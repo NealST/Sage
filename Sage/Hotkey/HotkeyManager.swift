@@ -7,7 +7,7 @@ import AppKit
 import Carbon.HIToolbox
 
 extension Notification.Name {
-    static let sageToggleHUD = Notification.Name("sage.toggleHUD")
+    static let sageToggleAgentWindow = Notification.Name("sage.toggleAgentWindow")
 }
 
 /// Registers ⌘⇧Space via Carbon hot keys (works without Accessibility permission).
@@ -19,8 +19,9 @@ final class HotkeyManager: @unchecked Sendable {
 
     private init() {}
 
-    func start() {
-        guard hotKeyRef == nil else { return }
+    @discardableResult
+    func start() -> Bool {
+        guard hotKeyRef == nil else { return true }
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -31,7 +32,7 @@ final class HotkeyManager: @unchecked Sendable {
             GetApplicationEventTarget(),
             { _, _, _ in
                 DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .sageToggleHUD, object: nil)
+                    NotificationCenter.default.post(name: .sageToggleAgentWindow, object: nil)
                 }
                 return noErr
             },
@@ -41,10 +42,10 @@ final class HotkeyManager: @unchecked Sendable {
             &handlerRef
         )
 
-        guard status == noErr else { return }
+        guard status == noErr else { return false }
 
-        var hotKeyID = EventHotKeyID(signature: OSType(0x53414745), id: 1) // 'SAGE'
-        RegisterEventHotKey(
+        let hotKeyID = EventHotKeyID(signature: OSType(0x53414745), id: 1) // 'SAGE'
+        let hotKeyStatus = RegisterEventHotKey(
             UInt32(kVK_Space),
             UInt32(cmdKey | shiftKey),
             hotKeyID,
@@ -52,6 +53,7 @@ final class HotkeyManager: @unchecked Sendable {
             0,
             &hotKeyRef
         )
+        return hotKeyStatus == noErr
     }
 
     func stop() {

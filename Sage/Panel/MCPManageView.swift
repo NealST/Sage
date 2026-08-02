@@ -12,6 +12,7 @@ struct MCPManageView: View {
     @State private var draftCommand = ""
     @State private var draftArgs = ""
     @State private var showingAdd = false
+    @State private var serverPendingDelete: MCPServerConfig?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,9 +30,9 @@ struct MCPManageView: View {
                 ForEach(appState.capabilities.mcpServers) { server in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            statusDot(server.status)
+                            statusIcon(server.status)
                             Text(server.name)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
                             Spacer()
                             Toggle(
                                 "Enabled",
@@ -46,13 +47,13 @@ struct MCPManageView: View {
                         }
 
                         Text(server.command + (server.args.isEmpty ? "" : " " + server.args.joined(separator: " ")))
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: SageDesign.Typography.microSize, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
 
                         HStack {
                             Text(statusLabel(server))
-                                .font(.system(size: 11))
+                                .font(.system(size: SageDesign.Typography.microSize))
                                 .foregroundStyle(.secondary)
                             Spacer()
                             if server.status == .error || server.status == .disconnected {
@@ -62,7 +63,7 @@ struct MCPManageView: View {
                                 .controlSize(.small)
                             }
                             Button("Delete", role: .destructive) {
-                                appState.capabilities.deleteMCPServer(server.id)
+                                serverPendingDelete = server
                             }
                             .controlSize(.small)
                         }
@@ -71,11 +72,11 @@ struct MCPManageView: View {
                             DisclosureGroup("Tools (\(server.toolCount))") {
                                 ForEach(mcpTools(for: server)) { tool in
                                     Text(tool.name)
-                                        .font(.system(size: 11))
+                                        .font(.system(size: SageDesign.Typography.microSize))
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
                         }
                     }
                     .padding(.vertical, 4)
@@ -86,7 +87,7 @@ struct MCPManageView: View {
             Divider()
             HStack {
                 Text("stdio MCP servers (command + args). Tools appear after a successful connect.")
-                    .font(.system(size: 11))
+                    .font(.system(size: SageDesign.Typography.microSize))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Done") { dismiss() }
@@ -97,6 +98,26 @@ struct MCPManageView: View {
         .frame(width: 560, height: 500)
         .sheet(isPresented: $showingAdd) {
             addSheet
+        }
+        .confirmationDialog(
+            "Delete “\(serverPendingDelete?.name ?? "server")”?",
+            isPresented: Binding(
+                get: { serverPendingDelete != nil },
+                set: { if !$0 { serverPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let id = serverPendingDelete?.id {
+                    appState.capabilities.deleteMCPServer(id)
+                }
+                serverPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                serverPendingDelete = nil
+            }
+        } message: {
+            Text("This removes the server configuration and its tools from Sage.")
         }
     }
 
@@ -111,7 +132,7 @@ struct MCPManageView: View {
             TextField("Arguments (space-separated)", text: $draftArgs)
                 .textFieldStyle(.roundedBorder)
             Text("Example: npx  ·  -y @modelcontextprotocol/server-filesystem /Users/you")
-                .font(.system(size: 11))
+                .font(.system(size: SageDesign.Typography.microSize))
                 .foregroundStyle(.secondary)
 
             HStack {
@@ -147,10 +168,22 @@ struct MCPManageView: View {
         appState.capabilities.mcpTools.filter { $0.serverID == server.id }
     }
 
-    private func statusDot(_ status: MCPServerStatus) -> some View {
-        Circle()
-            .fill(color(for: status))
-            .frame(width: 8, height: 8)
+    private func statusIcon(_ status: MCPServerStatus) -> some View {
+        Image(systemName: symbol(for: status))
+            .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+            .foregroundStyle(color(for: status))
+            .frame(width: 14)
+            .accessibilityLabel(status.rawValue)
+    }
+
+    private func symbol(for status: MCPServerStatus) -> String {
+        switch status {
+        case .connected: return "checkmark.circle.fill"
+        case .connecting: return "arrow.triangle.2.circlepath"
+        case .error: return "exclamationmark.circle.fill"
+        case .disconnected: return "circle"
+        case .disabled: return "pause.circle"
+        }
     }
 
     private func color(for status: MCPServerStatus) -> Color {
@@ -159,7 +192,7 @@ struct MCPManageView: View {
         case .connecting: return .yellow
         case .error: return .red
         case .disconnected: return .secondary
-        case .disabled: return .gray.opacity(0.5)
+        case .disabled: return .gray.opacity(0.7)
         }
     }
 

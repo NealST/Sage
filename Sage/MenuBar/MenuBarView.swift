@@ -7,35 +7,77 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
-    var onOpenHUD: () -> Void
+    var onOpenAgent: () -> Void
     var onOpenSettings: () -> Void
     var onQuit: () -> Void
 
     var body: some View {
         Button("Open Sage") {
-            onOpenHUD()
+            onOpenAgent()
         }
         .keyboardShortcut(" ", modifiers: [.command, .shift])
 
         Text(appState.statusHint)
             .font(.system(size: SageDesign.Typography.captionSize))
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+
+        if appState.hotkeyRegistrationFailed {
+            Text("⌘⇧Space could not be registered")
+                .font(.system(size: SageDesign.Typography.microSize))
+                .foregroundStyle(.secondary)
+        }
+
+        if case .awaitingConfirmation = appState.agent.phase {
+            Divider()
+            Button("Run Plan") {
+                onOpenAgent()
+                Task { await appState.agent.confirmPendingPlan() }
+            }
+            .disabled(appState.agent.isBusy)
+            Button("Cancel Plan") {
+                Task { await appState.agent.cancelPendingPlan() }
+            }
+            .disabled(appState.agent.isBusy)
+        }
+
+        if appState.agent.canStop {
+            Divider()
+            Button("Stop") {
+                appState.agent.stop()
+            }
+        }
+
+        if case .failed = appState.agent.phase {
+            if appState.agent.canRetryFailure {
+                Button("Retry") {
+                    onOpenAgent()
+                    Task { await appState.agent.retryLastFailure() }
+                }
+            }
+            if appState.isConfigurationFailure {
+                Button("Open Settings…") {
+                    onOpenSettings()
+                }
+            } else {
+                Button("Show Error…") {
+                    onOpenAgent()
+                }
+            }
+        }
 
         Divider()
+
+        Button("Start Fresh") {
+            appState.clearDraft()
+            Task { await appState.agent.startFresh() }
+        }
+        .disabled(!appState.agent.canStartFresh)
 
         Button("Settings…") {
             onOpenSettings()
         }
         .keyboardShortcut(",", modifiers: [.command])
-
-        Button("New Chat") {
-            appState.agent.createSession()
-            onOpenHUD()
-        }
-
-        Button("Clear Current Chat") {
-            Task { await appState.agent.clearActiveSession() }
-        }
 
         Divider()
 

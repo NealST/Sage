@@ -5,45 +5,60 @@
 
 import Foundation
 
-enum MessageRole: String, Codable, Sendable {
-    case system
-    case user
-    case assistant
-    case tool
+nonisolated enum AgentEventKind: String, Codable, Sendable {
+    case systemInstruction
+    case userInput
+    case assistantResponse
+    case toolResult
 }
 
-struct StoredToolCall: Codable, Sendable, Equatable {
+nonisolated struct ToolCallRecord: Codable, Sendable, Equatable {
     let id: String
     let name: String
     let argumentsJSON: String
 }
 
-struct ChatMessage: Identifiable, Codable, Sendable, Equatable {
+/// Explains which historical tasks were selected for a user input.
+/// Kept with the event so context decisions remain inspectable and debuggable.
+nonisolated struct EventContext: Codable, Sendable, Equatable {
+    var relatedTaskIDs: [UUID]
+    var confidence: Double
+    var reason: String
+}
+
+/// An immutable item in Sage's internal task history.
+///
+/// Events are persisted independently from model-provider wire formats so the
+/// product can change providers or context strategies without migrating data.
+nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
-    var role: MessageRole
+    var kind: AgentEventKind
     var content: String
     var toolCallID: String?
-    var toolCalls: [StoredToolCall]?
+    var toolCalls: [ToolCallRecord]?
+    var context: EventContext?
     var createdAt: Date
 
     init(
         id: UUID = UUID(),
-        role: MessageRole,
+        kind: AgentEventKind,
         content: String = "",
         toolCallID: String? = nil,
-        toolCalls: [StoredToolCall]? = nil,
+        toolCalls: [ToolCallRecord]? = nil,
+        context: EventContext? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
-        self.role = role
+        self.kind = kind
         self.content = content
         self.toolCallID = toolCallID
         self.toolCalls = toolCalls
+        self.context = context
         self.createdAt = createdAt
     }
 }
 
-enum StepStatus: String, Codable, Sendable {
+nonisolated enum StepStatus: String, Codable, Sendable {
     case pending
     case running
     case succeeded
@@ -51,7 +66,7 @@ enum StepStatus: String, Codable, Sendable {
     case skipped
 }
 
-struct AgentStep: Identifiable, Codable, Sendable, Equatable {
+nonisolated struct AgentStep: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var toolCallID: String
     var toolName: String
@@ -79,7 +94,7 @@ struct AgentStep: Identifiable, Codable, Sendable, Equatable {
     }
 }
 
-struct AgentPlan: Identifiable, Codable, Sendable, Equatable {
+nonisolated struct AgentPlan: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var summary: String
     var steps: [AgentStep]

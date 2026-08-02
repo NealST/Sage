@@ -17,7 +17,7 @@ final class ModelSettings {
     private enum DefaultsKey {
         static let baseURL = "llm.baseURL"
         static let model = "llm.model"
-        /// Debug-friendly fallback so Xcode re-runs don't depend on Keychain ACL.
+        /// Legacy plaintext storage — migrated out on launch.
         static let apiKeyFallback = "llm.apiKey.fallback"
     }
 
@@ -36,6 +36,9 @@ final class ModelSettings {
         }
     }
 
+    /// Surfaced when Keychain persistence fails after an edit.
+    private(set) var apiKeyPersistenceError: String?
+
     var isConfigured: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,13 +53,19 @@ final class ModelSettings {
         model = UserDefaults.standard.string(forKey: DefaultsKey.model)
             ?? "gpt-4.1-mini"
 
-        // UserDefaults first — never blocks launch with a Keychain password dialog.
-        // Keychain is best-effort for slightly better persistence.
-        if let fallback = UserDefaults.standard.string(forKey: DefaultsKey.apiKeyFallback), !fallback.isEmpty {
-            apiKey = fallback
-        } else if let key = KeychainStore.get(account: Account.apiKey), !key.isEmpty {
+        if let key = KeychainStore.get(account: Account.apiKey), !key.isEmpty {
             apiKey = key
-            UserDefaults.standard.set(key, forKey: DefaultsKey.apiKeyFallback)
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.apiKeyFallback)
+        } else if let legacy = UserDefaults.standard.string(forKey: DefaultsKey.apiKeyFallback),
+                  !legacy.isEmpty {
+            apiKey = legacy
+            do {
+                try KeychainStore.set(legacy, account: Account.apiKey)
+                UserDefaults.standard.removeObject(forKey: DefaultsKey.apiKeyFallback)
+            } catch {
+                // Keep plaintext until Keychain accepts the key.
+                apiKeyPersistenceError = "Could not move API key into Keychain."
+            }
         } else {
             apiKey = ""
         }
@@ -64,12 +73,19 @@ final class ModelSettings {
     }
 
     private func persistAPIKey(_ key: String) {
+        apiKeyPersistenceError = nil
         if key.isEmpty {
             KeychainStore.delete(account: Account.apiKey)
             UserDefaults.standard.removeObject(forKey: DefaultsKey.apiKeyFallback)
             return
         }
-        UserDefaults.standard.set(key, forKey: DefaultsKey.apiKeyFallback)
-        try? KeychainStore.set(key, account: Account.apiKey)
+        do {
+            try KeychainStore.set(key, account: Account.apiKey)
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.apiKeyFallback)
+        } catch {
+            // Keep a plaintext fallback so a failed Keychain write doesn't lose the key on quit.
+            UserDefaults.standard.set(key, forKey: DefaultsKey.apiKeyFallback)
+            apiKeyPersistenceError = "Could not save API key to Keychain. Kept a local fallback."
+        }
     }
 }

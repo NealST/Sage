@@ -12,8 +12,8 @@ struct SageApp: App {
     var body: some Scene {
         MenuBarExtra("Sage", systemImage: SageDesign.Symbol.brand) {
             MenuBarView(
-                onOpenHUD: {
-                    appDelegate.showHUD()
+                onOpenAgent: {
+                    appDelegate.showAgentWindow()
                 },
                 onOpenSettings: {
                     appDelegate.showSettings()

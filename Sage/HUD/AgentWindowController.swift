@@ -1,14 +1,14 @@
 //
-//  HUDPanelController.swift
+//  AgentWindowController.swift
 //  Sage
 //
 
 import AppKit
 import SwiftUI
 
-/// Standard macOS agent window (close / minimize / zoom), stays visible when unfocused.
+/// Persistent macOS agent workspace window (close / minimize / zoom).
 @MainActor
-final class HUDPanelController: NSObject, NSWindowDelegate {
+final class AgentWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private var window: NSWindow?
 
@@ -20,7 +20,7 @@ final class HUDPanelController: NSObject, NSWindowDelegate {
     func toggle() {
         if let window, window.isVisible {
             if window.isKeyWindow {
-                hide(cancelPending: false)
+                hide()
             } else {
                 focus(window)
             }
@@ -39,22 +39,19 @@ final class HUDPanelController: NSObject, NSWindowDelegate {
 
         NSApp.setActivationPolicy(.regular)
         focus(window)
-        appState.isHUDVisible = true
+        appState.isAgentWindowVisible = true
 
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .sageFocusHUDInput, object: nil)
+            NotificationCenter.default.post(name: .sageFocusAgentInput, object: nil)
         }
     }
 
-    /// - Parameter cancelPending: only true for explicit Cancel.
-    func hide(cancelPending: Bool) {
-        if cancelPending {
-            appState.agent.cancelPendingPlan()
-        }
+    /// Hiding never cancels a pending plan — only explicit Cancel does.
+    func hide() {
         window?.orderOut(nil)
-        appState.isHUDVisible = false
+        appState.isAgentWindowVisible = false
         // Stay regular if Settings is still open; otherwise return to menu-bar agent.
-        let settingsOpen = NSApp.windows.contains { $0.title == "Sage Settings" && $0.isVisible }
+        let settingsOpen = NSApp.windows.contains { $0.title == "Settings" && $0.isVisible }
         if !settingsOpen {
             NSApp.setActivationPolicy(.accessory)
         }
@@ -83,7 +80,7 @@ final class HUDPanelController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
-        window.minSize = NSSize(width: 720, height: 440)
+        window.minSize = NSSize(width: 560, height: 440)
         window.isOpaque = true
         window.backgroundColor = NSColor.windowBackgroundColor
         window.hasShadow = true
@@ -125,17 +122,17 @@ final class HUDPanelController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        hide(cancelPending: false)
+        hide()
         return false
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        appState.isHUDVisible = true
+        appState.isAgentWindowVisible = true
         NSApp.setActivationPolicy(.regular)
-        NotificationCenter.default.post(name: .sageFocusHUDInput, object: nil)
+        NotificationCenter.default.post(name: .sageFocusAgentInput, object: nil)
     }
 }
 
 extension Notification.Name {
-    static let sageFocusHUDInput = Notification.Name("sage.focusHUDInput")
+    static let sageFocusAgentInput = Notification.Name("sage.focusAgentInput")
 }

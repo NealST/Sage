@@ -37,8 +37,43 @@ enum ModelClientError: LocalizedError {
 }
 
 actor ModelClient {
+    /// Lightweight connectivity check against an OpenAI-compatible provider.
+    func probe(settings: ModelSettingsSnapshot) async throws {
+        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+
+        let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let modelsURL = URL(string: "\(trimmedBase)/models") else {
+            throw ModelClientError.invalidURL
+        }
+
+        var request = URLRequest(url: modelsURL)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ModelClientError.httpStatus(-1, "No HTTP response")
+        }
+
+        // Some gateways omit `/models`; fall back to a tiny completion.
+        if http.statusCode == 404 {
+            _ = try await complete(
+                events: [AgentEvent(kind: .userInput, content: "ping")],
+                tools: [],
+                settings: settings
+            )
+            return
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ModelClientError.httpStatus(http.statusCode, text)
+        }
+    }
+
     func complete(
-        messages: [ChatMessage],
+        events: [AgentEvent],
         tools: [ToolDefinition],
         settings: ModelSettingsSnapshot
     ) async throws -> ModelTurn {
@@ -57,13 +92,16 @@ actor ModelClient {
 
         let body = ChatCompletionRequest(
             model: settings.model,
-            messages: messages.map(APIMessage.init),
+            messages: events.map(APIMessage.init),
             tools: tools.isEmpty ? nil : tools.map(APITool.init),
             toolChoice: tools.isEmpty ? nil : "auto"
         )
         request.httpBody = try JSONEncoder().encode(body)
 
+        try Task.checkCancellation()
         let (data, response) = try await URLSession.shared.data(for: request)
+        try Task.checkCancellation()
+
         guard let http = response as? HTTPURLResponse else {
             throw ModelClientError.httpStatus(-1, "No HTTP response")
         }
@@ -83,6 +121,8 @@ actor ModelClient {
                 )
             }
             return ModelTurn(content: choice?.content, toolCalls: toolCalls)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             throw ModelClientError.decoding(error.localizedDescription)
         }
@@ -121,12 +161,17 @@ private struct APIMessage: Encodable {
         case toolCalls = "tool_calls"
     }
 
-    init(_ message: ChatMessage) {
-        role = message.role.rawValue
+    init(_ event: AgentEvent) {
+        switch event.kind {
+        case .systemInstruction: role = "system"
+        case .userInput: role = "user"
+        case .assistantResponse: role = "assistant"
+        case .toolResult: role = "tool"
+        }
         // OpenAI wants content null (or omitted) when tool_calls are present sometimes;
         // empty string is widely accepted by compatible providers.
-        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            content = message.content.isEmpty ? nil : message.content
+        if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
+            content = event.content.isEmpty ? nil : event.content
             self.toolCalls = toolCalls.map {
                 APIToolCall(
                     id: $0.id,
@@ -135,10 +180,10 @@ private struct APIMessage: Encodable {
                 )
             }
         } else {
-            content = message.content
+            content = event.content
             self.toolCalls = nil
         }
-        toolCallID = message.toolCallID
+        toolCallID = event.toolCallID
     }
 }
 

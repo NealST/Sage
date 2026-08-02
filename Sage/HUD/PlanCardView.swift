@@ -10,6 +10,7 @@ struct PlanCardView: View {
     var isExecuting: Bool
     var onConfirm: () -> Void
     var onCancel: () -> Void
+    var onStop: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
@@ -35,13 +36,23 @@ struct PlanCardView: View {
 
                     if index < plan.steps.count - 1 {
                         Divider()
-                            .opacity(0.35)
+                            .opacity(SageDesign.Chrome.dividerOpacity)
                             .padding(.leading, 22)
                     }
                 }
             }
 
-            if !isExecuting {
+            if isExecuting {
+                HStack(spacing: SageDesign.Spacing.sm) {
+                    Spacer(minLength: 0)
+                    if let onStop {
+                        Button("Stop", role: .cancel, action: onStop)
+                            .keyboardShortcut(.cancelAction)
+                            .controlSize(.regular)
+                    }
+                }
+                .padding(.top, SageDesign.Spacing.xs)
+            } else {
                 HStack(spacing: SageDesign.Spacing.sm) {
                     Button("Cancel", role: .cancel, action: onCancel)
                         .keyboardShortcut(.cancelAction)
@@ -67,22 +78,22 @@ struct PlanCardView: View {
         switch status {
         case .pending:
             Image(systemName: SageDesign.Symbol.stepPending)
-                .font(.system(size: 11, weight: .regular))
+                .font(.system(size: SageDesign.Typography.microSize, weight: .regular))
                 .foregroundStyle(.tertiary)
         case .running:
             ProgressView()
                 .controlSize(.mini)
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                 .foregroundStyle(.green)
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                 .foregroundStyle(.red)
         case .skipped:
             Image(systemName: "minus.circle")
-                .font(.system(size: 11))
+                .font(.system(size: SageDesign.Typography.microSize))
                 .foregroundStyle(.tertiary)
         }
     }
