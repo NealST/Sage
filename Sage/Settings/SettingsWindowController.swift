@@ -58,7 +58,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
-        window.setContentSize(NSSize(width: 420, height: 620))
+        window.setContentSize(NSSize(width: 440, height: 620))
         window.setFrameAutosaveName("SageSettingsWindow")
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true

@@ -9,6 +9,8 @@ nonisolated struct TaskSummary: Identifiable, Sendable, Equatable {
     let id: UUID
     var status: TaskStatus
     var summary: String?
+    var topic: String?
+    var abstract: String?
     var updatedAt: Date
 }
 

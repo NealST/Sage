@@ -82,6 +82,8 @@ final class AgentRuntime {
     private let tools: ToolRegistry
     private let taskRepository: any TaskRepository
     private let contextResolver: any TaskContextResolving
+    private let taskRouter: TaskRouter
+    private let topicGenerator: TopicGenerator
     private let settings: ModelSettings
     private weak var capabilities: CapabilityStore?
 
@@ -99,12 +101,16 @@ final class AgentRuntime {
         tools: ToolRegistry,
         taskRepository: any TaskRepository,
         contextResolver: any TaskContextResolving,
+        taskRouter: TaskRouter = TaskRouter(),
+        topicGenerator: TopicGenerator = TopicGenerator(),
         capabilities: CapabilityStore? = nil
     ) {
         self.settings = settings
         self.tools = tools
         self.taskRepository = taskRepository
         self.contextResolver = contextResolver
+        self.taskRouter = taskRouter
+        self.topicGenerator = topicGenerator
         self.capabilities = capabilities
     }
 
@@ -121,6 +127,11 @@ final class AgentRuntime {
             }
         } catch {
             phase = .failed(message: "Could not open Sage’s local database: \(error.localizedDescription)")
+        }
+
+        // Warm up the local model in the background — non-blocking.
+        Task.detached(priority: .utility) {
+            await LocalModelService.shared.warmUp()
         }
     }
 
@@ -174,9 +185,8 @@ final class AgentRuntime {
                     closing,
                     appendEvents: [],
                     deleteEventIDs: retractIDs,
-                    setActive: true
+                    setActive: false
                 )
-                // Keep memory aligned with the closed snapshot if create fails next.
                 activeTask = closing
                 activeTaskID = closing.id
                 refreshSummary(for: closing)
@@ -226,6 +236,8 @@ final class AgentRuntime {
 
     func eraseAllData() async -> Bool {
         guard !isBusy else { return false }
+        workTask?.cancel()
+        workTask = nil
         do {
             try await taskRepository.eraseAllData()
             activeTask = nil
@@ -382,7 +394,18 @@ final class AgentRuntime {
             input: trimmed,
             workspace: workspace
         )
-        guard await apply(contextDecision) else { return false }
+
+        // Local model routing: refine the decision when the heuristic says "continue"
+        // but the model may detect a topic switch or a match to a prior task.
+        if case .continueActive = contextDecision.action {
+            let routingResult = await applyLocalRouting(input: trimmed)
+            if let routingResult {
+                guard await applyRoutingDecision(routingResult, input: trimmed) else { return false }
+            }
+        } else {
+            guard await apply(contextDecision) else { return false }
+        }
+
         guard await ensureActiveTask() else { return false }
 
         // Resumed task may carry a pending plan — refuse instead of wiping it.
@@ -582,6 +605,7 @@ final class AgentRuntime {
             }
             lastAssistantText = text
             phase = .completed(summary: text)
+            generateTopicIfNeeded()
         } catch is CancellationError {
             await handleStop(plan: plan)
         } catch {
@@ -718,6 +742,7 @@ final class AgentRuntime {
         ) else { return }
         lastAssistantText = reply
         phase = .completed(summary: reply)
+        generateTopicIfNeeded()
     }
 
     private func requestModel(includeTools: Bool = true) async throws -> ModelTurn {
@@ -912,6 +937,8 @@ final class AgentRuntime {
             id: task.id,
             status: task.status,
             summary: task.summary,
+            topic: task.topic,
+            abstract: task.abstract,
             updatedAt: task.updatedAt
         )
         if let index = recentSummaries.firstIndex(where: { $0.id == task.id }) {
@@ -1031,14 +1058,112 @@ final class AgentRuntime {
     }
 
     private static func hint(for task: TaskRecord) -> String {
+        if let topic = task.topic?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !topic.isEmpty {
+            return "Using context from \u{201C}\(topic)\u{201D}"
+        }
         if let summary = task.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
            !summary.isEmpty {
             let clipped = summary.count > 48
                 ? String(summary.prefix(45)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
                 : summary
-            return "Using context from “\(clipped)”"
+            return "Using context from \u{201C}\(clipped)\u{201D}"
         }
         return "Using context from a related task"
+    }
+
+    // MARK: - Local Model Routing
+
+    /// Asks the local model to route the input. Returns nil if the model is not ready
+    /// or decides to continue the current task (no action needed).
+    private func applyLocalRouting(input: String) async -> TaskRoutingDecision? {
+        let catalog = TaskCatalog.build(
+            from: recentSummaries,
+            excluding: activeTaskID
+        )
+        // Skip routing if there's nothing to route to and the task is non-empty.
+        let activeIsEmpty = activeTask?.events.isEmpty ?? true
+        if catalog.entries.isEmpty && !activeIsEmpty {
+            return nil
+        }
+
+        let decision = await taskRouter.route(
+            input: input,
+            currentTopic: activeTask?.topic,
+            catalog: catalog
+        )
+
+        switch decision.action {
+        case .continueActive:
+            return nil
+        case .resumeTask, .beginNew:
+            return decision
+        }
+    }
+
+    /// Applies a local model routing decision to the runtime state.
+    private func applyRoutingDecision(
+        _ decision: TaskRoutingDecision,
+        input: String
+    ) async -> Bool {
+        switch decision.action {
+        case .continueActive:
+            return true
+        case .beginNew:
+            contextHint = nil
+            return await beginNewTask(relatedTo: []) != nil
+        case .resumeTask(let id):
+            await activateTask(id)
+            guard activeTaskID == id else { return false }
+            // Update topic if the resumed task gains new content.
+            if let existingTopic = activeTask?.topic,
+               let existingAbstract = activeTask?.abstract {
+                Task.detached(priority: .utility) { [topicGenerator] in
+                    if let updated = await topicGenerator.update(
+                        existingTopic: existingTopic,
+                        existingAbstract: existingAbstract,
+                        newInput: input
+                    ) {
+                        await MainActor.run { [weak self] in
+                            self?.updateTaskTopic(updated)
+                        }
+                    }
+                }
+            }
+            if let task = activeTask {
+                contextHint = Self.hint(for: task)
+            }
+            return true
+        }
+    }
+
+    /// Updates the active task's topic/abstract in memory and persists it.
+    private func updateTaskTopic(_ result: TopicResult) {
+        guard var task = activeTask else { return }
+        task.topic = result.topic
+        task.abstract = result.abstract
+        task.topicUpdatedAt = .now
+        task.updatedAt = .now
+        activeTask = task
+        refreshSummary(for: task)
+        Task {
+            try? await taskRepository.saveTaskState(task, setActive: true)
+        }
+    }
+
+    // MARK: - Topic Generation on Completion
+
+    /// Called after a task completes to generate its topic if missing.
+    func generateTopicIfNeeded() {
+        guard let task = activeTask,
+              task.topic == nil,
+              !task.events.isEmpty else { return }
+        Task.detached(priority: .utility) { [topicGenerator, weak self] in
+            guard let result = await topicGenerator.generate(from: task.events) else { return }
+            await MainActor.run {
+                self?.updateTaskTopic(result)
+            }
+        }
     }
 }
 

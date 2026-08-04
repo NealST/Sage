@@ -27,25 +27,22 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    fields
-                    statusRow
-                    Divider()
-                        .padding(.vertical, 16)
-                    capabilities
-                    Divider()
-                        .padding(.vertical, 16)
-                    privacy
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
+                    connectionSection
+                    capabilitiesSection
+                    privacySection
                 }
+                .padding(.horizontal, SageDesign.Spacing.xl)
+                .padding(.top, 20)
+                .padding(.bottom, SageDesign.Spacing.lg)
             }
             .frame(maxHeight: 520)
 
             footer
+                .padding(.horizontal, SageDesign.Spacing.xl)
+                .padding(.bottom, 18)
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
-        .frame(width: 420)
+        .frame(width: 440)
         .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear { testTask?.cancel() }
         .sheet(isPresented: $showSkillsManage) {
@@ -75,49 +72,198 @@ struct SettingsView: View {
         }
     }
 
-    private var eraseDialogTitle: String {
-        if case .awaitingConfirmation = appState.agent.phase {
-            return "Erase data and abandon pending plan?"
+    // MARK: - Connection
+
+    private var connectionSection: some View {
+        settingsSection("Connection") {
+            VStack(spacing: 0) {
+                settingsField(
+                    title: "Base URL",
+                    error: baseURLValidationError,
+                    isFirst: true
+                ) {
+                    TextField("https://api.openai.com/v1", text: $settings.baseURL)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                        .onChange(of: settings.baseURL) { _, _ in clearTestResult() }
+                }
+
+                sectionDivider
+
+                settingsField(
+                    title: "Model",
+                    error: modelValidationError
+                ) {
+                    TextField("gpt-4.1-mini", text: $settings.model)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                        .onChange(of: settings.model) { _, _ in clearTestResult() }
+                }
+
+                sectionDivider
+
+                settingsField(
+                    title: "API Key",
+                    error: apiKeyValidationError,
+                    isLast: true
+                ) {
+                    SecureField("sk-…", text: $settings.apiKey)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                        .onChange(of: settings.apiKey) { _, _ in clearTestResult() }
+                }
+            }
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
+            }
+
+            statusRow
         }
-        return "Erase all local Sage data?"
     }
 
-    private var eraseDialogMessage: String {
-        if case .awaitingConfirmation = appState.agent.phase {
-            return "This deletes local task history and abandons the pending plan. Your API key in Keychain is kept."
+    // MARK: - Capabilities
+
+    private var capabilitiesSection: some View {
+        settingsSection("Capabilities") {
+            VStack(spacing: 0) {
+                capabilityRow(
+                    symbol: SageDesign.Symbol.skills,
+                    title: "Skills",
+                    detail: "\(enabledSkillCount) of \(appState.capabilities.skills.count) enabled",
+                    isFirst: true,
+                    action: { showSkillsManage = true }
+                )
+
+                ForEach(Array(appState.capabilities.skills.prefix(4).enumerated()), id: \.element.id) { _, skill in
+                    sectionDivider
+                    quickToggleRow(
+                        title: skill.name,
+                        isOn: Binding(
+                            get: {
+                                appState.capabilities.skills.first(where: { $0.name == skill.name })?.enabled
+                                    ?? skill.enabled
+                            },
+                            set: { appState.capabilities.setSkillEnabled(skill.name, enabled: $0) }
+                        )
+                    )
+                }
+
+                sectionDivider
+
+                capabilityRow(
+                    symbol: SageDesign.Symbol.mcp,
+                    title: "MCP Servers",
+                    detail: "\(connectedMCPCount) connected",
+                    isLast: appState.capabilities.mcpServers.isEmpty,
+                    action: { showMCPManage = true }
+                )
+
+                ForEach(Array(appState.capabilities.mcpServers.prefix(3).enumerated()), id: \.element.id) { index, server in
+                    sectionDivider
+                    quickToggleRow(
+                        title: server.name,
+                        detail: mcpStatusDetail(server),
+                        isLast: index == min(2, appState.capabilities.mcpServers.count - 1),
+                        isOn: Binding(
+                            get: {
+                                appState.capabilities.mcpServers.first(where: { $0.id == server.id })?.enabled
+                                    ?? server.enabled
+                            },
+                            set: { appState.capabilities.setMCPEnabled(server.id, enabled: $0) }
+                        )
+                    )
+                }
+            }
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
+            }
         }
-        return "This permanently deletes local task history from this Mac. Your API key in Keychain is kept."
     }
 
-    private var fields: some View {
-        VStack(spacing: 12) {
-            settingsField(
-                title: "Base URL",
-                error: baseURLValidationError
-            ) {
-                TextField("https://api.openai.com/v1", text: $settings.baseURL)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: SageDesign.Typography.bodySize))
-                    .foregroundStyle(.primary)
-                    .onChange(of: settings.baseURL) { _, _ in clearTestResult() }
-            }
+    // MARK: - Privacy
 
-            settingsField(title: "Model", error: modelValidationError) {
-                TextField("gpt-4.1-mini", text: $settings.model)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: SageDesign.Typography.bodySize))
-                    .foregroundStyle(.primary)
-                    .onChange(of: settings.model) { _, _ in clearTestResult() }
-            }
+    private var privacySection: some View {
+        settingsSection("Privacy") {
+            HStack(spacing: SageDesign.Spacing.md) {
+                Image(systemName: "externaldrive")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
 
-            settingsField(title: "API Key", error: apiKeyValidationError) {
-                SecureField("sk-…", text: $settings.apiKey)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: SageDesign.Typography.bodySize))
-                    .foregroundStyle(.primary)
-                    .onChange(of: settings.apiKey) { _, _ in clearTestResult() }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Local history")
+                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                    Text(eraseMessage ?? "Task events stay on this Mac.")
+                        .font(.system(size: SageDesign.Typography.microSize))
+                        .foregroundStyle(
+                            eraseMessage?.hasPrefix("Could") == true ? Color.orange : Color.secondary
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button("Erase…") {
+                    eraseMessage = nil
+                    showEraseConfirm = true
+                }
+                .controlSize(.small)
+                .disabled(appState.agent.isBusy)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
             }
         }
+    }
+
+    // MARK: - Shared Components
+
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            Text(title)
+                .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 2)
+
+            content()
+        }
+    }
+
+    private var sectionDivider: some View {
+        Divider()
+            .padding(.leading, 14)
     }
 
     private var statusRow: some View {
@@ -128,7 +274,7 @@ struct SettingsView: View {
             } else {
                 switch testState {
                 case .idle:
-                    Text("API key is stored in Keychain. Changes save automatically.")
+                    Text("Stored in Keychain · saves automatically")
                         .foregroundStyle(.secondary)
                 case .testing:
                     Label("Testing connection…", systemImage: "arrow.triangle.2.circlepath")
@@ -144,100 +290,89 @@ struct SettingsView: View {
             }
         }
         .font(.system(size: SageDesign.Typography.microSize))
-        .padding(.top, 14)
+        .padding(.leading, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(statusAccessibilityLabel)
     }
 
-    private var capabilities: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("CAPABILITIES")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.secondary)
+    private func settingsField<Content: View>(
+        title: String,
+        error: String?,
+        isFirst: Bool = false,
+        isLast: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                    .foregroundStyle(.secondary)
 
-            capabilityRow(
-                symbol: SageDesign.Symbol.skills,
-                title: "Skills",
-                detail: "\(enabledSkillCount) of \(appState.capabilities.skills.count) enabled",
-                action: { showSkillsManage = true }
-            )
-
-            ForEach(appState.capabilities.skills.prefix(4)) { skill in
-                quickToggleRow(
-                    title: skill.name,
-                    isOn: Binding(
-                        get: {
-                            appState.capabilities.skills.first(where: { $0.name == skill.name })?.enabled
-                                ?? skill.enabled
-                        },
-                        set: { appState.capabilities.setSkillEnabled(skill.name, enabled: $0) }
-                    )
-                )
+                content()
+                    .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading)
+                    .accessibilityLabel(title)
             }
+            .padding(.horizontal, 14)
+            .padding(.top, isFirst ? 12 : 10)
+            .padding(.bottom, isLast ? 12 : 10)
 
-            capabilityRow(
-                symbol: SageDesign.Symbol.mcp,
-                title: "MCP Servers",
-                detail: "\(connectedMCPCount) connected",
-                action: { showMCPManage = true }
-            )
-
-            ForEach(appState.capabilities.mcpServers.prefix(3)) { server in
-                quickToggleRow(
-                    title: server.name,
-                    detail: mcpStatusDetail(server),
-                    isOn: Binding(
-                        get: {
-                            appState.capabilities.mcpServers.first(where: { $0.id == server.id })?.enabled
-                                ?? server.enabled
-                        },
-                        set: { appState.capabilities.setMCPEnabled(server.id, enabled: $0) }
-                    )
-                )
+            if let error {
+                Text(error)
+                    .font(.system(size: SageDesign.Typography.microSize))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 6)
             }
         }
     }
 
-    private var privacy: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("PRIVACY")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.secondary)
+    private func capabilityRow(
+        symbol: String,
+        title: String,
+        detail: String,
+        isFirst: Bool = false,
+        isLast: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: SageDesign.Spacing.md) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
 
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Local history")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
                         .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    Text(eraseMessage ?? "Task events stay on this Mac in Sage’s database.")
+                        .foregroundStyle(.primary)
+                    Text(detail)
                         .font(.system(size: SageDesign.Typography.microSize))
-                        .foregroundStyle(
-                            eraseMessage?.hasPrefix("Could") == true ? Color.orange : Color.secondary
-                        )
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.secondary)
                 }
+
                 Spacer()
-                Button("Erase…") {
-                    eraseMessage = nil
-                    showEraseConfirm = true
-                }
-                .controlSize(.small)
-                .disabled(appState.agent.isBusy)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     private func quickToggleRow(
         title: String,
         detail: String? = nil,
+        isLast: Bool = false,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack {
+        HStack(spacing: SageDesign.Spacing.md) {
+            Spacer()
+                .frame(width: 20)
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: SageDesign.Typography.bodySize))
@@ -249,71 +384,20 @@ struct SettingsView: View {
                         .lineLimit(1)
                 }
             }
+
             Spacer()
+
             Toggle(title, isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
-        .padding(.leading, 30)
-        .padding(.trailing, 12)
-        .padding(.vertical, 2)
-    }
-
-    private func mcpStatusDetail(_ server: MCPServerConfig) -> String? {
-        switch server.status {
-        case .connected: return nil
-        case .connecting: return "Connecting…"
-        case .error: return server.statusMessage ?? "Error"
-        case .disconnected: return server.enabled ? "Disconnected" : nil
-        case .disabled: return nil
-        }
-    }
-
-    private func capabilityRow(
-        symbol: String,
-        title: String,
-        detail: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                Text(detail)
-                    .font(.system(size: SageDesign.Typography.microSize))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Button("Manage…", action: action)
-                .controlSize(.small)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-        }
-        .overlay {
-            if AccessibilityPreferences.increaseContrast {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: 1
-                    )
-            }
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private var footer: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.md) {
             Button("Test Connection") {
                 runConnectionTest()
             }
@@ -329,46 +413,33 @@ struct SettingsView: View {
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
         }
-        .padding(.top, 16)
+        .padding(.top, SageDesign.Spacing.lg)
     }
 
-    private func settingsField<Content: View>(
-        title: String,
-        error: String?,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.secondary)
+    // MARK: - Helpers
 
-            content()
-                .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(
-                            error == nil
-                                ? Color.primary.opacity(SageDesign.Chrome.strokeOpacity)
-                                : Color.orange.opacity(0.7),
-                            lineWidth: error == nil
-                                ? (AccessibilityPreferences.increaseContrast ? 1 : 0.5)
-                                : 1
-                        )
-                }
-                .accessibilityLabel(title)
-
-            if let error {
-                Text(error)
-                    .font(.system(size: SageDesign.Typography.microSize))
-                    .foregroundStyle(.orange)
-            }
+    private func mcpStatusDetail(_ server: MCPServerConfig) -> String? {
+        switch server.status {
+        case .connected: return nil
+        case .connecting: return "Connecting…"
+        case .error: return server.statusMessage ?? "Error"
+        case .disconnected: return server.enabled ? "Disconnected" : nil
+        case .disabled: return nil
         }
+    }
+
+    private var eraseDialogTitle: String {
+        if case .awaitingConfirmation = appState.agent.phase {
+            return "Erase data and abandon pending plan?"
+        }
+        return "Erase all local Sage data?"
+    }
+
+    private var eraseDialogMessage: String {
+        if case .awaitingConfirmation = appState.agent.phase {
+            return "This deletes local task history and abandons the pending plan. Your API key in Keychain is kept."
+        }
+        return "This permanently deletes local task history from this Mac. Your API key in Keychain is kept."
     }
 
     private var baseURLValidationError: String? {
@@ -416,7 +487,7 @@ struct SettingsView: View {
             return persistenceError
         }
         switch testState {
-        case .idle: return "API key is stored in Keychain. Changes save automatically."
+        case .idle: return "API key stored in Keychain. Changes save automatically."
         case .testing: return "Testing connection"
         case .success: return "Connection succeeded"
         case .failure(let message): return message

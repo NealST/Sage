@@ -30,6 +30,11 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var status: TaskStatus
     var summary: String?
+    /// Short semantic label (≤20 chars) for task catalog display and routing.
+    var topic: String?
+    /// One-sentence intent description (≤80 chars) used by the local model router.
+    var abstract: String?
+    var topicUpdatedAt: Date?
     var events: [AgentEvent]
     var pendingPlan: AgentPlan?
     var entities: [TaskEntity]
@@ -41,6 +46,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         id: UUID = UUID(),
         status: TaskStatus = .active,
         summary: String? = nil,
+        topic: String? = nil,
+        abstract: String? = nil,
+        topicUpdatedAt: Date? = nil,
         events: [AgentEvent] = [],
         pendingPlan: AgentPlan? = nil,
         entities: [TaskEntity] = [],
@@ -51,6 +59,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.id = id
         self.status = status
         self.summary = summary
+        self.topic = topic
+        self.abstract = abstract
+        self.topicUpdatedAt = topicUpdatedAt
         self.events = events
         self.pendingPlan = pendingPlan
         self.entities = entities

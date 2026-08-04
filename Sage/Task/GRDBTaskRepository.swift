@@ -37,7 +37,7 @@ actor GRDBTaskRepository: TaskRepository {
             let summaryRows = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT id, status, summary, updated_at
+                SELECT id, status, summary, topic, abstract, updated_at
                 FROM tasks
                 ORDER BY updated_at DESC
                 LIMIT 40
@@ -52,6 +52,8 @@ actor GRDBTaskRepository: TaskRepository {
                     id: id,
                     status: status,
                     summary: row["summary"],
+                    topic: row["topic"],
+                    abstract: row["abstract"],
                     updatedAt: Date(timeIntervalSince1970: row["updated_at"])
                 )
             }
@@ -221,6 +223,13 @@ actor GRDBTaskRepository: TaskRepository {
         migrator.registerMigration("createTaskStore") { db in
             try db.execute(sql: Self.schemaSQL)
         }
+        migrator.registerMigration("addTopicFields") { db in
+            try db.execute(sql: """
+                ALTER TABLE tasks ADD COLUMN topic TEXT;
+                ALTER TABLE tasks ADD COLUMN abstract TEXT;
+                ALTER TABLE tasks ADD COLUMN topic_updated_at REAL;
+            """)
+        }
         try migrator.migrate(pool)
         try importLegacyJSONIfNeeded(into: pool)
         databasePool = pool
@@ -323,17 +332,23 @@ actor GRDBTaskRepository: TaskRepository {
     private func upsertTask(_ task: TaskRecord, database db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO tasks (id, status, summary, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO tasks (id, status, summary, topic, abstract, topic_updated_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 summary = excluded.summary,
+                topic = excluded.topic,
+                abstract = excluded.abstract,
+                topic_updated_at = excluded.topic_updated_at,
                 updated_at = excluded.updated_at
             """,
             arguments: [
                 task.id.uuidString,
                 task.status.rawValue,
                 task.summary,
+                task.topic,
+                task.abstract,
+                task.topicUpdatedAt?.timeIntervalSince1970,
                 task.createdAt.timeIntervalSince1970,
                 task.updatedAt.timeIntervalSince1970,
             ]
@@ -565,10 +580,16 @@ actor GRDBTaskRepository: TaskRepository {
             return nil
         }
 
+        let topicUpdatedAt: Date? = (row["topic_updated_at"] as Double?)
+            .map { Date(timeIntervalSince1970: $0) }
+
         return TaskRecord(
             id: id,
             status: status,
             summary: row["summary"],
+            topic: row["topic"],
+            abstract: row["abstract"],
+            topicUpdatedAt: topicUpdatedAt,
             events: try loadEvents(taskID: id, database: db),
             pendingPlan: try loadPlan(taskID: id, database: db),
             entities: try loadEntities(taskID: id, database: db),
