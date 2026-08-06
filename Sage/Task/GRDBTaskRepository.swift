@@ -129,15 +129,12 @@ actor GRDBTaskRepository: TaskRepository {
                 try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
                 try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
 
-                for eventID in deleteEventIDs {
-                    try db.execute(
-                        sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
-                        arguments: [eventID.uuidString, task.id.uuidString]
-                    )
-                }
-
+                // Compute next sequence BEFORE deletions so we never reuse a
+                // sequence value that was just freed (avoids UNIQUE constraint
+                // violations when deleted events had the highest sequence).
+                var nextSequence: Int?
                 if !appendEvents.isEmpty {
-                    var sequence = try Int.fetchOne(
+                    nextSequence = try Int.fetchOne(
                         db,
                         sql: """
                         SELECT COALESCE(MAX(sequence), -1) + 1
@@ -146,6 +143,16 @@ actor GRDBTaskRepository: TaskRepository {
                         """,
                         arguments: [task.id.uuidString]
                     ) ?? 0
+                }
+
+                for eventID in deleteEventIDs {
+                    try db.execute(
+                        sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
+                        arguments: [eventID.uuidString, task.id.uuidString]
+                    )
+                }
+
+                if var sequence = nextSequence {
                     for event in appendEvents {
                         try insertEvent(
                             event,

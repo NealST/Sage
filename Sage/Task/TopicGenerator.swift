@@ -36,7 +36,7 @@ actor TopicGenerator {
 
         guard let firstUser else { return nil }
 
-        let prompt = Self.buildPrompt(
+        let (system, user) = Self.buildPrompt(
             firstUser: firstUser,
             lastUser: lastUser != firstUser ? lastUser : nil,
             lastAssistant: lastAssistant
@@ -44,7 +44,8 @@ actor TopicGenerator {
 
         do {
             let output = try await modelService.generate(
-                prompt: prompt,
+                systemPrompt: system,
+                userPrompt: user,
                 maxTokens: 60,
                 temperature: 0
             )
@@ -68,7 +69,7 @@ actor TopicGenerator {
     ) async -> TopicResult? {
         guard await modelService.isReady else { return nil }
 
-        let prompt = Self.buildUpdatePrompt(
+        let (system, user) = Self.buildUpdatePrompt(
             existingTopic: existingTopic,
             existingAbstract: existingAbstract,
             newInput: newInput
@@ -76,7 +77,8 @@ actor TopicGenerator {
 
         do {
             let output = try await modelService.generate(
-                prompt: prompt,
+                systemPrompt: system,
+                userPrompt: user,
                 maxTokens: 60,
                 temperature: 0
             )
@@ -92,7 +94,17 @@ actor TopicGenerator {
         firstUser: String,
         lastUser: String?,
         lastAssistant: String?
-    ) -> String {
+    ) -> (system: String, user: String) {
+        let system = """
+        Generate a concise topic label and abstract for a task based on its conversation history.
+
+        Rules:
+        - topic: a short label, max 20 characters, in the user's language
+        - abstract: one sentence describing the intent, max 80 characters, in the user's language
+
+        Output ONLY this JSON format: {"topic":"...","abstract":"..."}
+        """
+
         var history = "First request: \(String(firstUser.prefix(200)))"
         if let lastUser {
             history += "\nLatest request: \(String(lastUser.prefix(200)))"
@@ -101,29 +113,15 @@ actor TopicGenerator {
             history += "\nResult: \(String(lastAssistant.prefix(200)))"
         }
 
-        return """
-        <|im_start|>system
-        Generate a concise topic label and abstract for a task based on its conversation history.
-
-        Rules:
-        - topic: a short label, max 20 characters, in the user's language
-        - abstract: one sentence describing the intent, max 80 characters, in the user's language
-
-        Output ONLY this JSON format: {"topic":"...","abstract":"..."}<|im_end|>
-        <|im_start|>user
-        \(history)<|im_end|>
-        <|im_start|>assistant
-        /no_think
-        """
+        return (system, history)
     }
 
     private static func buildUpdatePrompt(
         existingTopic: String,
         existingAbstract: String,
         newInput: String
-    ) -> String {
-        return """
-        <|im_start|>system
+    ) -> (system: String, user: String) {
+        let system = """
         A task is being resumed with new content. Update the topic and abstract to reflect the expanded scope.
 
         Rules:
@@ -131,14 +129,14 @@ actor TopicGenerator {
         - abstract: max 80 characters, in the user's language
         - Keep the original intent but incorporate the new direction
 
-        Output ONLY this JSON format: {"topic":"...","abstract":"..."}<|im_end|>
-        <|im_start|>user
+        Output ONLY this JSON format: {"topic":"...","abstract":"..."}
+        """
+        let user = """
         Current topic: \(existingTopic)
         Current abstract: \(existingAbstract)
-        New input: \(String(newInput.prefix(200)))<|im_end|>
-        <|im_start|>assistant
-        /no_think
+        New input: \(String(newInput.prefix(200)))
         """
+        return (system, user)
     }
 
     // MARK: - Parsing

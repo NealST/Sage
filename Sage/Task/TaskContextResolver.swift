@@ -152,7 +152,7 @@ nonisolated struct ContinuityTaskResolver: TaskContextResolving {
             text.lowercased()
                 .split { !$0.isLetter && !$0.isNumber }
                 .map(String.init)
-                .filter { $0.count >= 3 && !stop.contains($0) }
+                .filter { $0.count >= 2 && !stop.contains($0) }
         )
     }
 

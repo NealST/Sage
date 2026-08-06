@@ -187,8 +187,6 @@ final class AgentRuntime {
                     deleteEventIDs: retractIDs,
                     setActive: false
                 )
-                activeTask = closing
-                activeTaskID = closing.id
                 refreshSummary(for: closing)
                 phase = .idle
                 lastAssistantText = nil
@@ -197,6 +195,13 @@ final class AgentRuntime {
                 return nil
             }
         }
+
+        // Clear stale references before creating the new task so that a failure
+        // in createAndActivateTask never leaves the runtime pointing at a
+        // completed/closed task.
+        activeTask = nil
+        activeTaskID = nil
+
         return await createAndActivateTask(relatedTo: relatedTaskIDs)
     }
 
@@ -1118,6 +1123,7 @@ final class AgentRuntime {
             // Update topic if the resumed task gains new content.
             if let existingTopic = activeTask?.topic,
                let existingAbstract = activeTask?.abstract {
+                let targetID = id
                 Task.detached(priority: .utility) { [topicGenerator] in
                     if let updated = await topicGenerator.update(
                         existingTopic: existingTopic,
@@ -1125,7 +1131,7 @@ final class AgentRuntime {
                         newInput: input
                     ) {
                         await MainActor.run { [weak self] in
-                            self?.updateTaskTopic(updated)
+                            self?.updateTaskTopic(updated, for: targetID)
                         }
                     }
                 }
@@ -1137,9 +1143,36 @@ final class AgentRuntime {
         }
     }
 
-    /// Updates the active task's topic/abstract in memory and persists it.
-    private func updateTaskTopic(_ result: TopicResult) {
-        guard var task = activeTask else { return }
+    /// Updates a task's topic/abstract in memory (if still active) and persists it.
+    private func updateTaskTopic(_ result: TopicResult, for taskID: UUID? = nil) {
+        let targetID = taskID ?? activeTask?.id
+        guard var task = activeTask, task.id == targetID else {
+            // The active task has changed since the generation was launched.
+            // Persist the topic directly to the DB without touching in-memory state,
+            // and update the summary list so the catalog stays current.
+            if let targetID {
+                if let index = recentSummaries.firstIndex(where: { $0.id == targetID }) {
+                    recentSummaries[index] = TaskSummary(
+                        id: recentSummaries[index].id,
+                        status: recentSummaries[index].status,
+                        summary: recentSummaries[index].summary,
+                        topic: result.topic,
+                        abstract: result.abstract,
+                        updatedAt: recentSummaries[index].updatedAt
+                    )
+                }
+                Task {
+                    if var stale = try? await taskRepository.loadTask(id: targetID) {
+                        stale.topic = result.topic
+                        stale.abstract = result.abstract
+                        stale.topicUpdatedAt = .now
+                        stale.updatedAt = .now
+                        try? await taskRepository.saveTaskState(stale, setActive: false)
+                    }
+                }
+            }
+            return
+        }
         task.topic = result.topic
         task.abstract = result.abstract
         task.topicUpdatedAt = .now
@@ -1153,15 +1186,33 @@ final class AgentRuntime {
 
     // MARK: - Topic Generation on Completion
 
+    /// ID of the task currently undergoing topic generation, prevents duplicate runs.
+    private var topicGenerationTaskID: UUID?
+
     /// Called after a task completes to generate its topic if missing.
     func generateTopicIfNeeded() {
         guard let task = activeTask,
               task.topic == nil,
               !task.events.isEmpty else { return }
+        // Prevent concurrent generation for the same task.
+        guard topicGenerationTaskID != task.id else { return }
+        topicGenerationTaskID = task.id
+
+        let taskID = task.id
         Task.detached(priority: .utility) { [topicGenerator, weak self] in
-            guard let result = await topicGenerator.generate(from: task.events) else { return }
-            await MainActor.run {
-                self?.updateTaskTopic(result)
+            guard let result = await topicGenerator.generate(from: task.events) else {
+                await MainActor.run { [weak self] in
+                    if self?.topicGenerationTaskID == taskID {
+                        self?.topicGenerationTaskID = nil
+                    }
+                }
+                return
+            }
+            await MainActor.run { [weak self] in
+                if self?.topicGenerationTaskID == taskID {
+                    self?.topicGenerationTaskID = nil
+                }
+                self?.updateTaskTopic(result, for: taskID)
             }
         }
     }

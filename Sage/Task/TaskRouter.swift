@@ -86,7 +86,7 @@ actor TaskRouter {
             return .fallbackContinue
         }
 
-        let prompt = Self.buildPrompt(
+        let (system, user) = Self.buildPrompt(
             input: input,
             currentTopic: currentTopic,
             catalog: catalog
@@ -94,7 +94,8 @@ actor TaskRouter {
 
         do {
             let output = try await modelService.generate(
-                prompt: prompt,
+                systemPrompt: system,
+                userPrompt: user,
                 maxTokens: 48,
                 temperature: 0
             )
@@ -110,10 +111,9 @@ actor TaskRouter {
         input: String,
         currentTopic: String?,
         catalog: TaskCatalog
-    ) -> String {
+    ) -> (system: String, user: String) {
         let currentDesc = currentTopic ?? "(no active topic)"
-        return """
-        <|im_start|>system
+        let system = """
         You are a task router. Given the user's new message, the current task topic, and a catalog of prior tasks, decide the routing action.
 
         Rules:
@@ -121,17 +121,17 @@ actor TaskRouter {
         - If the message relates to a prior task in the catalog, output: {"action":"resume","id":"<8-char-prefix>"}
         - If the message is a new unrelated topic, output: {"action":"new"}
 
-        Output ONLY the JSON object, nothing else.<|im_end|>
-        <|im_start|>user
+        Output ONLY the JSON object, nothing else.
+        """
+        let user = """
         Current topic: \(currentDesc)
 
         Task catalog:
         \(catalog.promptText)
 
-        New message: \(String(input.prefix(300)))<|im_end|>
-        <|im_start|>assistant
-        /no_think
+        New message: \(String(input.prefix(300)))
         """
+        return (system, user)
     }
 
     // MARK: - Parsing
