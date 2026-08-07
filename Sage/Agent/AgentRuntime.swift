@@ -14,6 +14,8 @@ final class AgentRuntime {
     private(set) var activeTaskID: UUID?
     private(set) var phase: AgentPhase = .idle
     private(set) var lastAssistantText: String?
+    /// Incrementally accumulated text during streaming. Empty when not streaming.
+    private(set) var streamingText: String = ""
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     private(set) var contextHint: String?
     private(set) var isBusy = false
@@ -24,6 +26,12 @@ final class AgentRuntime {
 
     var events: [AgentEvent] {
         activeTask?.events ?? []
+    }
+
+    /// True when the model is actively streaming text (first token has arrived).
+    var isStreaming: Bool {
+        if case .thinking = phase { return !streamingText.isEmpty }
+        return false
     }
 
     var availableTools: [ToolDefinition] {
@@ -354,14 +362,17 @@ final class AgentRuntime {
 
         let resumeWithoutTools = events.last?.kind == .toolResult
         phase = .thinking
+        streamingText = ""
         do {
             try Task.checkCancellation()
-            let turn = try await requestModel(includeTools: !resumeWithoutTools)
+            let turn = try await requestModelStreaming(includeTools: !resumeWithoutTools)
             try Task.checkCancellation()
             await handleTurn(turn)
         } catch is CancellationError {
+            streamingText = ""
             await handleStop(plan: nil)
         } catch {
+            streamingText = ""
             await markFailed(error.localizedDescription)
         }
     }
@@ -446,15 +457,18 @@ final class AgentRuntime {
 
         phase = .thinking
         lastAssistantText = nil
+        streamingText = ""
 
         do {
             try Task.checkCancellation()
-            let turn = try await requestModel()
+            let turn = try await requestModelStreaming()
             try Task.checkCancellation()
             await handleTurn(turn)
         } catch is CancellationError {
+            streamingText = ""
             await handleStop(plan: nil)
         } catch {
+            streamingText = ""
             await markFailed(error.localizedDescription)
         }
         return true
@@ -494,17 +508,42 @@ final class AgentRuntime {
                 let resultEvent: AgentEvent
                 do {
                     try Task.checkCancellation()
-                    let result: String
+                    let rawResult: String
                     if step.toolName.hasPrefix("mcp__"), let capabilities {
-                        result = try await capabilities.callMCPTool(
+                        rawResult = try await capabilities.callMCPTool(
                             qualifiedName: step.toolName,
                             argumentsJSON: step.argumentsJSON
                         )
                     } else if let tool = tools.tool(named: step.toolName) {
-                        result = try await tool.call(argumentsJSON: step.argumentsJSON)
+                        // Some tools manage their own timeout or may involve user interaction
+                        // (permission prompts, interactive capture). Give them extended ceilings.
+                        let interactiveTools: Set<String> = [
+                            "run_shell_command",   // manages its own 120s timeout
+                            "take_screenshot",     // may trigger Screen Recording permission prompt
+                            "toggle_appearance",   // may trigger System Events permission prompt
+                            "create_reminder",     // may trigger Reminders permission prompt
+                        ]
+                        let timeout: Duration = interactiveTools.contains(step.toolName)
+                            ? .seconds(130)
+                            : toolExecutionTimeout
+                        rawResult = try await withThrowingTaskGroup(of: String.self) { group in
+                            group.addTask {
+                                try await tool.call(argumentsJSON: step.argumentsJSON)
+                            }
+                            group.addTask {
+                                try await Task.sleep(for: timeout)
+                                throw ToolError.operationFailed(
+                                    "Tool '\(step.toolName)' timed out after \(Int(timeout.components.seconds))s"
+                                )
+                            }
+                            let result = try await group.next()!
+                            group.cancelAll()
+                            return result
+                        }
                     } else {
                         throw ToolError.operationFailed("Unknown tool: \(step.toolName)")
                     }
+                    let result = capToolResult(rawResult)
                     // Side effects may already have landed — persist before honoring Stop.
                     plan.steps[index].status = .succeeded
                     plan.steps[index].result = result
@@ -586,9 +625,10 @@ final class AgentRuntime {
                 return
             }
             phase = .thinking
+            streamingText = ""
 
             try Task.checkCancellation()
-            let turn = try await requestModel(includeTools: false)
+            let turn = try await requestModelStreaming(includeTools: false)
             try Task.checkCancellation()
             let summary = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines)
             let text: String
@@ -605,15 +645,19 @@ final class AgentRuntime {
                     task.status = .completed
                 }
             ) else {
+                streamingText = ""
                 phase = .failed(message: "Could not save the completion summary.")
                 return
             }
+            streamingText = ""
             lastAssistantText = text
             phase = .completed(summary: text)
             generateTopicIfNeeded()
         } catch is CancellationError {
+            streamingText = ""
             await handleStop(plan: plan)
         } catch {
+            streamingText = ""
             await markFailed(error.localizedDescription)
         }
     }
@@ -732,6 +776,7 @@ final class AgentRuntime {
                 }
             ) else { return }
 
+            streamingText = ""
             phase = .awaitingConfirmation(plan)
             return
         }
@@ -745,6 +790,9 @@ final class AgentRuntime {
                 task.status = .completed
             }
         ) else { return }
+        // Clear streaming state AFTER the event is committed — the committed event bubble
+        // is now in the transcript, so clearing streamingText won't cause a visual flash.
+        streamingText = ""
         lastAssistantText = reply
         phase = .completed(summary: reply)
         generateTopicIfNeeded()
@@ -778,6 +826,81 @@ final class AgentRuntime {
             tools: toolDefinitions,
             settings: snapshot
         )
+    }
+
+    /// Streaming variant of `requestModel` — incrementally updates `streamingText`
+    /// and returns the assembled `ModelTurn` when the stream finishes.
+    private func requestModelStreaming(includeTools: Bool = true) async throws -> ModelTurn {
+        let snapshot = ModelSettingsSnapshot(
+            baseURL: settings.baseURL,
+            model: settings.model,
+            apiKey: settings.apiKey
+        )
+        let skillsAppendix = capabilities?.skillsPromptAppendix() ?? ""
+        let relatedAppendix = await relatedContextAppendix()
+        var modelEvents = [
+            AgentEvent(
+                kind: .systemInstruction,
+                content: systemPrompt + skillsAppendix + relatedAppendix
+            )
+        ]
+        modelEvents.append(contentsOf: ContextBudget.select(from: events))
+
+        let toolDefinitions: [ToolDefinition]
+        if includeTools {
+            toolDefinitions = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
+        } else {
+            toolDefinitions = []
+        }
+
+        let stream = try await modelClient.streamComplete(
+            events: modelEvents,
+            tools: toolDefinitions,
+            settings: snapshot
+        )
+
+        // Accumulate deltas into the final turn
+        var contentBuffer = ""
+        // Tool call accumulators keyed by index
+        var toolCallBuilders: [Int: ToolCallBuilder] = [:]
+
+        streamingText = ""
+
+        for try await delta in stream {
+            try Task.checkCancellation()
+
+            switch delta {
+            case .text(let chunk):
+                contentBuffer += chunk
+                streamingText = contentBuffer
+
+            case .toolCallDelta(let index, let id, let name, let arguments):
+                var builder = toolCallBuilders[index] ?? ToolCallBuilder()
+                if let id { builder.id = id }
+                if let name { builder.name = name }
+                if let arguments { builder.arguments += arguments }
+                toolCallBuilders[index] = builder
+
+            case .done:
+                break
+            }
+        }
+
+        // Note: streamingText is intentionally NOT cleared here.
+        // handleTurn will commit the text as an event, then clear streamingText,
+        // ensuring no visual flash between streaming content and the committed bubble.
+
+        // Assemble tool calls from builders, sorted by index
+        let toolCalls = toolCallBuilders.keys.sorted().compactMap { index -> ToolCallProposal? in
+            guard let builder = toolCallBuilders[index],
+                  let id = builder.id,
+                  let name = builder.name
+            else { return nil }
+            return ToolCallProposal(id: id, name: name, argumentsJSON: builder.arguments)
+        }
+
+        let content = contentBuffer.isEmpty ? nil : contentBuffer
+        return ModelTurn(content: content, toolCalls: toolCalls)
     }
 
     private func relatedContextAppendix() async -> String {
@@ -1043,20 +1166,52 @@ final class AgentRuntime {
             return "Rename to \(args["new_name"]?.stringValue ?? "…")"
         case "create_directory":
             return "Create \(args["path"]?.stringValue ?? "folder")"
+        case "search_files":
+            return "Search \(args["path"]?.stringValue ?? "files")"
         case "read_text_file":
             return "Read \(args["path"]?.stringValue ?? "file")"
         case "write_text_file":
             return "Write \(args["path"]?.stringValue ?? "file")"
+        case "copy_file":
+            return "Copy \(args["source"]?.stringValue ?? "file")"
+        case "delete_file":
+            return "Delete \(args["path"]?.stringValue ?? "file")"
+        case "run_shell_command":
+            let cmd = args["command"]?.stringValue ?? "command"
+            let short = cmd.count > 30 ? String(cmd.prefix(27)) + "…" : cmd
+            return "Run: \(short)"
         case "get_clipboard":
             return "Read clipboard"
         case "set_clipboard":
             return "Update clipboard"
+        case "get_selected_text":
+            return "Get selection"
+        case "type_text":
+            let text = args["text"]?.stringValue ?? ""
+            let preview = text.count > 20 ? String(text.prefix(17)) + "…" : text
+            return "Type: \(preview)"
+        case "get_screen_info":
+            return "Get screen info"
+        case "get_frontmost_app":
+            return "Check active app"
         case "open_application":
             return "Open \(args["name"]?.stringValue ?? "app")"
         case "open_url":
             return "Open URL"
         case "notify":
             return "Notify: \(args["title"]?.stringValue ?? "…")"
+        case "get_system_volume":
+            return "Get volume"
+        case "set_system_volume":
+            return "Set volume to \(args["volume"]?.stringValue ?? "…")%"
+        case "toggle_appearance":
+            return "Toggle appearance"
+        case "create_reminder":
+            let title = args["title"]?.stringValue ?? "reminder"
+            let short = title.count > 20 ? String(title.prefix(17)) + "…" : title
+            return "Remind: \(short)"
+        case "take_screenshot":
+            return "Take screenshot"
         default:
             return call.name
         }
@@ -1223,6 +1378,13 @@ private extension String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+}
+
+/// Accumulates streamed tool call fragments into a complete proposal.
+private struct ToolCallBuilder {
+    var id: String?
+    var name: String?
+    var arguments: String = ""
 }
 
 /// Tiny box so `submit` can return a Bool from a cancellable `Task<Void, Never>`.

@@ -13,6 +13,7 @@ struct MarkdownContentView: View {
     var body: some View {
         Markdown(markdown)
             .markdownTheme(.sage)
+            .markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

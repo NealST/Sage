@@ -62,22 +62,85 @@
 
 `MarkdownContentView` 已有基础，需要补齐细节。
 
-- [ ] 代码块语法高亮（基于语言标注）
+- [x] 流式渲染性能优化（分块缓存 + 节流，`StreamingContentView.swift`）
+- [ ] 代码块语法高亮（基于语言标注）— **代码已写好，待加 SPM 依赖**
 - [ ] 代码块右上角复制按钮
 - [ ] 链接可点击跳转
 - [ ] 图片/文件路径渲染（工具结果中的路径可预览）
 - [ ] 长文本折叠/展开
 
+#### 代码块语法高亮 — SPM 依赖清单
+
+方案：SwiftTreeSitter（AST 级解析，Xcode 同源技术，原生自适应配色）。
+
+代码文件已就绪：
+- `Sage/Highlighting/SageCodeTheme.swift` — Xcode 风格 light/dark 自适应配色
+- `Sage/Highlighting/TreeSitterHighlighter.swift` — tree-sitter 引擎 + MarkdownUI `CodeSyntaxHighlighter` 适配
+- `Sage/Panel/MarkdownContentView.swift` — 已接入 `.markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())`
+
+**需要在 Xcode 中添加的 SPM 依赖（File → Add Package Dependencies）：**
+
+| Package URL | Version | 说明 |
+|-------------|---------|------|
+| `https://github.com/tree-sitter/swift-tree-sitter` | from `0.9.0` | 核心 Swift 绑定 |
+| `https://github.com/alex-pinkus/tree-sitter-swift` | exact `0.7.3-with-generated-files` | Swift 语言解析器（必须用此 tag） |
+| `https://github.com/tree-sitter/tree-sitter-python` | from `0.23.0` | Python |
+| `https://github.com/tree-sitter/tree-sitter-javascript` | from `0.23.0` | JavaScript |
+| `https://github.com/tree-sitter/tree-sitter-typescript` | from `0.23.0` | TypeScript / TSX |
+| `https://github.com/tree-sitter/tree-sitter-rust` | from `0.24.0` | Rust |
+| `https://github.com/tree-sitter/tree-sitter-go` | from `0.23.0` | Go |
+| `https://github.com/tree-sitter/tree-sitter-c` | from `0.24.0` | C |
+| `https://github.com/tree-sitter/tree-sitter-cpp` | from `0.23.0` | C++ |
+| `https://github.com/tree-sitter/tree-sitter-json` | from `0.24.0` | JSON |
+| `https://github.com/tree-sitter/tree-sitter-html` | from `0.23.0` | HTML |
+| `https://github.com/tree-sitter/tree-sitter-css` | from `0.23.0` | CSS |
+| `https://github.com/tree-sitter/tree-sitter-bash` | from `0.23.0` | Bash/Shell |
+| `https://github.com/tree-sitter/tree-sitter-ruby` | from `0.23.0` | Ruby |
+| `https://github.com/tree-sitter/tree-sitter-java` | from `0.23.0` | Java |
+| `https://github.com/fwcd/tree-sitter-kotlin` | from `0.3.6` | Kotlin |
+
+添加后需要在 target 的 Frameworks 中链接：`SwiftTreeSitter`、`SwiftTreeSitterLayer`，以及所有 `TreeSitter<Lang>` products。
+
+> ⚠️ 如果 `Predicate.TextProvider` 初始化器签名与当前代码不匹配，需要根据实际 API 微调 `TreeSitterHighlighter.swift` 中的 `makeTextProvider` 函数。
+
 ### 1.3 内置工具扩展
 
-当前工具集覆盖文件和剪贴板，缺少系统交互能力。
+当前工具集（17 个）覆盖文件操作、Shell 执行、剪贴板、辅助功能和系统交互。下一步按优先级扩展：
 
-- [ ] `run_shell_command`：沙盒化的 shell 命令执行（超时、输出截断、危险命令拦截）
-- [ ] `search_files`：glob 模式文件搜索 + 内容 grep
-- [ ] `get_frontmost_app`：获取当前前台应用信息
-- [ ] `type_text`：通过 Accessibility API 模拟键入
-- [ ] `get_selected_text`：获取当前选中文本
-- [ ] `open_app`：按名称打开应用
+#### Tier 1 — 高价值 / 高频 ✅ 已完成
+
+| 工具 | 说明 | 状态 |
+|------|------|------|
+| `run_shell_command` | 沙盒化 shell 执行。异步 Process + terminationHandler，输出截断（stdout+stderr 合并，cap 50KB），可配置超时（默认 30s，最大 120s）。危险命令黑名单（rm -rf /、sudo 等）。工作目录限制在 ~/ 下。 | ✅ |
+| `search_files` | 文件搜索：支持 glob 模式匹配文件名 + 可选的内容 grep（正则）。递归搜索，结果 cap 50 条。返回格式：每行一个匹配（路径 + 可选匹配行）。 | ✅ |
+| `get_selected_text` | 通过 Accessibility API (AXUIElement) 获取当前前台应用的选中文本。需要辅助功能权限。返回选中文本或 "(no selection)"。 | ✅ |
+
+#### Tier 2 — 场景补全 ✅ 已完成
+
+| 工具 | 说明 | 状态 |
+|------|------|------|
+| `get_frontmost_app` | 获取当前前台应用信息：app name、bundle ID、窗口标题。通过 NSWorkspace + Accessibility API。 | ✅ |
+| `type_text` | 通过 Accessibility API 将文本插入当前焦点位置（替换选中或插入光标处）。配合 get_selected_text 实现"选中→处理→替换"闭环。防止写入 Sage 自身窗口。双策略：优先 kAXSelectedTextAttribute，回退 kAXValueAttribute（仅限简单输入框）。 | ✅ |
+| `get_screen_info` | 获取屏幕信息：分辨率、缩放比例、Retina 倍率、活跃显示器数量、当前窗口位置/尺寸。 | ✅ |
+
+#### Tier 3 — 锦上添花 ✅ 已完成
+
+| 工具 | 说明 | 状态 |
+|------|------|------|
+| `get_system_volume` / `set_system_volume` | CoreAudio 系统音量读取/设置（0–100）+ 静音控制 | ✅ |
+| `toggle_appearance` | 切换 Light/Dark 模式，支持指定模式或 toggle。通过 AppleScript 控制 System Events。 | ✅ |
+| `create_reminder` | 通过 EventKit 创建提醒事项，支持 due date（ISO 8601）、优先级、备注 | ✅ |
+| `take_screenshot` | 截取屏幕/窗口截图，保存为 PNG。优先使用 CGWindowList API，回退 screencapture CLI。 | ✅ |
+
+#### 实现原则
+
+所有新工具必须遵循 `Sage/Tools/TOOL_DESIGN.md` 中的设计标准：
+- Description 面向 AI 决策（含功能、限制、输出格式、副作用）
+- 操作类结果 `[OK]` 前缀，查询类裸数据
+- 错误信息 actionable（告知 AI 下一步怎么做）
+- 使用 `decodeToolArgs` + `PathGuard`（文件类）
+- 无阻塞同步调用，输出有大小上限
+- 注册到 `ToolRegistry.makeDefault()` + `humanTitle(for:)`
 
 ### 1.4 错误恢复 UX
 

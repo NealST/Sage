@@ -145,6 +145,12 @@ struct AgentWorkspaceView: View {
                     guard stickToBottom else { return }
                     scrollToLatest(using: proxy)
                 }
+                // Scroll during streaming — throttled by observing coarse content changes.
+                // Triggers on new lines OR every ~80 characters (whichever comes first).
+                .onChange(of: appState.agent.streamingText.scrollThrottleKey) { _, _ in
+                    guard stickToBottom else { return }
+                    scrollToLatestStreaming(using: proxy)
+                }
 
                 if !stickToBottom && !displayEvents.isEmpty {
                     Button {
@@ -203,12 +209,24 @@ struct AgentWorkspaceView: View {
     private var phaseAccessory: some View {
         switch appState.agent.phase {
         case .thinking:
-            HStack(spacing: SageDesign.Spacing.sm) {
-                ProgressView().controlSize(.small)
-                Text("Thinking…")
-                    .font(.system(size: SageDesign.Typography.bodySize))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+                if appState.agent.isStreaming {
+                    StreamingContentView(text: appState.agent.streamingText)
+                        .transition(.opacity)
+                } else {
+                    HStack(spacing: SageDesign.Spacing.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Thinking…")
+                            .font(.system(size: SageDesign.Typography.bodySize))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .animation(SageDesign.Motion.streamingTransition, value: appState.agent.isStreaming)
+            // Stop button stays anchored outside the animated content — no position jump.
+            .overlay(alignment: .topTrailing) {
                 if appState.agent.canStop {
                     Button("Stop") {
                         appState.agent.stop()
@@ -456,6 +474,19 @@ struct AgentWorkspaceView: View {
         }
     }
 
+    /// Streaming-specific scroll — uses a critically damped spring for smooth tracking.
+    private func scrollToLatestStreaming(using proxy: ScrollViewProxy) {
+        let animation = AccessibilityPreferences.reduceMotion
+            ? nil : SageDesign.Motion.streamingScroll
+        if let animation {
+            withAnimation(animation) {
+                proxy.scrollTo("phase-accessory", anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo("phase-accessory", anchor: .bottom)
+        }
+    }
+
     private func focusInputSoon() {
         DispatchQueue.main.async {
             if appState.agent.blocksNewInput { return }
@@ -537,5 +568,19 @@ private struct WrappingHStack: Layout {
         }
 
         return (CGSize(width: width, height: y + rowHeight), frames)
+    }
+}
+
+// MARK: - Streaming scroll throttle
+
+private extension String {
+    /// Coarse key combining line count and length bucket — triggers scroll updates
+    /// on new lines OR every ~80 characters, whichever comes first.
+    /// This avoids per-character scroll while still tracking long unwrapped lines.
+    var scrollThrottleKey: Int {
+        var lines = 1
+        for char in self where char == "\n" { lines += 1 }
+        let lengthBucket = count / 80
+        return lines &* 1000 &+ lengthBucket
     }
 }

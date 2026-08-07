@@ -56,7 +56,18 @@ enum SageDesign {
         static let contentCrossFade: Animation = .easeOut(duration: 0.18)
         static let reducedCrossFade: Animation = .easeOut(duration: 0.12)
 
+        /// Breathing cursor pulse — easeInOut for organic feel, not a hard blink.
+        static let cursorPulse: Animation = .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+
+        /// Critically damped spring for streaming scroll — no overshoot, smooth settle.
+        static let streamingScroll: Animation = .interpolatingSpring(duration: 0.3, bounce: 0)
+
         static var scrollAnimation: Animation? {
+            AccessibilityPreferences.reduceMotion ? nil : contentCrossFade
+        }
+
+        /// Cross-fade for thinking→streaming transition.
+        static var streamingTransition: Animation? {
             AccessibilityPreferences.reduceMotion ? nil : contentCrossFade
         }
     }

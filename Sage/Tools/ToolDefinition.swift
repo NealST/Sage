@@ -23,27 +23,65 @@ enum ToolError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidArguments(let detail): return "Invalid arguments: \(detail)"
-        case .pathNotAllowed(let path): return "Path not allowed: \(path)"
-        case .operationFailed(let detail): return detail
+        case .invalidArguments(let detail):
+            return "Invalid arguments: \(detail)"
+        case .pathNotAllowed(let path):
+            return "Path not allowed: \(path). Only paths under the user's home directory (~/) are accessible."
+        case .operationFailed(let detail):
+            return detail
         }
     }
 }
 
 enum PathGuard {
-    /// Only allow paths under the user's home directory.
+    /// Cached resolved home path to avoid repeated symlink resolution on every call.
+    private static let resolvedHomePath: String = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .standardizedFileURL.resolvingSymlinksInPath().path
+    }()
+
+    /// Only allow paths whose resolved physical location is under the user's home directory.
+    /// Resolves symlinks to prevent escaping the home sandbox via symbolic links.
     static func resolveAllowed(_ raw: String) throws -> URL {
         let expanded = (raw as NSString).expandingTildeInPath
         let url = URL(fileURLWithPath: expanded).standardizedFileURL
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL
-        let homePath = home.path
-        let path = url.path
-        guard path == homePath || path.hasPrefix(homePath + "/") else {
+        // Resolve symlinks to get the true physical path
+        let resolved = url.resolvingSymlinksInPath()
+        let path = resolved.path
+        guard path == resolvedHomePath || path.hasPrefix(resolvedHomePath + "/") else {
             throw ToolError.pathNotAllowed(raw)
         }
         return url
     }
 }
+
+/// Shared argument decoder for all tools.
+/// Uses `.convertFromSnakeCase` so tool Args structs can use camelCase properties
+/// without manually defining CodingKeys for every snake_case JSON parameter.
+func decodeToolArgs<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
+    guard let data = json.data(using: .utf8) else {
+        throw ToolError.invalidArguments("Arguments are not UTF-8")
+    }
+    do {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(T.self, from: data)
+    } catch {
+        throw ToolError.invalidArguments(error.localizedDescription)
+    }
+}
+
+/// Maximum characters a tool result may return before truncation.
+private let toolResultMaxChars = 50_000
+
+/// Truncates a tool result string if it exceeds the global cap.
+func capToolResult(_ result: String) -> String {
+    guard result.count > toolResultMaxChars else { return result }
+    return String(result.prefix(toolResultMaxChars)) + "\n… (result truncated at \(toolResultMaxChars) characters)"
+}
+
+/// Default timeout for tool execution (30 seconds).
+let toolExecutionTimeout: Duration = .seconds(30)
 
 struct ToolRegistry: Sendable {
     private let tools: [String: any AgentTool]
@@ -66,17 +104,35 @@ struct ToolRegistry: Sendable {
 
     static func makeDefault() -> ToolRegistry {
         ToolRegistry(tools: [
+            // File operations
             ListDirectoryTool(),
-            MoveFileTool(),
-            RenameFileTool(),
-            CreateDirectoryTool(),
+            SearchFilesTool(),
             ReadTextFileTool(),
             WriteTextFileTool(),
+            MoveFileTool(),
+            CopyFileTool(),
+            RenameFileTool(),
+            DeleteFileTool(),
+            CreateDirectoryTool(),
+            // Shell
+            RunShellCommandTool(),
+            // Clipboard
             GetClipboardTool(),
             SetClipboardTool(),
+            // Accessibility
+            GetSelectedTextTool(),
+            TypeTextTool(),
+            GetFrontmostAppTool(),
+            GetScreenInfoTool(),
+            // System
             OpenApplicationTool(),
             OpenURLTool(),
             NotifyTool(),
+            GetSystemVolumeTool(),
+            SetSystemVolumeTool(),
+            ToggleAppearanceTool(),
+            CreateReminderTool(),
+            TakeScreenshotTool(),
         ])
     }
 }

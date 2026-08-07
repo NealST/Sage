@@ -16,6 +16,18 @@ struct ModelTurn: Sendable {
     let toolCalls: [ToolCallProposal]
 }
 
+// MARK: - Streaming types
+
+/// A single incremental chunk from the SSE stream.
+enum StreamDelta: Sendable {
+    /// A text content fragment.
+    case text(String)
+    /// A tool call fragment (index identifies which call is being built).
+    case toolCallDelta(index: Int, id: String?, name: String?, arguments: String?)
+    /// The stream has finished; includes the stop reason.
+    case done
+}
+
 enum ModelClientError: LocalizedError {
     case notConfigured
     case invalidURL
@@ -69,6 +81,104 @@ actor ModelClient {
         guard (200..<300).contains(http.statusCode) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ModelClientError.httpStatus(http.statusCode, text)
+        }
+    }
+
+    /// Streaming variant — returns an `AsyncThrowingStream` of incremental deltas.
+    /// The caller accumulates text and tool call fragments, then assembles the final `ModelTurn`.
+    func streamComplete(
+        events: [AgentEvent],
+        tools: [ToolDefinition],
+        settings: ModelSettingsSnapshot
+    ) async throws -> AsyncThrowingStream<StreamDelta, Error> {
+        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+
+        let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(trimmedBase)/chat/completions") else {
+            throw ModelClientError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 120
+
+        let body = StreamingChatCompletionRequest(
+            model: settings.model,
+            messages: events.map(APIMessage.init),
+            tools: tools.isEmpty ? nil : tools.map(APITool.init),
+            toolChoice: tools.isEmpty ? nil : "auto",
+            stream: true
+        )
+        request.httpBody = try JSONEncoder().encode(body)
+
+        try Task.checkCancellation()
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        try Task.checkCancellation()
+
+        guard let http = response as? HTTPURLResponse else {
+            throw ModelClientError.httpStatus(-1, "No HTTP response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            // Read the error body from the byte stream
+            var errorData = Data()
+            for try await byte in bytes { errorData.append(byte) }
+            let text = String(data: errorData, encoding: .utf8) ?? ""
+            throw ModelClientError.httpStatus(http.statusCode, text)
+        }
+
+        return AsyncThrowingStream { continuation in
+            let parseTask = Task {
+                do {
+                    for try await line in bytes.lines {
+                        try Task.checkCancellation()
+
+                        // SSE format: lines starting with "data: "
+                        guard line.hasPrefix("data: ") else { continue }
+                        let payload = String(line.dropFirst(6))
+
+                        if payload == "[DONE]" {
+                            continuation.yield(.done)
+                            continuation.finish()
+                            return
+                        }
+
+                        guard let data = payload.data(using: .utf8),
+                              let chunk = try? JSONDecoder().decode(StreamingChunk.self, from: data)
+                        else { continue }
+
+                        guard let delta = chunk.choices.first?.delta else { continue }
+
+                        // Text content delta
+                        if let content = delta.content, !content.isEmpty {
+                            continuation.yield(.text(content))
+                        }
+
+                        // Tool call deltas
+                        if let toolCalls = delta.toolCalls {
+                            for tc in toolCalls {
+                                continuation.yield(.toolCallDelta(
+                                    index: tc.index,
+                                    id: tc.id,
+                                    name: tc.function?.name,
+                                    arguments: tc.function?.arguments
+                                ))
+                            }
+                        }
+                    }
+                    // Stream ended without [DONE] — still finish gracefully
+                    continuation.yield(.done)
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish(throwing: CancellationError())
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                parseTask.cancel()
+            }
         }
     }
 
@@ -245,6 +355,58 @@ private struct ChatCompletionResponse: Decodable {
     }
 }
 
+// MARK: - Streaming wire format
+
+private struct StreamingChatCompletionRequest: Encodable {
+    let model: String
+    let messages: [APIMessage]
+    let tools: [APITool]?
+    let toolChoice: String?
+    let stream: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case model, messages, tools, stream
+        case toolChoice = "tool_choice"
+    }
+}
+
+private struct StreamingChunk: Decodable {
+    let choices: [StreamingChoice]
+
+    struct StreamingChoice: Decodable {
+        let delta: Delta?
+        let finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case delta
+            case finishReason = "finish_reason"
+        }
+    }
+
+    struct Delta: Decodable {
+        let content: String?
+        let toolCalls: [ToolCallDelta]?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case toolCalls = "tool_calls"
+        }
+    }
+
+    struct ToolCallDelta: Decodable {
+        let index: Int
+        let id: String?
+        let function: FunctionDelta?
+
+        struct FunctionDelta: Decodable {
+            let name: String?
+            let arguments: String?
+        }
+    }
+}
+
+// MARK: - JSON utility
+
 enum JSONValue: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
@@ -317,6 +479,13 @@ extension JSONValue {
     static func stringProperty(_ description: String) -> JSONValue {
         .object([
             "type": .string("string"),
+            "description": .string(description),
+        ])
+    }
+
+    static func intProperty(_ description: String) -> JSONValue {
+        .object([
+            "type": .string("integer"),
             "description": .string(description),
         ])
     }
