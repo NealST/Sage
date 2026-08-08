@@ -34,14 +34,14 @@
 
 ### 0.1 提交当前修复并集成 MLX 依赖
 
-- [ ] 将 `HubEndpointResolver.swift` 添加到 Xcode 项目
-- [ ] 添加 SPM 依赖：`mlx-swift-lm`、`swift-huggingface`、`swift-transformers`
+- [x] 将 `HubEndpointResolver.swift` 添加到 Xcode 项目（PBXFileSystemSynchronizedRootGroup 自动包含）
+- [x] 添加 SPM 依赖：`mlx-swift-lm`、`swift-huggingface`、`swift-transformers`
 - [ ] 提交所有修改
 
 ### 0.2 修复 Xcode 项目文件
 
-- [ ] 修复 `project.pbxproj` 中损坏的 `isa` key
-- [ ] 完整构建验证，确保所有 MLX API 签名编译通过
+- [x] 修复 `project.pbxproj` 中损坏的 `isa` key（当前工程文件干净）
+- [x] 完整构建验证，确保所有 MLX API 签名编译通过
 
 ---
 
@@ -63,45 +63,21 @@
 `MarkdownContentView` 已有基础，需要补齐细节。
 
 - [x] 流式渲染性能优化（分块缓存 + 节流，`StreamingContentView.swift`）
-- [ ] 代码块语法高亮（基于语言标注）— **代码已写好，待加 SPM 依赖**
+- [x] 代码块语法高亮（基于语言标注）— TreeSitter SPM 已接入，构建通过
 - [ ] 代码块右上角复制按钮
 - [ ] 链接可点击跳转
 - [ ] 图片/文件路径渲染（工具结果中的路径可预览）
 - [ ] 长文本折叠/展开
 
-#### 代码块语法高亮 — SPM 依赖清单
+#### 代码块语法高亮 — SPM 依赖说明
 
 方案：SwiftTreeSitter（AST 级解析，Xcode 同源技术，原生自适应配色）。
 
-代码文件已就绪：
 - `Sage/Highlighting/SageCodeTheme.swift` — Xcode 风格 light/dark 自适应配色
 - `Sage/Highlighting/TreeSitterHighlighter.swift` — tree-sitter 引擎 + MarkdownUI `CodeSyntaxHighlighter` 适配
 - `Sage/Panel/MarkdownContentView.swift` — 已接入 `.markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())`
 
-**需要在 Xcode 中添加的 SPM 依赖（File → Add Package Dependencies）：**
-
-| Package URL | Version | 说明 |
-|-------------|---------|------|
-| `https://github.com/tree-sitter/swift-tree-sitter` | from `0.9.0` | 核心 Swift 绑定 |
-| `https://github.com/alex-pinkus/tree-sitter-swift` | exact `0.7.3-with-generated-files` | Swift 语言解析器（必须用此 tag） |
-| `https://github.com/tree-sitter/tree-sitter-python` | from `0.23.0` | Python |
-| `https://github.com/tree-sitter/tree-sitter-javascript` | from `0.23.0` | JavaScript |
-| `https://github.com/tree-sitter/tree-sitter-typescript` | from `0.23.0` | TypeScript / TSX |
-| `https://github.com/tree-sitter/tree-sitter-rust` | from `0.24.0` | Rust |
-| `https://github.com/tree-sitter/tree-sitter-go` | from `0.23.0` | Go |
-| `https://github.com/tree-sitter/tree-sitter-c` | from `0.24.0` | C |
-| `https://github.com/tree-sitter/tree-sitter-cpp` | from `0.23.0` | C++ |
-| `https://github.com/tree-sitter/tree-sitter-json` | from `0.24.0` | JSON |
-| `https://github.com/tree-sitter/tree-sitter-html` | from `0.23.0` | HTML |
-| `https://github.com/tree-sitter/tree-sitter-css` | from `0.23.0` | CSS |
-| `https://github.com/tree-sitter/tree-sitter-bash` | from `0.23.0` | Bash/Shell |
-| `https://github.com/tree-sitter/tree-sitter-ruby` | from `0.23.0` | Ruby |
-| `https://github.com/tree-sitter/tree-sitter-java` | from `0.23.0` | Java |
-| `https://github.com/fwcd/tree-sitter-kotlin` | from `0.3.6` | Kotlin |
-
-添加后需要在 target 的 Frameworks 中链接：`SwiftTreeSitter`、`SwiftTreeSitterLayer`，以及所有 `TreeSitter<Lang>` products。
-
-> ⚠️ 如果 `Predicate.TextProvider` 初始化器签名与当前代码不匹配，需要根据实际 API 微调 `TreeSitterHighlighter.swift` 中的 `makeTextProvider` 函数。
+Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）：上游 `Package.swift` 用 `FileManager` 探测 `scanner.c`，在 Xcode SPM 下会漏编导致链接失败。
 
 ### 1.3 内置工具扩展
 

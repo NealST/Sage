@@ -185,13 +185,13 @@ actor TaskRouter {
 
 // MARK: - Supporting Types
 
-private struct RouterOutput: Decodable {
+private nonisolated struct RouterOutput: Decodable {
     let action: String
     let id: String?
 }
 
 extension TaskRoutingDecision {
-    static let fallbackContinue = TaskRoutingDecision(
+    nonisolated static let fallbackContinue = TaskRoutingDecision(
         action: .continueActive,
         confidence: 0.5,
         reason: "Fallback: model unavailable or unparseable"

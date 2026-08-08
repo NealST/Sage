@@ -11,8 +11,8 @@ import Foundation
 import HuggingFace
 import MLX
 import MLXLLM
-import MLXHuggingFace
 import MLXLMCommon
+import Tokenizers
 
 /// Singleton actor that owns the local MLX model lifecycle.
 ///
@@ -147,7 +147,7 @@ actor LocalModelService {
 
             let container = try await LLMModelFactory.shared.loadContainer(
                 from: downloader,
-                using: #huggingFaceTokenizerLoader(),
+                using: SageTransformersTokenizerLoader(),
                 configuration: Self.modelConfiguration
             )
 
@@ -177,7 +177,18 @@ actor LocalModelService {
     }
 }
 
-// MARK: - Custom Downloader
+// MARK: - Hub / Tokenizer adapters
+
+private enum SageHubError: LocalizedError {
+    case invalidRepositoryID(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidRepositoryID(let id):
+            "Invalid Hugging Face repository ID: '\(id)'. Expected format 'namespace/name'."
+        }
+    }
+}
 
 /// Wraps `HubClient` to conform to the MLXLMCommon `Downloader` protocol,
 /// allowing us to control which endpoint (official vs mirror) is used.
@@ -193,7 +204,7 @@ private struct SageHubDownloader: MLXLMCommon.Downloader, @unchecked Sendable {
         progressHandler: @Sendable @escaping (Progress) -> Void
     ) async throws -> URL {
         guard let repoID = Repo.ID(rawValue: id) else {
-            throw HuggingFaceDownloaderError.invalidRepositoryID(id)
+            throw SageHubError.invalidRepositoryID(id)
         }
         let revision = revision ?? "main"
         return try await hubClient.downloadSnapshot(
@@ -205,5 +216,57 @@ private struct SageHubDownloader: MLXLMCommon.Downloader, @unchecked Sendable {
                 progressCallback(progress.fractionCompleted)
             }
         )
+    }
+}
+
+/// Loads tokenizers via `swift-transformers` without depending on MLXHuggingFace macros.
+private struct SageTransformersTokenizerLoader: MLXLMCommon.TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await AutoTokenizer.from(modelFolder: directory)
+        return SageTokenizerBridge(upstream)
+    }
+}
+
+private struct SageTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) {
+        self.upstream = upstream
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages,
+                tools: tools,
+                additionalContext: additionalContext
+            )
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
     }
 }

@@ -176,6 +176,7 @@ final class AgentRuntime {
     /// Entry point for a future context resolver. The UI does not expose task creation.
     @discardableResult
     func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
+        var inheritedRelated = relatedTaskIDs
         // Persist the closed prior task before switching memory.
         if var closing = activeTask {
             let retractIDs = unexecutedToolProposalIDs(in: closing.events)
@@ -183,19 +184,33 @@ final class AgentRuntime {
                 let deleteSet = Set(retractIDs)
                 closing.events.removeAll { deleteSet.contains($0.id) }
             }
-            if closing.status == .active || closing.status == .awaitingApproval {
-                closing.status = .completed
-            }
-            closing.pendingPlan = nil
-            closing.updatedAt = .now
+
             do {
-                try await taskRepository.mutateTask(
-                    closing,
-                    appendEvents: [],
-                    deleteEventIDs: retractIDs,
-                    setActive: false
-                )
-                refreshSummary(for: closing)
+                if closing.events.isEmpty {
+                    // Empty shells must not linger as completed catalog noise.
+                    try await taskRepository.deleteTask(id: closing.id)
+                    recentSummaries.removeAll { $0.id == closing.id }
+                } else {
+                    if closing.status == .active || closing.status == .awaitingApproval {
+                        closing.status = .completed
+                    }
+                    closing.pendingPlan = nil
+                    closing.updatedAt = .now
+                    try await taskRepository.mutateTask(
+                        closing,
+                        appendEvents: [],
+                        deleteEventIDs: retractIDs,
+                        setActive: false
+                    )
+                    refreshSummary(for: closing)
+                    // Closing via route/start-fresh often skips the .completed phase —
+                    // still generate a topic so the task can re-enter the catalog.
+                    scheduleTopicGeneration(for: closing)
+                    // Link the closed task so related-context injection can fire.
+                    if !inheritedRelated.contains(closing.id) {
+                        inheritedRelated.insert(closing.id, at: 0)
+                    }
+                }
                 phase = .idle
                 lastAssistantText = nil
             } catch {
@@ -210,7 +225,9 @@ final class AgentRuntime {
         activeTask = nil
         activeTaskID = nil
 
-        return await createAndActivateTask(relatedTo: relatedTaskIDs)
+        return await createAndActivateTask(
+            relatedTo: Array(inheritedRelated.prefix(Self.maxRelatedTaskIDs))
+        )
     }
 
     /// Entry point for future semantic retrieval. Not surfaced as chat navigation.
@@ -395,36 +412,59 @@ final class AgentRuntime {
         if case .completed = phase { phase = .idle }
         if case .failed = phase { phase = .idle }
 
+        // Dismiss-chip / force-fresh must not be undone by resume routing.
+        let forcedFresh: Bool
         if forceFreshOnNextSubmit {
             forceFreshOnNextSubmit = false
             contextHint = nil
             guard await beginNewTask(relatedTo: []) != nil else { return false }
+            forcedFresh = true
+        } else {
+            forcedFresh = false
         }
 
-        let workspace = TaskWorkspaceSnapshot(
-            activeTask: activeTask,
-            recentSummaries: recentSummaries,
-            activeTaskID: activeTaskID
-        )
-        let contextDecision = await contextResolver.resolve(
-            input: trimmed,
-            workspace: workspace
-        )
-
-        // Local model routing: refine the decision when the heuristic says "continue"
-        // but the model may detect a topic switch or a match to a prior task.
-        if case .continueActive = contextDecision.action {
-            let routingResult = await applyLocalRouting(input: trimmed)
-            if let routingResult {
-                guard await applyRoutingDecision(routingResult, input: trimmed) else { return false }
-            }
+        let effectiveDecision: TaskContextDecision
+        if forcedFresh {
+            effectiveDecision = TaskContextDecision(
+                action: .continueActive,
+                relatedTaskIDs: [],
+                confidence: 1,
+                reason: "User forced a fresh task boundary",
+                userVisibleHint: nil
+            )
         } else {
-            guard await apply(contextDecision) else { return false }
+            let workspace = TaskWorkspaceSnapshot(
+                activeTask: activeTask,
+                recentSummaries: recentSummaries,
+                activeTaskID: activeTaskID
+            )
+            let contextDecision = await contextResolver.resolve(
+                input: trimmed,
+                workspace: workspace
+            )
+
+            // Local model routing: refine when the heuristic says "continue"
+            // (topic drift → new, or resume a prior catalogued task).
+            if case .continueActive = contextDecision.action {
+                if let routingResult = await applyLocalRouting(input: trimmed) {
+                    guard let routed = await applyRoutingDecision(
+                        routingResult,
+                        input: trimmed
+                    ) else { return false }
+                    effectiveDecision = routed
+                } else {
+                    effectiveDecision = contextDecision
+                }
+            } else {
+                guard let applied = await apply(contextDecision) else { return false }
+                effectiveDecision = applied
+            }
         }
 
         guard await ensureActiveTask() else { return false }
 
-        // Resumed task may carry a pending plan — refuse instead of wiping it.
+        // Defensive: resume paths refuse tasks with a pending plan, but keep
+        // this guard so we never wipe a plan if state races.
         if let plan = activeTask?.pendingPlan {
             phase = .awaitingConfirmation(plan)
             return false
@@ -433,7 +473,7 @@ final class AgentRuntime {
         let userEvent = AgentEvent(
             kind: .userInput,
             content: trimmed,
-            context: contextDecision.eventContext
+            context: effectiveDecision.eventContext
         )
         guard await commit(
             appendEvents: [userEvent],
@@ -444,14 +484,14 @@ final class AgentRuntime {
                 if task.summary == nil {
                     task.summary = String(trimmed.prefix(160))
                 }
-                for relatedID in contextDecision.relatedTaskIDs
+                for relatedID in effectiveDecision.relatedTaskIDs
                     where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
                     task.relatedTaskIDs.append(relatedID)
                 }
             }
         ) else { return false }
 
-        if let hint = contextDecision.userVisibleHint {
+        if let hint = effectiveDecision.userVisibleHint {
             contextHint = hint
         }
 
@@ -915,9 +955,14 @@ final class AgentRuntime {
         var lines = ["", "## Related prior work", "Use only if relevant to the current request:"]
         for id in relatedIDs {
             guard let related = try? await taskRepository.loadTask(id: id) else { continue }
-            let title = related.summary?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            lines.append("- \(title.flatMap { $0.isEmpty ? nil : $0 } ?? "Prior task")")
+            let topic = related.topic?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let summary = related.summary?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            let title = topic ?? summary ?? "Prior task"
+            lines.append("- \(title)")
+            if let abstract = related.abstract?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !abstract.isEmpty {
+                lines.append("  Intent: \(abstract)")
+            }
             if let lastUser = related.events.last(where: { $0.kind == .userInput })?.content {
                 lines.append("  Last request: \(String(lastUser.prefix(220)))")
             }
@@ -953,39 +998,115 @@ final class AgentRuntime {
         }
     }
 
-    @discardableResult
-    private func apply(_ decision: TaskContextDecision) async -> Bool {
+    private static let maxRelatedTaskIDs = 8
+
+    /// Applies a heuristic context decision. Returns the effective decision
+    /// (may downgrade a blocked resume to continue), or nil on hard failure.
+    private func apply(_ decision: TaskContextDecision) async -> TaskContextDecision? {
         switch decision.action {
         case .continueActive:
-            return true
+            return decision
         case .beginNew:
             contextHint = nil
-            return await beginNewTask(relatedTo: decision.relatedTaskIDs) != nil
+            guard await beginNewTask(relatedTo: decision.relatedTaskIDs) != nil else {
+                return nil
+            }
+            return decision
         case .resumeTask(let id):
-            await activateTask(id)
-            guard activeTaskID == id else { return false }
-            if var task = activeTask {
-                for relatedID in decision.relatedTaskIDs
-                    where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
-                    task.relatedTaskIDs.append(relatedID)
-                }
+            return await resumeTask(
+                id,
+                extraRelatedIDs: decision.relatedTaskIDs,
+                inputForTopicUpdate: nil,
+                confidence: decision.confidence,
+                reason: decision.reason,
+                userVisibleHint: decision.userVisibleHint
+            )
+        }
+    }
+
+    /// Shared resume path for heuristic + local-model routing.
+    private func resumeTask(
+        _ id: UUID,
+        extraRelatedIDs: [UUID],
+        inputForTopicUpdate: String?,
+        confidence: Double,
+        reason: String,
+        userVisibleHint: String?
+    ) async -> TaskContextDecision? {
+        if await taskHasPendingPlan(id) {
+            return TaskContextDecision(
+                action: .continueActive,
+                relatedTaskIDs: [],
+                confidence: confidence,
+                reason: "Resume skipped: target has pending plan",
+                userVisibleHint: nil
+            )
+        }
+
+        let previousID = activeTaskID
+        await activateTask(id)
+        guard activeTaskID == id else { return nil }
+
+        if var task = activeTask {
+            var changed = false
+            if let previousID,
+               previousID != task.id,
+               !task.relatedTaskIDs.contains(previousID) {
+                task.relatedTaskIDs.insert(previousID, at: 0)
+                changed = true
+            }
+            for relatedID in extraRelatedIDs
+                where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
+                task.relatedTaskIDs.append(relatedID)
+                changed = true
+            }
+            if task.relatedTaskIDs.count > Self.maxRelatedTaskIDs {
+                task.relatedTaskIDs = Array(task.relatedTaskIDs.prefix(Self.maxRelatedTaskIDs))
+                changed = true
+            }
+            if changed {
                 task.updatedAt = .now
                 do {
                     try await taskRepository.saveTaskState(task, setActive: true)
-                    activeTask = task
-                    refreshSummary(for: task)
+                    adoptTaskInMemory(task)
                 } catch {
                     phase = .failed(message: "Could not update related context: \(error.localizedDescription)")
-                    return false
+                    return nil
                 }
             }
-            if let hint = decision.userVisibleHint {
-                contextHint = hint
-            } else if let task = activeTask {
-                contextHint = Self.hint(for: task)
+
+            if let inputForTopicUpdate,
+               let existingTopic = task.topic,
+               let existingAbstract = task.abstract {
+                let targetID = id
+                Task.detached(priority: .utility) { [topicGenerator] in
+                    if let updated = await topicGenerator.update(
+                        existingTopic: existingTopic,
+                        existingAbstract: existingAbstract,
+                        newInput: inputForTopicUpdate
+                    ) {
+                        await MainActor.run { [weak self] in
+                            self?.updateTaskTopic(updated, for: targetID)
+                        }
+                    }
+                }
             }
-            return true
         }
+
+        let hint = userVisibleHint ?? activeTask.map(Self.hint(for:))
+        if let hint { contextHint = hint }
+        return TaskContextDecision(
+            action: .resumeTask(id),
+            relatedTaskIDs: [],
+            confidence: confidence,
+            reason: reason,
+            userVisibleHint: hint
+        )
+    }
+
+    private func taskHasPendingPlan(_ id: UUID) async -> Bool {
+        if activeTaskID == id { return activeTask?.pendingPlan != nil }
+        return (try? await taskRepository.hasPendingPlan(taskID: id)) ?? false
     }
 
     /// Updates memory only after a successful atomic DB mutation.
@@ -1010,8 +1131,7 @@ final class AgentRuntime {
                 deleteEventIDs: deleteEventIDs,
                 setActive: true
             )
-            activeTask = task
-            refreshSummary(for: task)
+            adoptTaskInMemory(task)
             return true
         } catch {
             phase = .failed(message: "Could not save task history: \(error.localizedDescription)")
@@ -1026,12 +1146,27 @@ final class AgentRuntime {
         task.updatedAt = .now
         do {
             try await taskRepository.saveTaskState(task, setActive: true)
-            activeTask = task
-            refreshSummary(for: task)
+            adoptTaskInMemory(task)
             return true
         } catch {
             return false
         }
+    }
+
+    /// Writes `task` into memory, preserving a topic that arrived concurrently
+    /// (topic generation finishing while commit/plan save was in flight).
+    private func adoptTaskInMemory(_ task: TaskRecord) {
+        var merged = task
+        if merged.topic == nil,
+           let current = activeTask,
+           current.id == merged.id,
+           let topic = current.topic {
+            merged.topic = topic
+            merged.abstract = current.abstract
+            merged.topicUpdatedAt = current.topicUpdatedAt
+        }
+        activeTask = merged
+        refreshSummary(for: merged)
     }
 
     private func failDuringExecution(plan: AgentPlan, message: String) async {
@@ -1234,140 +1369,170 @@ final class AgentRuntime {
 
     // MARK: - Local Model Routing
 
-    /// Asks the local model to route the input. Returns nil if the model is not ready
-    /// or decides to continue the current task (no action needed).
+    /// Asks the local model to route the input. Returns nil if the model decides
+    /// (or falls back to) continuing the current task.
     private func applyLocalRouting(input: String) async -> TaskRoutingDecision? {
         let catalog = TaskCatalog.build(
             from: recentSummaries,
             excluding: activeTaskID
         )
-        // Skip routing if there's nothing to route to and the task is non-empty.
         let activeIsEmpty = activeTask?.events.isEmpty ?? true
-        if catalog.entries.isEmpty && !activeIsEmpty {
-            return nil
+        // Skip only when there is neither a conversation to leave nor a catalog
+        // to resume. A non-empty active task with an empty catalog still needs
+        // routing so the model can emit `new` on topic drift.
+        if catalog.entries.isEmpty && activeIsEmpty {
+            return heuristicRoutingDecision(input: input)
         }
 
         let decision = await taskRouter.route(
             input: input,
-            currentTopic: activeTask?.topic,
+            currentTopic: activeTask?.topic ?? activeTask?.summary.map {
+                String($0.prefix(20))
+            },
             catalog: catalog
         )
 
         switch decision.action {
         case .continueActive:
+            // Low confidence = model unavailable / unparseable — try lexical fallback.
+            if decision.confidence <= 0.5 {
+                return heuristicRoutingDecision(input: input)
+            }
             return nil
         case .resumeTask, .beginNew:
             return decision
         }
     }
 
-    /// Applies a local model routing decision to the runtime state.
-    private func applyRoutingDecision(
-        _ decision: TaskRoutingDecision,
-        input: String
-    ) async -> Bool {
+    private func heuristicRoutingDecision(input: String) -> TaskRoutingDecision? {
+        let workspace = TaskWorkspaceSnapshot(
+            activeTask: activeTask,
+            recentSummaries: recentSummaries,
+            activeTaskID: activeTaskID
+        )
+        guard let decision = HeuristicTaskFallback.decide(
+            input: input,
+            workspace: workspace
+        ) else {
+            return nil
+        }
         switch decision.action {
         case .continueActive:
-            return true
+            return nil
         case .beginNew:
-            contextHint = nil
-            return await beginNewTask(relatedTo: []) != nil
+            return TaskRoutingDecision(
+                action: .beginNew,
+                confidence: decision.confidence,
+                reason: decision.reason
+            )
         case .resumeTask(let id):
-            await activateTask(id)
-            guard activeTaskID == id else { return false }
-            // Update topic if the resumed task gains new content.
-            if let existingTopic = activeTask?.topic,
-               let existingAbstract = activeTask?.abstract {
-                let targetID = id
-                Task.detached(priority: .utility) { [topicGenerator] in
-                    if let updated = await topicGenerator.update(
-                        existingTopic: existingTopic,
-                        existingAbstract: existingAbstract,
-                        newInput: input
-                    ) {
-                        await MainActor.run { [weak self] in
-                            self?.updateTaskTopic(updated, for: targetID)
-                        }
-                    }
-                }
-            }
-            if let task = activeTask {
-                contextHint = Self.hint(for: task)
-            }
-            return true
+            return TaskRoutingDecision(
+                action: .resumeTask(id),
+                confidence: decision.confidence,
+                reason: decision.reason
+            )
         }
     }
 
-    /// Updates a task's topic/abstract in memory (if still active) and persists it.
+    /// Applies a local model routing decision. Returns the effective context
+    /// decision for event metadata, or nil on hard failure.
+    private func applyRoutingDecision(
+        _ decision: TaskRoutingDecision,
+        input: String
+    ) async -> TaskContextDecision? {
+        switch decision.action {
+        case .continueActive:
+            return TaskContextDecision(
+                action: .continueActive,
+                relatedTaskIDs: activeTask?.relatedTaskIDs ?? [],
+                confidence: decision.confidence,
+                reason: decision.reason,
+                userVisibleHint: nil
+            )
+        case .beginNew:
+            contextHint = nil
+            guard await beginNewTask(relatedTo: []) != nil else { return nil }
+            return TaskContextDecision(
+                action: .beginNew,
+                relatedTaskIDs: [],
+                confidence: decision.confidence,
+                reason: decision.reason,
+                userVisibleHint: nil
+            )
+        case .resumeTask(let id):
+            return await resumeTask(
+                id,
+                extraRelatedIDs: [],
+                inputForTopicUpdate: input,
+                confidence: decision.confidence,
+                reason: decision.reason,
+                userVisibleHint: nil
+            )
+        }
+    }
+
+    /// Updates a task's topic/abstract in memory (if still active) and persists
+    /// via a topic-only write so concurrent plan/event saves cannot be clobbered.
     private func updateTaskTopic(_ result: TopicResult, for taskID: UUID? = nil) {
         let targetID = taskID ?? activeTask?.id
-        guard var task = activeTask, task.id == targetID else {
-            // The active task has changed since the generation was launched.
-            // Persist the topic directly to the DB without touching in-memory state,
-            // and update the summary list so the catalog stays current.
-            if let targetID {
-                if let index = recentSummaries.firstIndex(where: { $0.id == targetID }) {
-                    recentSummaries[index] = TaskSummary(
-                        id: recentSummaries[index].id,
-                        status: recentSummaries[index].status,
-                        summary: recentSummaries[index].summary,
-                        topic: result.topic,
-                        abstract: result.abstract,
-                        updatedAt: recentSummaries[index].updatedAt
-                    )
-                }
-                Task {
-                    if var stale = try? await taskRepository.loadTask(id: targetID) {
-                        stale.topic = result.topic
-                        stale.abstract = result.abstract
-                        stale.topicUpdatedAt = .now
-                        stale.updatedAt = .now
-                        try? await taskRepository.saveTaskState(stale, setActive: false)
-                    }
-                }
-            }
-            return
+        guard let targetID else { return }
+        let stampedAt = Date.now
+
+        if var task = activeTask, task.id == targetID {
+            task.topic = result.topic
+            task.abstract = result.abstract
+            task.topicUpdatedAt = stampedAt
+            task.updatedAt = stampedAt
+            activeTask = task
+            refreshSummary(for: task)
+        } else if let index = recentSummaries.firstIndex(where: { $0.id == targetID }) {
+            recentSummaries[index] = TaskSummary(
+                id: recentSummaries[index].id,
+                status: recentSummaries[index].status,
+                summary: recentSummaries[index].summary,
+                topic: result.topic,
+                abstract: result.abstract,
+                updatedAt: stampedAt
+            )
+            recentSummaries.sort { $0.updatedAt > $1.updatedAt }
         }
-        task.topic = result.topic
-        task.abstract = result.abstract
-        task.topicUpdatedAt = .now
-        task.updatedAt = .now
-        activeTask = task
-        refreshSummary(for: task)
+
         Task {
-            try? await taskRepository.saveTaskState(task, setActive: true)
+            try? await taskRepository.updateTopic(
+                taskID: targetID,
+                topic: result.topic,
+                abstract: result.abstract,
+                topicUpdatedAt: stampedAt
+            )
         }
     }
 
     // MARK: - Topic Generation on Completion
 
-    /// ID of the task currently undergoing topic generation, prevents duplicate runs.
-    private var topicGenerationTaskID: UUID?
+    /// Tasks currently undergoing topic generation — prevents duplicate runs.
+    private var topicGenerationTaskIDs: Set<UUID> = []
 
     /// Called after a task completes to generate its topic if missing.
     func generateTopicIfNeeded() {
-        guard let task = activeTask,
-              task.topic == nil,
-              !task.events.isEmpty else { return }
-        // Prevent concurrent generation for the same task.
-        guard topicGenerationTaskID != task.id else { return }
-        topicGenerationTaskID = task.id
+        guard let task = activeTask else { return }
+        scheduleTopicGeneration(for: task)
+    }
+
+    /// Schedules topic generation for any task (active or just closed).
+    private func scheduleTopicGeneration(for task: TaskRecord) {
+        guard task.topic == nil, !task.events.isEmpty else { return }
+        guard !topicGenerationTaskIDs.contains(task.id) else { return }
+        topicGenerationTaskIDs.insert(task.id)
 
         let taskID = task.id
+        let events = task.events
         Task.detached(priority: .utility) { [topicGenerator, weak self] in
-            guard let result = await topicGenerator.generate(from: task.events) else {
-                await MainActor.run { [weak self] in
-                    if self?.topicGenerationTaskID == taskID {
-                        self?.topicGenerationTaskID = nil
-                    }
-                }
-                return
-            }
+            let result = await topicGenerator.generate(from: events)
             await MainActor.run { [weak self] in
-                if self?.topicGenerationTaskID == taskID {
-                    self?.topicGenerationTaskID = nil
+                self?.topicGenerationTaskIDs.remove(taskID)
+                if let result {
+                    self?.updateTaskTopic(result, for: taskID)
                 }
-                self?.updateTaskTopic(result, for: taskID)
             }
         }
     }

@@ -10,7 +10,7 @@
 import Foundation
 
 /// The resolved HuggingFace endpoint to use for model downloads.
-enum HubEndpoint: String, Sendable {
+nonisolated enum HubEndpoint: String, Sendable {
     case official = "https://huggingface.co"
     case mirror = "https://hf-mirror.com"
 
@@ -69,38 +69,33 @@ actor HubEndpointResolver {
 
     /// Sends concurrent HEAD requests to both endpoints; first 2xx wins.
     private func raceEndpoints() async -> HubEndpoint {
-        let probeURL = URL(string: "/api/models")!
+        let probePath = "/api/models"
 
-        return await withCheckedContinuation { continuation in
-            let resumed = ManagedAtomic(false)
-
-            let officialTask = Task {
-                let result = await probe(
-                    url: HubEndpoint.official.baseURL.appendingPathComponent(probeURL.path)
+        return await withTaskGroup(of: HubEndpoint?.self) { group in
+            group.addTask {
+                let ok = await self.probe(
+                    url: HubEndpoint.official.baseURL.appendingPathComponent(probePath)
                 )
-                if result, resumed.compareExchange(expected: false, desired: true) {
-                    continuation.resume(returning: .official)
-                }
+                return ok ? .official : nil
             }
-
-            let mirrorTask = Task {
-                let result = await probe(
-                    url: HubEndpoint.mirror.baseURL.appendingPathComponent(probeURL.path)
+            group.addTask {
+                let ok = await self.probe(
+                    url: HubEndpoint.mirror.baseURL.appendingPathComponent(probePath)
                 )
-                if result, resumed.compareExchange(expected: false, desired: true) {
-                    continuation.resume(returning: .mirror)
-                }
+                return ok ? .mirror : nil
             }
-
             // Timeout fallback: if neither responds in time, default to official.
-            Task {
+            group.addTask {
                 try? await Task.sleep(for: .seconds(Self.probeTimeout + 1))
-                if resumed.compareExchange(expected: false, desired: true) {
-                    officialTask.cancel()
-                    mirrorTask.cancel()
-                    continuation.resume(returning: .official)
-                }
+                return .official
             }
+
+            for await result in group {
+                guard let endpoint = result else { continue }
+                group.cancelAll()
+                return endpoint
+            }
+            return .official
         }
     }
 
@@ -135,26 +130,5 @@ actor HubEndpointResolver {
     private func persistToCache(_ endpoint: HubEndpoint) {
         UserDefaults.standard.set(endpoint.rawValue, forKey: Self.cacheKey)
         UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: Self.cacheTimestampKey)
-    }
-}
-
-// MARK: - Lock-free atomic boolean for race coordination
-
-/// Minimal atomic boolean using os_unfair_lock for the race condition.
-private final class ManagedAtomic: @unchecked Sendable {
-    private var _value: Bool
-    private var lock = os_unfair_lock()
-
-    init(_ value: Bool) {
-        _value = value
-    }
-
-    /// Atomically compares and exchanges. Returns true if the swap succeeded.
-    func compareExchange(expected: Bool, desired: Bool) -> Bool {
-        os_unfair_lock_lock(&lock)
-        defer { os_unfair_lock_unlock(&lock) }
-        guard _value == expected else { return false }
-        _value = desired
-        return true
     }
 }

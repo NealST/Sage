@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
+nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     var id: String { name }
     var name: String
     var description: String
@@ -14,7 +14,7 @@ struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     var sourceLabel: String
 }
 
-enum MCPServerStatus: String, Codable, Sendable, Equatable {
+nonisolated enum MCPServerStatus: String, Codable, Sendable, Equatable {
     case disabled
     case disconnected
     case connecting
@@ -22,7 +22,7 @@ enum MCPServerStatus: String, Codable, Sendable, Equatable {
     case error
 }
 
-struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
+nonisolated struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
     var id: String
     var name: String
     var command: String
@@ -84,16 +84,16 @@ struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
     }
 }
 
-struct MCPFileSnapshot: Codable, Sendable {
+nonisolated struct MCPFileSnapshot: Codable, Sendable {
     var mcpServers: [MCPServerConfig]
 }
 
-struct SkillStateSnapshot: Codable, Sendable {
+nonisolated struct SkillStateSnapshot: Codable, Sendable {
     /// skill name → enabled
     var enabled: [String: Bool]
 }
 
-struct MCPToolInfo: Identifiable, Sendable, Equatable {
+nonisolated struct MCPToolInfo: Identifiable, Sendable, Equatable {
     var id: String { qualifiedName }
     var serverID: String
     var serverName: String

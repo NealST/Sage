@@ -164,7 +164,7 @@ actor TopicGenerator {
     }
 }
 
-private struct TopicOutput: Decodable {
+private nonisolated struct TopicOutput: Decodable {
     let topic: String
     let abstract: String
 }

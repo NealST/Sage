@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct ToolDefinition: Sendable {
+nonisolated struct ToolDefinition: Sendable {
     let name: String
     let description: String
     let parameters: JSONValue

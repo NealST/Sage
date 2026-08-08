@@ -99,18 +99,27 @@ actor GRDBTaskRepository: TaskRepository {
         }
     }
 
+    func hasPendingPlan(taskID: UUID) throws -> Bool {
+        let pool = try database()
+        return try pool.read { db in
+            try Bool.fetchOne(
+                db,
+                sql: "SELECT EXISTS (SELECT 1 FROM plans WHERE task_id = ?)",
+                arguments: [taskID.uuidString]
+            ) ?? false
+        }
+    }
+
     func saveTaskState(_ task: TaskRecord, setActive: Bool) throws {
         let pool = try database()
+        // `pool.write` already opens a transaction — do not nest `inTransaction`.
         try pool.write { db in
-            try db.inTransaction {
-                try upsertTask(task, database: db)
-                try replaceEntities(task.entities, taskID: task.id, database: db)
-                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-                try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
-                if setActive {
-                    try writeActiveTaskID(task.id, database: db)
-                }
-                return .commit
+            try upsertTask(task, database: db)
+            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
+            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
+            try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
+            if setActive {
+                try writeActiveTaskID(task.id, database: db)
             }
         }
     }
@@ -123,50 +132,47 @@ actor GRDBTaskRepository: TaskRepository {
     ) throws {
         let pool = try database()
         try pool.write { db in
-            try db.inTransaction {
-                try upsertTask(task, database: db)
-                try replaceEntities(task.entities, taskID: task.id, database: db)
-                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-                try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
+            try upsertTask(task, database: db)
+            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
+            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
+            try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
 
-                // Compute next sequence BEFORE deletions so we never reuse a
-                // sequence value that was just freed (avoids UNIQUE constraint
-                // violations when deleted events had the highest sequence).
-                var nextSequence: Int?
-                if !appendEvents.isEmpty {
-                    nextSequence = try Int.fetchOne(
-                        db,
-                        sql: """
-                        SELECT COALESCE(MAX(sequence), -1) + 1
-                        FROM events
-                        WHERE task_id = ?
-                        """,
-                        arguments: [task.id.uuidString]
-                    ) ?? 0
-                }
+            // Compute next sequence BEFORE deletions so we never reuse a
+            // sequence value that was just freed (avoids UNIQUE constraint
+            // violations when deleted events had the highest sequence).
+            var nextSequence: Int?
+            if !appendEvents.isEmpty {
+                nextSequence = try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(MAX(sequence), -1) + 1
+                    FROM events
+                    WHERE task_id = ?
+                    """,
+                    arguments: [task.id.uuidString]
+                ) ?? 0
+            }
 
-                for eventID in deleteEventIDs {
-                    try db.execute(
-                        sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
-                        arguments: [eventID.uuidString, task.id.uuidString]
+            for eventID in deleteEventIDs {
+                try db.execute(
+                    sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
+                    arguments: [eventID.uuidString, task.id.uuidString]
+                )
+            }
+
+            if var sequence = nextSequence {
+                for event in appendEvents {
+                    try insertEvent(
+                        event,
+                        taskID: task.id,
+                        sequence: sequence,
+                        database: db
                     )
+                    sequence += 1
                 }
-
-                if var sequence = nextSequence {
-                    for event in appendEvents {
-                        try insertEvent(
-                            event,
-                            taskID: task.id,
-                            sequence: sequence,
-                            database: db
-                        )
-                        sequence += 1
-                    }
-                }
-                if setActive {
-                    try writeActiveTaskID(task.id, database: db)
-                }
-                return .commit
+            }
+            if setActive {
+                try writeActiveTaskID(task.id, database: db)
             }
         }
     }
@@ -181,19 +187,16 @@ actor GRDBTaskRepository: TaskRepository {
     func eraseAllData() throws {
         let pool = try database()
         try pool.write { db in
-            try db.inTransaction {
-                try db.execute(sql: "DELETE FROM event_context_tasks")
-                try db.execute(sql: "DELETE FROM event_contexts")
-                try db.execute(sql: "DELETE FROM event_tool_calls")
-                try db.execute(sql: "DELETE FROM plan_steps")
-                try db.execute(sql: "DELETE FROM plans")
-                try db.execute(sql: "DELETE FROM task_relations")
-                try db.execute(sql: "DELETE FROM task_entities")
-                try db.execute(sql: "DELETE FROM events")
-                try db.execute(sql: "DELETE FROM app_state")
-                try db.execute(sql: "DELETE FROM tasks")
-                return .commit
-            }
+            try db.execute(sql: "DELETE FROM event_context_tasks")
+            try db.execute(sql: "DELETE FROM event_contexts")
+            try db.execute(sql: "DELETE FROM event_tool_calls")
+            try db.execute(sql: "DELETE FROM plan_steps")
+            try db.execute(sql: "DELETE FROM plans")
+            try db.execute(sql: "DELETE FROM task_relations")
+            try db.execute(sql: "DELETE FROM task_entities")
+            try db.execute(sql: "DELETE FROM events")
+            try db.execute(sql: "DELETE FROM app_state")
+            try db.execute(sql: "DELETE FROM tasks")
         }
         try? FileManager.default.removeItem(at: legacyJSONURL)
     }
@@ -336,7 +339,47 @@ actor GRDBTaskRepository: TaskRepository {
 
     // MARK: - Writes
 
+    func updateTopic(
+        taskID: UUID,
+        topic: String,
+        abstract: String,
+        topicUpdatedAt: Date
+    ) throws {
+        let pool = try database()
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                UPDATE tasks
+                SET topic = ?,
+                    abstract = ?,
+                    topic_updated_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    topic,
+                    abstract,
+                    topicUpdatedAt.timeIntervalSince1970,
+                    topicUpdatedAt.timeIntervalSince1970,
+                    taskID.uuidString,
+                ]
+            )
+        }
+    }
+
+    func deleteTask(id: UUID) throws {
+        let pool = try database()
+        try pool.write { db in
+            try db.execute(
+                sql: "DELETE FROM tasks WHERE id = ?",
+                arguments: [id.uuidString]
+            )
+        }
+    }
+
     private func upsertTask(_ task: TaskRecord, database db: Database) throws {
+        // COALESCE keeps an existing topic when a concurrent in-memory snapshot
+        // still has nil (topic generation racing with commit/mutate).
         try db.execute(
             sql: """
             INSERT INTO tasks (id, status, summary, topic, abstract, topic_updated_at, created_at, updated_at)
@@ -344,9 +387,9 @@ actor GRDBTaskRepository: TaskRepository {
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 summary = excluded.summary,
-                topic = excluded.topic,
-                abstract = excluded.abstract,
-                topic_updated_at = excluded.topic_updated_at,
+                topic = COALESCE(excluded.topic, tasks.topic),
+                abstract = COALESCE(excluded.abstract, tasks.abstract),
+                topic_updated_at = COALESCE(excluded.topic_updated_at, tasks.topic_updated_at),
                 updated_at = excluded.updated_at
             """,
             arguments: [
@@ -362,11 +405,14 @@ actor GRDBTaskRepository: TaskRepository {
         )
     }
 
-    private func replaceEntities(
+    /// Entity extraction is not wired yet — skip the DELETE when the in-memory
+    /// list is empty (the common hot path) so every commit doesn't touch the table.
+    private func replaceEntitiesIfNeeded(
         _ entities: [TaskEntity],
         taskID: UUID,
         database db: Database
     ) throws {
+        guard !entities.isEmpty else { return }
         try db.execute(
             sql: "DELETE FROM task_entities WHERE task_id = ?",
             arguments: [taskID.uuidString]
@@ -539,35 +585,32 @@ actor GRDBTaskRepository: TaskRepository {
             ) ?? 0
             guard existingCount == 0 else { return false }
 
-            try db.inTransaction {
-                // Insert every task first so relation foreign keys are valid.
-                for task in snapshot.tasks {
-                    try upsertTask(task, database: db)
-                }
-                for task in snapshot.tasks {
-                    try replaceEntities(task.entities, taskID: task.id, database: db)
-                    try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-                    try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
-                    for (sequence, event) in task.events.enumerated() {
-                        try insertEvent(
-                            event,
-                            taskID: task.id,
-                            sequence: sequence,
-                            database: db
-                        )
-                    }
-                }
-                try db.execute(
-                    sql: """
-                    INSERT INTO app_state (singleton, active_task_id)
-                    VALUES (1, ?)
-                    ON CONFLICT(singleton) DO UPDATE
-                    SET active_task_id = excluded.active_task_id
-                    """,
-                    arguments: [snapshot.activeTaskID?.uuidString]
-                )
-                return .commit
+            // Insert every task first so relation foreign keys are valid.
+            for task in snapshot.tasks {
+                try upsertTask(task, database: db)
             }
+            for task in snapshot.tasks {
+                try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
+                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
+                try replacePendingPlan(task.pendingPlan, taskID: task.id, database: db)
+                for (sequence, event) in task.events.enumerated() {
+                    try insertEvent(
+                        event,
+                        taskID: task.id,
+                        sequence: sequence,
+                        database: db
+                    )
+                }
+            }
+            try db.execute(
+                sql: """
+                INSERT INTO app_state (singleton, active_task_id)
+                VALUES (1, ?)
+                ON CONFLICT(singleton) DO UPDATE
+                SET active_task_id = excluded.active_task_id
+                """,
+                arguments: [snapshot.activeTaskID?.uuidString]
+            )
             return true
         }
 
@@ -599,7 +642,8 @@ actor GRDBTaskRepository: TaskRepository {
             topicUpdatedAt: topicUpdatedAt,
             events: try loadEvents(taskID: id, database: db),
             pendingPlan: try loadPlan(taskID: id, database: db),
-            entities: try loadEntities(taskID: id, database: db),
+            // Entity extraction is not wired; skip the table read on the hot path.
+            entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: db),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
@@ -616,81 +660,111 @@ actor GRDBTaskRepository: TaskRepository {
             """,
             arguments: [taskID.uuidString]
         )
-        return try rows.compactMap { row in
+        guard !rows.isEmpty else { return [] }
+
+        let eventIDStrings: [String] = rows.compactMap { row in
+            guard let id = row["id"] as String? else { return nil }
+            return id
+        }
+        let toolCallsByEvent = try loadToolCalls(forEventIDs: eventIDStrings, database: db)
+        let contextsByEvent = try loadContexts(forEventIDs: eventIDStrings, database: db)
+
+        return rows.compactMap { row in
             guard
-                let id = UUID(uuidString: row["id"]),
+                let idString = row["id"] as String?,
+                let id = UUID(uuidString: idString),
                 let kind = AgentEventKind(rawValue: row["kind"])
             else {
                 return nil
             }
-
-            let toolCallRows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT * FROM event_tool_calls
-                WHERE event_id = ?
-                ORDER BY position
-                """,
-                arguments: [id.uuidString]
-            )
-            let toolCalls = toolCallRows.map { callRow in
-                ToolCallRecord(
-                    id: callRow["call_id"],
-                    name: callRow["name"],
-                    argumentsJSON: callRow["arguments_json"]
-                )
-            }
-
+            let toolCalls = toolCallsByEvent[idString] ?? []
             return AgentEvent(
                 id: id,
                 kind: kind,
                 content: row["content"],
                 toolCallID: row["tool_call_id"],
                 toolCalls: toolCalls.isEmpty ? nil : toolCalls,
-                context: try loadContext(eventID: id, database: db),
+                context: contextsByEvent[idString],
                 createdAt: Date(timeIntervalSince1970: row["created_at"])
             )
         }
     }
 
-    private func loadContext(eventID: UUID, database db: Database) throws -> EventContext? {
-        guard let row = try Row.fetchOne(
-            db,
-            sql: "SELECT * FROM event_contexts WHERE event_id = ?",
-            arguments: [eventID.uuidString]
-        ) else {
-            return nil
-        }
-        let relatedIDs = try String.fetchAll(
-            db,
-            sql: """
-            SELECT related_task_id FROM event_context_tasks
-            WHERE event_id = ?
-            ORDER BY position
-            """,
-            arguments: [eventID.uuidString]
-        ).compactMap(UUID.init(uuidString:))
-        return EventContext(
-            relatedTaskIDs: relatedIDs,
-            confidence: row["confidence"],
-            reason: row["reason"]
-        )
-    }
-
-    private func loadEntities(taskID: UUID, database db: Database) throws -> [TaskEntity] {
+    private func loadToolCalls(
+        forEventIDs eventIDs: [String],
+        database db: Database
+    ) throws -> [String: [ToolCallRecord]] {
+        guard !eventIDs.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ", ")
         let rows = try Row.fetchAll(
             db,
             sql: """
-            SELECT * FROM task_entities
-            WHERE task_id = ?
-            ORDER BY rowid
+            SELECT event_id, call_id, name, arguments_json
+            FROM event_tool_calls
+            WHERE event_id IN (\(placeholders))
+            ORDER BY event_id, position
             """,
-            arguments: [taskID.uuidString]
+            arguments: StatementArguments(eventIDs)
         )
-        return rows.compactMap { row in
-            guard let id = UUID(uuidString: row["id"]) else { return nil }
-            return TaskEntity(id: id, kind: row["kind"], value: row["value"])
+        var result: [String: [ToolCallRecord]] = [:]
+        for row in rows {
+            let eventID: String = row["event_id"]
+            result[eventID, default: []].append(
+                ToolCallRecord(
+                    id: row["call_id"],
+                    name: row["name"],
+                    argumentsJSON: row["arguments_json"]
+                )
+            )
         }
+        return result
+    }
+
+    private func loadContexts(
+        forEventIDs eventIDs: [String],
+        database db: Database
+    ) throws -> [String: EventContext] {
+        guard !eventIDs.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ", ")
+        let contextRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT event_id, confidence, reason
+            FROM event_contexts
+            WHERE event_id IN (\(placeholders))
+            """,
+            arguments: StatementArguments(eventIDs)
+        )
+        guard !contextRows.isEmpty else { return [:] }
+
+        let relatedRows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT event_id, related_task_id
+            FROM event_context_tasks
+            WHERE event_id IN (\(placeholders))
+            ORDER BY event_id, position
+            """,
+            arguments: StatementArguments(eventIDs)
+        )
+        var relatedByEvent: [String: [UUID]] = [:]
+        for row in relatedRows {
+            let eventID: String = row["event_id"]
+            if let related = UUID(uuidString: row["related_task_id"]) {
+                relatedByEvent[eventID, default: []].append(related)
+            }
+        }
+
+        var result: [String: EventContext] = [:]
+        for row in contextRows {
+            let eventID: String = row["event_id"]
+            result[eventID] = EventContext(
+                relatedTaskIDs: relatedByEvent[eventID] ?? [],
+                confidence: row["confidence"],
+                reason: row["reason"]
+            )
+        }
+        return result
     }
 
     private func loadRelations(taskID: UUID, database db: Database) throws -> [UUID] {

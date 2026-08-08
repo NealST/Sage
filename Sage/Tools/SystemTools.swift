@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import AudioToolbox
 import CoreAudio
 import EventKit
 import Foundation
@@ -627,15 +628,7 @@ struct TakeScreenshotTool: AgentTool {
             withIntermediateDirectories: true
         )
 
-        // Try CGWindowList API first for non-interactive capture
-        let captured = try await captureWithCGWindow(mode: captureMode, savePath: savePath)
-        if captured {
-            let attrs = try? FileManager.default.attributesOfItem(atPath: savePath.path)
-            let size = (attrs?[.size] as? Int) ?? 0
-            return "[OK] Screenshot saved to \(savePath.path) (\(size) bytes)"
-        }
-
-        // Fallback: screencapture CLI (only for screen mode — window mode requires interactive selection)
+        // Prefer screencapture CLI (CGWindowListCreateImage is unavailable on macOS 26+).
         if captureMode == "screen" {
             let result = try await runScreencapture(arguments: ["-x", savePath.path])
             if result == 0, FileManager.default.fileExists(atPath: savePath.path) {
@@ -651,57 +644,6 @@ struct TakeScreenshotTool: AgentTool {
         throw ToolError.operationFailed(
             "\(hint) Ensure Sage has Screen Recording permission in System Settings → Privacy & Security → Screen Recording → Sage."
         )
-    }
-
-    private static let sageBundleID = "mozheng.Sage"
-
-    private func captureWithCGWindow(mode: String, savePath: URL) async throws -> Bool {
-        return await MainActor.run {
-            let image: CGImage?
-
-            if mode == "window" {
-                // Find the frontmost window, excluding Sage itself
-                let windowList = CGWindowListCopyWindowInfo(
-                    [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
-                ) as? [[String: Any]] ?? []
-
-                // Filter out Sage's own windows and find the topmost non-Sage window
-                let candidateWindows = windowList.filter { info in
-                    guard let ownerName = info[kCGWindowOwnerName as String] as? String,
-                          let layer = info[kCGWindowLayer as String] as? Int,
-                          layer == 0 // normal window layer
-                    else { return false }
-                    // Exclude Sage windows by bundle ID or name
-                    if let pid = info[kCGWindowOwnerPID as String] as? Int32,
-                       let app = NSRunningApplication(processIdentifier: pid),
-                       app.bundleIdentifier == Self.sageBundleID {
-                        return false
-                    }
-                    return !ownerName.isEmpty
-                }
-
-                guard let frontWindow = candidateWindows.first,
-                      let windowID = frontWindow[kCGWindowNumber as String] as? CGWindowID
-                else { return false }
-                image = CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, [.boundsIgnoreFraming])
-            } else {
-                // Capture entire main display
-                image = CGDisplayCreateImage(CGMainDisplayID())
-            }
-
-            guard let cgImage = image else { return false }
-
-            // Save as PNG
-            let rep = NSBitmapImageRep(cgImage: cgImage)
-            guard let pngData = rep.representation(using: .png, properties: [:]) else { return false }
-
-            do {
-                try pngData.write(to: savePath)
-                return true
-            } catch {
-                return false
-            }
-        }
     }
 
     private func runScreencapture(arguments: [String]) async throws -> Int32 {

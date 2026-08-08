@@ -24,6 +24,7 @@ import TreeSitterPython
 import TreeSitterRuby
 import TreeSitterRust
 import TreeSitterSwift
+import TreeSitterTSX
 import TreeSitterTypeScript
 
 // MARK: - CodeSyntaxHighlighter Conformance
@@ -66,8 +67,8 @@ private extension TreeSitterCodeHighlighter {
         }
 
         let cursor = query.execute(in: tree)
-        let provider = makeTextProvider(for: code)
-        return cursor.resolve(with: provider).highlights()
+        let context = Predicate.Context(string: code)
+        return cursor.resolve(with: context).highlights()
     }
 
     /// Builds a composed SwiftUI `Text` from source code and highlight ranges.
@@ -188,17 +189,3 @@ private final class ConfigCache: @unchecked Sendable {
 }
 
 private let configCache = ConfigCache()
-
-// MARK: - Text Provider
-
-/// Creates a predicate text provider for the given source string.
-/// This allows tree-sitter to resolve predicates like `#match?` during query execution.
-private func makeTextProvider(for source: String) -> SwiftTreeSitter.Predicate.TextProvider {
-    let nsString = source as NSString
-    return .init { range, _ in
-        guard range.location != NSNotFound,
-              range.location + range.length <= nsString.length
-        else { return nil }
-        return nsString.substring(with: range)
-    }
-}

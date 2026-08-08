@@ -239,7 +239,7 @@ actor ModelClient {
     }
 }
 
-struct ModelSettingsSnapshot: Sendable {
+nonisolated struct ModelSettingsSnapshot: Sendable {
     let baseURL: String
     let model: String
     let apiKey: String
@@ -247,7 +247,7 @@ struct ModelSettingsSnapshot: Sendable {
 
 // MARK: - Wire format
 
-private struct ChatCompletionRequest: Encodable {
+nonisolated private struct ChatCompletionRequest: Encodable {
     let model: String
     let messages: [APIMessage]
     let tools: [APITool]?
@@ -259,7 +259,7 @@ private struct ChatCompletionRequest: Encodable {
     }
 }
 
-private struct APIMessage: Encodable {
+nonisolated private struct APIMessage: Encodable {
     let role: String
     let content: String?
     let toolCallID: String?
@@ -297,18 +297,18 @@ private struct APIMessage: Encodable {
     }
 }
 
-private struct APIToolCall: Encodable {
+nonisolated private struct APIToolCall: Encodable {
     let id: String
     let type: String
     let function: APIToolCallFunction
 }
 
-private struct APIToolCallFunction: Encodable {
+nonisolated private struct APIToolCallFunction: Encodable {
     let name: String
     let arguments: String
 }
 
-private struct APITool: Encodable {
+nonisolated private struct APITool: Encodable {
     let type = "function"
     let function: APIFunction
 
@@ -321,13 +321,13 @@ private struct APITool: Encodable {
     }
 }
 
-private struct APIFunction: Encodable {
+nonisolated private struct APIFunction: Encodable {
     let name: String
     let description: String
     let parameters: JSONValue
 }
 
-private struct ChatCompletionResponse: Decodable {
+nonisolated private struct ChatCompletionResponse: Decodable {
     let choices: [Choice]
 
     struct Choice: Decodable {
@@ -357,7 +357,7 @@ private struct ChatCompletionResponse: Decodable {
 
 // MARK: - Streaming wire format
 
-private struct StreamingChatCompletionRequest: Encodable {
+nonisolated private struct StreamingChatCompletionRequest: Encodable {
     let model: String
     let messages: [APIMessage]
     let tools: [APITool]?
@@ -370,7 +370,7 @@ private struct StreamingChatCompletionRequest: Encodable {
     }
 }
 
-private struct StreamingChunk: Decodable {
+nonisolated private struct StreamingChunk: Decodable {
     let choices: [StreamingChoice]
 
     struct StreamingChoice: Decodable {
@@ -407,7 +407,7 @@ private struct StreamingChunk: Decodable {
 
 // MARK: - JSON utility
 
-enum JSONValue: Codable, Sendable, Equatable {
+nonisolated enum JSONValue: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
