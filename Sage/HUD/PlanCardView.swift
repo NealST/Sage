@@ -21,24 +21,18 @@ struct PlanCardView: View {
                 .accessibilityAddTraits(.isHeader)
 
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.sm) {
-                        statusIcon(step.status)
-                            .frame(width: 14, alignment: .center)
-                        Text(step.title)
-                            .font(.system(size: SageDesign.Typography.captionSize))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
-                    }
+                ForEach(plan.steps) { step in
+                    ToolCallView(
+                        name: step.toolName,
+                        argumentsJSON: step.argumentsJSON,
+                        titleOverride: step.title,
+                        status: step.status,
+                        resultContent: step.result,
+                        previewAgainstDisk: step.status == .pending || step.status == .running,
+                        startExpandedIfFileEdit: !isExecuting && step.status == .pending
+                    )
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(step.title), \(accessibilityStatus(step.status))")
-
-                    if index < plan.steps.count - 1 {
-                        Divider()
-                            .opacity(SageDesign.Chrome.dividerOpacity)
-                            .padding(.leading, 22)
-                    }
                 }
             }
 
@@ -71,31 +65,6 @@ struct PlanCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
-    }
-
-    @ViewBuilder
-    private func statusIcon(_ status: StepStatus) -> some View {
-        switch status {
-        case .pending:
-            Image(systemName: SageDesign.Symbol.stepPending)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .regular))
-                .foregroundStyle(.tertiary)
-        case .running:
-            ProgressView()
-                .controlSize(.mini)
-        case .succeeded:
-            Image(systemName: SageDesign.Symbol.stepSuccess)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.green)
-        case .failed:
-            Image(systemName: SageDesign.Symbol.stepFailed)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.red)
-        case .skipped:
-            Image(systemName: "minus.circle")
-                .font(.system(size: SageDesign.Typography.microSize))
-                .foregroundStyle(.tertiary)
-        }
     }
 
     private func accessibilityStatus(_ status: StepStatus) -> String {

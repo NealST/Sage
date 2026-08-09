@@ -76,7 +76,9 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
 
         window.delegate = self
         window.title = "Sage"
-        window.titleVisibility = .visible
+        // General chrome owns the titlebar row — hide the stacked system title.
+        // Project mode re-enables title + representedURL from AgentWorkspaceView.
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
@@ -86,6 +88,7 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         window.hasShadow = true
         window.hidesOnDeactivate = false
         window.animationBehavior = .documentWindow
+        window.identifier = NSUserInterfaceItemIdentifier("SageAgentWindow")
         window.setFrameAutosaveName("SageAgentWindow")
 
         let root = AgentPanelView()

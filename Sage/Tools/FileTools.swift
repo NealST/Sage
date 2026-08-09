@@ -9,7 +9,8 @@ struct ListDirectoryTool: AgentTool {
     let definition = ToolDefinition(
         name: "list_directory",
         description: """
-            List files and folders in a directory. Only paths under the user's home (~) are allowed.
+            List files and folders in a directory. Paths must stay inside the active sandbox \
+            (home ~/ in General, or the focused project root). Relative paths resolve against the project root when focused.
             Output format: one entry per line as "kind\\tsize\\tpath" (kind is "dir" or "file", size in bytes or "-" for dirs).
             Recursive listing indents child entries with spaces. Capped at 500 entries.
             Use depth=1 (default) for a quick overview, increase up to 5 for deeper exploration.
@@ -191,7 +192,7 @@ struct RenameFileTool: AgentTool {
 struct CreateDirectoryTool: AgentTool {
     let definition = ToolDefinition(
         name: "create_directory",
-        description: "Create a directory (and any missing parent directories) under ~/. Safe to call if the directory already exists.",
+        description: "Create a directory (and any missing parent directories) inside the active sandbox (home ~/ or the focused project root). Safe to call if the directory already exists.",
         parameters: .schemaObject(
             properties: [
                 "path": .stringProperty("Directory path to create"),
@@ -317,7 +318,8 @@ struct ReadTextFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "read_text_file",
         description: """
-            Read a UTF-8 text file under ~/. Returns raw file content (no line numbers added). \
+            Read a UTF-8 text file inside the active sandbox (home ~/ or project root). \
+            Returns raw file content (no line numbers added). \
             Full read is capped at ~100KB — for larger files, use line_start/line_end to read a section. \
             Use list_directory first to check file size if unsure.
             """,
@@ -477,7 +479,8 @@ struct WriteTextFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "write_text_file",
         description: """
-            Write UTF-8 text to a file under ~/. Creates parent folders if needed. \
+            Write UTF-8 text to a file inside the active sandbox (home ~/ or project root). \
+            Creates parent folders if needed. \
             WARNING: Overwrites the file if it already exists — read it first if you need to preserve content. \
             Content must be the complete file — there is no append or patch mode.
             """,
@@ -499,13 +502,22 @@ struct WriteTextFileTool: AgentTool {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path)
         let existed = FileManager.default.fileExists(atPath: url.path)
+        // Capture before contents for UI diff; omit when missing/unreadable/non-UTF8.
+        let before: String? = {
+            guard existed else { return nil }
+            return try? String(contentsOf: url, encoding: .utf8)
+        }()
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try args.content.write(to: url, atomically: true, encoding: .utf8)
-        let verb = existed ? "Overwrote" : "Created"
-        return "[OK] \(verb) \(url.path) (\(args.content.utf8.count) bytes)"
+        return WriteFileResultCodec.makeResult(
+            path: url.path,
+            created: !existed,
+            before: before,
+            after: args.content
+        )
     }
 }
 

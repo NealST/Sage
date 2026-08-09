@@ -3,18 +3,37 @@
 //  Sage
 //
 
+import AppKit
 import SwiftUI
+
+private struct PathGuardPolicyKey: EnvironmentKey {
+    static let defaultValue: PathGuard.Policy = .home
+}
+
+extension EnvironmentValues {
+    var pathGuardPolicy: PathGuard.Policy {
+        get { self[PathGuardPolicyKey.self] }
+        set { self[PathGuardPolicyKey.self] = newValue }
+    }
+}
 
 struct AgentWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @FocusState private var isInputFocused: Bool
     @State private var stickToBottom = true
+    @State private var gitBranch: String?
 
     var body: some View {
         @Bindable var appState = appState
 
         VStack(spacing: 0) {
-            header
+            WorkspaceChromeView(
+                onWillNavigate: {
+                    stickToBottom = true
+                    appState.clearDraft()
+                },
+                gitBranch: $gitBranch
+            )
             if let hint = appState.agent.contextHint {
                 contextChip(hint)
             }
@@ -24,16 +43,34 @@ struct AgentWorkspaceView: View {
             composer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { focusInputSoon() }
+        .environment(\.pathGuardPolicy, appState.agent.pathGuardPolicy)
+        .onAppear {
+            focusInputSoon()
+            refreshGitBranch()
+            updateWindowTitle()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .sageFocusAgentInput)) { _ in
             focusInputSoon()
+            refreshGitBranch()
+            updateWindowTitle()
         }
         .onChange(of: appState.isAgentWindowVisible) { _, visible in
-            if visible { focusInputSoon() }
+            if visible {
+                focusInputSoon()
+                refreshGitBranch()
+                updateWindowTitle()
+            }
         }
         .onChange(of: appState.agent.activeTaskID) { _, _ in
             stickToBottom = true
             focusInputSoon()
+        }
+        .onChange(of: appState.agent.focusedProject?.id) { _, _ in
+            refreshGitBranch()
+            updateWindowTitle()
+        }
+        .onChange(of: gitBranch) { _, _ in
+            updateWindowTitle()
         }
         .onChange(of: appState.agent.phase) { _, phase in
             switch phase {
@@ -47,44 +84,40 @@ struct AgentWorkspaceView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: SageDesign.Spacing.sm) {
-            Text("Sage")
-                .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
-            Spacer()
-            if case .awaitingConfirmation = appState.agent.phase {
-                Label("Awaiting confirmation", systemImage: SageDesign.Symbol.pending)
-                    .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
-                    .foregroundStyle(.orange)
-                    .labelStyle(.titleAndIcon)
-            }
-            if appState.agent.canStartFresh {
-                Button("Start Fresh") {
-                    stickToBottom = true
-                    appState.clearDraft()
-                    Task { await appState.agent.startFresh() }
-                }
-                .controlSize(.small)
-                .disabled(appState.agent.isBusy)
-                .help(
-                    appState.agent.hasPendingPlan
-                        ? "Cancel the pending plan and start a clean task"
-                        : "Forget prior context and start a clean task"
-                )
-            }
-            Button {
-                NotificationCenter.default.post(name: .sageOpenSettings, object: nil)
-            } label: {
-                Image(systemName: SageDesign.Symbol.settings)
-                    .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Settings")
-            .accessibilityLabel("Settings")
+    private func refreshGitBranch() {
+        guard let root = appState.agent.focusedProject?.rootURL else {
+            gitBranch = nil
+            return
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.md)
+        let url = root
+        Task.detached(priority: .utility) {
+            let branch = GitBranchReader.currentBranch(inProjectRoot: url)
+            await MainActor.run { gitBranch = branch }
+        }
+    }
+
+    /// Unify window chrome: General hides title (actions live in the strip);
+    /// Project uses the system title + folder proxy for path / branch.
+    private func updateWindowTitle() {
+        guard let window = NSApp.windows.first(where: {
+            $0.identifier?.rawValue == "SageAgentWindow"
+                || $0.frameAutosaveName == "SageAgentWindow"
+        }) else { return }
+
+        if let project = appState.agent.focusedProject {
+            window.titleVisibility = .visible
+            window.representedURL = project.rootURL
+            if let gitBranch, !gitBranch.isEmpty {
+                window.title = "\(project.name) — \(gitBranch)"
+            } else {
+                window.title = project.name
+            }
+        } else {
+            window.representedURL = nil
+            window.title = "Sage"
+            // Avoid “Sage” stacked above Open / New in the unified strip.
+            window.titleVisibility = .hidden
+        }
     }
 
     private func contextChip(_ hint: String) -> some View {
@@ -205,6 +238,19 @@ struct AgentWorkspaceView: View {
         }
     }
 
+    private func toolResultContent(for callID: String) -> String? {
+        appState.agent.events.last(where: {
+            $0.kind == .toolResult && $0.toolCallID == callID && !$0.content.hasPrefix("ERROR:")
+        })?.content
+    }
+
+    /// Live disk preview only for proposed writes that have not executed yet.
+    private func shouldPreviewToolCallAgainstDisk(callID: String) -> Bool {
+        !appState.agent.events.contains(where: {
+            $0.kind == .toolResult && $0.toolCallID == callID
+        })
+    }
+
     @ViewBuilder
     private var phaseAccessory: some View {
         switch appState.agent.phase {
@@ -307,45 +353,28 @@ struct AgentWorkspaceView: View {
         case .assistantResponse:
             VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
                 if !event.content.isEmpty {
-                    MarkdownContentView(markdown: event.content)
+                    MarkdownContentView(markdown: event.content, collapsible: true)
                 }
                 if let calls = event.toolCalls, !calls.isEmpty {
-                    FlowToolPills(names: calls.map(\.name))
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(calls, id: \.id) { call in
+                            ToolCallView(
+                                name: call.name,
+                                argumentsJSON: call.argumentsJSON,
+                                resultContent: toolResultContent(for: call.id),
+                                previewAgainstDisk: shouldPreviewToolCallAgainstDisk(callID: call.id)
+                            )
+                        }
+                    }
                 }
             }
 
         case .toolResult:
-            HStack(spacing: 6) {
-                Image(systemName: SageDesign.Symbol.tools)
-                    .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
-                Text(toolPillTitle(event))
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-            )
-            .overlay {
-                if AccessibilityPreferences.increaseContrast {
-                    Capsule(style: .continuous)
-                        .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-                }
-            }
-            .foregroundStyle(.secondary)
+            ToolResultView(content: event.content)
 
         case .systemInstruction:
             EmptyView()
         }
-    }
-
-    private func toolPillTitle(_ event: AgentEvent) -> String {
-        if event.content.hasPrefix("ERROR:") {
-            return "Tool failed"
-        }
-        return String(event.content.prefix(80))
     }
 
     private var composer: some View {
@@ -502,74 +531,6 @@ struct AgentWorkspaceView: View {
     }
 }
 
-/// Wrapping pill row for tool names.
-private struct FlowToolPills: View {
-    let names: [String]
-
-    var body: some View {
-        WrappingHStack(spacing: 6) {
-            ForEach(names, id: \.self) { name in
-                Text(name.replacingOccurrences(of: "_", with: " "))
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-                    )
-                    .overlay {
-                        if AccessibilityPreferences.increaseContrast {
-                            Capsule(style: .continuous)
-                                .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-                        }
-                    }
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct WrappingHStack: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        arrange(proposal: proposal, subviews: subviews).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let frames = arrange(proposal: proposal, subviews: subviews).frames
-        for index in subviews.indices {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + frames[index].minX, y: bounds.minY + frames[index].minY),
-                proposal: ProposedViewSize(frames[index].size)
-            )
-        }
-    }
-
-    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
-        let maxWidth = proposal.width ?? .infinity
-        var frames: [CGRect] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var width: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-            width = max(width, x - spacing)
-        }
-
-        return (CGSize(width: width, height: y + rowHeight), frames)
-    }
-}
 
 // MARK: - Streaming scroll throttle
 

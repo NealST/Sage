@@ -37,7 +37,7 @@
 
 | ❌ 不好 | ✅ 好 |
 |---------|-------|
-| `"Path not allowed: /etc/hosts"` | `"Path not allowed: /etc/hosts. Only paths under ~/ are accessible."` |
+| `"Path not allowed: /etc/hosts"` | `"Path not allowed: /etc/hosts. Only paths under ~/ are accessible."`（Project 模式下改为 project root） |
 | `"File too large"` | `"File too large (150KB). Use line_start/line_end to read a section."` |
 | `"Permission denied"` | `"Notification permission denied. Enable in System Settings → Notifications → Sage."` |
 
@@ -50,7 +50,7 @@
 
 ### 5. 安全边界
 
-- **PathGuard**：所有文件操作必须经过 PathGuard 验证，只允许 ~/ 下的路径
+- **PathGuard**：所有文件操作必须经过 PathGuard 验证。General：仅 `~/`；Focused Project：仅 project root（且仍 ⊆ `~/`）。相对路径在 Project 下相对 root 解析。Runtime 通过 `PathGuard.$policy` TaskLocal 注入策略。
 - **大小限制**：读取操作有明确上限（ReadTextFile 100KB, Clipboard 10K chars）
 - **全局 cap**：所有工具结果在 runtime 层截断到 50K 字符
 - **超时**：所有工具执行有 30s 超时保护

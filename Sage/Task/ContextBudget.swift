@@ -114,7 +114,10 @@ enum ContextBudget {
     }
 
     private static func characterCost(of event: AgentEvent) -> Int {
-        var cost = max(event.content.count, 1)
+        let body = event.kind == .toolResult
+            ? WriteFileResultCodec.modelFacing(event.content)
+            : event.content
+        var cost = max(body.count, 1)
         if let calls = event.toolCalls {
             cost += calls.reduce(0) { $0 + $1.argumentsJSON.count + $1.name.count }
         }

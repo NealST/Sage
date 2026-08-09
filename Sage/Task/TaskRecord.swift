@@ -29,6 +29,8 @@ nonisolated struct TaskEntity: Identifiable, Codable, Sendable, Equatable {
 nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var status: TaskStatus
+    /// `nil` = General (no project). Non-nil = bound to that project.
+    var projectID: UUID?
     var summary: String?
     /// Short semantic label (≤20 chars) for task catalog display and routing.
     var topic: String?
@@ -45,6 +47,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     init(
         id: UUID = UUID(),
         status: TaskStatus = .active,
+        projectID: UUID? = nil,
         summary: String? = nil,
         topic: String? = nil,
         abstract: String? = nil,
@@ -58,6 +61,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     ) {
         self.id = id
         self.status = status
+        self.projectID = projectID
         self.summary = summary
         self.topic = topic
         self.abstract = abstract

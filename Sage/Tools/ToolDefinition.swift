@@ -18,40 +18,130 @@ protocol AgentTool: Sendable {
 
 enum ToolError: LocalizedError {
     case invalidArguments(String)
-    case pathNotAllowed(String)
+    case pathNotAllowed(String, policy: PathGuard.Policy)
     case operationFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidArguments(let detail):
             return "Invalid arguments: \(detail)"
-        case .pathNotAllowed(let path):
-            return "Path not allowed: \(path). Only paths under the user's home directory (~/) are accessible."
+        case .pathNotAllowed(let path, let policy):
+            return "Path not allowed: \(path). \(policy.boundaryDescription)"
         case .operationFailed(let detail):
             return detail
         }
     }
 }
 
-enum PathGuard {
+enum PathGuard: Sendable {
+    /// Active sandbox for the current tool call (set by AgentRuntime via TaskLocal).
+    @TaskLocal
+    static var policy: Policy = .home
+
+    /// Sandbox policy for file/shell path resolution.
+    enum Policy: Sendable, Equatable {
+        /// General mode — paths must resolve under the user's home directory.
+        case home
+        /// Project mode — paths must resolve under `root` (and still under home).
+        case project(root: URL)
+
+        var boundaryDescription: String {
+            switch self {
+            case .home:
+                return "Only paths under the user's home directory (~/) are accessible."
+            case .project(let root):
+                return "Only paths under the active project root (\(root.path)) are accessible."
+            }
+        }
+
+        var defaultWorkingDirectory: URL {
+            switch self {
+            case .home:
+                return FileManager.default.homeDirectoryForCurrentUser
+            case .project(let root):
+                return root
+            }
+        }
+    }
+
     /// Cached resolved home path to avoid repeated symlink resolution on every call.
     private static let resolvedHomePath: String = {
         FileManager.default.homeDirectoryForCurrentUser
             .standardizedFileURL.resolvingSymlinksInPath().path
     }()
 
-    /// Only allow paths whose resolved physical location is under the user's home directory.
-    /// Resolves symlinks to prevent escaping the home sandbox via symbolic links.
-    static func resolveAllowed(_ raw: String) throws -> URL {
-        let expanded = (raw as NSString).expandingTildeInPath
-        let url = URL(fileURLWithPath: expanded).standardizedFileURL
-        // Resolve symlinks to get the true physical path
-        let resolved = url.resolvingSymlinksInPath()
+    /// Resolve and validate a path under the current `TaskLocal` policy.
+    nonisolated static func resolveAllowed(_ raw: String) throws -> URL {
+        try resolveAllowed(raw, policy: policy)
+    }
+
+    /// Resolve and validate a path under an explicit policy.
+    nonisolated static func resolveAllowed(_ raw: String, policy: Policy) throws -> URL {
+        let candidate = try makeCandidateURL(raw, policy: policy)
+        let resolved = candidate.resolvingSymlinksInPath()
         let path = resolved.path
-        guard path == resolvedHomePath || path.hasPrefix(resolvedHomePath + "/") else {
-            throw ToolError.pathNotAllowed(raw)
+
+        guard isInsideHome(path) else {
+            throw ToolError.pathNotAllowed(raw, policy: policy)
         }
-        return url
+
+        switch policy {
+        case .home:
+            // Return the resolved URL so symlink escapes cannot write outside ~.
+            return resolved
+        case .project(let root):
+            let rootPath = root.resolvingSymlinksInPath().path
+            guard path == rootPath || path.hasPrefix(rootPath + "/") else {
+                throw ToolError.pathNotAllowed(raw, policy: policy)
+            }
+            return resolved
+        }
+    }
+
+    /// Validate a directory as a project root (exists, directory, under ~).
+    /// Returns the standardized absolute path string used as `ProjectRecord.rootPath`.
+    @discardableResult
+    nonisolated static func validateProjectRoot(_ url: URL) throws -> URL {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+              isDir.boolValue
+        else {
+            throw ToolError.operationFailed(
+                "Project root must be an existing directory: \(url.path)"
+            )
+        }
+        let standardized = url.standardizedFileURL
+        let resolved = standardized.resolvingSymlinksInPath()
+        guard isInsideHome(resolved.path) else {
+            throw ToolError.pathNotAllowed(url.path, policy: .home)
+        }
+        return resolved
+    }
+
+    // MARK: - Internals
+
+    nonisolated private static func makeCandidateURL(_ raw: String, policy: Policy) throws -> URL {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ToolError.invalidArguments("Path cannot be empty.")
+        }
+
+        switch policy {
+        case .home:
+            let expanded = (trimmed as NSString).expandingTildeInPath
+            return URL(fileURLWithPath: expanded).standardizedFileURL
+        case .project(let root):
+            if trimmed.hasPrefix("~") || trimmed.hasPrefix("/") {
+                let expanded = (trimmed as NSString).expandingTildeInPath
+                return URL(fileURLWithPath: expanded).standardizedFileURL
+            }
+            // Relative paths anchor at the project root.
+            return root.appendingPathComponent(trimmed).standardizedFileURL
+        }
+    }
+
+    nonisolated private static func isInsideHome(_ resolvedPath: String) -> Bool {
+        resolvedPath == resolvedHomePath || resolvedPath.hasPrefix(resolvedHomePath + "/")
     }
 }
 
@@ -103,10 +193,7 @@ nonisolated struct FlexibleBool: Decodable, Sendable, Equatable {
                 value = false
                 return
             default:
-                throw DecodingError.dataCorruptedError(
-                    in: container,
-                    debugDescription: "Expected boolean, got \"\(string)\""
-                )
+                break
             }
         }
         throw DecodingError.typeMismatch(
@@ -152,27 +239,22 @@ struct ToolRegistry: Sendable {
 
     static func makeDefault() -> ToolRegistry {
         ToolRegistry(tools: [
-            // File operations
             ListDirectoryTool(),
-            SearchFilesTool(),
+            MoveFileTool(),
+            RenameFileTool(),
+            CreateDirectoryTool(),
+            DeleteFileTool(),
+            CopyFileTool(),
             ReadTextFileTool(),
             WriteTextFileTool(),
-            MoveFileTool(),
-            CopyFileTool(),
-            RenameFileTool(),
-            DeleteFileTool(),
-            CreateDirectoryTool(),
-            // Shell
+            SearchFilesTool(),
             RunShellCommandTool(),
-            // Clipboard
             GetClipboardTool(),
             SetClipboardTool(),
-            // Accessibility
             GetSelectedTextTool(),
             TypeTextTool(),
-            GetFrontmostAppTool(),
             GetScreenInfoTool(),
-            // System
+            GetFrontmostAppTool(),
             OpenApplicationTool(),
             OpenURLTool(),
             NotifyTool(),

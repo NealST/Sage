@@ -17,6 +17,18 @@ struct MenuBarView: View {
         }
         .keyboardShortcut(" ", modifiers: [.command, .shift])
 
+        Button("Open Project…") {
+            openProjectFromMenu()
+        }
+        .disabled(appState.agent.isBusy)
+        .keyboardShortcut("o", modifiers: [.command, .shift])
+
+        Button("New Project…") {
+            createProjectFromMenu()
+        }
+        .disabled(appState.agent.isBusy)
+        .keyboardShortcut("n", modifiers: [.command, .shift])
+
         Text(appState.statusHint)
             .font(.system(size: SageDesign.Typography.captionSize))
             .foregroundStyle(.secondary)
@@ -85,5 +97,32 @@ struct MenuBarView: View {
             onQuit()
         }
         .keyboardShortcut("q", modifiers: [.command])
+    }
+
+    private func openProjectFromMenu() {
+        // Show panels above the menu-bar app; open the agent window first.
+        onOpenAgent()
+        DispatchQueue.main.async {
+            guard let url = ProjectPanelActions.pickDirectory(
+                message: "Choose a project folder"
+            ) else { return }
+            appState.clearDraft()
+            Task { await appState.agent.openProject(at: url) }
+        }
+    }
+
+    private func createProjectFromMenu() {
+        onOpenAgent()
+        DispatchQueue.main.async {
+            guard let created = ProjectPanelActions.promptCreateProject() else { return }
+            appState.clearDraft()
+            Task {
+                await appState.agent.createProject(
+                    parent: created.parent,
+                    name: created.name,
+                    gitInit: created.gitInit
+                )
+            }
+        }
     }
 }

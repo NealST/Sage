@@ -10,7 +10,9 @@ struct RunShellCommandTool: AgentTool {
         name: "run_shell_command",
         description: """
             Execute a shell command via /bin/zsh -c and return its output (stdout + stderr combined). \
-            Working directory must be under ~/. Default timeout is 30s (max 120s). \
+            Working directory must stay inside the active sandbox \
+            (home ~/ in General; the project root when a Project is focused). \
+            Defaults to the sandbox root. Default timeout is 30s (max 120s). \
             Output is capped at 50KB. Result format: "[exit N]\\n<output>". \
             Dangerous commands (rm -rf /, sudo, etc.) are blocked. \
             Use for: git, grep, find, python, node, brew, make, and other CLI tools.
@@ -18,7 +20,9 @@ struct RunShellCommandTool: AgentTool {
         parameters: .schemaObject(
             properties: [
                 "command": .stringProperty("Shell command to execute (passed to /bin/zsh -c)"),
-                "working_directory": .stringProperty("Working directory (must be under ~/). Defaults to ~."),
+                "working_directory": .stringProperty(
+                    "Working directory inside the active sandbox. Defaults to sandbox root (~/ or project root)."
+                ),
                 "timeout_seconds": .intProperty("Timeout in seconds (1–120, default 30)."),
             ],
             required: ["command"]
@@ -74,17 +78,17 @@ struct RunShellCommandTool: AgentTool {
         // Safety checks
         try validateCommand(command)
 
-        // Resolve working directory
+        // Resolve working directory (sandbox root when omitted)
         let workDir: URL
         if let dir = args.workingDirectory {
             workDir = try PathGuard.resolveAllowed(dir)
         } else {
-            workDir = FileManager.default.homeDirectoryForCurrentUser
+            workDir = PathGuard.policy.defaultWorkingDirectory
         }
 
         guard FileManager.default.fileExists(atPath: workDir.path) else {
             throw ToolError.operationFailed(
-                "Working directory does not exist: \(args.workingDirectory ?? "~"). Use create_directory first."
+                "Working directory does not exist: \(args.workingDirectory ?? workDir.path). Use create_directory first."
             )
         }
 

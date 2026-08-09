@@ -12,6 +12,9 @@ final class AgentRuntime {
     private(set) var activeTask: TaskRecord?
     private(set) var recentSummaries: [TaskSummary] = []
     private(set) var activeTaskID: UUID?
+    /// Focused code project (`nil` = General).
+    private(set) var focusedProject: ProjectRecord?
+    private(set) var recentProjects: [ProjectRecord] = []
     private(set) var phase: AgentPhase = .idle
     private(set) var lastAssistantText: String?
     /// Incrementally accumulated text during streaming. Empty when not streaming.
@@ -26,6 +29,18 @@ final class AgentRuntime {
 
     var events: [AgentEvent] {
         activeTask?.events ?? []
+    }
+
+    /// Path sandbox for tools and UI path resolution.
+    var pathGuardPolicy: PathGuard.Policy {
+        if let focusedProject {
+            return .project(root: focusedProject.rootURL)
+        }
+        return .home
+    }
+
+    var focusTitle: String {
+        focusedProject?.name ?? "General"
     }
 
     /// True when the model is actively streaming text (first token has arrived).
@@ -98,7 +113,8 @@ final class AgentRuntime {
     private let systemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
     Prefer using tools for real actions (files, clipboard, apps, notifications).
-    Keep plans small and concrete. Expand ~ paths. Stay inside the user's home directory for files.
+    Keep plans small and concrete. Expand ~ paths when useful.
+    File and shell paths are sandboxed — stay inside the active sandbox described below.
     When rewriting text for the clipboard, use get_clipboard / set_clipboard.
     After tools run, you will see their results — then give a short clear summary of what happened.
     Reply in the same language the user uses.
@@ -125,10 +141,8 @@ final class AgentRuntime {
     func bootstrap() async {
         do {
             let snapshot = try await taskRepository.loadWorkspace()
-            recentSummaries = snapshot.recentSummaries
-            if let task = snapshot.activeTask {
-                activeTask = task
-                activeTaskID = task.id
+            applyWorkspaceSnapshot(snapshot)
+            if snapshot.activeTask != nil {
                 await restorePhaseFromActiveTask()
             } else {
                 _ = await createAndActivateTask(relatedTo: [])
@@ -253,7 +267,15 @@ final class AgentRuntime {
                 phase = .failed(message: "Could not find that task context.")
                 return
             }
-            try await taskRepository.setActiveTaskID(id)
+            // Task must belong to the focused project (or General).
+            guard task.projectID == focusedProject?.id else {
+                phase = .failed(message: "That task belongs to a different project.")
+                return
+            }
+            try await taskRepository.setFocus(
+                projectID: focusedProject?.id,
+                activeTaskID: id
+            )
             activeTask = task
             activeTaskID = task.id
             refreshSummary(for: task)
@@ -272,6 +294,8 @@ final class AgentRuntime {
             try await taskRepository.eraseAllData()
             activeTask = nil
             activeTaskID = nil
+            focusedProject = nil
+            recentProjects = []
             recentSummaries = []
             lastAssistantText = nil
             contextHint = nil
@@ -281,6 +305,104 @@ final class AgentRuntime {
             return true
         } catch {
             phase = .failed(message: "Could not erase local data: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    // MARK: - Project focus
+
+    /// Open an existing directory as the focused project (reuses same root_path).
+    @discardableResult
+    func openProject(at url: URL) async -> Bool {
+        guard beginOperation() else { return false }
+        defer { endOperation() }
+        do {
+            guard await persistLeavingFocus() else { return false }
+            let project = try await taskRepository.openProject(rootURL: url, displayName: nil)
+            return await focusProject(project)
+        } catch {
+            phase = .failed(message: "Could not open project: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Create a new project directory under `parentURL`, then focus it.
+    @discardableResult
+    func createProject(parent parentURL: URL, name: String, gitInit: Bool) async -> Bool {
+        guard beginOperation() else { return false }
+        defer { endOperation() }
+        do {
+            guard await persistLeavingFocus() else { return false }
+            let project = try await taskRepository.createProject(
+                parentURL: parentURL,
+                name: name,
+                gitInit: gitInit
+            )
+            return await focusProject(project)
+        } catch {
+            phase = .failed(message: "Could not create project: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Switch focus to an already-registered project.
+    @discardableResult
+    func switchProject(id: UUID) async -> Bool {
+        guard beginOperation() else { return false }
+        defer { endOperation() }
+        do {
+            guard let project = try await taskRepository.loadProject(id: id) else {
+                phase = .failed(message: "Could not find that project.")
+                return false
+            }
+            if focusedProject?.id == project.id { return true }
+            guard await persistLeavingFocus() else { return false }
+            // Refresh last_opened
+            let opened = try await taskRepository.openProject(
+                rootURL: project.rootURL,
+                displayName: project.name
+            )
+            return await focusProject(opened)
+        } catch {
+            phase = .failed(message: "Could not switch project: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Leave the project and return to General.
+    @discardableResult
+    func closeProject() async -> Bool {
+        guard beginOperation() else { return false }
+        defer { endOperation() }
+        guard focusedProject != nil else { return true }
+        do {
+            guard await persistLeavingFocus() else { return false }
+
+            // Prefer the General task we left earlier; else most-recent General summary.
+            var restoreID = try await taskRepository.lastGeneralTaskID()
+            if let id = restoreID,
+               let task = try await taskRepository.loadTask(id: id),
+               task.projectID != nil {
+                restoreID = nil
+            }
+
+            focusedProject = nil
+            activeTask = nil
+            activeTaskID = nil
+            try await taskRepository.setFocus(projectID: nil, activeTaskID: restoreID)
+
+            let snapshot = try await taskRepository.loadWorkspace()
+            applyWorkspaceSnapshot(snapshot)
+            contextHint = nil
+            forceFreshOnNextSubmit = false
+
+            if snapshot.activeTask == nil {
+                return await createAndActivateTask(relatedTo: []) != nil
+            }
+            await restorePhaseFromActiveTask()
+            return true
+        } catch {
+            phase = .failed(message: "Could not close project: \(error.localizedDescription)")
             return false
         }
     }
@@ -433,11 +555,7 @@ final class AgentRuntime {
                 userVisibleHint: nil
             )
         } else {
-            let workspace = TaskWorkspaceSnapshot(
-                activeTask: activeTask,
-                recentSummaries: recentSummaries,
-                activeTaskID: activeTaskID
-            )
+            let workspace = currentWorkspaceSnapshot()
             let contextDecision = await contextResolver.resolve(
                 input: trimmed,
                 workspace: workspace
@@ -566,9 +684,12 @@ final class AgentRuntime {
                         let timeout: Duration = interactiveTools.contains(step.toolName)
                             ? .seconds(130)
                             : toolExecutionTimeout
+                        let policy = pathGuardPolicy
                         rawResult = try await withThrowingTaskGroup(of: String.self) { group in
                             group.addTask {
-                                try await tool.call(argumentsJSON: step.argumentsJSON)
+                                try await PathGuard.$policy.withValue(policy) {
+                                    try await tool.call(argumentsJSON: step.argumentsJSON)
+                                }
                             }
                             group.addTask {
                                 try await Task.sleep(for: timeout)
@@ -849,7 +970,7 @@ final class AgentRuntime {
         var modelEvents = [
             AgentEvent(
                 kind: .systemInstruction,
-                content: systemPrompt + skillsAppendix + relatedAppendix
+                content: systemPrompt + projectPromptAppendix() + skillsAppendix + relatedAppendix
             )
         ]
         modelEvents.append(contentsOf: ContextBudget.select(from: events))
@@ -881,7 +1002,7 @@ final class AgentRuntime {
         var modelEvents = [
             AgentEvent(
                 kind: .systemInstruction,
-                content: systemPrompt + skillsAppendix + relatedAppendix
+                content: systemPrompt + projectPromptAppendix() + skillsAppendix + relatedAppendix
             )
         ]
         modelEvents.append(contentsOf: ContextBudget.select(from: events))
@@ -953,8 +1074,11 @@ final class AgentRuntime {
         guard !relatedIDs.isEmpty else { return "" }
 
         var lines = ["", "## Related prior work", "Use only if relevant to the current request:"]
+        let scopeProjectID = focusedProject?.id
         for id in relatedIDs {
             guard let related = try? await taskRepository.loadTask(id: id) else { continue }
+            // Never inject cross-project context.
+            guard related.projectID == scopeProjectID else { continue }
             let topic = related.topic?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             let summary = related.summary?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             let title = topic ?? summary ?? "Prior task"
@@ -983,9 +1107,17 @@ final class AgentRuntime {
 
     @discardableResult
     private func createAndActivateTask(relatedTo relatedTaskIDs: [UUID]) async -> UUID? {
-        let task = TaskRecord(relatedTaskIDs: relatedTaskIDs)
+        let scopedRelated = await filterRelatedIDsToScope(relatedTaskIDs)
+        let task = TaskRecord(
+            projectID: focusedProject?.id,
+            relatedTaskIDs: scopedRelated
+        )
         do {
             try await taskRepository.saveTaskState(task, setActive: true)
+            try await taskRepository.setFocus(
+                projectID: focusedProject?.id,
+                activeTaskID: task.id
+            )
             activeTask = task
             activeTaskID = task.id
             refreshSummary(for: task)
@@ -996,6 +1128,127 @@ final class AgentRuntime {
             phase = .failed(message: "Could not create task storage: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func applyWorkspaceSnapshot(_ snapshot: TaskWorkspaceSnapshot) {
+        focusedProject = snapshot.focusedProject
+        recentProjects = snapshot.recentProjects
+        recentSummaries = snapshot.recentSummaries
+        activeTask = snapshot.activeTask
+        activeTaskID = snapshot.activeTask?.id ?? snapshot.activeTaskID
+    }
+
+    private func currentWorkspaceSnapshot() -> TaskWorkspaceSnapshot {
+        TaskWorkspaceSnapshot(
+            focusedProject: focusedProject,
+            activeTask: activeTask,
+            recentSummaries: recentSummaries,
+            recentProjects: recentProjects,
+            activeTaskID: activeTaskID
+        )
+    }
+
+    private func projectPromptAppendix() -> String {
+        guard let project = focusedProject else {
+            return """
+
+
+            ## Active sandbox
+            Mode: General. File and shell paths must stay under the user's home directory (~/).
+            Default shell working directory is ~.
+            """
+        }
+        return """
+
+
+        ## Active sandbox
+        Mode: Code Project.
+        Project name: \(project.name)
+        Project root: \(project.rootPath)
+        All file reads/writes and shell working directories must stay inside this project root.
+        Relative paths resolve against the project root. Prefer project-relative paths.
+        Default shell working directory is the project root.
+        """
+    }
+
+    /// Save the in-memory task (including pending plan) and remember last-active
+    /// pointers before changing project focus.
+    @discardableResult
+    private func persistLeavingFocus() async -> Bool {
+        if var current = activeTask {
+            if case .awaitingConfirmation(let plan) = phase {
+                current.pendingPlan = plan
+                current.status = .awaitingApproval
+            }
+            current.updatedAt = .now
+            do {
+                try await taskRepository.saveTaskState(current, setActive: false)
+                activeTask = current
+            } catch {
+                phase = .failed(message: "Could not save task before switching project: \(error.localizedDescription)")
+                return false
+            }
+        }
+
+        do {
+            if let project = focusedProject {
+                try await taskRepository.setProjectLastActiveTask(
+                    projectID: project.id,
+                    taskID: activeTaskID
+                )
+            } else if let activeTaskID, activeTask?.projectID == nil {
+                try await taskRepository.setLastGeneralTaskID(activeTaskID)
+            }
+            return true
+        } catch {
+            phase = .failed(message: "Could not remember project focus: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func focusProject(_ project: ProjectRecord) async -> Bool {
+        do {
+            contextHint = nil
+            forceFreshOnNextSubmit = false
+
+            // Reload project so last_active_task_id reflects what we just persisted.
+            let project = try await taskRepository.loadProject(id: project.id) ?? project
+
+            if let lastID = project.lastActiveTaskID,
+               let task = try await taskRepository.loadTask(id: lastID),
+               task.projectID == project.id {
+                try await taskRepository.setFocus(projectID: project.id, activeTaskID: lastID)
+                let snapshot = try await taskRepository.loadWorkspace()
+                applyWorkspaceSnapshot(snapshot)
+                focusedProject = snapshot.focusedProject ?? project
+                await restorePhaseFromActiveTask()
+                return true
+            }
+
+            focusedProject = project
+            activeTask = nil
+            activeTaskID = nil
+            try await taskRepository.setFocus(projectID: project.id, activeTaskID: nil)
+            guard await createAndActivateTask(relatedTo: []) != nil else { return false }
+            let snapshot = try await taskRepository.loadWorkspace()
+            applyWorkspaceSnapshot(snapshot)
+            focusedProject = snapshot.focusedProject ?? project
+            return true
+        } catch {
+            phase = .failed(message: "Could not focus project: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func filterRelatedIDsToScope(_ ids: [UUID]) async -> [UUID] {
+        let scope = focusedProject?.id
+        var result: [UUID] = []
+        for id in ids {
+            guard let task = try? await taskRepository.loadTask(id: id) else { continue }
+            guard task.projectID == scope else { continue }
+            if !result.contains(id) { result.append(id) }
+        }
+        return Array(result.prefix(Self.maxRelatedTaskIDs))
     }
 
     private static let maxRelatedTaskIDs = 8
@@ -1196,9 +1449,12 @@ final class AgentRuntime {
     }
 
     private func refreshSummary(for task: TaskRecord) {
+        // Keep the in-memory catalog scoped to the focused project.
+        guard task.projectID == focusedProject?.id else { return }
         let summary = TaskSummary(
             id: task.id,
             status: task.status,
+            projectID: task.projectID,
             summary: task.summary,
             topic: task.topic,
             abstract: task.abstract,
@@ -1288,68 +1544,7 @@ final class AgentRuntime {
     }
 
     private func humanTitle(for call: ToolCallProposal) -> String {
-        let args = (try? JSONDecoder().decode(
-            [String: JSONValue].self,
-            from: Data(call.argumentsJSON.utf8)
-        )) ?? [:]
-        switch call.name {
-        case "list_directory":
-            return "List \(args["path"]?.stringValue ?? "folder")"
-        case "move_file":
-            return "Move \(args["source"]?.stringValue ?? "file")"
-        case "rename_file":
-            return "Rename to \(args["new_name"]?.stringValue ?? "…")"
-        case "create_directory":
-            return "Create \(args["path"]?.stringValue ?? "folder")"
-        case "search_files":
-            return "Search \(args["path"]?.stringValue ?? "files")"
-        case "read_text_file":
-            return "Read \(args["path"]?.stringValue ?? "file")"
-        case "write_text_file":
-            return "Write \(args["path"]?.stringValue ?? "file")"
-        case "copy_file":
-            return "Copy \(args["source"]?.stringValue ?? "file")"
-        case "delete_file":
-            return "Delete \(args["path"]?.stringValue ?? "file")"
-        case "run_shell_command":
-            let cmd = args["command"]?.stringValue ?? "command"
-            let short = cmd.count > 30 ? String(cmd.prefix(27)) + "…" : cmd
-            return "Run: \(short)"
-        case "get_clipboard":
-            return "Read clipboard"
-        case "set_clipboard":
-            return "Update clipboard"
-        case "get_selected_text":
-            return "Get selection"
-        case "type_text":
-            let text = args["text"]?.stringValue ?? ""
-            let preview = text.count > 20 ? String(text.prefix(17)) + "…" : text
-            return "Type: \(preview)"
-        case "get_screen_info":
-            return "Get screen info"
-        case "get_frontmost_app":
-            return "Check active app"
-        case "open_application":
-            return "Open \(args["name"]?.stringValue ?? "app")"
-        case "open_url":
-            return "Open URL"
-        case "notify":
-            return "Notify: \(args["title"]?.stringValue ?? "…")"
-        case "get_system_volume":
-            return "Get volume"
-        case "set_system_volume":
-            return "Set volume to \(args["volume"]?.stringValue ?? "…")%"
-        case "toggle_appearance":
-            return "Toggle appearance"
-        case "create_reminder":
-            let title = args["title"]?.stringValue ?? "reminder"
-            let short = title.count > 20 ? String(title.prefix(17)) + "…" : title
-            return "Remind: \(short)"
-        case "take_screenshot":
-            return "Take screenshot"
-        default:
-            return call.name
-        }
+        ToolCallPresentation.humanTitle(name: call.name, argumentsJSON: call.argumentsJSON)
     }
 
     private static func hint(for task: TaskRecord) -> String {
@@ -1405,11 +1600,7 @@ final class AgentRuntime {
     }
 
     private func heuristicRoutingDecision(input: String) -> TaskRoutingDecision? {
-        let workspace = TaskWorkspaceSnapshot(
-            activeTask: activeTask,
-            recentSummaries: recentSummaries,
-            activeTaskID: activeTaskID
-        )
+        let workspace = currentWorkspaceSnapshot()
         guard let decision = HeuristicTaskFallback.decide(
             input: input,
             workspace: workspace
@@ -1489,6 +1680,7 @@ final class AgentRuntime {
             recentSummaries[index] = TaskSummary(
                 id: recentSummaries[index].id,
                 status: recentSummaries[index].status,
+                projectID: recentSummaries[index].projectID,
                 summary: recentSummaries[index].summary,
                 topic: result.topic,
                 abstract: result.abstract,

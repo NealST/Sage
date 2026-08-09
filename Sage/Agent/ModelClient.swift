@@ -290,7 +290,10 @@ nonisolated private struct APIMessage: Encodable {
                 )
             }
         } else {
-            content = event.content
+            // Strip write-file diff sidecars — keep model context lean.
+            content = event.kind == .toolResult
+                ? WriteFileResultCodec.modelFacing(event.content)
+                : event.content
             self.toolCalls = nil
         }
         toolCallID = event.toolCallID

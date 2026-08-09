@@ -28,35 +28,53 @@ actor GRDBTaskRepository: TaskRepository {
     func loadWorkspace() throws -> TaskWorkspaceSnapshot {
         let pool = try database()
         return try pool.read { db in
-            let activeIDString = try String.fetchOne(
+            let focusRow = try Row.fetchOne(
                 db,
-                sql: "SELECT active_task_id FROM app_state WHERE singleton = 1"
+                sql: "SELECT active_task_id, focused_project_id FROM app_state WHERE singleton = 1"
             )
-            let activeTaskID = activeIDString.flatMap(UUID.init(uuidString:))
+            let activeTaskID = (focusRow?["active_task_id"] as String?)
+                .flatMap(UUID.init(uuidString:))
+            let focusedProjectID = (focusRow?["focused_project_id"] as String?)
+                .flatMap(UUID.init(uuidString:))
 
-            let summaryRows = try Row.fetchAll(
-                db,
-                sql: """
-                SELECT id, status, summary, topic, abstract, updated_at
-                FROM tasks
-                ORDER BY updated_at DESC
-                LIMIT 40
-                """
-            )
-            let recentSummaries = summaryRows.compactMap { row -> TaskSummary? in
-                guard
-                    let id = UUID(uuidString: row["id"]),
-                    let status = TaskStatus(rawValue: row["status"])
-                else { return nil }
-                return TaskSummary(
-                    id: id,
-                    status: status,
-                    summary: row["summary"],
-                    topic: row["topic"],
-                    abstract: row["abstract"],
-                    updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+            let focusedProject: ProjectRecord?
+            if let focusedProjectID {
+                focusedProject = try loadProject(id: focusedProjectID, database: db)
+            } else {
+                focusedProject = nil
+            }
+
+            let summaryRows: [Row]
+            if let focusedProjectID {
+                summaryRows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, status, project_id, summary, topic, abstract, updated_at
+                    FROM tasks
+                    WHERE project_id = ?
+                    ORDER BY updated_at DESC
+                    LIMIT 40
+                    """,
+                    arguments: [focusedProjectID.uuidString]
+                )
+            } else {
+                summaryRows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT id, status, project_id, summary, topic, abstract, updated_at
+                    FROM tasks
+                    WHERE project_id IS NULL
+                    ORDER BY updated_at DESC
+                    LIMIT 40
+                    """
                 )
             }
+
+            let recentSummaries = summaryRows.compactMap { row -> TaskSummary? in
+                Self.taskSummary(from: row)
+            }
+
+            let recentProjects = try loadRecentProjects(limit: 12, database: db)
 
             let activeTask: TaskRecord?
             if let activeTaskID,
@@ -64,8 +82,10 @@ actor GRDBTaskRepository: TaskRepository {
                 db,
                 sql: "SELECT * FROM tasks WHERE id = ?",
                 arguments: [activeTaskID.uuidString]
-               ) {
-                activeTask = try loadTask(from: row, database: db)
+               ),
+               let loaded = try loadTask(from: row, database: db),
+               loaded.projectID == focusedProjectID {
+                activeTask = loaded
             } else if let first = recentSummaries.first,
                       let row = try Row.fetchOne(
                         db,
@@ -78,10 +98,26 @@ actor GRDBTaskRepository: TaskRepository {
             }
 
             return TaskWorkspaceSnapshot(
+                focusedProject: focusedProject,
                 activeTask: activeTask,
                 recentSummaries: recentSummaries,
+                recentProjects: recentProjects,
                 activeTaskID: activeTask?.id ?? activeTaskID
             )
+        }
+    }
+
+    func loadProject(id: UUID) throws -> ProjectRecord? {
+        let pool = try database()
+        return try pool.read { db in
+            try loadProject(id: id, database: db)
+        }
+    }
+
+    func listRecentProjects(limit: Int) throws -> [ProjectRecord] {
+        let pool = try database()
+        return try pool.read { db in
+            try loadRecentProjects(limit: limit, database: db)
         }
     }
 
@@ -177,16 +213,139 @@ actor GRDBTaskRepository: TaskRepository {
         }
     }
 
-    func setActiveTaskID(_ taskID: UUID?) throws {
+    func setFocus(projectID: UUID?, activeTaskID: UUID?) throws {
         let pool = try database()
         try pool.write { db in
-            try writeActiveTaskID(taskID, database: db)
+            if let activeTaskID {
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: "SELECT project_id FROM tasks WHERE id = ?",
+                    arguments: [activeTaskID.uuidString]
+                ) else {
+                    throw ToolError.operationFailed("Active task not found.")
+                }
+                let taskProjectID = (row["project_id"] as String?).flatMap(UUID.init(uuidString:))
+                guard taskProjectID == projectID else {
+                    throw ToolError.operationFailed(
+                        "Active task does not belong to the focused project."
+                    )
+                }
+            }
+            try writeFocus(
+                projectID: projectID,
+                activeTaskID: activeTaskID,
+                database: db
+            )
+        }
+    }
+
+    func openProject(rootURL: URL, displayName: String?) throws -> ProjectRecord {
+        let validated = try PathGuard.validateProjectRoot(rootURL)
+        let pool = try database()
+        return try pool.write { db in
+            if let existing = try loadProject(rootPath: validated.path, database: db) {
+                var updated = existing
+                updated.lastOpenedAt = .now
+                updated.updatedAt = .now
+                if let displayName, !displayName.isEmpty {
+                    updated.name = displayName
+                }
+                try upsertProject(updated, database: db)
+                return updated
+            }
+            let name = displayName?.nilIfEmpty ?? validated.lastPathComponent
+            let project = ProjectRecord(name: name, rootPath: validated.path)
+            try upsertProject(project, database: db)
+            return project
+        }
+    }
+
+    func createProject(parentURL: URL, name: String, gitInit: Bool) throws -> ProjectRecord {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw ToolError.invalidArguments("Project name cannot be empty.")
+        }
+        guard !trimmed.contains("/") else {
+            throw ToolError.invalidArguments("Project name cannot contain '/'.")
+        }
+        let parent = try PathGuard.validateProjectRoot(parentURL)
+        let root = parent.appendingPathComponent(trimmed)
+        if FileManager.default.fileExists(atPath: root.path) {
+            throw ToolError.operationFailed(
+                "Path already exists: \(root.path). Open it instead, or choose another name."
+            )
+        }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        if gitInit {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = ["-C", root.path, "init"]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try? process.run()
+            process.waitUntilExit()
+        }
+        return try openProject(rootURL: root, displayName: trimmed)
+    }
+
+    func setProjectLastActiveTask(projectID: UUID, taskID: UUID?) throws {
+        let pool = try database()
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                UPDATE projects
+                SET last_active_task_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    taskID?.uuidString,
+                    Date.now.timeIntervalSince1970,
+                    projectID.uuidString,
+                ]
+            )
+        }
+    }
+
+    func setLastGeneralTaskID(_ taskID: UUID?) throws {
+        let pool = try database()
+        try pool.write { db in
+            // Ensure app_state row exists; preserve other focus columns.
+            let active = try String.fetchOne(
+                db,
+                sql: "SELECT active_task_id FROM app_state WHERE singleton = 1"
+            )
+            let focused = try String.fetchOne(
+                db,
+                sql: "SELECT focused_project_id FROM app_state WHERE singleton = 1"
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO app_state (
+                    singleton, active_task_id, focused_project_id, last_general_task_id
+                ) VALUES (1, ?, ?, ?)
+                ON CONFLICT(singleton) DO UPDATE SET
+                    last_general_task_id = excluded.last_general_task_id
+                """,
+                arguments: [active, focused, taskID?.uuidString]
+            )
+        }
+    }
+
+    func lastGeneralTaskID() throws -> UUID? {
+        let pool = try database()
+        return try pool.read { db in
+            let raw = try String.fetchOne(
+                db,
+                sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
+            )
+            return raw.flatMap(UUID.init(uuidString:))
         }
     }
 
     func eraseAllData() throws {
         let pool = try database()
         try pool.write { db in
+            try db.execute(sql: "UPDATE projects SET last_active_task_id = NULL")
             try db.execute(sql: "DELETE FROM event_context_tasks")
             try db.execute(sql: "DELETE FROM event_contexts")
             try db.execute(sql: "DELETE FROM event_tool_calls")
@@ -197,19 +356,55 @@ actor GRDBTaskRepository: TaskRepository {
             try db.execute(sql: "DELETE FROM events")
             try db.execute(sql: "DELETE FROM app_state")
             try db.execute(sql: "DELETE FROM tasks")
+            try db.execute(sql: "DELETE FROM projects")
         }
         try? FileManager.default.removeItem(at: legacyJSONURL)
     }
 
-    private func writeActiveTaskID(_ taskID: UUID?, database db: Database) throws {
+    private func writeFocus(
+        projectID: UUID?,
+        activeTaskID: UUID?,
+        database db: Database
+    ) throws {
+        let lastGeneral = try String.fetchOne(
+            db,
+            sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
+        )
         try db.execute(
             sql: """
-            INSERT INTO app_state (singleton, active_task_id)
-            VALUES (1, ?)
-            ON CONFLICT(singleton) DO UPDATE
-            SET active_task_id = excluded.active_task_id
+            INSERT INTO app_state (
+                singleton, active_task_id, focused_project_id, last_general_task_id
+            )
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                active_task_id = excluded.active_task_id,
+                focused_project_id = excluded.focused_project_id
             """,
-            arguments: [taskID?.uuidString]
+            arguments: [activeTaskID?.uuidString, projectID?.uuidString, lastGeneral]
+        )
+    }
+
+    private func writeActiveTaskID(_ taskID: UUID?, database db: Database) throws {
+        // Preserve focused_project_id / last_general_task_id when only flipping active task.
+        let focused = try String.fetchOne(
+            db,
+            sql: "SELECT focused_project_id FROM app_state WHERE singleton = 1"
+        )
+        let lastGeneral = try String.fetchOne(
+            db,
+            sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO app_state (
+                singleton, active_task_id, focused_project_id, last_general_task_id
+            )
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                active_task_id = excluded.active_task_id,
+                focused_project_id = COALESCE(excluded.focused_project_id, app_state.focused_project_id)
+            """,
+            arguments: [taskID?.uuidString, focused, lastGeneral]
         )
     }
 
@@ -238,6 +433,34 @@ actor GRDBTaskRepository: TaskRepository {
                 ALTER TABLE tasks ADD COLUMN topic TEXT;
                 ALTER TABLE tasks ADD COLUMN abstract TEXT;
                 ALTER TABLE tasks ADD COLUMN topic_updated_at REAL;
+            """)
+        }
+        migrator.registerMigration("addProjects") { db in
+            try db.execute(sql: """
+                CREATE TABLE projects (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    root_path TEXT NOT NULL UNIQUE,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    last_opened_at REAL NOT NULL,
+                    last_active_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL
+                );
+
+                CREATE INDEX projects_last_opened
+                ON projects(last_opened_at DESC);
+
+                ALTER TABLE tasks ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+
+                CREATE INDEX tasks_project_updated
+                ON tasks(project_id, updated_at DESC);
+
+                ALTER TABLE app_state ADD COLUMN focused_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+            """)
+        }
+        migrator.registerMigration("addLastGeneralTask") { db in
+            try db.execute(sql: """
+                ALTER TABLE app_state ADD COLUMN last_general_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
             """)
         }
         try migrator.migrate(pool)
@@ -382,10 +605,14 @@ actor GRDBTaskRepository: TaskRepository {
         // still has nil (topic generation racing with commit/mutate).
         try db.execute(
             sql: """
-            INSERT INTO tasks (id, status, summary, topic, abstract, topic_updated_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (
+                id, status, project_id, summary, topic, abstract,
+                topic_updated_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
+                project_id = excluded.project_id,
                 summary = excluded.summary,
                 topic = COALESCE(excluded.topic, tasks.topic),
                 abstract = COALESCE(excluded.abstract, tasks.abstract),
@@ -395,6 +622,7 @@ actor GRDBTaskRepository: TaskRepository {
             arguments: [
                 task.id.uuidString,
                 task.status.rawValue,
+                task.projectID?.uuidString,
                 task.summary,
                 task.topic,
                 task.abstract,
@@ -604,8 +832,8 @@ actor GRDBTaskRepository: TaskRepository {
             }
             try db.execute(
                 sql: """
-                INSERT INTO app_state (singleton, active_task_id)
-                VALUES (1, ?)
+                INSERT INTO app_state (singleton, active_task_id, focused_project_id)
+                VALUES (1, ?, NULL)
                 ON CONFLICT(singleton) DO UPDATE
                 SET active_task_id = excluded.active_task_id
                 """,
@@ -633,9 +861,12 @@ actor GRDBTaskRepository: TaskRepository {
         let topicUpdatedAt: Date? = (row["topic_updated_at"] as Double?)
             .map { Date(timeIntervalSince1970: $0) }
 
+        let projectID = (row["project_id"] as String?).flatMap(UUID.init(uuidString:))
+
         return TaskRecord(
             id: id,
             status: status,
+            projectID: projectID,
             summary: row["summary"],
             topic: row["topic"],
             abstract: row["abstract"],
@@ -646,6 +877,93 @@ actor GRDBTaskRepository: TaskRepository {
             entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: db),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+        )
+    }
+
+    private func loadProject(id: UUID, database db: Database) throws -> ProjectRecord? {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: "SELECT * FROM projects WHERE id = ?",
+            arguments: [id.uuidString]
+        ) else { return nil }
+        return Self.projectRecord(from: row)
+    }
+
+    private func loadProject(rootPath: String, database db: Database) throws -> ProjectRecord? {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: "SELECT * FROM projects WHERE root_path = ?",
+            arguments: [rootPath]
+        ) else { return nil }
+        return Self.projectRecord(from: row)
+    }
+
+    private func loadRecentProjects(limit: Int, database db: Database) throws -> [ProjectRecord] {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT * FROM projects
+            ORDER BY last_opened_at DESC
+            LIMIT ?
+            """,
+            arguments: [limit]
+        )
+        return rows.compactMap(Self.projectRecord(from:))
+    }
+
+    private func upsertProject(_ project: ProjectRecord, database db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO projects (
+                id, name, root_path, created_at, updated_at,
+                last_opened_at, last_active_task_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                root_path = excluded.root_path,
+                updated_at = excluded.updated_at,
+                last_opened_at = excluded.last_opened_at,
+                last_active_task_id = excluded.last_active_task_id
+            """,
+            arguments: [
+                project.id.uuidString,
+                project.name,
+                project.rootPath,
+                project.createdAt.timeIntervalSince1970,
+                project.updatedAt.timeIntervalSince1970,
+                project.lastOpenedAt.timeIntervalSince1970,
+                project.lastActiveTaskID?.uuidString,
+            ]
+        )
+    }
+
+    private static func projectRecord(from row: Row) -> ProjectRecord? {
+        guard let id = UUID(uuidString: row["id"]) else { return nil }
+        return ProjectRecord(
+            id: id,
+            name: row["name"],
+            rootPath: row["root_path"],
+            createdAt: Date(timeIntervalSince1970: row["created_at"]),
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+            lastOpenedAt: Date(timeIntervalSince1970: row["last_opened_at"]),
+            lastActiveTaskID: (row["last_active_task_id"] as String?)
+                .flatMap(UUID.init(uuidString:))
+        )
+    }
+
+    private static func taskSummary(from row: Row) -> TaskSummary? {
+        guard
+            let id = UUID(uuidString: row["id"]),
+            let status = TaskStatus(rawValue: row["status"])
+        else { return nil }
+        return TaskSummary(
+            id: id,
+            status: status,
+            projectID: (row["project_id"] as String?).flatMap(UUID.init(uuidString:)),
+            summary: row["summary"],
+            topic: row["topic"],
+            abstract: row["abstract"],
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )
     }
@@ -818,5 +1136,12 @@ actor GRDBTaskRepository: TaskRepository {
             summary: planRow["summary"],
             steps: steps
         )
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
