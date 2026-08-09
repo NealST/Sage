@@ -6,6 +6,7 @@
 import AppKit
 import AudioToolbox
 import CoreAudio
+import CoreGraphics
 import EventKit
 import Foundation
 import UserNotifications
@@ -271,7 +272,7 @@ struct SetSystemVolumeTool: AgentTool {
         parameters: .schemaObject(
             properties: [
                 "volume": .intProperty("Volume level 0–100"),
-                "mute": .intProperty("Set to 1 to mute, 0 to unmute. Omit to leave mute state unchanged."),
+                "mute": .boolProperty("Set true to mute, false to unmute. Omit to leave mute state unchanged."),
             ],
             required: ["volume"]
         )
@@ -279,7 +280,7 @@ struct SetSystemVolumeTool: AgentTool {
 
     private struct Args: Decodable {
         let volume: Int
-        let mute: Int?
+        let mute: FlexibleBool?
     }
 
     func call(argumentsJSON: String) async throws -> String {
@@ -295,10 +296,9 @@ struct SetSystemVolumeTool: AgentTool {
         }
 
         if let mute = args.mute {
-            let shouldMute = mute == 1
             do {
-                try setOutputMute(shouldMute)
-                result += shouldMute ? ", muted" : ", unmuted"
+                try setOutputMute(mute.value)
+                result += mute.value ? ", muted" : ", unmuted"
             } catch {
                 result += " (warning: volume changed but mute toggle failed: \(error.localizedDescription))"
             }
@@ -576,11 +576,11 @@ struct TakeScreenshotTool: AgentTool {
     let definition = ToolDefinition(
         name: "take_screenshot",
         description: """
-            Capture a screenshot and save it to a file under ~/. \
-            Modes: "screen" captures the entire main screen, "window" captures the frontmost window. \
-            Returns the file path of the saved PNG image. \
-            The file can be referenced in subsequent tool calls or shown to the user. \
-            Default save location: ~/Desktop/sage_screenshot_<timestamp>.png
+            Capture a screenshot and save it to a PNG under ~/. \
+            Modes: "screen" captures the main display; "window" captures the frontmost visible \
+            window of another app (skips Sage itself — useful when Sage has focus). \
+            Returns the saved file path. Default: ~/Desktop/sage_screenshot_<timestamp>.png. \
+            Requires Screen Recording permission.
             """,
         parameters: .schemaObject(
             properties: [
@@ -628,22 +628,77 @@ struct TakeScreenshotTool: AgentTool {
             withIntermediateDirectories: true
         )
 
-        // Prefer screencapture CLI (CGWindowListCreateImage is unavailable on macOS 26+).
-        if captureMode == "screen" {
-            let result = try await runScreencapture(arguments: ["-x", savePath.path])
-            if result == 0, FileManager.default.fileExists(atPath: savePath.path) {
-                let attrs = try? FileManager.default.attributesOfItem(atPath: savePath.path)
-                let size = (attrs?[.size] as? Int) ?? 0
-                return "[OK] Screenshot saved to \(savePath.path) (\(size) bytes)"
+        // Use screencapture CLI (CGWindowListCreateImage is unavailable on newer macOS).
+        // Window mode: resolve a CGWindowID then capture with -l.
+        let captureArgs: [String]
+        if captureMode == "window" {
+            guard let windowID = Self.frontmostCapturableWindowID() else {
+                throw ToolError.operationFailed(
+                    "No capturable window found (excluding Sage). Bring another app’s window to the front and retry."
+                )
+            }
+            captureArgs = ["-x", "-o", "-l", String(windowID), savePath.path]
+        } else {
+            captureArgs = ["-x", savePath.path]
+        }
+
+        let status = try await runScreencapture(arguments: captureArgs)
+        if status == 0, FileManager.default.fileExists(atPath: savePath.path) {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: savePath.path)
+            let size = (attrs?[.size] as? Int) ?? 0
+            let modeLabel = captureMode == "window" ? "Window screenshot" : "Screenshot"
+            return "[OK] \(modeLabel) saved to \(savePath.path) (\(size) bytes)"
+        }
+
+        throw ToolError.operationFailed(
+            "Screenshot failed. Ensure Sage has Screen Recording permission in System Settings → Privacy & Security → Screen Recording → Sage."
+        )
+    }
+
+    /// Front-to-back on-screen windows; prefer the frontmost non-Sage app, else any other app.
+    private static func frontmostCapturableWindowID() -> CGWindowID? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+        else {
+            return nil
+        }
+
+        let sagePID = ProcessInfo.processInfo.processIdentifier
+        let frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let preferredPID: pid_t? = {
+            guard let frontPID, frontPID != sagePID else { return nil }
+            return frontPID
+        }()
+
+        var fallback: CGWindowID?
+
+        for info in infoList {
+            guard let pidValue = info[kCGWindowOwnerPID as String] as? NSNumber else { continue }
+            let pid = pid_t(pidValue.int32Value)
+            if pid == sagePID { continue }
+
+            let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+            guard layer == 0 else { continue }
+
+            if let bounds = info[kCGWindowBounds as String] as? [String: Any] {
+                let width = (bounds["Width"] as? NSNumber)?.doubleValue ?? 0
+                let height = (bounds["Height"] as? NSNumber)?.doubleValue ?? 0
+                // Skip menu bar extras / tiny panels.
+                guard width >= 80, height >= 80 else { continue }
+            }
+
+            guard let number = info[kCGWindowNumber as String] as? NSNumber else { continue }
+            let windowID = CGWindowID(number.uint32Value)
+
+            if let preferredPID, pid == preferredPID {
+                return windowID
+            }
+            if fallback == nil {
+                fallback = windowID
             }
         }
 
-        let hint = captureMode == "window"
-            ? "Window capture failed — no visible window found for the frontmost app (excluding Sage)."
-            : "Screenshot failed."
-        throw ToolError.operationFailed(
-            "\(hint) Ensure Sage has Screen Recording permission in System Settings → Privacy & Security → Screen Recording → Sage."
-        )
+        return fallback
     }
 
     private func runScreencapture(arguments: [String]) async throws -> Int32 {

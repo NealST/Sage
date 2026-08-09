@@ -489,4 +489,11 @@ extension JSONValue {
             "description": .string(description),
         ])
     }
+
+    static func boolProperty(_ description: String) -> JSONValue {
+        .object([
+            "type": .string("boolean"),
+            "description": .string(description),
+        ])
+    }
 }

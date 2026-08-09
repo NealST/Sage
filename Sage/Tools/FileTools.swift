@@ -18,7 +18,7 @@ struct ListDirectoryTool: AgentTool {
             properties: [
                 "path": .stringProperty("Absolute or ~ path to the directory"),
                 "depth": .intProperty("Recursion depth (1 = immediate children only, default 1, max 5)"),
-                "include_hidden": .intProperty("Set to 1 to include hidden files/directories. Default 0 (skip hidden)."),
+                "include_hidden": .boolProperty("Include hidden files/directories. Default false."),
             ],
             required: ["path"]
         )
@@ -27,13 +27,7 @@ struct ListDirectoryTool: AgentTool {
     private struct Args: Decodable {
         let path: String
         let depth: Int?
-        let includeHidden: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case path
-            case depth
-            case includeHidden = "include_hidden"
-        }
+        let includeHidden: FlexibleBool?
     }
 
     private static let maxEntries = 500
@@ -57,7 +51,7 @@ struct ListDirectoryTool: AgentTool {
 
         let requestedDepth = args.depth ?? 1
         let maxDepth = min(max(requestedDepth, 1), 5)
-        let skipHidden = (args.includeHidden ?? 0) == 0
+        let skipHidden = !(args.includeHidden?.value ?? false)
         var lines: [String] = []
         var truncated = false
         listRecursive(url: url, depth: maxDepth, currentDepth: 0, skipHidden: skipHidden, lines: &lines, truncated: &truncated)
@@ -531,7 +525,7 @@ struct SearchFilesTool: AgentTool {
                 "path": .stringProperty("Directory to search in (recursive)"),
                 "name_pattern": .stringProperty("Glob pattern for file names (e.g. '*.swift', 'README*'). Default '*' matches all."),
                 "content_pattern": .stringProperty("Optional regex pattern to search inside matching files. Only UTF-8 text files are searched."),
-                "include_hidden": .intProperty("Set to 1 to include hidden files/directories. Default 0 (skip hidden)."),
+                "include_hidden": .boolProperty("Include hidden files/directories. Default false."),
             ],
             required: ["path"]
         )
@@ -541,14 +535,7 @@ struct SearchFilesTool: AgentTool {
         let path: String
         let namePattern: String?
         let contentPattern: String?
-        let includeHidden: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case path
-            case namePattern = "name_pattern"
-            case contentPattern = "content_pattern"
-            case includeHidden = "include_hidden"
-        }
+        let includeHidden: FlexibleBool?
     }
 
     private static let maxResults = 50
@@ -565,7 +552,7 @@ struct SearchFilesTool: AgentTool {
         }
 
         let namePattern = args.namePattern ?? "*"
-        let skipHidden = (args.includeHidden ?? 0) == 0
+        let skipHidden = !(args.includeHidden?.value ?? false)
 
         // Compile content regex if provided
         let contentRegex: NSRegularExpression?

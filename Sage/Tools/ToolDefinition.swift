@@ -71,6 +71,54 @@ func decodeToolArgs<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
     }
 }
 
+/// Accepts JSON booleans, 0/1 integers, and common string forms (`"true"` / `"1"`).
+/// Models frequently emit any of these for flag-like tool parameters.
+nonisolated struct FlexibleBool: Decodable, Sendable, Equatable {
+    let value: Bool
+
+    init(_ value: Bool) {
+        self.value = value
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let bool = try? container.decode(Bool.self) {
+            value = bool
+            return
+        }
+        if let int = try? container.decode(Int.self) {
+            value = int != 0
+            return
+        }
+        if let double = try? container.decode(Double.self) {
+            value = double != 0
+            return
+        }
+        if let string = try? container.decode(String.self) {
+            switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "1", "yes", "y":
+                value = true
+                return
+            case "false", "0", "no", "n":
+                value = false
+                return
+            default:
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Expected boolean, got \"\(string)\""
+                )
+            }
+        }
+        throw DecodingError.typeMismatch(
+            Bool.self,
+            DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Expected boolean, integer 0/1, or true/false string"
+            )
+        )
+    }
+}
+
 /// Maximum characters a tool result may return before truncation.
 private let toolResultMaxChars = 50_000
 
