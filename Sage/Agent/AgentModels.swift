@@ -122,3 +122,10 @@ struct RetryDisplayState: Equatable {
     var totalSeconds: Int
     var secondsRemaining: Int
 }
+
+/// Cumulative token usage for the current session.
+struct TokenUsage: Equatable {
+    var input: Int = 0
+    var output: Int = 0
+    var total: Int { input + output }
+}

@@ -18,6 +18,9 @@ struct SageApp: App {
                 onOpenSettings: {
                     appDelegate.showSettings()
                 },
+                onOpenDashboard: {
+                    appDelegate.showDashboard()
+                },
                 onQuit: {
                     NSApp.terminate(nil)
                 }

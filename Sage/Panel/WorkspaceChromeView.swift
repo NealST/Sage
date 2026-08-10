@@ -178,6 +178,19 @@ struct WorkspaceChromeView: View {
         }
 
         Button {
+            NotificationCenter.default.post(name: .sageOpenDashboard, object: nil)
+        } label: {
+            Image(systemName: SageDesign.Symbol.dashboard)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Dashboard")
+        .accessibilityLabel("Dashboard")
+
+        Button {
             NotificationCenter.default.post(name: .sageOpenSettings, object: nil)
         } label: {
             Image(systemName: SageDesign.Symbol.settings)

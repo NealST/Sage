@@ -9,6 +9,7 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     var onOpenAgent: () -> Void
     var onOpenSettings: () -> Void
+    var onOpenDashboard: () -> Void
     var onQuit: () -> Void
 
     var body: some View {
@@ -85,6 +86,11 @@ struct MenuBarView: View {
             Task { await appState.agent.startFresh() }
         }
         .disabled(!appState.agent.canStartFresh)
+
+        Button("Dashboard") {
+            onOpenDashboard()
+        }
+        .keyboardShortcut("d", modifiers: [.command, .shift])
 
         Button("Settings…") {
             onOpenSettings()

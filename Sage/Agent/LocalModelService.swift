@@ -37,6 +37,8 @@ actor LocalModelService {
         case loading
         case ready
         case failed(String)
+        /// Model was automatically unloaded due to system memory pressure.
+        case unloadedByPressure
     }
 
     private(set) var status: Status = .idle
@@ -44,6 +46,11 @@ actor LocalModelService {
     private var loadingTask: Task<ModelContainer, Error>?
     private var retryCount = 0
     private static let maxRetries = 2
+
+    /// True while a `generate` call is in flight — prevents mid-inference unload.
+    private var isInferring = false
+    /// Set when pressure arrives during inference; triggers unload after completion.
+    private var shouldUnloadAfterInference = false
 
     // MARK: - Public
 
@@ -74,6 +81,15 @@ actor LocalModelService {
         temperature: Float = 0
     ) async throws -> String {
         let container = try await ensureLoaded()
+
+        isInferring = true
+        defer {
+            isInferring = false
+            if shouldUnloadAfterInference {
+                shouldUnloadAfterInference = false
+                unloadDueToPressure()
+            }
+        }
 
         let userInput = UserInput(
             chat: [
@@ -110,6 +126,29 @@ actor LocalModelService {
         loadingTask?.cancel()
         loadingTask = nil
         status = .idle
+        MLX.Memory.clearCache()
+    }
+
+    /// Called by the memory pressure monitor. Defers if inference is active.
+    func handleMemoryPressure() {
+        guard modelContainer != nil else { return }
+        if isInferring {
+            shouldUnloadAfterInference = true
+        } else {
+            unloadDueToPressure()
+        }
+    }
+
+    /// Approximate memory used by the MLX model buffers (bytes).
+    var memoryFootprintBytes: Int {
+        Int(MLX.Memory.activeMemory)
+    }
+
+    private func unloadDueToPressure() {
+        modelContainer = nil
+        loadingTask?.cancel()
+        loadingTask = nil
+        status = .unloadedByPressure
         MLX.Memory.clearCache()
     }
 

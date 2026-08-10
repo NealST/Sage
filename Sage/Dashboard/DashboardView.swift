@@ -1,0 +1,276 @@
+//
+//  DashboardView.swift
+//  Sage
+//
+//  Runtime status dashboard — model state, memory usage, token consumption.
+//  Designed as a live monitoring panel, separate from configuration (Settings).
+//
+
+import SwiftUI
+
+struct DashboardView: View {
+    @Environment(AppState.self) private var appState
+    @State private var modelStatus: LocalModelService.Status = .idle
+    @State private var memoryBytes: Int = 0
+    @State private var refreshTimer: Timer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
+                    localModelSection
+                    memorySection
+                    tokenUsageSection
+                }
+                .padding(.horizontal, SageDesign.Spacing.xl)
+                .padding(.top, 20)
+                .padding(.bottom, SageDesign.Spacing.lg)
+            }
+        }
+        .frame(width: 400, minHeight: 360)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .task { await refreshModelState() }
+        .onAppear { startPolling() }
+        .onDisappear { stopPolling() }
+    }
+
+    // MARK: - Local Model
+
+    private var localModelSection: some View {
+        dashboardSection("Local Model") {
+            VStack(spacing: SageDesign.Spacing.md) {
+                HStack(spacing: SageDesign.Spacing.sm) {
+                    statusDot
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(statusTitle)
+                            .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                        Text(statusSubtitle)
+                            .font(.system(size: SageDesign.Typography.microSize))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    modelActionButton
+                }
+
+                if case .downloading(let progress) = modelStatus {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .tint(.accentColor)
+                }
+            }
+            .padding(SageDesign.Spacing.md)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
+            }
+        }
+    }
+
+    private var statusDot: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+            .animation(.easeInOut(duration: 0.3), value: statusColorKey)
+    }
+
+    private var statusColor: Color {
+        switch modelStatus {
+        case .ready: .green
+        case .loading, .downloading: .orange
+        case .failed: .red
+        case .idle, .unloadedByPressure: .secondary
+        }
+    }
+
+    private var statusColorKey: Int {
+        switch modelStatus {
+        case .ready: 0
+        case .loading, .downloading: 1
+        case .failed: 2
+        case .idle, .unloadedByPressure: 3
+        }
+    }
+
+    private var statusTitle: String {
+        switch modelStatus {
+        case .idle: "Idle"
+        case .downloading: "Downloading…"
+        case .loading: "Loading…"
+        case .ready: "Ready"
+        case .failed: "Failed"
+        case .unloadedByPressure: "Unloaded (Memory Pressure)"
+        }
+    }
+
+    private var statusSubtitle: String {
+        switch modelStatus {
+        case .idle: "Model not loaded"
+        case .downloading(let p): "Progress: \(Int(p * 100))%"
+        case .loading: "Loading model into memory…"
+        case .ready: "Qwen3-0.6B-4bit • \(formattedMemory)"
+        case .failed(let msg): msg
+        case .unloadedByPressure: "Released due to system memory pressure"
+        }
+    }
+
+    @ViewBuilder
+    private var modelActionButton: some View {
+        switch modelStatus {
+        case .ready:
+            Button("Unload") {
+                Task { await LocalModelService.shared.unload() }
+                Task { await refreshModelState() }
+            }
+            .controlSize(.small)
+        case .idle, .unloadedByPressure, .failed:
+            Button("Load") {
+                Task { await LocalModelService.shared.warmUp() }
+                Task { await refreshModelState() }
+            }
+            .controlSize(.small)
+        case .loading, .downloading:
+            ProgressView()
+                .controlSize(.small)
+        }
+    }
+
+    // MARK: - Memory
+
+    private var memorySection: some View {
+        dashboardSection("Memory") {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MLX Buffer Usage")
+                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                    Text(formattedMemory)
+                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                pressureBadge
+            }
+            .padding(SageDesign.Spacing.md)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
+            }
+        }
+    }
+
+    private var pressureBadge: some View {
+        let level = MemoryPressureMonitor.shared.currentLevel
+        let (text, color): (String, Color) = switch level {
+        case .normal: ("Normal", .green)
+        case .warning: ("Warning", .orange)
+        case .critical: ("Critical", .red)
+        }
+        return Text(text)
+            .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(color.opacity(0.14))
+            )
+    }
+
+    // MARK: - Token Usage
+
+    private var tokenUsageSection: some View {
+        dashboardSection("Session Tokens") {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Current Session")
+                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                    Text(tokenSummary)
+                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(SageDesign.Spacing.md)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                    )
+            }
+        }
+    }
+
+    private var tokenSummary: String {
+        let usage = appState.agent.tokenUsage
+        return "In: \(formatTokenCount(usage.input)) • Out: \(formatTokenCount(usage.output))"
+    }
+
+    // MARK: - Helpers
+
+    private var formattedMemory: String {
+        formatBytes(memoryBytes)
+    }
+
+    private func formatBytes(_ bytes: Int) -> String {
+        if bytes < 1024 { return "\(bytes) B" }
+        let kb = Double(bytes) / 1024
+        if kb < 1024 { return String(format: "%.0f KB", kb) }
+        let mb = kb / 1024
+        return String(format: "%.1f MB", mb)
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count < 1000 { return "\(count)" }
+        let k = Double(count) / 1000
+        return String(format: "%.1fk", k)
+    }
+
+    private func refreshModelState() async {
+        modelStatus = await LocalModelService.shared.status
+        memoryBytes = await LocalModelService.shared.memoryFootprintBytes
+    }
+
+    private func startPolling() {
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            Task { await refreshModelState() }
+        }
+    }
+
+    private func stopPolling() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    // MARK: - Section Builder
+
+    private func dashboardSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            Text(title)
+                .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            content()
+        }
+    }
+}

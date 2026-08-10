@@ -21,6 +21,8 @@ final class AgentRuntime {
     private(set) var streamingText: String = ""
     /// Retry countdown state — non-nil when waiting to retry after a transient error.
     private(set) var retryState: RetryDisplayState?
+    /// Cumulative token usage for the current session.
+    private(set) var tokenUsage = TokenUsage()
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     private(set) var contextHint: String?
     private(set) var isBusy = false
@@ -263,6 +265,7 @@ final class AgentRuntime {
         // completed/closed task.
         activeTask = nil
         activeTaskID = nil
+        tokenUsage = TokenUsage()
 
         return await createAndActivateTask(
             relatedTo: Array(inheritedRelated.prefix(Self.maxRelatedTaskIDs))

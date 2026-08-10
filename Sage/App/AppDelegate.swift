@@ -7,12 +7,14 @@ import AppKit
 
 extension Notification.Name {
     static let sageOpenSettings = Notification.Name("sage.openSettings")
+    static let sageOpenDashboard = Notification.Name("sage.openDashboard")
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var agentWindowController: AgentWindowController?
     private var settingsController: SettingsWindowController?
+    private var dashboardController: DashboardWindowController?
 
     let appState = AppState()
 
@@ -21,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         agentWindowController = AgentWindowController(appState: appState)
         settingsController = SettingsWindowController(appState: appState)
+        dashboardController = DashboardWindowController(appState: appState)
 
         appState.hotkeyRegistrationFailed = !HotkeyManager.shared.start()
         NotificationCenter.default.addObserver(
@@ -35,6 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .sageOpenSettings,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenDashboard),
+            name: .sageOpenDashboard,
+            object: nil
+        )
+
+        startMemoryPressureMonitor()
 
         Task {
             await appState.capabilities.bootstrap()
@@ -59,11 +70,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsController?.show()
     }
 
+    func showDashboard() {
+        dashboardController?.show()
+    }
+
     @objc private func handleToggleAgentWindow() {
         agentWindowController?.toggle()
     }
 
     @objc private func handleOpenSettings() {
         showSettings()
+    }
+
+    @objc private func handleOpenDashboard() {
+        showDashboard()
+    }
+
+    private func startMemoryPressureMonitor() {
+        MemoryPressureMonitor.shared.onPressureChange = { level in
+            guard level == .warning || level == .critical else { return }
+            Task {
+                await LocalModelService.shared.handleMemoryPressure()
+            }
+        }
+        MemoryPressureMonitor.shared.start()
     }
 }
