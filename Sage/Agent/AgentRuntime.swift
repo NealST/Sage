@@ -993,7 +993,8 @@ final class AgentRuntime {
             model: settings.model,
             apiKey: settings.apiKey
         )
-        let skillsAppendix = capabilities?.skillsPromptAppendix() ?? ""
+        let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
+        let skillsAppendix = await capabilities?.skillsPromptAppendix(for: latestUserMessage) ?? ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
             AgentEvent(
@@ -1027,7 +1028,8 @@ final class AgentRuntime {
             model: settings.model,
             apiKey: settings.apiKey
         )
-        let skillsAppendix = capabilities?.skillsPromptAppendix() ?? ""
+        let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
+        let skillsAppendix = await capabilities?.skillsPromptAppendix(for: latestUserMessage) ?? ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
             AgentEvent(

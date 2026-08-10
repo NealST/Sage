@@ -156,26 +156,23 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 2.3 Skill 系统完善
 
-`SkillRegistry` 已有基础框架，需要补齐功能。
+`SkillRegistry` 已有基础框架，需要补齐功能。长期记忆（踩坑经历、最佳实践）通过 Skill 系统实现——自动沉淀为 `.md` 文件，按需激活注入。
 
+- [ ] **Skill 按需激活**（核心）— 不再全量注入，根据用户输入语义匹配 skill description，只激活相关 skill
+- [ ] 踩坑/最佳实践自动沉淀 — agent 解决问题后自动（或用户触发）生成 skill 文件
 - [ ] Skill 编辑器 UI（prompt 模板 + 参数定义）
 - [ ] 参数化 prompt 模板（变量插值）
 - [ ] Skill 链式调用
-- [ ] 基于上下文的 skill 自动激活
 - [ ] 内置常用 skill（翻译、摘要、代码审查、写作润色）
-
----
-
-## Phase 3 — 上下文与记忆
 
 ### 3.1 长期记忆 / 知识库
 
-超越 task 历史的持久化记忆。
+> **设计决策**：长期记忆复用 Skill 系统实现。踩坑经历和最佳实践沉淀为 Skill 文件，通过按需激活机制做语义召回。不引入独立的向量存储层。
 
-- [ ] 用户偏好自动学习（语言、风格、常用路径）
-- [ ] 本地向量嵌入存储（SQLite + 嵌入向量）
-- [ ] 跨 session 的语义检索
-- [ ] 记忆管理 UI（查看、删除、编辑）
+- [ ] Skill 按需激活机制（见 2.3，是基础）
+- [ ] 经验沉淀触发机制（用户显式 "记住这个" + agent 自动识别）
+- [ ] 跨项目 skill 共享（`~/Library/Application Support/Sage/Skills/` 已支持）
+- [ ] 记忆/skill 管理 UI（查看、删除、编辑）
 
 ### 3.2 上下文窗口优化
 

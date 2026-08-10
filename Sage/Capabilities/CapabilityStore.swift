@@ -59,11 +59,22 @@ final class CapabilityStore {
         NSWorkspace.shared.open(dir)
     }
 
-    func skillsPromptAppendix() -> String {
+    /// Returns the skill prompt appendix with only the skills relevant to the user's message.
+    /// Uses the local model to determine relevance. Falls back to all enabled skills if
+    /// the model is unavailable.
+    func skillsPromptAppendix(for userMessage: String) async -> String {
         let active = enabledSkills
         guard !active.isEmpty else { return "" }
+
+        let matchedNames = await skillMatcher.match(
+            userMessage: userMessage,
+            skills: active
+        )
+        let matched = active.filter { matchedNames.contains($0.name) }
+        guard !matched.isEmpty else { return "" }
+
         var lines: [String] = ["", "## Active Skills", "Follow these skills when relevant:"]
-        for skill in active {
+        for skill in matched {
             lines.append("### \(skill.name)")
             lines.append(skill.description)
             let body = SkillRegistry.readBody(for: skill, limit: 2_500)
@@ -74,6 +85,8 @@ final class CapabilityStore {
         }
         return lines.joined(separator: "\n")
     }
+
+    private let skillMatcher = SkillMatcher()
 
     // MARK: - MCP
 
