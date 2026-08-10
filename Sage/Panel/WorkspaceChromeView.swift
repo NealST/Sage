@@ -19,10 +19,7 @@ struct WorkspaceChromeView: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             if isProject {
-                // Path + branch live in the window title / proxy icon — keep this row quiet.
                 projectLeading
-            } else {
-                generalLeading
             }
 
             Spacer(minLength: 12)
@@ -31,42 +28,8 @@ struct WorkspaceChromeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: SageDesign.Panel.titlebarContentHeight)
-        // Content already sits below the titlebar; don’t add a second traffic-light gutter.
         .padding(.leading, SageDesign.Spacing.lg)
         .padding(.trailing, SageDesign.Spacing.lg)
-    }
-
-    // MARK: - General
-
-    private var generalLeading: some View {
-        HStack(spacing: 6) {
-            Button {
-                openProject()
-            } label: {
-                Label("Open Project", systemImage: "folder")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(appState.agent.isBusy)
-            .help("Open Project…")
-            .keyboardShortcut("o", modifiers: [.command, .shift])
-
-            Button {
-                createProject()
-            } label: {
-                Label("New Project", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(appState.agent.isBusy)
-            .help("New Project…")
-            .keyboardShortcut("n", modifiers: [.command, .shift])
-
-            if !appState.agent.recentProjects.isEmpty {
-                recentProjectsMenu
-            }
-        }
-        .labelStyle(.titleAndIcon)
     }
 
     // MARK: - Project
@@ -123,30 +86,6 @@ struct WorkspaceChromeView: View {
         }
     }
 
-    private var recentProjectsMenu: some View {
-        Menu {
-            ForEach(appState.agent.recentProjects) { project in
-                Button {
-                    onWillNavigate()
-                    Task { await appState.agent.switchProject(id: project.id) }
-                } label: {
-                    Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
-                }
-                .disabled(appState.agent.isBusy)
-            }
-        } label: {
-            Image(systemName: "clock")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .help("Recent projects")
-        .accessibilityLabel("Recent projects")
-        .disabled(appState.agent.isBusy)
-    }
-
     // MARK: - Trailing
 
     @ViewBuilder
@@ -176,32 +115,6 @@ struct WorkspaceChromeView: View {
                     : "Start a clean task in the current workspace"
             )
         }
-
-        Button {
-            NotificationCenter.default.post(name: .sageOpenDashboard, object: nil)
-        } label: {
-            Image(systemName: SageDesign.Symbol.dashboard)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Dashboard")
-        .accessibilityLabel("Dashboard")
-
-        Button {
-            NotificationCenter.default.post(name: .sageOpenSettings, object: nil)
-        } label: {
-            Image(systemName: SageDesign.Symbol.settings)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Settings")
-        .accessibilityLabel("Settings")
     }
 
     // MARK: - Actions

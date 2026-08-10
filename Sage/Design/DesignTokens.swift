@@ -124,6 +124,5 @@ enum SageDesign {
         static let tools = "wrench.and.screwdriver"
         static let skills = "book.closed"
         static let mcp = "server.rack"
-        static let dashboard = "gauge.open.with.lines.needle.33percent"
     }
 }

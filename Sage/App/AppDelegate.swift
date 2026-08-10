@@ -7,7 +7,6 @@ import AppKit
 
 extension Notification.Name {
     static let sageOpenSettings = Notification.Name("sage.openSettings")
-    static let sageOpenDashboard = Notification.Name("sage.openDashboard")
 }
 
 @MainActor
@@ -38,13 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .sageOpenSettings,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleOpenDashboard),
-            name: .sageOpenDashboard,
-            object: nil
-        )
-
         startMemoryPressureMonitor()
 
         Task {
@@ -80,10 +72,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleOpenSettings() {
         showSettings()
-    }
-
-    @objc private func handleOpenDashboard() {
-        showDashboard()
     }
 
     private func startMemoryPressureMonitor() {
