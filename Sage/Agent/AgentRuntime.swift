@@ -1007,11 +1007,13 @@ final class AgentRuntime {
             toolDefinitions = []
         }
 
-        return try await modelClient.complete(
+        let turn = try await modelClient.complete(
             events: modelEvents,
             tools: toolDefinitions,
             settings: snapshot
         )
+        retryState = nil
+        return turn
     }
 
     /// Streaming variant of `requestModel` — incrementally updates `streamingText`

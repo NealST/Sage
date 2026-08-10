@@ -25,6 +25,10 @@ struct RetryCountdownView: View {
                     .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
+                    .animation(
+                        reduceMotion ? .none : .interpolatingSpring(duration: 0.3, bounce: 0),
+                        value: state.secondsRemaining
+                    )
                 Text("Attempt \(state.attempt) of \(state.maxAttempts)")
                     .font(.system(size: SageDesign.Typography.captionSize))
                     .foregroundStyle(.tertiary)

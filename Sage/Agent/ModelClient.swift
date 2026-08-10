@@ -99,13 +99,17 @@ nonisolated struct RetryPolicy: Sendable {
 
     /// Calculates the delay for a given attempt (0-indexed).
     /// If a `retryAfter` value is provided (from 429 header), uses that instead.
+    /// Includes ±25% jitter to avoid thundering herd on concurrent retries.
     func delay(attempt: Int, retryAfter: TimeInterval? = nil) -> TimeInterval {
         if let serverDelay = retryAfter {
             return min(serverDelay, maxDelay)
         }
         // Exponential backoff: base * 2^attempt, capped at maxDelay
         let exponential = baseDelay * pow(2.0, Double(attempt))
-        return min(exponential, maxDelay)
+        let capped = min(exponential, maxDelay)
+        // Add ±25% jitter to prevent synchronized retries across clients
+        let jitter = capped * Double.random(in: -0.25...0.25)
+        return max(0.5, capped + jitter)
     }
 }
 
@@ -422,6 +426,9 @@ actor ModelClient {
             await callback?(.waiting(secondsRemaining: remaining))
             try await Task.sleep(for: .seconds(1))
         }
+
+        // Signal wait complete — clears the countdown UI before the next attempt starts.
+        await callback?(.waiting(secondsRemaining: 0))
     }
 
     /// Parses the `Retry-After` header (seconds or HTTP-date).
