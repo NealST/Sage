@@ -15,6 +15,12 @@ final class CapabilityStore {
 
     private let store = MCPConfigStore()
     private var clients: [String: MCPStdioClient] = [:]
+    private var reconnectTasks: [String: Task<Void, Never>] = [:]
+
+    /// Maximum consecutive reconnect attempts before giving up.
+    private static let maxReconnectAttempts = 3
+    /// Base delay for exponential backoff (doubles each attempt).
+    private static let reconnectBaseDelay: TimeInterval = 1.0
 
     var enabledSkills: [SkillRecord] {
         skills.filter(\.enabled)
@@ -112,6 +118,8 @@ final class CapabilityStore {
     }
 
     func deleteMCPServer(_ id: String) {
+        reconnectTasks[id]?.cancel()
+        reconnectTasks[id] = nil
         Task { await disconnect(serverID: id) }
         mcpServers.removeAll { $0.id == id }
         mcpTools.removeAll { $0.serverID == id }
@@ -123,12 +131,16 @@ final class CapabilityStore {
         mcpServers[index].enabled = enabled
         if enabled {
             mcpServers[index].status = .disconnected
+            mcpServers[index].reconnectAttempts = 0
             persistMCP()
             Task { await connect(serverID: id) }
         } else {
+            reconnectTasks[id]?.cancel()
+            reconnectTasks[id] = nil
             mcpServers[index].status = .disabled
             mcpServers[index].statusMessage = nil
             mcpServers[index].toolCount = 0
+            mcpServers[index].reconnectAttempts = 0
             mcpTools.removeAll { $0.serverID == id }
             persistMCP()
             Task { await disconnect(serverID: id) }
@@ -139,6 +151,10 @@ final class CapabilityStore {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
+        // Cancel any pending reconnect for this server.
+        reconnectTasks[serverID]?.cancel()
+        reconnectTasks[serverID] = nil
+
         mcpServers[index].status = .connecting
         mcpServers[index].statusMessage = nil
 
@@ -146,6 +162,12 @@ final class CapabilityStore {
 
         let config = mcpServers[index]
         let client = MCPStdioClient(config: config)
+
+        // Wire up process exit callback for auto-reconnect.
+        await client.setOnProcessExit { [weak self] exitedServerID in
+            await self?.handleServerProcessExit(serverID: exitedServerID)
+        }
+
         clients[serverID] = client
 
         do {
@@ -163,13 +185,17 @@ final class CapabilityStore {
             mcpServers[idx].status = .connected
             mcpServers[idx].toolCount = tools.count
             mcpServers[idx].statusMessage = nil
+            mcpServers[idx].reconnectAttempts = 0
+            mcpServers[idx].recentLogs = await client.stderrLog
             mcpTools.removeAll { $0.serverID == serverID }
             mcpTools.append(contentsOf: tools)
         } catch {
             guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+            let stderrLines = await client.stderrLog
             mcpServers[idx].status = .error
-            mcpServers[idx].statusMessage = error.localizedDescription
+            mcpServers[idx].statusMessage = stderrLines.last ?? error.localizedDescription
             mcpServers[idx].toolCount = 0
+            mcpServers[idx].recentLogs = stderrLines
             mcpTools.removeAll { $0.serverID == serverID }
             clients[serverID] = nil
         }
@@ -178,6 +204,50 @@ final class CapabilityStore {
     func reconnectEnabledServers() async {
         for server in mcpServers where server.enabled {
             await connect(serverID: server.id)
+        }
+    }
+
+    /// Manually retry a failed server (resets reconnect counter).
+    func retryServer(_ serverID: String) {
+        guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+        mcpServers[index].reconnectAttempts = 0
+        mcpServers[index].statusMessage = nil
+        Task { await connect(serverID: serverID) }
+    }
+
+    /// Called when a server process exits unexpectedly. Triggers auto-reconnect with backoff.
+    private func handleServerProcessExit(serverID: String) {
+        guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard mcpServers[index].enabled else { return }
+
+        // Sync stderr logs from the client before it's removed.
+        if let client = clients[serverID] {
+            Task {
+                let logs = await client.stderrLog
+                if let idx = mcpServers.firstIndex(where: { $0.id == serverID }) {
+                    mcpServers[idx].recentLogs = logs
+                }
+            }
+        }
+        clients[serverID] = nil
+        mcpTools.removeAll { $0.serverID == serverID }
+
+        let attempts = mcpServers[index].reconnectAttempts
+        if attempts >= Self.maxReconnectAttempts {
+            mcpServers[index].status = .error
+            mcpServers[index].statusMessage = "Process exited — reconnect failed after \(attempts) attempts"
+            return
+        }
+
+        mcpServers[index].status = .reconnecting
+        mcpServers[index].reconnectAttempts = attempts + 1
+        mcpServers[index].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
+
+        let delay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
+        reconnectTasks[serverID] = Task {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await connect(serverID: serverID)
         }
     }
 
@@ -210,6 +280,8 @@ final class CapabilityStore {
     }
 
     private func disconnect(serverID: String) async {
+        reconnectTasks[serverID]?.cancel()
+        reconnectTasks[serverID] = nil
         if let client = clients.removeValue(forKey: serverID) {
             await client.disconnect()
         }

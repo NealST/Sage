@@ -5,7 +5,15 @@
 
 import Foundation
 
-/// Minimal MCP JSON-RPC client over stdio (initialize + tools/list + tools/call).
+/// MCP JSON-RPC client over stdio with health monitoring.
+///
+/// Responsibilities (transport layer only):
+/// - Process lifecycle: start, graceful shutdown, force kill
+/// - JSON-RPC framing: initialize, tools/list, tools/call, ping
+/// - stderr capture: ring buffer of recent log lines
+/// - Process exit detection: notifies the coordinator via callback
+///
+/// Reconnection logic lives in `CapabilityStore` (coordination layer).
 actor MCPStdioClient {
     private let config: MCPServerConfig
     private var process: Process?
@@ -15,17 +23,32 @@ actor MCPStdioClient {
     private var buffer = Data()
     private var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
     private var readTask: Task<Void, Never>?
+    private var stderrTask: Task<Void, Never>?
+    private var healthTask: Task<Void, Never>?
+
+    /// Ring buffer of recent stderr lines (max `stderrLineLimit`).
+    private(set) var recentStderrLines: [String] = []
+    private static let stderrLineLimit = 50
+
+    /// Called when the server process exits unexpectedly (not via `disconnect`).
+    /// The callback receives the server config ID.
+    var onProcessExit: (@Sendable (String) async -> Void)?
+
+    /// True while a graceful disconnect is in progress — suppresses exit callback.
+    private var isDisconnecting = false
 
     enum ClientError: LocalizedError {
         case notRunning
         case invalidResponse(String)
         case remote(String)
+        case pingTimeout
 
         var errorDescription: String? {
             switch self {
             case .notRunning: return "MCP server is not running"
             case .invalidResponse(let detail): return "Invalid MCP response: \(detail)"
             case .remote(let detail): return detail
+            case .pingTimeout: return "MCP server did not respond to ping"
             }
         }
     }
@@ -34,8 +57,14 @@ actor MCPStdioClient {
         self.config = config
     }
 
+    func setOnProcessExit(_ callback: @escaping @Sendable (String) async -> Void) {
+        onProcessExit = callback
+    }
+
+    // MARK: - Public API
+
     func connect() async throws -> [MCPToolInfo] {
-        try startProcess()
+        try await startProcess()
         _ = try await request(
             method: "initialize",
             params: .object([
@@ -50,6 +79,7 @@ actor MCPStdioClient {
         try await notify(method: "notifications/initialized", params: .object([:]))
         let listed = try await request(method: "tools/list", params: .object([:]))
         let tools = parseTools(listed)
+        startHealthCheck()
         return tools
     }
 
@@ -72,24 +102,66 @@ actor MCPStdioClient {
         return stringify(result)
     }
 
-    func disconnect() {
+    /// Graceful shutdown: send `shutdown` RPC, wait up to 3s, then force terminate.
+    func disconnect() async {
+        isDisconnecting = true
+        healthTask?.cancel()
+        healthTask = nil
+
+        // Attempt graceful shutdown if the process is still running.
+        if stdinPipe != nil, process?.isRunning == true {
+            do {
+                _ = try await withThrowingTaskGroup(of: JSONValue.self) { group in
+                    group.addTask { [self] in
+                        try await self.request(method: "shutdown", params: .object([:]))
+                    }
+                    group.addTask {
+                        try await Task.sleep(for: .seconds(3))
+                        throw ClientError.pingTimeout
+                    }
+                    let result = try await group.next()!
+                    group.cancelAll()
+                    return result
+                }
+            } catch {
+                // Shutdown request failed or timed out — proceed to force kill.
+            }
+        }
+
+        forceCleanup()
+        isDisconnecting = false
+    }
+
+    /// Immediate teardown without graceful shutdown (used internally after crash detection).
+    private func forceCleanup() {
         readTask?.cancel()
         readTask = nil
+        stderrTask?.cancel()
+        stderrTask = nil
+        healthTask?.cancel()
+        healthTask = nil
         for (_, cont) in pending {
             cont.resume(throwing: ClientError.notRunning)
         }
         pending.removeAll()
-        process?.terminate()
+        if process?.isRunning == true {
+            process?.terminate()
+        }
         process = nil
         stdinPipe = nil
         stdoutPipe = nil
         buffer = Data()
     }
 
+    /// Returns the most recent stderr lines for display.
+    var stderrLog: [String] { recentStderrLines }
+
     // MARK: - Process I/O
 
-    private func startProcess() throws {
-        disconnect()
+    private func startProcess() async throws {
+        await disconnect()
+
+        recentStderrLines = []
 
         let process = Process()
         let stdin = Pipe()
@@ -113,6 +185,9 @@ actor MCPStdioClient {
         self.stdinPipe = stdin
         self.stdoutPipe = stdout
 
+        let serverID = config.id
+
+        // stdout reader — JSON-RPC responses
         readTask = Task { [weak self] in
             guard let self else { return }
             let handle = stdout.fileHandleForReading
@@ -125,8 +200,94 @@ actor MCPStdioClient {
                 }
                 await self.consume(chunk)
             }
+            // Process exited — notify coordinator if not a graceful disconnect.
+            let shouldNotify = await !self.isDisconnecting
+            if shouldNotify {
+                await self.forceCleanup()
+                if let callback = await self.onProcessExit {
+                    await callback(serverID)
+                }
+            }
+        }
+
+        // stderr reader — log capture
+        stderrTask = Task { [weak self] in
+            guard let self else { return }
+            let handle = stderr.fileHandleForReading
+            var stderrBuffer = Data()
+            while !Task.isCancelled {
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    if process.isRunning == false { break }
+                    continue
+                }
+                stderrBuffer.append(chunk)
+                // Extract complete lines
+                while let range = stderrBuffer.range(of: Data([0x0A])) {
+                    let lineData = stderrBuffer.subdata(in: stderrBuffer.startIndex..<range.lowerBound)
+                    stderrBuffer.removeSubrange(stderrBuffer.startIndex...range.lowerBound)
+                    if let text = String(data: lineData, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                       !text.isEmpty {
+                        await self.appendStderrLine(text)
+                    }
+                }
+            }
+            // Flush remaining partial line
+            if !stderrBuffer.isEmpty,
+               let text = String(data: stderrBuffer, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !text.isEmpty {
+                await self.appendStderrLine(text)
+            }
         }
     }
+
+    private func appendStderrLine(_ line: String) {
+        recentStderrLines.append(line)
+        if recentStderrLines.count > Self.stderrLineLimit {
+            recentStderrLines.removeFirst(recentStderrLines.count - Self.stderrLineLimit)
+        }
+    }
+
+    // MARK: - Health Check
+
+    private func startHealthCheck() {
+        healthTask?.cancel()
+        healthTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { break }
+                guard let self else { break }
+                do {
+                    _ = try await withThrowingTaskGroup(of: JSONValue.self) { group in
+                        group.addTask { [self] in
+                            try await self.request(method: "ping", params: .object([:]))
+                        }
+                        group.addTask {
+                            try await Task.sleep(for: .seconds(5))
+                            throw ClientError.pingTimeout
+                        }
+                        let result = try await group.next()!
+                        group.cancelAll()
+                        return result
+                    }
+                } catch {
+                    // Ping failed or timed out — treat as unresponsive.
+                    guard !Task.isCancelled else { break }
+                    let serverID = await self.config.id
+                    await self.forceCleanup()
+                    if let callback = await self.onProcessExit {
+                        await callback(serverID)
+                    }
+                    break
+                }
+            }
+        }
+    }
+
+    // MARK: - JSON-RPC Framing
 
     private func consume(_ chunk: Data) {
         buffer.append(chunk)
@@ -196,6 +357,8 @@ actor MCPStdioClient {
         line.append(0x0A)
         try pipe.fileHandleForWriting.write(contentsOf: line)
     }
+
+    // MARK: - Parsing
 
     private func parseTools(_ result: JSONValue) -> [MCPToolInfo] {
         guard case .object(let root) = result,

@@ -22,6 +22,7 @@ struct DashboardView: View {
                     localModelSection
                     memorySection
                     tokenUsageSection
+                    mcpServersSection
                 }
                 .padding(.horizontal, SageDesign.Spacing.xl)
                 .padding(.top, 20)
@@ -241,6 +242,28 @@ struct DashboardView: View {
         return "In: \(formatTokenCount(usage.input)) • Out: \(formatTokenCount(usage.output))"
     }
 
+    // MARK: - MCP Servers
+
+    private var mcpServersSection: some View {
+        dashboardSection("MCP Servers") {
+            let servers = appState.capabilities.mcpServers
+            if servers.isEmpty {
+                Text("No servers configured")
+                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .foregroundStyle(.tertiary)
+                    .padding(SageDesign.Spacing.md)
+            } else {
+                VStack(spacing: SageDesign.Spacing.sm) {
+                    ForEach(servers, id: \.id) { server in
+                        MCPServerRow(server: server) {
+                            appState.capabilities.retryServer(server.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private var formattedMemory: String {
@@ -296,6 +319,97 @@ struct DashboardView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content()
+        }
+    }
+}
+
+// MARK: - MCP Server Row
+
+private struct MCPServerRow: View {
+    let server: MCPServerConfig
+    let onRetry: () -> Void
+    @State private var logsExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row
+            HStack(spacing: SageDesign.Spacing.sm) {
+                Circle()
+                    .fill(serverStatusColor)
+                    .frame(width: 8, height: 8)
+
+                Text(server.name)
+                    .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                    .lineLimit(1)
+
+                Spacer()
+
+                if server.status == .error || server.status == .reconnecting {
+                    Button("Retry") { onRetry() }
+                        .controlSize(.small)
+                }
+
+                if !server.recentLogs.isEmpty {
+                    Button {
+                        withAnimation(SageDesign.Motion.contentCrossFade) {
+                            logsExpanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .rotationEffect(.degrees(logsExpanded ? 90 : 0))
+                            .animation(.easeInOut(duration: 0.2), value: logsExpanded)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            // Status subtitle
+            if let message = server.statusMessage {
+                Text(message)
+                    .font(.system(size: SageDesign.Typography.microSize))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 8 + SageDesign.Spacing.sm) // align with name
+                    .padding(.top, 2)
+                    .contentTransition(.opacity)
+            }
+
+            // Expandable logs
+            if logsExpanded && !server.recentLogs.isEmpty {
+                ScrollView(.vertical) {
+                    Text(server.recentLogs.joined(separator: "\n"))
+                        .font(.system(size: SageDesign.Typography.microSize, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 120)
+                .padding(.top, SageDesign.Spacing.sm)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(SageDesign.Spacing.md)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
+                    lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
+                )
+        }
+        .animation(SageDesign.Motion.contentCrossFade, value: server.status)
+    }
+
+    private var serverStatusColor: Color {
+        switch server.status {
+        case .connected: .green
+        case .connecting, .reconnecting: .orange
+        case .error: .red
+        case .disabled: Color.secondary
         }
     }
 }

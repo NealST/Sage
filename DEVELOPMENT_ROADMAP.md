@@ -127,10 +127,10 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 1.5 MLX 模型内存压力卸载
 
-- [ ] 监听 `DispatchSource.makeMemoryPressureSource()` 的 warning/critical 事件
-- [ ] 内存压力时自动调用 `LocalModelService.unload()`
+- [x] 监听 `DispatchSource.makeMemoryPressureSource()` 的 warning/critical 事件 — `MemoryPressureMonitor` 单例
+- [x] 内存压力时自动调用 `LocalModelService.unload()` — warning 级别自动卸载
 - [x] 下次推理时自动重新加载（`ensureLoaded()` 懒加载）
-- [ ] Settings 中显示模型状态（未下载 / 已下载 / 已加载 / 内存占用）
+- [x] Dashboard 面板显示模型状态（idle / loading / ready / unloaded）+ 内存占用 + 压力等级
 
 ---
 
@@ -140,11 +140,12 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 当前 `MCPStdioClient` 是基础实现，缺少生产级的健壮性。
 
-- [ ] 进程崩溃自动重连（带退避）
-- [ ] 心跳健康检查
-- [ ] 优雅关闭（发送 shutdown 请求后等待退出）— 当前仅 `process.terminate()`，未发 MCP shutdown RPC
-- [ ] stderr 日志捕获和展示 — Pipe 已创建但未读取
+- [x] 进程崩溃自动重连（带退避）— `handleServerProcessExit` + `scheduleReconnect`，指数退避 1s→2s→4s，最多 3 次
+- [x] 心跳健康检查 — 每 30s ping，5s 超时，失败触发重连
+- [x] 优雅关闭（发送 shutdown JSON-RPC 后等待 3s 退出）— `MCPStdioClient.disconnect()` async
+- [x] stderr 日志捕获和展示 — 50 行环形缓冲，Dashboard MCP 面板可展开查看
 - [x] 无响应超时处理（`CapabilityStore` 20s 连接超时，`TaskGroup` 竞速）
+- [x] Dashboard MCP 服务器状态面板 — 状态点 + 日志展开 + 手动重试
 
 ### 2.2 MCP 服务器发现与管理
 

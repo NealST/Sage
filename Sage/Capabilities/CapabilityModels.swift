@@ -19,6 +19,7 @@ nonisolated enum MCPServerStatus: String, Codable, Sendable, Equatable {
     case disconnected
     case connecting
     case connected
+    case reconnecting
     case error
 }
 
@@ -33,6 +34,18 @@ nonisolated struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
     var status: MCPServerStatus
     var statusMessage: String?
     var toolCount: Int
+    /// Recent stderr output lines (ring buffer, max 50). Runtime-only.
+    var recentLogs: [String] = []
+    /// Number of consecutive reconnect attempts. Reset on successful connect.
+    var reconnectAttempts: Int = 0
+
+    static func == (lhs: MCPServerConfig, rhs: MCPServerConfig) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.command == rhs.command
+        && lhs.args == rhs.args && lhs.env == rhs.env && lhs.enabled == rhs.enabled
+        && lhs.status == rhs.status && lhs.statusMessage == rhs.statusMessage
+        && lhs.toolCount == rhs.toolCount && lhs.recentLogs == rhs.recentLogs
+        && lhs.reconnectAttempts == rhs.reconnectAttempts
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, command, args, env, enabled
