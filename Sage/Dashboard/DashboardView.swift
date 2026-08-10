@@ -409,7 +409,7 @@ private struct MCPServerRow: View {
         case .connected: .green
         case .connecting, .reconnecting: .orange
         case .error: .red
-        case .disabled: Color.secondary
+        case .disabled, .disconnected: Color.secondary
         }
     }
 }

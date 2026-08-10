@@ -221,25 +221,38 @@ final class CapabilityStore {
         guard mcpServers[index].enabled else { return }
 
         // Sync stderr logs from the client before it's removed.
-        if let client = clients[serverID] {
-            let logs = await client.stderrLog
+        // The client reference is grabbed first; after the await the array may have shifted.
+        let exitedClient = clients[serverID]
+        if let exitedClient {
+            let logs = await exitedClient.stderrLog
             if let idx = mcpServers.firstIndex(where: { $0.id == serverID }) {
                 mcpServers[idx].recentLogs = logs
             }
         }
-        clients[serverID] = nil
+
+        // If a new client was installed during the await (manual reconnect raced us),
+        // don't tear it down — only remove if it's still the crashed client.
+        if let current = clients[serverID], current === exitedClient {
+            clients[serverID] = nil
+        } else if exitedClient == nil {
+            clients[serverID] = nil
+        }
         mcpTools.removeAll { $0.serverID == serverID }
 
-        let attempts = mcpServers[index].reconnectAttempts
+        // Re-fetch index after the await — array may have mutated.
+        guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard mcpServers[idx].enabled else { return }
+
+        let attempts = mcpServers[idx].reconnectAttempts
         if attempts >= Self.maxReconnectAttempts {
-            mcpServers[index].status = .error
-            mcpServers[index].statusMessage = "Process exited — reconnect failed after \(attempts) attempts"
+            mcpServers[idx].status = .error
+            mcpServers[idx].statusMessage = "Process exited — reconnect failed after \(attempts) attempts"
             return
         }
 
-        mcpServers[index].status = .reconnecting
-        mcpServers[index].reconnectAttempts = attempts + 1
-        mcpServers[index].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
+        mcpServers[idx].status = .reconnecting
+        mcpServers[idx].reconnectAttempts = attempts + 1
+        mcpServers[idx].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
 
         let baseDelay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
         let jitter = Double.random(in: 0...(baseDelay * 0.3))

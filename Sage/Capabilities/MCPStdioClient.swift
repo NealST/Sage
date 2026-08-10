@@ -76,7 +76,7 @@ actor MCPStdioClient {
                 ]),
             ])
         )
-        try await notify(method: "notifications/initialized", params: .object([:]))
+        try notify(method: "notifications/initialized", params: .object([:]))
         let listed = try await request(method: "tools/list", params: .object([:]))
         let tools = parseTools(listed)
         startHealthCheck()
@@ -199,20 +199,17 @@ actor MCPStdioClient {
 
         let serverID = config.id
 
-        // stdout reader — JSON-RPC responses
+        // stdout reader — JSON-RPC responses.
+        // availableData blocks the calling thread, so read on a dedicated non-cooperative
+        // thread via AsyncStream to avoid starving the Swift concurrency thread pool.
+        let stdoutStream = Self.asyncDataStream(from: stdout.fileHandleForReading)
         readTask = Task { [weak self] in
             guard let self else { return }
-            let handle = stdout.fileHandleForReading
-            while !Task.isCancelled {
-                let chunk = handle.availableData
-                if chunk.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(40))
-                    if process.isRunning == false { break }
-                    continue
-                }
+            for await chunk in stdoutStream {
+                guard !Task.isCancelled else { break }
                 await self.consume(chunk)
             }
-            // Process exited — notify coordinator if not a graceful disconnect.
+            // Stream ended (EOF / process exited) — notify coordinator if not graceful.
             let shouldNotify = await !self.isDisconnecting
             if shouldNotify {
                 let didClean = await self.forceCleanup()
@@ -222,20 +219,14 @@ actor MCPStdioClient {
             }
         }
 
-        // stderr reader — log capture
+        // stderr reader — log capture (same non-blocking pattern).
+        let stderrStream = Self.asyncDataStream(from: stderr.fileHandleForReading)
         stderrTask = Task { [weak self] in
             guard let self else { return }
-            let handle = stderr.fileHandleForReading
             var stderrBuffer = Data()
-            while !Task.isCancelled {
-                let chunk = handle.availableData
-                if chunk.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    if process.isRunning == false { break }
-                    continue
-                }
+            for await chunk in stderrStream {
+                guard !Task.isCancelled else { break }
                 stderrBuffer.append(chunk)
-                // Extract complete lines
                 while let range = stderrBuffer.range(of: Data([0x0A])) {
                     let lineData = stderrBuffer.subdata(in: stderrBuffer.startIndex..<range.lowerBound)
                     stderrBuffer.removeSubrange(stderrBuffer.startIndex...range.lowerBound)
@@ -260,6 +251,29 @@ actor MCPStdioClient {
         recentStderrLines.append(line)
         if recentStderrLines.count > Self.stderrLineLimit {
             recentStderrLines.removeFirst(recentStderrLines.count - Self.stderrLineLimit)
+        }
+    }
+
+    /// Creates an AsyncStream that reads from a FileHandle on a dedicated thread,
+    /// avoiding blocking the Swift concurrency cooperative thread pool.
+    private static func asyncDataStream(from handle: FileHandle) -> AsyncStream<Data> {
+        AsyncStream { continuation in
+            let thread = Thread {
+                while true {
+                    let data = handle.availableData
+                    if data.isEmpty {
+                        // EOF — pipe closed or process exited.
+                        continuation.finish()
+                        return
+                    }
+                    continuation.yield(data)
+                }
+            }
+            thread.qualityOfService = .userInitiated
+            thread.start()
+            continuation.onTermination = { _ in
+                thread.cancel()
+            }
         }
     }
 
@@ -353,7 +367,7 @@ actor MCPStdioClient {
         }
     }
 
-    private func notify(method: String, params: JSONValue) async throws {
+    private func notify(method: String, params: JSONValue) throws {
         guard let stdinPipe else { throw ClientError.notRunning }
         let payload: JSONValue = .object([
             "jsonrpc": .string("2.0"),
