@@ -19,6 +19,8 @@ final class AgentRuntime {
     private(set) var lastAssistantText: String?
     /// Incrementally accumulated text during streaming. Empty when not streaming.
     private(set) var streamingText: String = ""
+    /// Retry countdown state — non-nil when waiting to retry after a transient error.
+    private(set) var retryState: RetryDisplayState?
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     private(set) var contextHint: String?
     private(set) var isBusy = false
@@ -139,6 +141,11 @@ final class AgentRuntime {
     }
 
     func bootstrap() async {
+        // Wire up retry status callback so UI can show countdown.
+        await modelClient.setRetryStatusHandler { [weak self] status in
+            self?.handleRetryStatus(status)
+        }
+
         do {
             let snapshot = try await taskRepository.loadWorkspace()
             applyWorkspaceSnapshot(snapshot)
@@ -148,12 +155,30 @@ final class AgentRuntime {
                 _ = await createAndActivateTask(relatedTo: [])
             }
         } catch {
-            phase = .failed(message: "Could not open Sage’s local database: \(error.localizedDescription)")
+            phase = .failed(message: "Could not open Sage's local database: \(error.localizedDescription)")
         }
 
         // Warm up the local model in the background — non-blocking.
         Task.detached(priority: .utility) {
             await LocalModelService.shared.warmUp()
+        }
+    }
+
+    private func handleRetryStatus(_ status: RetryStatus) {
+        switch status {
+        case .retrying(let attempt, let total, let delay):
+            let totalSec = Int(delay.rounded(.up))
+            retryState = RetryDisplayState(
+                attempt: attempt,
+                maxAttempts: total,
+                totalSeconds: totalSec,
+                secondsRemaining: totalSec
+            )
+        case .waiting(let seconds):
+            retryState?.secondsRemaining = seconds
+            if seconds <= 0 {
+                retryState = nil
+            }
         }
     }
 
@@ -1020,6 +1045,9 @@ final class AgentRuntime {
             settings: snapshot
         )
 
+        // Stream obtained — clear any retry countdown (retries succeeded or weren't needed).
+        retryState = nil
+
         // Accumulate deltas into the final turn
         var contentBuffer = ""
         // Tool call accumulators keyed by index
@@ -1423,6 +1451,7 @@ final class AgentRuntime {
     }
 
     private func failDuringExecution(plan: AgentPlan, message: String) async {
+        retryState = nil
         if var task = activeTask {
             task.pendingPlan = plan
             task.status = .awaitingApproval
@@ -1435,6 +1464,7 @@ final class AgentRuntime {
     }
 
     private func markFailed(_ message: String) async {
+        retryState = nil
         phase = .failed(message: message)
         guard var task = activeTask else { return }
         task.status = .failed

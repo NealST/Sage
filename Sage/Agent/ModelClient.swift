@@ -32,6 +32,7 @@ enum ModelClientError: LocalizedError {
     case notConfigured
     case invalidURL
     case httpStatus(Int, String)
+    case rateLimited(retryAfter: TimeInterval?)
     case decoding(String)
 
     var errorDescription: String? {
@@ -41,14 +42,89 @@ enum ModelClientError: LocalizedError {
         case .invalidURL:
             return "Model base URL is invalid."
         case .httpStatus(let code, let body):
-            return "Model API error (\(code)): \(body)"
+            return Self.actionableMessage(code: code, body: body)
+        case .rateLimited(let retryAfter):
+            if let seconds = retryAfter {
+                return "Rate limited — retry available in \(Int(seconds.rounded(.up)))s."
+            }
+            return "Rate limited by the API. Wait a moment and try again."
         case .decoding(let detail):
             return "Could not parse model response: \(detail)"
         }
     }
+
+    /// Whether this error is transient and safe to auto-retry.
+    var isTransient: Bool {
+        switch self {
+        case .rateLimited: return true
+        case .httpStatus(let code, _):
+            // 5xx = server error, 408 = request timeout
+            return code >= 500 || code == 408
+        default: return false
+        }
+    }
+
+    private static func actionableMessage(code: Int, body: String) -> String {
+        switch code {
+        case 401:
+            return "Authentication failed (401). Check your API key in Settings."
+        case 403:
+            return "Access denied (403). Your API key may lack permissions for this model."
+        case 404:
+            return "Model endpoint not found (404). Verify the base URL in Settings."
+        case 408:
+            return "Request timed out (408). Check your network connection."
+        case 429:
+            return "Rate limited (429). Too many requests — wait a moment."
+        case 500...599:
+            let short = body.prefix(120)
+            return "Server error (\(code)). The provider may be experiencing issues.\(short.isEmpty ? "" : " \(short)")"
+        default:
+            let short = body.prefix(200)
+            return "Model API error (\(code))\(short.isEmpty ? "." : ": \(short)")"
+        }
+    }
+}
+
+// MARK: - Retry policy
+
+/// Exponential backoff retry for transient API errors.
+/// Respects `Retry-After` headers and emits status updates for UI countdown.
+nonisolated struct RetryPolicy: Sendable {
+    let maxAttempts: Int
+    let baseDelay: TimeInterval
+    let maxDelay: TimeInterval
+
+    static let `default` = RetryPolicy(maxAttempts: 3, baseDelay: 1.0, maxDelay: 30.0)
+
+    /// Calculates the delay for a given attempt (0-indexed).
+    /// If a `retryAfter` value is provided (from 429 header), uses that instead.
+    func delay(attempt: Int, retryAfter: TimeInterval? = nil) -> TimeInterval {
+        if let serverDelay = retryAfter {
+            return min(serverDelay, maxDelay)
+        }
+        // Exponential backoff: base * 2^attempt, capped at maxDelay
+        let exponential = baseDelay * pow(2.0, Double(attempt))
+        return min(exponential, maxDelay)
+    }
+}
+
+/// Status updates emitted during retry waits so the UI can show progress.
+enum RetryStatus: Sendable {
+    /// About to retry after a transient failure.
+    case retrying(attempt: Int, of: Int, afterDelay: TimeInterval)
+    /// Countdown tick — seconds remaining before next attempt.
+    case waiting(secondsRemaining: Int)
 }
 
 actor ModelClient {
+    /// Called on the main actor when retry status changes (for UI countdown).
+    private var onRetryStatus: (@MainActor @Sendable (RetryStatus) -> Void)?
+
+    func setRetryStatusHandler(_ handler: @escaping @MainActor @Sendable (RetryStatus) -> Void) {
+        onRetryStatus = handler
+    }
+
     /// Lightweight connectivity check against an OpenAI-compatible provider.
     func probe(settings: ModelSettingsSnapshot) async throws {
         guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
@@ -85,11 +161,12 @@ actor ModelClient {
     }
 
     /// Streaming variant — returns an `AsyncThrowingStream` of incremental deltas.
-    /// The caller accumulates text and tool call fragments, then assembles the final `ModelTurn`.
+    /// Automatically retries on transient errors (5xx, 429, timeout) with exponential backoff.
     func streamComplete(
         events: [AgentEvent],
         tools: [ToolDefinition],
-        settings: ModelSettingsSnapshot
+        settings: ModelSettingsSnapshot,
+        retryPolicy: RetryPolicy = .default
     ) async throws -> AsyncThrowingStream<StreamDelta, Error> {
         guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
 
@@ -98,43 +175,191 @@ actor ModelClient {
             throw ModelClientError.invalidURL
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 120
+        let encodedBody: Data = try {
+            let body = StreamingChatCompletionRequest(
+                model: settings.model,
+                messages: events.map(APIMessage.init),
+                tools: tools.isEmpty ? nil : tools.map(APITool.init),
+                toolChoice: tools.isEmpty ? nil : "auto",
+                stream: true
+            )
+            return try JSONEncoder().encode(body)
+        }()
 
-        let body = StreamingChatCompletionRequest(
-            model: settings.model,
-            messages: events.map(APIMessage.init),
-            tools: tools.isEmpty ? nil : tools.map(APITool.init),
-            toolChoice: tools.isEmpty ? nil : "auto",
-            stream: true
-        )
-        request.httpBody = try JSONEncoder().encode(body)
+        // Retry loop for transient errors
+        var lastError: Error?
+        for attempt in 0..<retryPolicy.maxAttempts {
+            try Task.checkCancellation()
 
-        try Task.checkCancellation()
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        try Task.checkCancellation()
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = 120
+            request.httpBody = encodedBody
 
-        guard let http = response as? HTTPURLResponse else {
-            throw ModelClientError.httpStatus(-1, "No HTTP response")
+            do {
+                let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                try Task.checkCancellation()
+
+                guard let http = response as? HTTPURLResponse else {
+                    throw ModelClientError.httpStatus(-1, "No HTTP response")
+                }
+
+                if (200..<300).contains(http.statusCode) {
+                    return buildStream(from: bytes)
+                }
+
+                // Read error body
+                var errorData = Data()
+                for try await byte in bytes { errorData.append(byte) }
+                let text = String(data: errorData, encoding: .utf8) ?? ""
+
+                // Handle 429 specifically
+                if http.statusCode == 429 {
+                    let retryAfter = Self.parseRetryAfter(http)
+                    let error = ModelClientError.rateLimited(retryAfter: retryAfter)
+                    if attempt < retryPolicy.maxAttempts - 1 {
+                        try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: retryAfter)
+                        lastError = error
+                        continue
+                    }
+                    throw error
+                }
+
+                let error = ModelClientError.httpStatus(http.statusCode, text)
+                if error.isTransient, attempt < retryPolicy.maxAttempts - 1 {
+                    try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: nil)
+                    lastError = error
+                    continue
+                }
+                throw error
+
+            } catch let error as ModelClientError {
+                throw error
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Network-level errors (timeout, connection reset) are transient
+                if attempt < retryPolicy.maxAttempts - 1 {
+                    try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: nil)
+                    lastError = error
+                    continue
+                }
+                throw error
+            }
         }
-        guard (200..<300).contains(http.statusCode) else {
-            // Read the error body from the byte stream
-            var errorData = Data()
-            for try await byte in bytes { errorData.append(byte) }
-            let text = String(data: errorData, encoding: .utf8) ?? ""
-            throw ModelClientError.httpStatus(http.statusCode, text)
+        throw lastError ?? ModelClientError.httpStatus(-1, "Retry exhausted")
+    }
+
+    func complete(
+        events: [AgentEvent],
+        tools: [ToolDefinition],
+        settings: ModelSettingsSnapshot,
+        retryPolicy: RetryPolicy = .default
+    ) async throws -> ModelTurn {
+        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+
+        let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: "\(trimmedBase)/chat/completions") else {
+            throw ModelClientError.invalidURL
         }
 
-        return AsyncThrowingStream { continuation in
+        let encodedBody: Data = try {
+            let body = ChatCompletionRequest(
+                model: settings.model,
+                messages: events.map(APIMessage.init),
+                tools: tools.isEmpty ? nil : tools.map(APITool.init),
+                toolChoice: tools.isEmpty ? nil : "auto"
+            )
+            return try JSONEncoder().encode(body)
+        }()
+
+        var lastError: Error?
+        for attempt in 0..<retryPolicy.maxAttempts {
+            try Task.checkCancellation()
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+            request.timeoutInterval = 90
+            request.httpBody = encodedBody
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try Task.checkCancellation()
+
+                guard let http = response as? HTTPURLResponse else {
+                    throw ModelClientError.httpStatus(-1, "No HTTP response")
+                }
+
+                if (200..<300).contains(http.statusCode) {
+                    do {
+                        let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+                        let choice = decoded.choices.first?.message
+                        let toolCalls = (choice?.toolCalls ?? []).map {
+                            ToolCallProposal(
+                                id: $0.id,
+                                name: $0.function.name,
+                                argumentsJSON: $0.function.arguments
+                            )
+                        }
+                        return ModelTurn(content: choice?.content, toolCalls: toolCalls)
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        throw ModelClientError.decoding(error.localizedDescription)
+                    }
+                }
+
+                let text = String(data: data, encoding: .utf8) ?? ""
+
+                if http.statusCode == 429 {
+                    let retryAfter = Self.parseRetryAfter(http)
+                    let error = ModelClientError.rateLimited(retryAfter: retryAfter)
+                    if attempt < retryPolicy.maxAttempts - 1 {
+                        try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: retryAfter)
+                        lastError = error
+                        continue
+                    }
+                    throw error
+                }
+
+                let error = ModelClientError.httpStatus(http.statusCode, text)
+                if error.isTransient, attempt < retryPolicy.maxAttempts - 1 {
+                    try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: nil)
+                    lastError = error
+                    continue
+                }
+                throw error
+
+            } catch let error as ModelClientError {
+                throw error
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                if attempt < retryPolicy.maxAttempts - 1 {
+                    try await performRetryWait(attempt: attempt, retryPolicy: retryPolicy, retryAfter: nil)
+                    lastError = error
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? ModelClientError.httpStatus(-1, "Retry exhausted")
+    }
+
+    // MARK: - Private helpers
+
+    /// Builds the SSE parsing stream from a URLSession byte stream.
+    private func buildStream(from bytes: URLSession.AsyncBytes) -> AsyncThrowingStream<StreamDelta, Error> {
+        AsyncThrowingStream { continuation in
             let parseTask = Task {
                 do {
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
 
-                        // SSE format: lines starting with "data: "
                         guard line.hasPrefix("data: ") else { continue }
                         let payload = String(line.dropFirst(6))
 
@@ -150,12 +375,10 @@ actor ModelClient {
 
                         guard let delta = chunk.choices.first?.delta else { continue }
 
-                        // Text content delta
                         if let content = delta.content, !content.isEmpty {
                             continuation.yield(.text(content))
                         }
 
-                        // Tool call deltas
                         if let toolCalls = delta.toolCalls {
                             for tc in toolCalls {
                                 continuation.yield(.toolCallDelta(
@@ -167,7 +390,6 @@ actor ModelClient {
                             }
                         }
                     }
-                    // Stream ended without [DONE] — still finish gracefully
                     continuation.yield(.done)
                     continuation.finish()
                 } catch is CancellationError {
@@ -182,62 +404,44 @@ actor ModelClient {
         }
     }
 
-    func complete(
-        events: [AgentEvent],
-        tools: [ToolDefinition],
-        settings: ModelSettingsSnapshot
-    ) async throws -> ModelTurn {
-        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+    /// Waits with exponential backoff, emitting countdown ticks for UI feedback.
+    private func performRetryWait(
+        attempt: Int,
+        retryPolicy: RetryPolicy,
+        retryAfter: TimeInterval?
+    ) async throws {
+        let delay = retryPolicy.delay(attempt: attempt, retryAfter: retryAfter)
+        let totalSeconds = Int(delay.rounded(.up))
 
-        let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard let url = URL(string: "\(trimmedBase)/chat/completions") else {
-            throw ModelClientError.invalidURL
-        }
+        let callback = onRetryStatus
+        await callback?(.retrying(attempt: attempt + 1, of: retryPolicy.maxAttempts, afterDelay: delay))
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 90
-
-        let body = ChatCompletionRequest(
-            model: settings.model,
-            messages: events.map(APIMessage.init),
-            tools: tools.isEmpty ? nil : tools.map(APITool.init),
-            toolChoice: tools.isEmpty ? nil : "auto"
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-
-        try Task.checkCancellation()
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try Task.checkCancellation()
-
-        guard let http = response as? HTTPURLResponse else {
-            throw ModelClientError.httpStatus(-1, "No HTTP response")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let text = String(data: data, encoding: .utf8) ?? ""
-            throw ModelClientError.httpStatus(http.statusCode, text)
-        }
-
-        do {
-            let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
-            let choice = decoded.choices.first?.message
-            let toolCalls = (choice?.toolCalls ?? []).map {
-                ToolCallProposal(
-                    id: $0.id,
-                    name: $0.function.name,
-                    argumentsJSON: $0.function.arguments
-                )
-            }
-            return ModelTurn(content: choice?.content, toolCalls: toolCalls)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            throw ModelClientError.decoding(error.localizedDescription)
+        // Emit countdown ticks each second for UI
+        for remaining in stride(from: totalSeconds, through: 1, by: -1) {
+            try Task.checkCancellation()
+            await callback?(.waiting(secondsRemaining: remaining))
+            try await Task.sleep(for: .seconds(1))
         }
     }
+
+    /// Parses the `Retry-After` header (seconds or HTTP-date).
+    private static func parseRetryAfter(_ response: HTTPURLResponse) -> TimeInterval? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+        // Try as integer seconds first
+        if let seconds = Double(value) {
+            return seconds
+        }
+        // Try as HTTP-date
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        if let date = formatter.date(from: value) {
+            return max(0, date.timeIntervalSinceNow)
+        }
+        return nil
+    }
 }
+
 
 nonisolated struct ModelSettingsSnapshot: Sendable {
     let baseURL: String

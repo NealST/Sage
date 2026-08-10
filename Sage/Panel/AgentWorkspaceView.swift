@@ -259,6 +259,9 @@ struct AgentWorkspaceView: View {
                 if appState.agent.isStreaming {
                     StreamingContentView(text: appState.agent.streamingText)
                         .transition(.opacity)
+                } else if let retry = appState.agent.retryState {
+                    RetryCountdownView(state: retry)
+                        .transition(.opacity)
                 } else {
                     HStack(spacing: SageDesign.Spacing.sm) {
                         ProgressView().controlSize(.small)

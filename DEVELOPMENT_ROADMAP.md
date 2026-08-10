@@ -53,10 +53,10 @@
 
 当前 `ModelClient` 返回完整的 `ModelTurn`，用户需要等待整个响应生成完毕才能看到内容。
 
-- [ ] `ModelClient` 改为 SSE 流式请求，返回 `AsyncStream<String>`
-- [ ] `AgentRuntime` 支持增量更新 `lastAssistantText`
-- [ ] UI transcript 实时追加 token，带打字光标效果
-- [ ] 流式过程中支持 stop 中断
+- [x] `ModelClient` 改为 SSE 流式请求，返回 `AsyncThrowingStream<StreamDelta, Error>`
+- [x] `AgentRuntime` 支持增量更新 `streamingText`
+- [x] UI transcript 实时追加 token，带呼吸光标效果（`StreamingContentView.swift`）
+- [x] 流式过程中支持 stop 中断
 
 ### 1.2 Markdown 渲染打磨
 
@@ -64,10 +64,10 @@
 
 - [x] 流式渲染性能优化（分块缓存 + 节流，`StreamingContentView.swift`）
 - [x] 代码块语法高亮（基于语言标注）— TreeSitter SPM 已接入，构建通过
-- [ ] 代码块右上角复制按钮
-- [ ] 链接可点击跳转
-- [ ] 图片/文件路径渲染（工具结果中的路径可预览）
-- [ ] 长文本折叠/展开
+- [x] 代码块右上角复制按钮（`MarkdownContentView.swift` Copy/Copied 动画反馈）
+- [x] 链接可点击跳转（`PathTextSupport.swift` — 本地路径 Finder reveal / Quick Look，http/mailto 系统打开）
+- [x] 图片/文件路径渲染（`QuickLookPresenter.swift` — 图片/PDF Quick Look 预览）
+- [x] 长文本折叠/展开（助手回复高度折叠 + 代码块行数折叠 + 工具结果/调用可展开 chip）
 
 #### 代码块语法高亮 — SPM 依赖说明
 
@@ -120,16 +120,16 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 1.4 错误恢复 UX
 
-- [ ] 网络超时指数退避重试（最多 3 次）
-- [ ] 模型 API 限流检测（429），显示等待倒计时
-- [ ] 部分工具执行失败时的回滚/跳过策略
-- [ ] 错误消息附带可操作建议（如 "检查 API Key" 按钮直接跳转 Settings）
+- [x] 网络超时指数退避重试（最多 3 次）— `RetryPolicy` 指数退避，网络错误/5xx/408 自动重试
+- [x] 模型 API 限流检测（429），显示等待倒计时 — 解析 `Retry-After` header，`RetryCountdownView` 环形进度 + 秒数倒计时
+- [x] 部分工具执行失败时的回滚/跳过策略（失败步骤标记 `.failed`，后续步骤 `.skipped`，支持 resume 重试）
+- [x] 错误消息附带可操作建议 — 401→检查 API Key，403→权限不足，404→检查 URL，429→限流，5xx→服务端问题；UI 已有 Open Settings 按钮
 
 ### 1.5 MLX 模型内存压力卸载
 
 - [ ] 监听 `DispatchSource.makeMemoryPressureSource()` 的 warning/critical 事件
 - [ ] 内存压力时自动调用 `LocalModelService.unload()`
-- [ ] 下次推理时自动重新加载
+- [x] 下次推理时自动重新加载（`ensureLoaded()` 懒加载）
 - [ ] Settings 中显示模型状态（未下载 / 已下载 / 已加载 / 内存占用）
 
 ---
@@ -142,9 +142,9 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 - [ ] 进程崩溃自动重连（带退避）
 - [ ] 心跳健康检查
-- [ ] 优雅关闭（发送 shutdown 请求后等待退出）
-- [ ] stderr 日志捕获和展示
-- [ ] 无响应超时处理
+- [ ] 优雅关闭（发送 shutdown 请求后等待退出）— 当前仅 `process.terminate()`，未发 MCP shutdown RPC
+- [ ] stderr 日志捕获和展示 — Pipe 已创建但未读取
+- [x] 无响应超时处理（`CapabilityStore` 20s 连接超时，`TaskGroup` 竞速）
 
 ### 2.2 MCP 服务器发现与管理
 

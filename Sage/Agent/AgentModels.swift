@@ -114,3 +114,11 @@ enum AgentPhase: Equatable {
     case completed(summary: String)
     case failed(message: String)
 }
+
+/// State for retry countdown display — embedded in the @Observable AgentRuntime.
+struct RetryDisplayState: Equatable {
+    var attempt: Int
+    var maxAttempts: Int
+    var totalSeconds: Int
+    var secondsRemaining: Int
+}
