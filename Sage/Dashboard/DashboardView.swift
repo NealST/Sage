@@ -12,6 +12,7 @@ struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var modelStatus: LocalModelService.Status = .idle
     @State private var memoryBytes: Int = 0
+    @State private var pressureLevel: MemoryPressureMonitor.PressureLevel = .normal
     @State private var refreshTimer: Timer?
 
     var body: some View {
@@ -44,13 +45,16 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(statusTitle)
                             .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                            .contentTransition(.opacity)
                         Text(statusSubtitle)
                             .font(.system(size: SageDesign.Typography.microSize))
                             .foregroundStyle(.secondary)
+                            .contentTransition(.opacity)
                     }
                     Spacer()
                     modelActionButton
                 }
+                .animation(SageDesign.Motion.contentCrossFade, value: statusColorKey)
 
                 if case .downloading(let progress) = modelStatus {
                     ProgressView(value: progress)
@@ -125,14 +129,18 @@ struct DashboardView: View {
         switch modelStatus {
         case .ready:
             Button("Unload") {
-                Task { await LocalModelService.shared.unload() }
-                Task { await refreshModelState() }
+                Task {
+                    await LocalModelService.shared.unload()
+                    await refreshModelState()
+                }
             }
             .controlSize(.small)
         case .idle, .unloadedByPressure, .failed:
             Button("Load") {
-                Task { await LocalModelService.shared.warmUp() }
-                Task { await refreshModelState() }
+                Task {
+                    await LocalModelService.shared.warmUp()
+                    await refreshModelState()
+                }
             }
             .controlSize(.small)
         case .loading, .downloading:
@@ -152,10 +160,12 @@ struct DashboardView: View {
                     Text(formattedMemory)
                         .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
                         .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
                 }
                 Spacer()
                 pressureBadge
             }
+            .animation(SageDesign.Motion.contentCrossFade, value: memoryBytes)
             .padding(SageDesign.Spacing.md)
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -172,8 +182,7 @@ struct DashboardView: View {
     }
 
     private var pressureBadge: some View {
-        let level = MemoryPressureMonitor.shared.currentLevel
-        let (text, color): (String, Color) = switch level {
+        let (text, color): (String, Color) = switch pressureLevel {
         case .normal: ("Normal", .green)
         case .warning: ("Warning", .orange)
         case .critical: ("Critical", .red)
@@ -187,6 +196,15 @@ struct DashboardView: View {
                 Capsule(style: .continuous)
                     .fill(color.opacity(0.14))
             )
+            .animation(.easeInOut(duration: 0.3), value: pressureLevelKey)
+    }
+
+    private var pressureLevelKey: Int {
+        switch pressureLevel {
+        case .normal: 0
+        case .warning: 1
+        case .critical: 2
+        }
     }
 
     // MARK: - Token Usage
@@ -244,13 +262,20 @@ struct DashboardView: View {
     }
 
     private func refreshModelState() async {
-        modelStatus = await LocalModelService.shared.status
-        memoryBytes = await LocalModelService.shared.memoryFootprintBytes
+        let newStatus = await LocalModelService.shared.status
+        let newBytes = await LocalModelService.shared.memoryFootprintBytes
+        let newPressure = MemoryPressureMonitor.shared.currentLevel
+        withAnimation(SageDesign.Motion.contentCrossFade) {
+            modelStatus = newStatus
+            memoryBytes = newBytes
+            pressureLevel = newPressure
+        }
     }
 
     private func startPolling() {
+        guard refreshTimer == nil else { return }
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-            Task { await refreshModelState() }
+            Task { @MainActor in await refreshModelState() }
         }
     }
 

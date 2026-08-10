@@ -26,6 +26,7 @@ final class MemoryPressureMonitor: @unchecked Sendable {
 
     private let source: DispatchSourceMemoryPressure
     private var lastLevel: PressureLevel = .normal
+    private var started = false
 
     private init() {
         source = DispatchSource.makeMemoryPressureSource(
@@ -51,10 +52,13 @@ final class MemoryPressureMonitor: @unchecked Sendable {
         }
     }
 
+    /// Starts monitoring. Safe to call multiple times — only the first call resumes the source.
     func start() {
+        guard !started else { return }
+        started = true
         source.resume()
     }
 
-    /// Current pressure level (read from the last event).
-    var currentLevel: PressureLevel { lastLevel }
+    /// Current pressure level (read from the last event). Only access from the main thread.
+    @MainActor var currentLevel: PressureLevel { lastLevel }
 }
