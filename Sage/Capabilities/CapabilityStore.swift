@@ -216,17 +216,15 @@ final class CapabilityStore {
     }
 
     /// Called when a server process exits unexpectedly. Triggers auto-reconnect with backoff.
-    private func handleServerProcessExit(serverID: String) {
+    private func handleServerProcessExit(serverID: String) async {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
         // Sync stderr logs from the client before it's removed.
         if let client = clients[serverID] {
-            Task {
-                let logs = await client.stderrLog
-                if let idx = mcpServers.firstIndex(where: { $0.id == serverID }) {
-                    mcpServers[idx].recentLogs = logs
-                }
+            let logs = await client.stderrLog
+            if let idx = mcpServers.firstIndex(where: { $0.id == serverID }) {
+                mcpServers[idx].recentLogs = logs
             }
         }
         clients[serverID] = nil
@@ -243,7 +241,9 @@ final class CapabilityStore {
         mcpServers[index].reconnectAttempts = attempts + 1
         mcpServers[index].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
 
-        let delay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
+        let baseDelay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
+        let jitter = Double.random(in: 0...(baseDelay * 0.3))
+        let delay = baseDelay + jitter
         reconnectTasks[serverID] = Task {
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }

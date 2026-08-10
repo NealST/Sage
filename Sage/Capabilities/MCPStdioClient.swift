@@ -64,7 +64,7 @@ actor MCPStdioClient {
     // MARK: - Public API
 
     func connect() async throws -> [MCPToolInfo] {
-        try await startProcess()
+        try startProcess()
         _ = try await request(
             method: "initialize",
             params: .object([
@@ -130,10 +130,18 @@ actor MCPStdioClient {
 
         forceCleanup()
         isDisconnecting = false
+        didCleanup = false
     }
 
+    /// True once forceCleanup has fired — prevents double exit notification.
+    private var didCleanup = false
+
     /// Immediate teardown without graceful shutdown (used internally after crash detection).
-    private func forceCleanup() {
+    /// Returns `true` if this call actually performed cleanup (first call wins).
+    @discardableResult
+    private func forceCleanup() -> Bool {
+        guard !didCleanup else { return false }
+        didCleanup = true
         readTask?.cancel()
         readTask = nil
         stderrTask?.cancel()
@@ -151,6 +159,7 @@ actor MCPStdioClient {
         stdinPipe = nil
         stdoutPipe = nil
         buffer = Data()
+        return true
     }
 
     /// Returns the most recent stderr lines for display.
@@ -158,9 +167,12 @@ actor MCPStdioClient {
 
     // MARK: - Process I/O
 
-    private func startProcess() async throws {
-        await disconnect()
-
+    private func startProcess() throws {
+        // Reset state for a fresh connection.
+        // Note: the caller (CapabilityStore.connect) already disconnects the old client,
+        // so we only need to ensure local state is clean.
+        forceCleanup()
+        didCleanup = false
         recentStderrLines = []
 
         let process = Process()
@@ -203,8 +215,8 @@ actor MCPStdioClient {
             // Process exited — notify coordinator if not a graceful disconnect.
             let shouldNotify = await !self.isDisconnecting
             if shouldNotify {
-                await self.forceCleanup()
-                if let callback = await self.onProcessExit {
+                let didClean = await self.forceCleanup()
+                if didClean, let callback = await self.onProcessExit {
                     await callback(serverID)
                 }
             }
@@ -255,6 +267,7 @@ actor MCPStdioClient {
 
     private func startHealthCheck() {
         healthTask?.cancel()
+        let serverID = config.id
         healthTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -276,9 +289,8 @@ actor MCPStdioClient {
                 } catch {
                     // Ping failed or timed out — treat as unresponsive.
                     guard !Task.isCancelled else { break }
-                    let serverID = await self.config.id
-                    await self.forceCleanup()
-                    if let callback = await self.onProcessExit {
+                    let didClean = await self.forceCleanup()
+                    if didClean, let callback = await self.onProcessExit {
                         await callback(serverID)
                     }
                     break
