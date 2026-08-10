@@ -271,6 +271,9 @@ struct ToolCallView: View {
         case "read_text_file": return "doc.text"
         case "run_shell_command": return "terminal"
         case "delete_file": return "trash"
+        case "load_skill": return "book.closed"
+        case "load_skill_resource": return "doc.text.magnifyingglass"
+        case "run_skill_script": return "applescript"
         default: return SageDesign.Symbol.tools
         }
     }

@@ -463,6 +463,11 @@ actor GRDBTaskRepository: TaskRepository {
                 ALTER TABLE app_state ADD COLUMN last_general_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
             """)
         }
+        migrator.registerMigration("addActivatedSkills") { db in
+            try db.execute(sql: """
+                ALTER TABLE tasks ADD COLUMN activated_skills TEXT;
+            """)
+        }
         try migrator.migrate(pool)
         try importLegacyJSONIfNeeded(into: pool)
         databasePool = pool
@@ -603,13 +608,18 @@ actor GRDBTaskRepository: TaskRepository {
     private func upsertTask(_ task: TaskRecord, database db: Database) throws {
         // COALESCE keeps an existing topic when a concurrent in-memory snapshot
         // still has nil (topic generation racing with commit/mutate).
+        let activatedSkillsJSON: String? = task.activatedSkillNames.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(Array(task.activatedSkillNames)))
+                .flatMap { String(data: $0, encoding: .utf8) }
+
         try db.execute(
             sql: """
             INSERT INTO tasks (
                 id, status, project_id, summary, topic, abstract,
-                topic_updated_at, created_at, updated_at
+                topic_updated_at, activated_skills, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 project_id = excluded.project_id,
@@ -617,6 +627,7 @@ actor GRDBTaskRepository: TaskRepository {
                 topic = COALESCE(excluded.topic, tasks.topic),
                 abstract = COALESCE(excluded.abstract, tasks.abstract),
                 topic_updated_at = COALESCE(excluded.topic_updated_at, tasks.topic_updated_at),
+                activated_skills = excluded.activated_skills,
                 updated_at = excluded.updated_at
             """,
             arguments: [
@@ -627,6 +638,7 @@ actor GRDBTaskRepository: TaskRepository {
                 task.topic,
                 task.abstract,
                 task.topicUpdatedAt?.timeIntervalSince1970,
+                activatedSkillsJSON,
                 task.createdAt.timeIntervalSince1970,
                 task.updatedAt.timeIntervalSince1970,
             ]
@@ -863,6 +875,15 @@ actor GRDBTaskRepository: TaskRepository {
 
         let projectID = (row["project_id"] as String?).flatMap(UUID.init(uuidString:))
 
+        let activatedSkills: Set<String>
+        if let json: String = row["activated_skills"],
+           let data = json.data(using: .utf8),
+           let names = try? JSONDecoder().decode([String].self, from: data) {
+            activatedSkills = Set(names)
+        } else {
+            activatedSkills = []
+        }
+
         return TaskRecord(
             id: id,
             status: status,
@@ -876,6 +897,7 @@ actor GRDBTaskRepository: TaskRepository {
             // Entity extraction is not wired; skip the table read on the hot path.
             entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: db),
+            activatedSkillNames: activatedSkills,
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )

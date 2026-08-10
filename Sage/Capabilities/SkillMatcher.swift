@@ -2,21 +2,21 @@
 //  SkillMatcher.swift
 //  Sage
 //
-//  Implements progressive skill activation:
-//  1. Local model available → selects relevant skills, injects their full body
-//  2. Local model unavailable → injects only the skill catalog (name + description)
-//     into the system prompt; the cloud model uses `load_skill` tool to fetch bodies
+//  Implements progressive skill activation via local model matching:
+//  1. Local model available → selects relevant skills → auto-loaded via `load_skill` tool
+//  2. Local model unavailable/no match → catalog shown, cloud model calls `load_skill` itself
 //
-//  Skills are NEVER all injected at once. Only matched/requested skills are loaded.
+//  Both paths go through the unified `load_skill` execution, ensuring `activatedSkillNames`
+//  is always correctly maintained.
 //
 
 import Foundation
 
-/// Result of skill matching — determines how skills are presented to the cloud model.
+/// Result of skill matching — determines whether skills are auto-loaded or deferred to the cloud model.
 enum SkillMatchResult: Sendable {
-    /// Local model selected specific skills — inject their full body.
+    /// Local model selected specific skills — they will be auto-loaded via `load_skill`.
     case resolved(names: [String])
-    /// Local model unavailable — inject catalog only, cloud model decides via tool.
+    /// Local model unavailable or no match — cloud model decides via `load_skill` tool.
     case deferred
 }
 
@@ -38,13 +38,22 @@ actor SkillMatcher {
         let enabled = skills.filter(\.enabled)
         guard !enabled.isEmpty else { return .resolved(names: []) }
 
+        // Skills that opt out of local model matching are excluded from the
+        // candidate list but still available via the `load_skill` tool.
+        let candidates = enabled.filter { !$0.disableModelInvocation }
+
         guard await modelService.isReady else {
+            return .deferred
+        }
+
+        guard !candidates.isEmpty else {
+            // All enabled skills opted out of model invocation — defer to cloud.
             return .deferred
         }
 
         let (system, user) = Self.buildPrompt(
             userMessage: userMessage,
-            skills: enabled
+            skills: candidates
         )
 
         do {
@@ -54,7 +63,7 @@ actor SkillMatcher {
                 maxTokens: 64,
                 temperature: 0
             )
-            let matched = Self.parse(output: output, skills: enabled)
+            let matched = Self.parse(output: output, skills: candidates)
             return .resolved(names: matched)
         } catch {
             return .deferred

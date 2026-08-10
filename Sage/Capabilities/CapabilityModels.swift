@@ -12,6 +12,18 @@ nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     var path: String
     var enabled: Bool
     var sourceLabel: String
+    /// When true, the local model should not be used to match this skill;
+    /// it will only be offered via the `load_skill` tool catalog.
+    var disableModelInvocation: Bool = false
+    /// Optional license information for the skill.
+    var license: String?
+    /// Optional compatibility/environment requirements description.
+    var compatibility: String?
+    /// Arbitrary key-value metadata from the skill frontmatter.
+    var metadata: [String: String]?
+    /// Space-separated list of pre-approved tools the skill may use (experimental).
+    /// Parsed per spec but not yet enforced at runtime — reserved for future use.
+    var allowedTools: String?
 }
 
 nonisolated enum MCPServerStatus: String, Codable, Sendable, Equatable {

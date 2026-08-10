@@ -37,9 +37,23 @@ struct SkillsManageView: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
-                            Text(skill.sourceLabel)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.tertiary)
+                            if let compat = skill.compatibility {
+                                Text("Requires: \(compat)")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.orange)
+                            }
+                            HStack(spacing: 6) {
+                                Text(skill.sourceLabel)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.tertiary)
+                                if let license = skill.license {
+                                    Text("·")
+                                        .foregroundStyle(.tertiary)
+                                    Text(license)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
                         }
                         Spacer()
                         Toggle(
@@ -63,7 +77,7 @@ struct SkillsManageView: View {
                let selected = appState.capabilities.skills.first(where: { $0.name == selectedName }) {
                 Divider()
                 ScrollView {
-                    Text(SkillRegistry.readBody(for: selected, limit: 6_000))
+                    Text(SkillRegistry.readBody(for: selected))
                         .font(.system(size: 12))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)

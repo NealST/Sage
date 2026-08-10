@@ -41,6 +41,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var pendingPlan: AgentPlan?
     var entities: [TaskEntity]
     var relatedTaskIDs: [UUID]
+    /// Skills activated in this task (persisted so they survive task switches).
+    var activatedSkillNames: Set<String>
     var createdAt: Date
     var updatedAt: Date
 
@@ -56,6 +58,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         pendingPlan: AgentPlan? = nil,
         entities: [TaskEntity] = [],
         relatedTaskIDs: [UUID] = [],
+        activatedSkillNames: Set<String> = [],
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -70,8 +73,33 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.pendingPlan = pendingPlan
         self.entities = entities
         self.relatedTaskIDs = relatedTaskIDs
+        self.activatedSkillNames = activatedSkillNames
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        status = try container.decode(TaskStatus.self, forKey: .status)
+        projectID = try container.decodeIfPresent(UUID.self, forKey: .projectID)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        topic = try container.decodeIfPresent(String.self, forKey: .topic)
+        abstract = try container.decodeIfPresent(String.self, forKey: .abstract)
+        topicUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .topicUpdatedAt)
+        events = try container.decode([AgentEvent].self, forKey: .events)
+        pendingPlan = try container.decodeIfPresent(AgentPlan.self, forKey: .pendingPlan)
+        entities = try container.decodeIfPresent([TaskEntity].self, forKey: .entities) ?? []
+        relatedTaskIDs = try container.decodeIfPresent([UUID].self, forKey: .relatedTaskIDs) ?? []
+        activatedSkillNames = try container.decodeIfPresent(Set<String>.self, forKey: .activatedSkillNames) ?? []
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, status, projectID, summary, topic, abstract, topicUpdatedAt
+        case events, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
+        case createdAt, updatedAt
     }
 }
 

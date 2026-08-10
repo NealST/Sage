@@ -14,30 +14,34 @@ enum ContextBudget {
         let sanitized = sanitize(events)
         guard !sanitized.isEmpty else { return [] }
 
+        // Protected events (e.g., skill instructions) are always included.
+        let protectedEvents = sanitized.filter(\.protected)
+        let prunableEvents = sanitized.filter { !$0.protected }
+
         var selected: [AgentEvent] = []
-        var characters = 0
-        var index = sanitized.count - 1
+        var characters = protectedEvents.reduce(0) { $0 + characterCost(of: $1) }
+        var index = prunableEvents.count - 1
 
         while index >= 0 {
-            if selected.count >= maxEvents { break }
+            if selected.count + protectedEvents.count >= maxEvents { break }
 
-            let event = sanitized[index]
+            let event = prunableEvents[index]
             // Keep assistant tool_calls + following tool results as an atomic block.
             if event.kind == .toolResult {
                 var blockStart = index
-                while blockStart > 0, sanitized[blockStart - 1].kind == .toolResult {
+                while blockStart > 0, prunableEvents[blockStart - 1].kind == .toolResult {
                     blockStart -= 1
                 }
                 if blockStart > 0,
-                   sanitized[blockStart - 1].kind == .assistantResponse,
-                   let calls = sanitized[blockStart - 1].toolCalls,
+                   prunableEvents[blockStart - 1].kind == .assistantResponse,
+                   let calls = prunableEvents[blockStart - 1].toolCalls,
                    !calls.isEmpty {
                     blockStart -= 1
                 }
-                let block = Array(sanitized[blockStart...index])
+                let block = Array(prunableEvents[blockStart...index])
                 let cost = block.reduce(0) { $0 + characterCost(of: $1) }
                 if !selected.isEmpty,
-                   selected.count + block.count > maxEvents
+                   selected.count + protectedEvents.count + block.count > maxEvents
                     || characters + cost > maxCharacters {
                     break
                 }
@@ -64,7 +68,18 @@ enum ContextBudget {
             index -= 1
         }
 
-        return selected
+        // Merge protected events back in chronological order.
+        return mergeByOrder(protected: protectedEvents, pruned: selected, original: sanitized)
+    }
+
+    /// Merges protected and selected events maintaining their original order.
+    private static func mergeByOrder(
+        protected: [AgentEvent],
+        pruned: [AgentEvent],
+        original: [AgentEvent]
+    ) -> [AgentEvent] {
+        let includedIDs = Set(protected.map(\.id)).union(pruned.map(\.id))
+        return original.filter { includedIDs.contains($0.id) }
     }
 
     /// Drops fully unexecuted proposals, truncates partially executed ones,

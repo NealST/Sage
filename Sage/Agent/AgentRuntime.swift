@@ -28,6 +28,11 @@ final class AgentRuntime {
     private(set) var isBusy = false
     /// After dismissing the context chip, the next submit starts a clean task.
     private var forceFreshOnNextSubmit = false
+    /// Cached skill appendix for the current user turn — avoids redundant local model calls
+    /// during tool-use loops within the same turn.
+    private var cachedSkillResult: CapabilityStore.SkillAppendixResult?
+    /// Skills already loaded via `load_skill` in this task — prevents duplicate injection.
+    private var activatedSkillNames: Set<String> = []
     /// In-flight submit/confirm/retry work — cancelled by `stop()`.
     private var workTask: Task<Void, Never>?
 
@@ -151,6 +156,8 @@ final class AgentRuntime {
         do {
             let snapshot = try await taskRepository.loadWorkspace()
             applyWorkspaceSnapshot(snapshot)
+            // Reload skills scoped to the restored project (if any).
+            await capabilities?.reloadSkills(projectRoot: focusedProject?.rootURL)
             if snapshot.activeTask != nil {
                 await restorePhaseFromActiveTask()
             } else {
@@ -266,6 +273,7 @@ final class AgentRuntime {
         activeTask = nil
         activeTaskID = nil
         tokenUsage = TokenUsage()
+        activatedSkillNames = []
 
         return await createAndActivateTask(
             relatedTo: Array(inheritedRelated.prefix(Self.maxRelatedTaskIDs))
@@ -328,6 +336,7 @@ final class AgentRuntime {
             lastAssistantText = nil
             contextHint = nil
             forceFreshOnNextSubmit = false
+            activatedSkillNames = []
             phase = .idle
             guard await createAndActivateTask(relatedTo: []) != nil else { return false }
             return true
@@ -418,6 +427,9 @@ final class AgentRuntime {
             activeTask = nil
             activeTaskID = nil
             try await taskRepository.setFocus(projectID: nil, activeTaskID: restoreID)
+
+            // Reload skills without project scope (user-level only).
+            await capabilities?.reloadSkills(projectRoot: nil)
 
             let snapshot = try await taskRepository.loadWorkspace()
             applyWorkspaceSnapshot(snapshot)
@@ -530,6 +542,7 @@ final class AgentRuntime {
         let resumeWithoutTools = events.last?.kind == .toolResult
         phase = .thinking
         streamingText = ""
+        cachedSkillResult = nil
         do {
             try Task.checkCancellation()
             let turn = try await requestModelStreaming(includeTools: !resumeWithoutTools)
@@ -547,6 +560,12 @@ final class AgentRuntime {
     private func performSubmit(_ userText: String) async -> Bool {
         let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+
+        // Intercept /skill-name slash commands for user-explicit skill activation.
+        if let skillActivation = parseSkillSlashCommand(trimmed) {
+            return await handleSkillSlashCommand(skillActivation)
+        }
+
         guard settings.isConfigured else {
             phase = .failed(message: ModelClientError.notConfigured.localizedDescription)
             return false
@@ -644,6 +663,13 @@ final class AgentRuntime {
         phase = .thinking
         lastAssistantText = nil
         streamingText = ""
+        cachedSkillResult = nil
+
+        // Auto-load skills recommended by the local model before the first cloud request.
+        // This ensures the cloud model sees skill content immediately without needing to
+        // call load_skill itself. Falls back to catalog-based activation if local model
+        // returns no matches or encounters an error.
+        await autoLoadRecommendedSkills(for: trimmed)
 
         do {
             try Task.checkCancellation()
@@ -702,6 +728,10 @@ final class AgentRuntime {
                         )
                     } else if step.toolName == "load_skill" {
                         rawResult = try await executeLoadSkill(argumentsJSON: step.argumentsJSON)
+                    } else if step.toolName == "load_skill_resource" {
+                        rawResult = try await executeLoadSkillResource(argumentsJSON: step.argumentsJSON)
+                    } else if step.toolName == "run_skill_script" {
+                        rawResult = try await executeRunSkillScript(argumentsJSON: step.argumentsJSON)
                     } else if let tool = tools.tool(named: step.toolName) {
                         // Some tools manage their own timeout or may involve user interaction
                         // (permission prompts, interactive capture). Give them extended ceilings.
@@ -715,10 +745,13 @@ final class AgentRuntime {
                             ? .seconds(130)
                             : toolExecutionTimeout
                         let policy = pathGuardPolicy
+                        let allowlist = skillReadAllowlist()
                         rawResult = try await withThrowingTaskGroup(of: String.self) { group in
                             group.addTask {
                                 try await PathGuard.$policy.withValue(policy) {
-                                    try await tool.call(argumentsJSON: step.argumentsJSON)
+                                    try await PathGuard.$readAllowlist.withValue(allowlist) {
+                                        try await tool.call(argumentsJSON: step.argumentsJSON)
+                                    }
                                 }
                             }
                             group.addTask {
@@ -738,10 +771,12 @@ final class AgentRuntime {
                     // Side effects may already have landed — persist before honoring Stop.
                     plan.steps[index].status = .succeeded
                     plan.steps[index].result = result
+                    let isSkillContext = step.toolName == "load_skill" || step.toolName == "load_skill_resource"
                     resultEvent = AgentEvent(
                         kind: .toolResult,
                         content: result,
-                        toolCallID: step.toolCallID
+                        toolCallID: step.toolCallID,
+                        protected: isSkillContext
                     )
                 } catch is CancellationError {
                     plan.steps[index].status = .pending
@@ -1007,25 +1042,481 @@ final class AgentRuntime {
         ])
     )
 
+    /// Computes read-allowlisted directories from activated skills.
+    /// Allows the model to read bundled resources in skill directories even in project mode.
+    private func skillReadAllowlist() -> [String] {
+        guard !activatedSkillNames.isEmpty else { return [] }
+        let skills = capabilities?.enabledSkills ?? []
+        return activatedSkillNames.compactMap { name in
+            guard let skill = skills.first(where: { $0.name == name }) else { return nil }
+            return URL(fileURLWithPath: skill.path)
+                .deletingLastPathComponent()
+                .resolvingSymlinksInPath()
+                .path
+        }
+    }
+
+    /// Auto-loads skills recommended by the local model by injecting synthetic
+    /// tool-call + tool-result events into the conversation. This gives the cloud model
+    /// immediate access to skill instructions without requiring it to call `load_skill`.
+    ///
+    /// If the local model returns no recommendations (deferred/error), this is a no-op
+    /// and the cloud model will see the catalog and can call `load_skill` itself.
+    private func autoLoadRecommendedSkills(for userMessage: String) async {
+        guard let capabilities else { return }
+
+        let skillResult = await capabilities.skillsPromptAppendix(for: userMessage)
+        cachedSkillResult = skillResult
+
+        let toLoad = skillResult.recommendedSkills.filter { !activatedSkillNames.contains($0) }
+        guard !toLoad.isEmpty else { return }
+
+        // For each recommended skill, generate a synthetic load_skill call + result pair.
+        var syntheticEvents: [AgentEvent] = []
+
+        for skillName in toLoad {
+            let callID = "auto_skill_\(skillName)_\(UUID().uuidString.prefix(8))"
+            let argsJSON = "{\"name\":\"\(skillName)\"}"
+
+            // Execute the actual load logic.
+            let result: String
+            do {
+                result = try await executeLoadSkill(argumentsJSON: argsJSON)
+            } catch {
+                // If loading fails for one skill, skip it — don't block others.
+                continue
+            }
+
+            // Synthetic assistant response with a tool call (protected to stay paired with result).
+            let assistantEvent = AgentEvent(
+                kind: .assistantResponse,
+                content: "",
+                toolCalls: [ToolCallRecord(id: callID, name: "load_skill", argumentsJSON: argsJSON)],
+                protected: true
+            )
+
+            // Synthetic tool result (protected from context pruning).
+            let resultEvent = AgentEvent(
+                kind: .toolResult,
+                content: result,
+                toolCallID: callID,
+                protected: true
+            )
+
+            syntheticEvents.append(assistantEvent)
+            syntheticEvents.append(resultEvent)
+        }
+
+        guard !syntheticEvents.isEmpty else { return }
+
+        // Commit the synthetic events so they persist and appear in the conversation.
+        _ = await commit(
+            appendEvents: syntheticEvents,
+            deleteEventIDs: [],
+            mutate: { _ in }
+        )
+    }
+
+    /// Builds the structured `<skill_content>` block for a skill record.
+    /// Shared by `executeLoadSkill`, `handleSkillSlashCommand`, and `autoLoadRecommendedSkills`.
+    private func buildSkillContent(for skill: SkillRecord) -> String {
+        let body = SkillRegistry.readBody(for: skill)
+        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent().path
+        var content = "<skill_content name=\"\(skill.name)\">\n"
+        content += body
+
+        let resources = SkillRegistry.listResources(for: skill)
+        let hasScripts = resources.contains { $0.hasPrefix("scripts/") }
+
+        if !resources.isEmpty {
+            content += "\n\nSkill directory: \(skillDir)"
+            content += "\nUse `load_skill_resource` to read any resource file by relative path."
+            if hasScripts {
+                content += "\nUse `run_skill_script` to execute scripts in the scripts/ directory."
+            }
+            content += "\n\n<skill_resources>"
+            for resource in resources {
+                content += "\n  <file>\(resource)</file>"
+            }
+            content += "\n</skill_resources>"
+        } else {
+            content += "\n\nSkill directory: \(skillDir)"
+        }
+
+        content += "\n</skill_content>"
+        return content
+    }
+
     private func executeLoadSkill(argumentsJSON: String) async throws -> String {
         struct Args: Decodable { let name: String }
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-        guard let body = await capabilities?.loadSkillBody(name: args.name) else {
+
+        // Deduplication: don't re-inject a skill already loaded in this task.
+        if activatedSkillNames.contains(args.name) {
+            return "Skill '\(args.name)' is already loaded in this session. Its instructions are active."
+        }
+
+        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.name }) else {
             throw ToolError.operationFailed(
                 "Skill '\(args.name)' not found or not enabled. Available skills: \(capabilities?.enabledSkills.map(\.name).joined(separator: ", ") ?? "none")"
             )
         }
-        return body
+
+        let body = SkillRegistry.readBody(for: skill)
+        guard !body.isEmpty else {
+            throw ToolError.operationFailed("Skill '\(args.name)' has no content.")
+        }
+
+        activatedSkillNames.insert(args.name)
+        return buildSkillContent(for: skill)
     }
 
-    private func requestModel(includeTools: Bool = true) async throws -> ModelTurn {
+    // MARK: - Skill Resource Loading
+
+    /// Tool definition for `load_skill_resource` — available when any skill is activated.
+    static let loadSkillResourceDefinition = ToolDefinition(
+        name: "load_skill_resource",
+        description: """
+            Load a reference or resource file from an activated skill's directory. \
+            Use this to progressively read documentation, templates, or data files \
+            bundled with a skill (e.g. files in references/, assets/). \
+            The skill must have been activated via load_skill or a slash command first.
+            """,
+        parameters: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "skill_name": .object([
+                    "type": .string("string"),
+                    "description": .string("Name of the activated skill that owns the resource."),
+                ]),
+                "path": .object([
+                    "type": .string("string"),
+                    "description": .string("Relative path to the resource file within the skill directory (e.g. 'references/REFERENCE.md')."),
+                ]),
+            ]),
+            "required": .array([.string("skill_name"), .string("path")]),
+        ])
+    )
+
+    /// Tool definition for `run_skill_script` — available when any skill is activated.
+    static let runSkillScriptDefinition = ToolDefinition(
+        name: "run_skill_script",
+        description: """
+            Execute a script bundled with an activated skill. \
+            The script path is relative to the skill's root directory (e.g. 'scripts/extract.py'). \
+            Scripts run with the skill directory as working directory. \
+            Supports any executable script — specify an interpreter or ensure the script has a shebang.
+            """,
+        parameters: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "skill_name": .object([
+                    "type": .string("string"),
+                    "description": .string("Name of the activated skill that owns the script."),
+                ]),
+                "script_path": .object([
+                    "type": .string("string"),
+                    "description": .string("Relative path to the script within the skill directory (e.g. 'scripts/extract.py')."),
+                ]),
+                "arguments": .object([
+                    "type": .string("string"),
+                    "description": .string("Optional space-separated arguments to pass to the script."),
+                ]),
+                "interpreter": .object([
+                    "type": .string("string"),
+                    "description": .string("Optional interpreter (e.g. 'python3', 'node', 'bash'). If omitted, the script is executed directly."),
+                ]),
+                "timeout_seconds": .object([
+                    "type": .string("integer"),
+                    "description": .string("Timeout in seconds (default 30). The script is terminated if it exceeds this limit."),
+                ]),
+            ]),
+            "required": .array([.string("skill_name"), .string("script_path")]),
+        ])
+    )
+
+    private func executeLoadSkillResource(argumentsJSON: String) async throws -> String {
+        struct Args: Decodable {
+            let skillName: String
+            let path: String
+        }
+        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
+
+        guard activatedSkillNames.contains(args.skillName) else {
+            throw ToolError.operationFailed(
+                "Skill '\(args.skillName)' is not activated in this session. Use load_skill first."
+            )
+        }
+
+        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.skillName }) else {
+            throw ToolError.operationFailed("Skill '\(args.skillName)' not found.")
+        }
+
+        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent()
+
+        // Validate the relative path doesn't escape the skill directory.
+        let normalizedPath = args.path.replacingOccurrences(of: "\\", with: "/")
+        guard !normalizedPath.contains("..") else {
+            throw ToolError.operationFailed(
+                "Path must not contain '..'. Use a relative path within the skill directory."
+            )
+        }
+        guard !normalizedPath.hasPrefix("/") else {
+            throw ToolError.operationFailed(
+                "Path must be relative to the skill directory, not absolute."
+            )
+        }
+
+        let fileURL = skillDir.appendingPathComponent(normalizedPath).standardizedFileURL
+        let resolvedPath = fileURL.resolvingSymlinksInPath().path
+        let resolvedSkillDir = skillDir.resolvingSymlinksInPath().path
+        guard resolvedPath.hasPrefix(resolvedSkillDir + "/") else {
+            throw ToolError.operationFailed("Resolved path escapes the skill directory.")
+        }
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            let resources = SkillRegistry.listResources(for: skill)
+            var msg = "File not found: \(args.path)"
+            if !resources.isEmpty {
+                msg += "\n\nAvailable resources:\n" + resources.map { "  \($0)" }.joined(separator: "\n")
+            }
+            throw ToolError.operationFailed(msg)
+        }
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let fileSize = (attrs[.size] as? Int) ?? 0
+
+        let data = try Data(contentsOf: fileURL)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw ToolError.operationFailed("Resource file is not valid UTF-8 text: \(args.path)")
+        }
+
+        var result = ""
+        if fileSize > 100_000 {
+            result += "⚠️ Warning: Resource file is large (\(fileSize) bytes). This may consume significant context.\n\n"
+        }
+        result += "<skill_resource skill=\"\(args.skillName)\" path=\"\(args.path)\">\n\(text)\n</skill_resource>"
+        return result
+    }
+
+    private func executeRunSkillScript(argumentsJSON: String) async throws -> String {
+        struct Args: Decodable {
+            let skillName: String
+            let scriptPath: String
+            let arguments: String?
+            let interpreter: String?
+            let timeoutSeconds: Int?
+        }
+        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
+
+        guard activatedSkillNames.contains(args.skillName) else {
+            throw ToolError.operationFailed(
+                "Skill '\(args.skillName)' is not activated in this session. Use load_skill first."
+            )
+        }
+
+        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.skillName }) else {
+            throw ToolError.operationFailed("Skill '\(args.skillName)' not found.")
+        }
+
+        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent()
+
+        // Validate script path.
+        let normalizedPath = args.scriptPath.replacingOccurrences(of: "\\", with: "/")
+        guard !normalizedPath.contains("..") else {
+            throw ToolError.operationFailed(
+                "Script path must not contain '..'. Use a relative path within the skill directory."
+            )
+        }
+        guard !normalizedPath.hasPrefix("/") else {
+            throw ToolError.operationFailed(
+                "Script path must be relative to the skill directory, not absolute."
+            )
+        }
+
+        let scriptURL = skillDir.appendingPathComponent(normalizedPath).standardizedFileURL
+        let resolvedPath = scriptURL.resolvingSymlinksInPath().path
+        let resolvedSkillDir = skillDir.resolvingSymlinksInPath().path
+        guard resolvedPath.hasPrefix(resolvedSkillDir + "/") else {
+            throw ToolError.operationFailed("Resolved script path escapes the skill directory.")
+        }
+
+        guard FileManager.default.fileExists(atPath: scriptURL.path) else {
+            throw ToolError.operationFailed(
+                "Script not found: \(args.scriptPath) in skill '\(args.skillName)'."
+            )
+        }
+
+        // Block dangerous argument patterns.
+        if let arguments = args.arguments {
+            let dangerousPatterns = ["rm -rf /", "rm -rf /*", "rm -rf ~/", "rm -rf ~/*"]
+            for pattern in dangerousPatterns {
+                if arguments.contains(pattern) {
+                    throw ToolError.operationFailed("Blocked: arguments contain dangerous pattern.")
+                }
+            }
+        }
+
+        // Build the command.
+        let command: String
+        if let interpreter = args.interpreter, !interpreter.isEmpty {
+            let escapedScript = scriptURL.path.replacingOccurrences(of: "'", with: "'\\''")
+            command = "\(interpreter) '\(escapedScript)'" + (args.arguments.map { " \($0)" } ?? "")
+        } else {
+            // Ensure executable permission.
+            let attrs = try FileManager.default.attributesOfItem(atPath: scriptURL.path)
+            let perms = (attrs[.posixPermissions] as? Int) ?? 0
+            if perms & 0o111 == 0 {
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: perms | 0o755],
+                    ofItemAtPath: scriptURL.path
+                )
+            }
+            let escapedScript = scriptURL.path.replacingOccurrences(of: "'", with: "'\\''")
+            command = "'\(escapedScript)'" + (args.arguments.map { " \($0)" } ?? "")
+        }
+
+        let timeout = max(args.timeoutSeconds ?? 30, 1)
+
+        // Run process off the MainActor to avoid UI freezes.
+        // Read pipe data concurrently with process execution to avoid deadlock
+        // when output exceeds the pipe buffer (~64KB).
+        let scriptCommand = command
+        let scriptDir = skillDir
+
+        let (output, exitCode, timedOut) = try await Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-c", scriptCommand]
+            process.currentDirectoryURL = scriptDir
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            try process.run()
+
+            // Read pipe data asynchronously to prevent buffer-full deadlock.
+            let readTask = Task { () -> Data in
+                pipe.fileHandleForReading.readDataToEndOfFile()
+            }
+
+            // Timeout watchdog — terminates the process if it exceeds the limit.
+            // Sends SIGTERM first, then SIGKILL after a 5s grace period.
+            var didTimeout = false
+            let timeoutTask = Task {
+                try await Task.sleep(for: .seconds(timeout))
+                if process.isRunning {
+                    didTimeout = true
+                    process.terminate()
+                    // Grace period: if still running after 5s, force kill.
+                    try? await Task.sleep(for: .seconds(5))
+                    if process.isRunning {
+                        kill(process.processIdentifier, SIGKILL)
+                    }
+                }
+            }
+
+            process.waitUntilExit()
+            timeoutTask.cancel()
+
+            let data = await readTask.value
+            let text = String(data: data, encoding: .utf8) ?? "(non-UTF-8 output)"
+            return (text, process.terminationStatus, didTimeout)
+        }.value
+
+        var result = ""
+        if timedOut {
+            result += "⚠️ Script terminated: exceeded timeout of \(timeout)s.\n"
+        }
+        result += "[exit \(exitCode)]\n"
+        if output.utf8.count > 50_000 {
+            result += "⚠️ Warning: Script output is large (\(output.utf8.count) bytes). This may consume significant context.\n\n"
+        }
+        result += output
+        return result
+    }
+
+    // MARK: - Slash Command Skill Activation
+
+    /// Parses `/skill-name` from user input. Returns the skill name if matched.
+    private func parseSkillSlashCommand(_ input: String) -> String? {
+        guard input.hasPrefix("/") else { return nil }
+        // Extract the command — everything after "/" up to the first space or end.
+        let afterSlash = input.dropFirst()
+        let command = String(afterSlash.prefix(while: { !$0.isWhitespace }))
+        guard !command.isEmpty else { return nil }
+        // Check if it matches an available skill name.
+        let skills = capabilities?.enabledSkills ?? []
+        guard skills.contains(where: { $0.name == command }) else { return nil }
+        return command
+    }
+
+    /// Handles a `/skill-name` command: loads the skill body into context as a user-injected event.
+    private func handleSkillSlashCommand(_ skillName: String) async -> Bool {
+        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == skillName }) else {
+            phase = .failed(message: "Skill '\(skillName)' not found or not enabled.")
+            return false
+        }
+
+        if activatedSkillNames.contains(skillName) {
+            phase = .failed(message: "Skill '\(skillName)' is already active in this session.")
+            return false
+        }
+
+        let body = SkillRegistry.readBody(for: skill)
+        guard !body.isEmpty else {
+            phase = .failed(message: "Skill '\(skillName)' has no content.")
+            return false
+        }
+
+        activatedSkillNames.insert(skillName)
+        let content = buildSkillContent(for: skill)
+
+        // Inject as a protected user event so the model sees the skill instructions.
+        guard await ensureActiveTask() else { return false }
+        let event = AgentEvent(
+            kind: .userInput,
+            content: "[Activated skill: \(skillName)]\n\n\(content)",
+            protected: true
+        )
+        guard await commit(
+            appendEvents: [event],
+            deleteEventIDs: [],
+            mutate: { _ in }
+        ) else { return false }
+
+        phase = .completed(summary: "Skill '\(skillName)' activated. Its instructions are now active for this session.")
+        return true
+    }
+
+    /// Returns skill names available for slash-command autocomplete.
+    var availableSkillNames: [String] {
+        (capabilities?.enabledSkills ?? [])
+            .filter { !activatedSkillNames.contains($0.name) }
+            .map(\.name)
+            .sorted()
+    }
+
+    /// Builds the model events and tool definitions shared by both streaming and non-streaming paths.
+    private func prepareModelRequest(includeTools: Bool) async -> (events: [AgentEvent], tools: [ToolDefinition], settings: ModelSettingsSnapshot) {
         let snapshot = ModelSettingsSnapshot(
             baseURL: settings.baseURL,
             model: settings.model,
             apiKey: settings.apiKey
         )
-        let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
-        let skillResult = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
+
+        // Use cached skill result if available (same user turn); otherwise compute and cache.
+        let skillResult: CapabilityStore.SkillAppendixResult?
+        if let cached = cachedSkillResult {
+            skillResult = cached
+        } else {
+            let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
+            let computed = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
+            cachedSkillResult = computed
+            skillResult = computed
+        }
+
         let skillsAppendix = skillResult?.text ?? ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
@@ -1042,15 +1533,25 @@ final class AgentRuntime {
             if skillResult?.needsLoadSkillTool == true {
                 defs.append(Self.loadSkillDefinition)
             }
+            // Expose resource/script tools when any skill has been activated.
+            if !activatedSkillNames.isEmpty {
+                defs.append(Self.loadSkillResourceDefinition)
+                defs.append(Self.runSkillScriptDefinition)
+            }
             toolDefinitions = defs
         } else {
             toolDefinitions = []
         }
 
+        return (modelEvents, toolDefinitions, snapshot)
+    }
+
+    private func requestModel(includeTools: Bool = true) async throws -> ModelTurn {
+        let req = await prepareModelRequest(includeTools: includeTools)
         let turn = try await modelClient.complete(
-            events: modelEvents,
-            tools: toolDefinitions,
-            settings: snapshot
+            events: req.events,
+            tools: req.tools,
+            settings: req.settings
         )
         retryState = nil
         return turn
@@ -1059,38 +1560,11 @@ final class AgentRuntime {
     /// Streaming variant of `requestModel` — incrementally updates `streamingText`
     /// and returns the assembled `ModelTurn` when the stream finishes.
     private func requestModelStreaming(includeTools: Bool = true) async throws -> ModelTurn {
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: settings.baseURL,
-            model: settings.model,
-            apiKey: settings.apiKey
-        )
-        let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
-        let skillResult = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
-        let skillsAppendix = skillResult?.text ?? ""
-        let relatedAppendix = await relatedContextAppendix()
-        var modelEvents = [
-            AgentEvent(
-                kind: .systemInstruction,
-                content: systemPrompt + projectPromptAppendix() + skillsAppendix + relatedAppendix
-            )
-        ]
-        modelEvents.append(contentsOf: ContextBudget.select(from: events))
-
-        let toolDefinitions: [ToolDefinition]
-        if includeTools {
-            var defs = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
-            if skillResult?.needsLoadSkillTool == true {
-                defs.append(Self.loadSkillDefinition)
-            }
-            toolDefinitions = defs
-        } else {
-            toolDefinitions = []
-        }
-
+        let req = await prepareModelRequest(includeTools: includeTools)
         let stream = try await modelClient.streamComplete(
-            events: modelEvents,
-            tools: toolDefinitions,
-            settings: snapshot
+            events: req.events,
+            tools: req.tools,
+            settings: req.settings
         )
 
         // Stream obtained — clear any retry countdown (retries succeeded or weren't needed).
@@ -1287,6 +1761,9 @@ final class AgentRuntime {
             contextHint = nil
             forceFreshOnNextSubmit = false
 
+            // Reload skills scoped to the new project.
+            await capabilities?.reloadSkills(projectRoot: project.rootURL)
+
             // Reload project so last_active_task_id reflects what we just persisted.
             let project = try await taskRepository.loadProject(id: project.id) ?? project
 
@@ -1452,6 +1929,8 @@ final class AgentRuntime {
             task.events.removeAll { deleteSet.contains($0.id) }
         }
         task.events.append(contentsOf: appendEvents)
+        // Keep persisted skill set in sync with runtime state.
+        task.activatedSkillNames = activatedSkillNames
         task.updatedAt = .now
         do {
             try await taskRepository.mutateTask(
@@ -1552,6 +2031,8 @@ final class AgentRuntime {
             lastAssistantText = nil
             return
         }
+        // Restore activated skills from the persisted task record.
+        activatedSkillNames = task.activatedSkillNames
         lastAssistantText = task.events.last(where: {
             $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
         })?.content

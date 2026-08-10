@@ -37,6 +37,8 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
     var toolCallID: String?
     var toolCalls: [ToolCallRecord]?
     var context: EventContext?
+    /// When true, this event is exempt from context budget pruning (e.g., skill instructions).
+    var protected: Bool
     var createdAt: Date
 
     init(
@@ -46,6 +48,7 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         toolCallID: String? = nil,
         toolCalls: [ToolCallRecord]? = nil,
         context: EventContext? = nil,
+        protected: Bool = false,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -54,7 +57,24 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         self.toolCallID = toolCallID
         self.toolCalls = toolCalls
         self.context = context
+        self.protected = protected
         self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        kind = try container.decode(AgentEventKind.self, forKey: .kind)
+        content = try container.decode(String.self, forKey: .content)
+        toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        toolCalls = try container.decodeIfPresent([ToolCallRecord].self, forKey: .toolCalls)
+        context = try container.decodeIfPresent(EventContext.self, forKey: .context)
+        protected = try container.decodeIfPresent(Bool.self, forKey: .protected) ?? false
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, content, toolCallID, toolCalls, context, protected, createdAt
     }
 }
 

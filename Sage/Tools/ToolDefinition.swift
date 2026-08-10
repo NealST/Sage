@@ -38,6 +38,11 @@ enum PathGuard: Sendable {
     @TaskLocal
     static var policy: Policy = .home
 
+    /// Additional read-only paths allowed beyond the primary policy (e.g., skill directories).
+    /// Paths in this list are permitted for read operations even if outside the project root.
+    @TaskLocal
+    static var readAllowlist: [String] = []
+
     /// Sandbox policy for file/shell path resolution.
     enum Policy: Sendable, Equatable {
         /// General mode — paths must resolve under the user's home directory.
@@ -91,11 +96,25 @@ enum PathGuard: Sendable {
             return resolved
         case .project(let root):
             let rootPath = root.resolvingSymlinksInPath().path
-            guard path == rootPath || path.hasPrefix(rootPath + "/") else {
-                throw ToolError.pathNotAllowed(raw, policy: policy)
+            if path == rootPath || path.hasPrefix(rootPath + "/") {
+                return resolved
             }
-            return resolved
+            // Check read-allowlist (e.g., activated skill directories).
+            if isInReadAllowlist(path) {
+                return resolved
+            }
+            throw ToolError.pathNotAllowed(raw, policy: policy)
         }
+    }
+
+    /// Check if a resolved path falls under any read-allowlisted directory.
+    nonisolated private static func isInReadAllowlist(_ resolvedPath: String) -> Bool {
+        for allowed in readAllowlist {
+            if resolvedPath == allowed || resolvedPath.hasPrefix(allowed + "/") {
+                return true
+            }
+        }
+        return false
     }
 
     /// Validate a directory as a project root (exists, directory, under ~).

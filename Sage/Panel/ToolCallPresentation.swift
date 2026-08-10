@@ -113,6 +113,15 @@ enum ToolCallPresentation {
             return "Remind: \(short)"
         case "take_screenshot":
             return "Take screenshot"
+        case "load_skill":
+            return "Load skill: \(display(args["name"]) ?? "…")"
+        case "load_skill_resource":
+            let skill = display(args["skill_name"]) ?? ""
+            let path = display(args["path"]) ?? "resource"
+            return skill.isEmpty ? "Load resource: \(path)" : "[\(skill)] \(path)"
+        case "run_skill_script":
+            let script = display(args["script_path"]) ?? "script"
+            return "Run: \(script)"
         default:
             if name.hasPrefix("mcp__") {
                 return name.split(separator: "__").last.map(String.init)?
@@ -214,6 +223,12 @@ enum ToolCallPresentation {
         var fence = "```"
         while content.contains(fence) { fence += "`" }
         return "\(fence)\(lang)\n\(content)\n\(fence)"
+    }
+
+    /// Extracts a string value for a given key from tool arguments JSON.
+    static func extractArg(_ json: String, key: String) -> String? {
+        let args = decodeArgs(json)
+        return display(args[key])
     }
 
     private static func decodeArgs(_ json: String) -> [String: JSONValue] {

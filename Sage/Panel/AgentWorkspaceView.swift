@@ -22,6 +22,8 @@ struct AgentWorkspaceView: View {
     @FocusState private var isInputFocused: Bool
     @State private var stickToBottom = true
     @State private var gitBranch: String?
+    @State private var skillSuggestions: [String] = []
+    @State private var selectedSuggestionIndex: Int = 0
 
     var body: some View {
         @Bindable var appState = appState
@@ -364,6 +366,9 @@ struct AgentWorkspaceView: View {
                             ToolCallView(
                                 name: call.name,
                                 argumentsJSON: call.argumentsJSON,
+                                titleOverride: call.id.hasPrefix("auto_skill_")
+                                    ? "Auto-loaded skill: \(ToolCallPresentation.extractArg(call.argumentsJSON, key: "name") ?? "…")"
+                                    : nil,
                                 resultContent: toolResultContent(for: call.id),
                                 previewAgainstDisk: shouldPreviewToolCallAgainstDisk(callID: call.id)
                             )
@@ -384,6 +389,53 @@ struct AgentWorkspaceView: View {
         @Bindable var appState = appState
 
         return VStack(alignment: .leading, spacing: 6) {
+            // Skill autocomplete suggestions (above the input field).
+            if !skillSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(skillSuggestions.enumerated()), id: \.element) { index, name in
+                        Button {
+                            appState.draft = "/\(name)"
+                            skillSuggestions = []
+                            submit()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                Text("/\(name)")
+                                    .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                                if let desc = appState.capabilities.enabledSkills
+                                    .first(where: { $0.name == name })?.description {
+                                    Text("— \(desc)")
+                                        .font(.system(size: SageDesign.Typography.microSize))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                index == selectedSuggestionIndex
+                                    ? Color.accentColor.opacity(0.12)
+                                    : Color.clear
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
             HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
                 TextField(composerPlaceholder, text: $appState.draft, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -394,6 +446,9 @@ struct AgentWorkspaceView: View {
                     .onSubmit {
                         guard !blocksSubmit else { return }
                         submit()
+                    }
+                    .onChange(of: appState.draft) { _, newValue in
+                        updateSkillSuggestions(newValue)
                     }
                     .accessibilityHint(composerAccessibilityHint)
 
@@ -488,11 +543,32 @@ struct AgentWorkspaceView: View {
         guard !trimmed.isEmpty else { return }
         guard !blocksSubmit else { return }
         stickToBottom = true
+        skillSuggestions = []
         Task {
             let accepted = await appState.agent.submit(trimmed)
             if accepted {
                 appState.clearDraft()
             }
+        }
+    }
+
+    private func updateSkillSuggestions(_ draft: String) {
+        // Show suggestions only when draft starts with "/" and has no spaces (pure command).
+        guard draft.hasPrefix("/"), !draft.contains(" ") else {
+            if !skillSuggestions.isEmpty {
+                withAnimation(.easeOut(duration: 0.15)) { skillSuggestions = [] }
+            }
+            return
+        }
+        let prefix = String(draft.dropFirst()).lowercased()
+        let available = appState.agent.availableSkillNames
+        let filtered = prefix.isEmpty
+            ? available
+            : available.filter { $0.lowercased().hasPrefix(prefix) }
+        let capped = Array(filtered.prefix(5))
+        withAnimation(.easeOut(duration: 0.15)) {
+            skillSuggestions = capped
+            selectedSuggestionIndex = 0
         }
     }
 
