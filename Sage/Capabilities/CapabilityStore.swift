@@ -59,31 +59,66 @@ final class CapabilityStore {
         NSWorkspace.shared.open(dir)
     }
 
-    /// Returns the skill prompt appendix with only the skills relevant to the user's message.
-    /// Uses the local model to determine relevance. Falls back to all enabled skills if
-    /// the model is unavailable.
-    func skillsPromptAppendix(for userMessage: String) async -> String {
-        let active = enabledSkills
-        guard !active.isEmpty else { return "" }
+    /// Result of progressive skill activation.
+    struct SkillAppendixResult: Sendable {
+        /// The text to append to the system prompt.
+        let text: String
+        /// Whether the cloud model needs the `load_skill` tool to fetch skill bodies.
+        let needsLoadSkillTool: Bool
+    }
 
-        let matchedNames = await skillMatcher.match(
+    /// Progressive skill activation:
+    /// - Local model available → returns full body of matched skills (no tool needed)
+    /// - Local model unavailable → returns catalog only (name + description);
+    ///   the cloud model uses `load_skill` tool to fetch full content on demand
+    func skillsPromptAppendix(for userMessage: String) async -> SkillAppendixResult {
+        let active = enabledSkills
+        guard !active.isEmpty else { return SkillAppendixResult(text: "", needsLoadSkillTool: false) }
+
+        let result = await skillMatcher.match(
             userMessage: userMessage,
             skills: active
         )
-        let matched = active.filter { matchedNames.contains($0.name) }
-        guard !matched.isEmpty else { return "" }
 
-        var lines: [String] = ["", "## Active Skills", "Follow these skills when relevant:"]
-        for skill in matched {
-            lines.append("### \(skill.name)")
-            lines.append(skill.description)
-            let body = SkillRegistry.readBody(for: skill, limit: 2_500)
-            if !body.isEmpty {
-                lines.append(body)
+        switch result {
+        case .resolved(let names):
+            let matched = active.filter { names.contains($0.name) }
+            guard !matched.isEmpty else {
+                return SkillAppendixResult(text: "", needsLoadSkillTool: false)
+            }
+            var lines: [String] = ["", "## Active Skills", "Follow these skills when relevant:"]
+            for skill in matched {
+                lines.append("### \(skill.name)")
+                lines.append(skill.description)
+                let body = SkillRegistry.readBody(for: skill, limit: 2_500)
+                if !body.isEmpty {
+                    lines.append(body)
+                }
+                lines.append("")
+            }
+            return SkillAppendixResult(text: lines.joined(separator: "\n"), needsLoadSkillTool: false)
+
+        case .deferred:
+            var lines: [String] = [
+                "",
+                "## Available Skills",
+                "The following skills are available. Use the `load_skill` tool to load a skill's full content when relevant to the user's request.",
+                ""
+            ]
+            for skill in active {
+                lines.append("- **\(skill.name)**: \(skill.description)")
             }
             lines.append("")
+            return SkillAppendixResult(text: lines.joined(separator: "\n"), needsLoadSkillTool: true)
         }
-        return lines.joined(separator: "\n")
+    }
+
+    /// Loads the full body of a skill by name. Used by the `load_skill` tool.
+    func loadSkillBody(name: String) -> String? {
+        guard let skill = skills.first(where: { $0.name == name && $0.enabled }) else {
+            return nil
+        }
+        return SkillRegistry.readBody(for: skill, limit: 4_000)
     }
 
     private let skillMatcher = SkillMatcher()

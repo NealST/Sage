@@ -700,6 +700,8 @@ final class AgentRuntime {
                             qualifiedName: step.toolName,
                             argumentsJSON: step.argumentsJSON
                         )
+                    } else if step.toolName == "load_skill" {
+                        rawResult = try await executeLoadSkill(argumentsJSON: step.argumentsJSON)
                     } else if let tool = tools.tool(named: step.toolName) {
                         // Some tools manage their own timeout or may involve user interaction
                         // (permission prompts, interactive capture). Give them extended ceilings.
@@ -987,6 +989,35 @@ final class AgentRuntime {
         generateTopicIfNeeded()
     }
 
+    // MARK: - Skill Loading
+
+    /// Tool definition for `load_skill` — exposed to the cloud model when skills are deferred.
+    static let loadSkillDefinition = ToolDefinition(
+        name: "load_skill",
+        description: "Load a skill's full content by name. Use this when a skill from the Available Skills list is relevant to the user's request. Returns the skill's complete instructions.",
+        parameters: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "name": .object([
+                    "type": .string("string"),
+                    "description": .string("The exact name of the skill to load (from the Available Skills list)."),
+                ]),
+            ]),
+            "required": .array([.string("name")]),
+        ])
+    )
+
+    private func executeLoadSkill(argumentsJSON: String) async throws -> String {
+        struct Args: Decodable { let name: String }
+        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
+        guard let body = await capabilities?.loadSkillBody(name: args.name) else {
+            throw ToolError.operationFailed(
+                "Skill '\(args.name)' not found or not enabled. Available skills: \(capabilities?.enabledSkills.map(\.name).joined(separator: ", ") ?? "none")"
+            )
+        }
+        return body
+    }
+
     private func requestModel(includeTools: Bool = true) async throws -> ModelTurn {
         let snapshot = ModelSettingsSnapshot(
             baseURL: settings.baseURL,
@@ -994,7 +1025,8 @@ final class AgentRuntime {
             apiKey: settings.apiKey
         )
         let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
-        let skillsAppendix = await capabilities?.skillsPromptAppendix(for: latestUserMessage) ?? ""
+        let skillResult = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
+        let skillsAppendix = skillResult?.text ?? ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
             AgentEvent(
@@ -1006,7 +1038,11 @@ final class AgentRuntime {
 
         let toolDefinitions: [ToolDefinition]
         if includeTools {
-            toolDefinitions = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
+            var defs = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
+            if skillResult?.needsLoadSkillTool == true {
+                defs.append(Self.loadSkillDefinition)
+            }
+            toolDefinitions = defs
         } else {
             toolDefinitions = []
         }
@@ -1029,7 +1065,8 @@ final class AgentRuntime {
             apiKey: settings.apiKey
         )
         let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
-        let skillsAppendix = await capabilities?.skillsPromptAppendix(for: latestUserMessage) ?? ""
+        let skillResult = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
+        let skillsAppendix = skillResult?.text ?? ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
             AgentEvent(
@@ -1041,7 +1078,11 @@ final class AgentRuntime {
 
         let toolDefinitions: [ToolDefinition]
         if includeTools {
-            toolDefinitions = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
+            var defs = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
+            if skillResult?.needsLoadSkillTool == true {
+                defs.append(Self.loadSkillDefinition)
+            }
+            toolDefinitions = defs
         } else {
             toolDefinitions = []
         }

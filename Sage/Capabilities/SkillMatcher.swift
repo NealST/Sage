@@ -2,12 +2,23 @@
 //  SkillMatcher.swift
 //  Sage
 //
-//  Uses the local MLX model to determine which skills are relevant
-//  to the user's current input. Only matched skills are injected
-//  into the system prompt — avoiding token waste on irrelevant skills.
+//  Implements progressive skill activation:
+//  1. Local model available → selects relevant skills, injects their full body
+//  2. Local model unavailable → injects only the skill catalog (name + description)
+//     into the system prompt; the cloud model uses `load_skill` tool to fetch bodies
+//
+//  Skills are NEVER all injected at once. Only matched/requested skills are loaded.
 //
 
 import Foundation
+
+/// Result of skill matching — determines how skills are presented to the cloud model.
+enum SkillMatchResult: Sendable {
+    /// Local model selected specific skills — inject their full body.
+    case resolved(names: [String])
+    /// Local model unavailable — inject catalog only, cloud model decides via tool.
+    case deferred
+}
 
 /// Selects relevant skills for a given user message using the local model.
 actor SkillMatcher {
@@ -17,25 +28,18 @@ actor SkillMatcher {
         self.modelService = modelService
     }
 
-    /// Given a user message and available skills, returns the names of skills
-    /// that should be activated for this request.
-    ///
-    /// Falls back to returning ALL skills if the model is unavailable
-    /// (preserves current behavior as a safe default).
+    /// Attempts to match skills using the local model.
+    /// Returns `.resolved` with matched skill names, or `.deferred` if the model
+    /// is unavailable (cloud model will decide via `load_skill` tool).
     func match(
         userMessage: String,
         skills: [SkillRecord]
-    ) async -> [String] {
+    ) async -> SkillMatchResult {
         let enabled = skills.filter(\.enabled)
-        guard !enabled.isEmpty else { return [] }
-
-        // If only 1-2 skills, skip the model call — just activate them all.
-        if enabled.count <= 2 {
-            return enabled.map(\.name)
-        }
+        guard !enabled.isEmpty else { return .resolved(names: []) }
 
         guard await modelService.isReady else {
-            return enabled.map(\.name)
+            return .deferred
         }
 
         let (system, user) = Self.buildPrompt(
@@ -51,10 +55,9 @@ actor SkillMatcher {
                 temperature: 0
             )
             let matched = Self.parse(output: output, skills: enabled)
-            // If parsing fails or returns empty, fall back to all skills.
-            return matched.isEmpty ? enabled.map(\.name) : matched
+            return .resolved(names: matched)
         } catch {
-            return enabled.map(\.name)
+            return .deferred
         }
     }
 
@@ -108,7 +111,6 @@ actor SkillMatcher {
             return []
         }
 
-        // Validate that returned names actually exist in the skill list.
         let validNames = Set(skills.map(\.name))
         return parsed.skills.filter { validNames.contains($0) }
     }
