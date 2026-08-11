@@ -60,10 +60,41 @@ final class CapabilityStore {
     }
 
     func openSkillsFolder() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("Sage/Skills", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
+        openSkillsFolder(scope: .global)
+    }
+
+    /// Opens the skills directory for the given scope in Finder.
+    func openSkillsFolder(scope: SkillScope) {
+        switch scope {
+        case .global:
+            let appSupport = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask
+            ).first!
+            let dir = appSupport.appendingPathComponent("Sage/Skills", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(dir)
+        case .project:
+            guard let root = currentProjectRoot else { return }
+            let dir = root.appendingPathComponent(".sage/skills", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(dir)
+        }
+    }
+
+    /// Reveals a skill's SKILL.md in Finder.
+    func revealSkill(_ skill: SkillRecord) {
+        let url = URL(fileURLWithPath: skill.path)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// Deletes a skill directory from disk and reloads the catalog.
+    func deleteSkill(_ skill: SkillRecord) throws {
+        let skillFile = URL(fileURLWithPath: skill.path)
+        let skillDir = skillFile.deletingLastPathComponent()
+        try FileManager.default.trashItem(at: skillDir, resultingItemURL: nil)
+        SkillRegistry.invalidateCaches()
+        skills.removeAll { $0.path == skill.path }
+        persistSkillState()
     }
 
     /// Result of progressive skill activation.

@@ -3,20 +3,54 @@
 //  Sage
 //
 //  Analyzes completed tasks to identify reusable experiences worth saving as skills.
-//  Uses the cloud model to determine if a task contains valuable patterns, workarounds,
-//  or best practices, and generates SKILL.md content accordingly.
+//  Extraction only decides skip / new / enhance; full SKILL.md content is composed
+//  after the user confirms the banner suggestion.
 //
 
 import Foundation
 
-/// Result of skill extraction analysis.
+/// How skill extraction was triggered.
+enum SkillExtractionMode: Sendable {
+    /// Passive close-task extraction — may return skip.
+    case automatic
+    /// User explicitly asked to remember (`/remember`) — must choose new or enhance.
+    case explicitRemember
+}
+
+/// Result of skill extraction analysis (identification only — no full body yet).
 enum SkillExtractionResult: Sendable {
     /// The task does not contain experience worth saving.
     case skip
     /// A new skill should be created.
-    case newSkill(name: String, description: String, body: String)
+    case newSkill(name: String, description: String)
     /// An existing skill should be enhanced with new knowledge.
-    case enhance(existingName: String, description: String, body: String)
+    case enhance(existingName: String, description: String)
+}
+
+/// Draft produced when composing a skill after user confirmation.
+struct SkillDraft: Sendable {
+    let description: String
+    let body: String
+}
+
+enum SkillCompositionError: LocalizedError {
+    case emptyTranscript
+    case sourceTaskMissing
+    case modelFailed(String)
+    case invalidResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyTranscript:
+            return "Source task has no usable transcript to compose from."
+        case .sourceTaskMissing:
+            return "Source task is no longer available; cannot save this skill."
+        case .modelFailed(let message):
+            return "Could not compose skill: \(message)"
+        case .invalidResponse:
+            return "Model returned an invalid skill draft."
+        }
+    }
 }
 
 /// Extracts reusable experiences from completed tasks via cloud model analysis.
@@ -29,22 +63,29 @@ actor SkillExtractionService {
 
     /// Analyzes a completed task to determine if it contains reusable experience.
     ///
+    /// Identification only — does not generate full skill bodies. Composition runs
+    /// after the user confirms the banner suggestion.
+    ///
     /// - Parameters:
     ///   - task: The completed TaskRecord with full event history.
     ///   - existingSkills: Current skill catalog (name, description, and body) for deduplication.
     ///   - settings: Model settings snapshot (captured on MainActor before calling).
+    ///   - mode: `.automatic` may skip; `.explicitRemember` must return new or enhance.
+    ///   - userNote: Optional hint from `/remember …` (explicit mode only).
     /// - Returns: Extraction result indicating skip, new skill, or enhancement.
     func analyze(
         task: TaskRecord,
-        existingSkills: [(name: String, description: String, body: String)],
-        settings: ModelSettingsSnapshot
+        existingSkills: [(name: String, description: String, body: String, scope: SkillScope)],
+        settings: ModelSettingsSnapshot,
+        mode: SkillExtractionMode = .automatic,
+        userNote: String? = nil
     ) async -> SkillExtractionResult? {
 
         let transcript = buildTranscript(from: task)
         guard !transcript.isEmpty else { return nil }
 
         let skillsCatalog = existingSkills.map { skill in
-            var entry = "- \(skill.name): \(skill.description)"
+            var entry = "- \(skill.name) [\(skill.scope.catalogLabel)]: \(skill.description)"
             if !skill.body.isEmpty {
                 let preview = String(skill.body.prefix(300))
                 entry += "\n  Current content: \(preview)\(skill.body.count > 300 ? "…" : "")"
@@ -52,7 +93,61 @@ actor SkillExtractionService {
             return entry
         }.joined(separator: "\n")
 
-        let systemPrompt = """
+        let systemPrompt: String
+        switch mode {
+        case .automatic:
+            systemPrompt = Self.automaticSystemPrompt(skillsCatalog: skillsCatalog)
+        case .explicitRemember:
+            systemPrompt = Self.explicitRememberSystemPrompt(skillsCatalog: skillsCatalog)
+        }
+
+        var userPrompt = """
+        ## Task Summary
+        \(task.topic ?? task.summary ?? "Untitled task")
+
+        ## Task Transcript
+        \(transcript)
+        """
+        if mode == .explicitRemember,
+           let note = userNote?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !note.isEmpty {
+            userPrompt += """
+
+
+            ## User note
+            The user added this hint with /remember: \(note)
+            """
+        }
+
+        let events: [AgentEvent] = [
+            AgentEvent(kind: .systemInstruction, content: systemPrompt),
+            AgentEvent(kind: .userInput, content: userPrompt),
+        ]
+
+        do {
+            let turn = try await modelClient.complete(
+                events: events,
+                tools: [],
+                settings: settings,
+                retryPolicy: RetryPolicy(maxAttempts: 2, baseDelay: 1.0, maxDelay: 10.0)
+            )
+
+            guard let content = turn.content else {
+                return mode == .explicitRemember ? nil : .skip
+            }
+            let parsed = parseResponse(content, mode: mode)
+            // Explicit remember must not soft-skip; treat skip as failure for retry UX.
+            if mode == .explicitRemember, case .skip = parsed {
+                return nil
+            }
+            return parsed
+        } catch {
+            return nil
+        }
+    }
+
+    private static func automaticSystemPrompt(skillsCatalog: String) -> String {
+        """
         You are an experience analyst. Your job is to examine a completed task conversation \
         and determine if it contains reusable knowledge worth saving as a "skill" (a reusable \
         instruction/experience document).
@@ -68,6 +163,9 @@ actor SkillExtractionService {
         - The knowledge is too specific to one situation with no reuse potential
         - The information is widely known and easily searchable
 
+        Existing skills are labeled [global] or [project]. Prefer enhancing an existing skill \
+        when the new knowledge belongs with it; do not invent a near-duplicate name.
+
         ## Existing Skills
         \(skillsCatalog.isEmpty ? "(none)" : skillsCatalog)
 
@@ -78,35 +176,170 @@ actor SkillExtractionService {
         {"action": "skip", "reason": "brief explanation"}
 
         If a new skill should be created:
-        {"action": "new", "name": "kebab-case-name", "description": "One sentence description", "body": "Full SKILL.md content in markdown"}
+        {"action": "new", "name": "kebab-case-name", "description": "One sentence description of when to use the skill"}
 
         If an existing skill should be enhanced:
-        {"action": "enhance", "target": "existing-skill-name", "description": "Updated description", "body": "Complete new SKILL.md content (replaces old version)"}
+        {"action": "enhance", "target": "existing-skill-name", "description": "Updated one-sentence description of when to use the skill"}
 
-        ## SKILL.md Format
-        The body should follow this structure:
-        ```
-        ---
-        description: One sentence description
-        source: auto-generated
-        ---
+        Do NOT generate the full skill body — it will be composed later when the user confirms, \
+        using the task transcript (and for enhance, the existing skill text) plus skill writing best practices.
 
-        # Skill Name
+        Output ONLY the JSON object, nothing else.
+        """
+    }
 
-        [Main content: the experience, best practice, or workflow in clear actionable form]
-        ```
+    private static func explicitRememberSystemPrompt(skillsCatalog: String) -> String {
+        """
+        You are an experience analyst. The user explicitly asked to remember knowledge from \
+        this task as a skill. You MUST choose either a new skill or an enhancement — do not skip.
+
+        Decide:
+        - "enhance" when the knowledge belongs with an existing skill (same problem class / domain).
+        - "new" when it is a distinct reusable topic with no good existing target.
+
+        Existing skills are labeled [global] or [project]. Prefer enhancing when appropriate; \
+        do not invent a near-duplicate name.
+
+        ## Existing Skills
+        \(skillsCatalog.isEmpty ? "(none)" : skillsCatalog)
+
+        ## Response Format
+        Respond with ONLY a JSON object in one of these formats:
+
+        If a new skill should be created:
+        {"action": "new", "name": "kebab-case-name", "description": "One sentence description of when to use the skill"}
+
+        If an existing skill should be enhanced:
+        {"action": "enhance", "target": "existing-skill-name", "description": "Updated one-sentence description of when to use the skill"}
+
+        Do NOT use action "skip". Do NOT generate the full skill body — it will be composed later \
+        when the user confirms.
+
+        Output ONLY the JSON object, nothing else.
+        """
+    }
+
+    /// Composes a new skill from task knowledge after the user confirms a banner suggestion.
+    func composeNewSkill(
+        skillName: String,
+        suggestedDescription: String,
+        task: TaskRecord,
+        settings: ModelSettingsSnapshot
+    ) async throws -> SkillDraft {
+        let transcript = buildTranscript(from: task)
+        guard !transcript.isEmpty else {
+            throw SkillCompositionError.emptyTranscript
+        }
+
+        let systemPrompt = """
+        You are a skill author. Turn reusable knowledge from a completed task into a clear, \
+        durable skill document.
+
+        ## Goals
+        - Capture non-obvious procedures, gotchas, and workflows from the task transcript.
+        - Omit trivia and widely known information.
+        - Follow the skill writing best practices below (same standards as the save_skill tool).
+
+        ## Skill writing best practices
+        Description: \(SkillAuthoring.descriptionGuidelines)
+
+        Body: \(SkillAuthoring.bodyGuidelines)
+
+        ## Response Format
+        Respond with ONLY a JSON object:
+        {"description": "One-sentence description", "body": "Full skill markdown body without frontmatter"}
 
         Output ONLY the JSON object, nothing else.
         """
 
         let userPrompt = """
-        ## Task Summary
-        \(task.topic ?? task.summary ?? "Untitled task")
+        ## New skill
+        Name: \(skillName)
+        Suggested description (from earlier analysis — revise if needed): \(suggestedDescription)
 
-        ## Task Transcript
+        ## Source task
+        Summary: \(task.topic ?? task.summary ?? "Untitled task")
+
+        ## Task transcript
         \(transcript)
         """
 
+        return try await completeCompose(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            settings: settings
+        )
+    }
+
+    /// Composes an enhanced skill by merging the existing skill with new task knowledge,
+    /// following `save_skill` authoring best practices.
+    ///
+    /// Called after the user confirms an enhance suggestion in the banner.
+    func composeEnhancedSkill(
+        skillName: String,
+        currentDescription: String,
+        currentBody: String,
+        suggestedDescription: String,
+        task: TaskRecord,
+        settings: ModelSettingsSnapshot
+    ) async throws -> SkillDraft {
+        let transcript = buildTranscript(from: task)
+        guard !transcript.isEmpty else {
+            throw SkillCompositionError.emptyTranscript
+        }
+
+        let systemPrompt = """
+        You are a skill editor. Merge an existing skill with new knowledge from a completed task \
+        into one coherent, improved skill document.
+
+        ## Goals
+        - Preserve durable, still-correct guidance from the existing skill.
+        - Integrate new non-obvious knowledge from the task transcript.
+        - Remove outdated, duplicated, or contradicted guidance (prefer the newer task evidence).
+        - Follow the skill writing best practices below (same standards as the save_skill tool).
+
+        ## Skill writing best practices
+        Description: \(SkillAuthoring.descriptionGuidelines)
+
+        Body: \(SkillAuthoring.bodyGuidelines)
+
+        ## Response Format
+        Respond with ONLY a JSON object:
+        {"description": "Updated one-sentence description", "body": "Full skill markdown body without frontmatter"}
+
+        Output ONLY the JSON object, nothing else.
+        """
+
+        let userPrompt = """
+        ## Target skill
+        Name: \(skillName)
+        Current description: \(currentDescription)
+        Suggested description (from earlier analysis — revise if needed): \(suggestedDescription)
+
+        ## Existing skill body
+        \(currentBody.isEmpty ? "(empty)" : currentBody)
+
+        ## Source task
+        Summary: \(task.topic ?? task.summary ?? "Untitled task")
+
+        ## Task transcript (new knowledge)
+        \(transcript)
+        """
+
+        return try await completeCompose(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            settings: settings
+        )
+    }
+
+    // MARK: - Composition Helpers
+
+    private func completeCompose(
+        systemPrompt: String,
+        userPrompt: String,
+        settings: ModelSettingsSnapshot
+    ) async throws -> SkillDraft {
         let events: [AgentEvent] = [
             AgentEvent(kind: .systemInstruction, content: systemPrompt),
             AgentEvent(kind: .userInput, content: userPrompt),
@@ -119,11 +352,14 @@ actor SkillExtractionService {
                 settings: settings,
                 retryPolicy: RetryPolicy(maxAttempts: 2, baseDelay: 1.0, maxDelay: 10.0)
             )
-
-            guard let content = turn.content else { return .skip }
-            return parseResponse(content)
+            guard let content = turn.content else {
+                throw SkillCompositionError.invalidResponse
+            }
+            return try parseComposeResponse(content)
+        } catch let error as SkillCompositionError {
+            throw error
         } catch {
-            return nil
+            throw SkillCompositionError.modelFailed(error.localizedDescription)
         }
     }
 
@@ -181,29 +417,55 @@ actor SkillExtractionService {
     /// Converts spaces/underscores to hyphens, lowercases, strips invalid chars.
     private static func normalizeSkillName(_ raw: String) -> String {
         let lowered = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        var result = lowered.map { char -> Character in
-            if char.isASCII && (char.isLowercase || char.isNumber) { return char }
-            if char == "-" || char == "_" || char == " " { return "-" }
-            return Character("")
-        }.filter { $0 != Character("") }
-
-        // Collapse consecutive hyphens
         var collapsed: [Character] = []
-        for char in result {
-            if char == "-" && collapsed.last == "-" { continue }
-            collapsed.append(char)
+        for char in lowered {
+            let mapped: Character
+            if char.isASCII && (char.isLowercase || char.isNumber) {
+                mapped = char
+            } else if char == "-" || char == "_" || char == " " {
+                mapped = "-"
+            } else {
+                continue
+            }
+            if mapped == "-" && collapsed.last == "-" { continue }
+            collapsed.append(mapped)
         }
-        result = collapsed
 
-        // Trim leading/trailing hyphens
-        while result.first == "-" { result.removeFirst() }
-        while result.last == "-" { result.removeLast() }
+        while collapsed.first == "-" { collapsed.removeFirst() }
+        while collapsed.last == "-" { collapsed.removeLast() }
 
-        let name = String(result)
+        let name = String(collapsed)
         return name.count <= 64 ? name : String(name.prefix(64))
     }
 
-    private func parseResponse(_ content: String) -> SkillExtractionResult {
+    private func parseComposeResponse(_ content: String) throws -> SkillDraft {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let jsonStart = trimmed.firstIndex(of: "{"),
+              let jsonEnd = trimmed.lastIndex(of: "}") else {
+            throw SkillCompositionError.invalidResponse
+        }
+
+        let jsonString = String(trimmed[jsonStart...jsonEnd])
+        guard let data = jsonString.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let description = parsed["description"] as? String,
+              let body = parsed["body"] as? String else {
+            throw SkillCompositionError.invalidResponse
+        }
+
+        let trimmedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDescription.isEmpty, !trimmedBody.isEmpty else {
+            throw SkillCompositionError.invalidResponse
+        }
+        guard trimmedDescription.count <= 1024 else {
+            throw SkillCompositionError.invalidResponse
+        }
+
+        return SkillDraft(description: trimmedDescription, body: trimmedBody)
+    }
+
+    private func parseResponse(_ content: String, mode: SkillExtractionMode = .automatic) -> SkillExtractionResult {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard let jsonStart = trimmed.firstIndex(of: "{"),
@@ -221,26 +483,28 @@ actor SkillExtractionService {
         switch action {
         case "new":
             guard let rawName = parsed["name"] as? String,
-                  let description = parsed["description"] as? String,
-                  let body = parsed["body"] as? String else {
+                  let description = parsed["description"] as? String else {
                 return .skip
             }
             let name = Self.normalizeSkillName(rawName)
             guard !name.isEmpty else { return .skip }
-            return .newSkill(name: name, description: description, body: body)
+            return .newSkill(name: name, description: description)
 
         case "enhance":
             guard let target = parsed["target"] as? String,
-                  let description = parsed["description"] as? String,
-                  let body = parsed["body"] as? String else {
+                  let description = parsed["description"] as? String else {
                 return .skip
             }
-            // Normalize: trim whitespace, lowercase (skill names are always lowercase kebab-case)
-            let normalizedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return .enhance(existingName: normalizedTarget, description: description, body: body)
+            let normalizedTarget = Self.normalizeSkillName(target)
+            guard !normalizedTarget.isEmpty else { return .skip }
+            return .enhance(existingName: normalizedTarget, description: description)
+
+        case "skip":
+            return .skip
 
         default:
-            return .skip
+            // Explicit mode should not invent skip via unknown actions.
+            return mode == .explicitRemember ? .skip : .skip
         }
     }
 }

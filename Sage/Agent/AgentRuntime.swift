@@ -31,7 +31,7 @@ final class AgentRuntime {
     /// Cached skill appendix for the current user turn — avoids redundant local model calls
     /// during tool-use loops within the same turn.
     private var cachedSkillResult: CapabilityStore.SkillAppendixResult?
-    /// Skills already loaded via `load_skill` in this task — prevents duplicate injection.
+    /// Skills already loaded via `load_skill` / slash activation in this task.
     private var activatedSkillNames: Set<String> = []
     /// In-flight submit/confirm/retry work — cancelled by `stop()`.
     private var workTask: Task<Void, Never>?
@@ -120,6 +120,11 @@ final class AgentRuntime {
     private weak var capabilities: CapabilityStore?
     private let skillExtractionService: SkillExtractionService
     let skillSuggestionQueue = SkillSuggestionQueue()
+    /// Bumped on project focus changes so in-flight extractions after a switch are discarded.
+    private var skillSuggestionGeneration: UInt64 = 0
+    /// Background skill create/enhance jobs started from banner confirmation.
+    private(set) var skillSaveJobs: [SkillSaveJob] = []
+    private var skillSaveSuccessClearTasks: [UUID: Task<Void, Never>] = [:]
 
     private let systemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
@@ -434,8 +439,9 @@ final class AgentRuntime {
             activeTaskID = nil
             try await taskRepository.setFocus(projectID: nil, activeTaskID: restoreID)
 
-            // Reload skills without project scope (user-level only).
+            // Reload skills without project scope (global only).
             await capabilities?.reloadSkills(projectRoot: nil)
+            invalidatePendingSkillSuggestions()
 
             let snapshot = try await taskRepository.loadWorkspace()
             applyWorkspaceSnapshot(snapshot)
@@ -567,9 +573,14 @@ final class AgentRuntime {
         let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
 
-        // Intercept /skill-name slash commands for user-explicit skill activation.
-        if let skillActivation = parseSkillSlashCommand(trimmed) {
-            return await handleSkillSlashCommand(skillActivation)
+        // Slash commands (`/remember`, `/skill-name`, …) — see `Commands/`.
+        let enabledSkillNames = (capabilities?.enabledSkills ?? []).map(\.name)
+        if let handled = await SlashCommandRegistry.handle(
+            trimmed,
+            host: self,
+            enabledSkillNames: enabledSkillNames
+        ) {
+            return handled
         }
 
         guard settings.isConfigured else {
@@ -1126,7 +1137,7 @@ final class AgentRuntime {
     }
 
     /// Builds the structured `<skill_content>` block for a skill record.
-    /// Shared by `executeLoadSkill`, `handleSkillSlashCommand`, and `autoLoadRecommendedSkills`.
+    /// Shared by `executeLoadSkill`, slash activation, and `autoLoadRecommendedSkills`.
     private func buildSkillContent(for skill: SkillRecord) -> String {
         let body = SkillRegistry.readBody(for: skill)
         let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent().path
@@ -1453,10 +1464,10 @@ final class AgentRuntime {
         name: "save_skill",
         description: """
             Create a new skill or enhance an existing one to persist reusable experience as long-term memory. \
-            Use this when the user explicitly asks to save/remember an experience, or when confirming \
-            a skill suggestion. The skill content should follow best practices: focus on what the agent \
-            wouldn't know without the skill, use imperative phrasing, provide concrete procedures over \
-            declarations, and keep the body under 500 lines / 5000 tokens.
+            Use this when the user explicitly asks to save/remember an experience. \
+            Scope matches the product tips: "project" saves under the current project (only used there); \
+            "global" saves everywhere. When a project is focused, prefer "project" for project-specific \
+            knowledge; when none is focused, only "global" is valid. Enhance keeps the existing skill's location.
             """,
         parameters: .object([
             "type": .string("object"),
@@ -1472,30 +1483,139 @@ final class AgentRuntime {
                 ]),
                 "description": .object([
                     "type": .string("string"),
-                    "description": .string("""
-                        Skill description (max 1024 chars). Use imperative phrasing: "Use this skill when..." \
-                        Focus on user intent, not implementation. Be specific about when the skill applies, \
-                        including non-obvious triggers.
-                        """),
+                    "description": .string(SkillAuthoring.descriptionGuidelines),
                 ]),
                 "body": .object([
                     "type": .string("string"),
+                    "description": .string(
+                        "Full SKILL.md content in markdown. Follow these guidelines: "
+                        + SkillAuthoring.bodyGuidelines
+                    ),
+                ]),
+                "scope": .object([
+                    "type": .string("string"),
                     "description": .string("""
-                        Full SKILL.md content in markdown. Follow these guidelines: \
-                        (1) Add what the agent lacks, omit what it knows — focus on project-specific conventions, \
-                        non-obvious edge cases, and specific tools/APIs. \
-                        (2) Favor procedures over declarations — teach how to approach a class of problems. \
-                        (3) Include a Gotchas section for environment-specific facts that defy assumptions. \
-                        (4) Provide defaults, not menus — pick a recommended approach, mention alternatives briefly. \
-                        (5) Use templates for output format, checklists for multi-step workflows. \
-                        (6) Keep under 500 lines. Move detailed references to separate files if needed. \
-                        (7) Do NOT include frontmatter — it will be added automatically.
+                        Where to save a NEW skill. "project" = This Project (current project only). \
+                        "global" = Everywhere (all workspaces). Defaults to "project" when a project \
+                        is focused, otherwise "global". Ignored for enhance.
                         """),
+                    "enum": .array([.string("project"), .string("global")]),
                 ]),
             ]),
             "required": .array([.string("action"), .string("name"), .string("description"), .string("body")]),
         ])
     )
+
+    /// Starts a background skill create/enhance job after the user confirms a banner tip.
+    /// The banner should dismiss immediately; progress is tracked in `skillSaveJobs`.
+    func startSkillSuggestionSave(_ suggestion: SkillSuggestion) {
+        let job = SkillSaveJob(
+            type: suggestion.type,
+            skillName: suggestion.skillName,
+            status: .running
+        )
+        skillSaveJobs.insert(job, at: 0)
+        let jobID = job.id
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.confirmSkillSuggestion(suggestion)
+                self.updateSkillSaveJob(jobID, status: .succeeded)
+                self.scheduleSkillSaveJobClear(jobID)
+            } catch {
+                self.skillSaveSuccessClearTasks[jobID]?.cancel()
+                self.skillSaveSuccessClearTasks[jobID] = nil
+                self.updateSkillSaveJob(jobID, status: .failed(error.localizedDescription))
+            }
+        }
+    }
+
+    /// Dismisses a finished skill-save job from the status indicator.
+    func dismissSkillSaveJob(_ jobID: UUID) {
+        skillSaveSuccessClearTasks[jobID]?.cancel()
+        skillSaveSuccessClearTasks[jobID] = nil
+        skillSaveJobs.removeAll { $0.id == jobID }
+    }
+
+    private func updateSkillSaveJob(_ jobID: UUID, status: SkillSaveJob.Status) {
+        guard let index = skillSaveJobs.firstIndex(where: { $0.id == jobID }) else { return }
+        skillSaveJobs[index].status = status
+    }
+
+    private func scheduleSkillSaveJobClear(_ jobID: UUID) {
+        skillSaveSuccessClearTasks[jobID]?.cancel()
+        skillSaveSuccessClearTasks[jobID] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            self?.dismissSkillSaveJob(jobID)
+        }
+    }
+
+    /// Persists a banner skill suggestion. Both new and enhance suggestions are composed
+    /// by the cloud model on confirm (task transcript + save_skill guidelines; enhance
+    /// also includes the existing skill body).
+    func confirmSkillSuggestion(_ suggestion: SkillSuggestion) async throws {
+        guard let sourceTask = try await taskRepository.loadTask(id: suggestion.sourceTaskID) else {
+            throw SkillCompositionError.sourceTaskMissing
+        }
+
+        let snapshot = ModelSettingsSnapshot(
+            baseURL: settings.baseURL,
+            model: settings.model,
+            apiKey: settings.apiKey
+        )
+
+        switch suggestion.type {
+        case .new:
+            let draft = try await skillExtractionService.composeNewSkill(
+                skillName: suggestion.skillName,
+                suggestedDescription: suggestion.skillDescription,
+                task: sourceTask,
+                settings: snapshot
+            )
+            if capabilities?.skills.contains(where: { $0.name == suggestion.skillName }) == true {
+                throw SkillWriter.WriteError.alreadyExists(suggestion.skillName)
+            }
+            let projectRoot = suggestion.projectRootPath.map { URL(fileURLWithPath: $0) }
+            try SkillWriter.createSkill(
+                name: suggestion.skillName,
+                description: draft.description,
+                body: draft.body,
+                scope: suggestion.scope,
+                projectRoot: projectRoot
+            )
+
+        case .enhance:
+            guard let path = suggestion.targetSkillPath,
+                  FileManager.default.fileExists(atPath: path) else {
+                throw SkillWriter.WriteError.skillNotFound(suggestion.skillName)
+            }
+            let existing = capabilities?.skills.first(where: { $0.path == path })
+                ?? SkillRecord(
+                    name: suggestion.skillName,
+                    description: suggestion.skillDescription,
+                    path: path,
+                    enabled: true,
+                    sourceLabel: suggestion.scope.sourceLabel
+                )
+            let draft = try await skillExtractionService.composeEnhancedSkill(
+                skillName: existing.name,
+                currentDescription: existing.description,
+                currentBody: SkillRegistry.readBody(for: existing),
+                suggestedDescription: suggestion.skillDescription,
+                task: sourceTask,
+                settings: snapshot
+            )
+            try SkillWriter.enhanceSkill(
+                existingRecord: existing,
+                description: draft.description,
+                body: draft.body
+            )
+        }
+
+        await capabilities?.reloadSkills(projectRoot: focusedProject?.rootURL)
+    }
 
     private func executeSaveSkill(argumentsJSON: String) async throws -> String {
         struct Args: Decodable {
@@ -1503,6 +1623,7 @@ final class AgentRuntime {
             let name: String
             let description: String
             let body: String
+            let scope: String?
         }
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
 
@@ -1524,15 +1645,23 @@ final class AgentRuntime {
 
         switch args.action {
         case "create":
+            let scope = try resolveSaveSkillScope(args.scope)
+            if capabilities?.skills.contains(where: { $0.name == args.name }) == true {
+                throw ToolError.operationFailed(
+                    "Skill '\(args.name)' already exists in this workspace. Use action 'enhance' instead."
+                )
+            }
             let path = try SkillWriter.createSkill(
                 name: args.name,
                 description: args.description,
-                body: args.body
+                body: args.body,
+                scope: scope,
+                projectRoot: focusedProject?.rootURL
             )
             await capabilities?.reloadSkills(
                 projectRoot: focusedProject?.rootURL
             )
-            return "[OK] Created skill '\(args.name)' at \(path)"
+            return "[OK] Created \(scope.catalogLabel) skill '\(args.name)' at \(path)"
 
         case "enhance":
             guard let existing = capabilities?.skills
@@ -1550,7 +1679,7 @@ final class AgentRuntime {
             await capabilities?.reloadSkills(
                 projectRoot: focusedProject?.rootURL
             )
-            return "[OK] Enhanced skill '\(args.name)' at \(path)"
+            return "[OK] Enhanced \(existing.scope.catalogLabel) skill '\(args.name)' at \(path)"
 
         default:
             throw ToolError.invalidArguments(
@@ -1559,65 +1688,39 @@ final class AgentRuntime {
         }
     }
 
-    // MARK: - Slash Command Skill Activation
-
-    /// Parses `/skill-name` from user input. Returns the skill name if matched.
-    private func parseSkillSlashCommand(_ input: String) -> String? {
-        guard input.hasPrefix("/") else { return nil }
-        // Extract the command — everything after "/" up to the first space or end.
-        let afterSlash = input.dropFirst()
-        let command = String(afterSlash.prefix(while: { !$0.isWhitespace }))
-        guard !command.isEmpty else { return nil }
-        // Check if it matches an available skill name.
-        let skills = capabilities?.enabledSkills ?? []
-        guard skills.contains(where: { $0.name == command }) else { return nil }
-        return command
+    /// Resolves create scope the same way as the banner: project when focused (unless
+    /// explicitly global), otherwise global only.
+    private func resolveSaveSkillScope(_ raw: String?) throws -> SkillScope {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch trimmed {
+        case nil, "":
+            return focusedProject != nil ? .project : .global
+        case "project":
+            guard focusedProject != nil else {
+                throw ToolError.invalidArguments(
+                    "scope 'project' requires a focused project. Use 'global', or open a project first."
+                )
+            }
+            return .project
+        case "global":
+            return .global
+        default:
+            throw ToolError.invalidArguments(
+                "Invalid scope '\(raw ?? "")'. Must be 'project' or 'global'."
+            )
+        }
     }
 
-    /// Handles a `/skill-name` command: loads the skill body into context as a user-injected event.
-    private func handleSkillSlashCommand(_ skillName: String) async -> Bool {
-        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == skillName }) else {
-            phase = .failed(message: "Skill '\(skillName)' not found or not enabled.")
-            return false
-        }
+    // MARK: - Slash Commands (see `Commands/`)
 
-        if activatedSkillNames.contains(skillName) {
-            phase = .failed(message: "Skill '\(skillName)' is already active in this session.")
-            return false
-        }
-
-        let body = SkillRegistry.readBody(for: skill)
-        guard !body.isEmpty else {
-            phase = .failed(message: "Skill '\(skillName)' has no content.")
-            return false
-        }
-
-        activatedSkillNames.insert(skillName)
-        let content = buildSkillContent(for: skill)
-
-        // Inject as a protected user event so the model sees the skill instructions.
-        guard await ensureActiveTask() else { return false }
-        let event = AgentEvent(
-            kind: .userInput,
-            content: "[Activated skill: \(skillName)]\n\n\(content)",
-            protected: true
-        )
-        guard await commit(
-            appendEvents: [event],
-            deleteEventIDs: [],
-            mutate: { _ in }
-        ) else { return false }
-
-        phase = .completed(summary: "Skill '\(skillName)' activated. Its instructions are now active for this session.")
-        return true
-    }
-
-    /// Returns skill names available for slash-command autocomplete.
-    var availableSkillNames: [String] {
-        (capabilities?.enabledSkills ?? [])
+    /// Autocomplete entries: builtins + inactive enabled skills (with descriptions).
+    var availableSlashCommandDefinitions: [SlashCommandDefinition] {
+        let skills = (capabilities?.enabledSkills ?? [])
             .filter { !activatedSkillNames.contains($0.name) }
-            .map(\.name)
-            .sorted()
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return SlashCommandRegistry.definitions(
+            skills: skills.map { ($0.name, $0.description) }
+        )
     }
 
     /// Builds the model events and tool definitions shared by both streaming and non-streaming paths.
@@ -1884,6 +1987,7 @@ final class AgentRuntime {
         do {
             contextHint = nil
             forceFreshOnNextSubmit = false
+            invalidatePendingSkillSuggestions()
 
             // Reload skills scoped to the new project.
             await capabilities?.reloadSkills(projectRoot: project.rootURL)
@@ -1915,6 +2019,12 @@ final class AgentRuntime {
             phase = .failed(message: "Could not focus project: \(error.localizedDescription)")
             return false
         }
+    }
+
+    /// Drops pending skill tips and ignores in-flight extraction results after a project switch.
+    private func invalidatePendingSkillSuggestions() {
+        skillSuggestionGeneration &+= 1
+        skillSuggestionQueue.dismissAll()
     }
 
     private func filterRelatedIDsToScope(_ ids: [UUID]) async -> [UUID] {
@@ -2416,13 +2526,25 @@ final class AgentRuntime {
 
     // MARK: - Skill Extraction
 
-    /// Asynchronously analyzes a completed task for reusable experience.
-    /// Results are enqueued into `skillSuggestionQueue` for debounced UI presentation.
-    private func scheduleSkillExtraction(for task: TaskRecord) {
-        // Skip trivial tasks (fewer than 4 events = likely just a greeting or simple Q&A).
-        guard task.events.count >= 4 else { return }
+    /// Asynchronously analyzes a task for reusable experience.
+    /// Results are enqueued into `skillSuggestionQueue` for UI presentation.
+    private func scheduleSkillExtraction(
+        for task: TaskRecord,
+        mode: SkillExtractionMode = .automatic,
+        userNote: String? = nil,
+        presentImmediately: Bool = false
+    ) {
+        // Passive extraction skips trivial tasks; explicit /remember already validated content.
+        if mode == .automatic {
+            guard task.events.count >= 4 else { return }
+        }
         guard settings.isConfigured else { return }
-        guard !skillExtractionTaskIDs.contains(task.id) else { return }
+        guard !skillExtractionTaskIDs.contains(task.id) else {
+            if mode == .explicitRemember {
+                phase = .failed(message: "Already identifying what to remember for this task.")
+            }
+            return
+        }
         skillExtractionTaskIDs.insert(task.id)
 
         let snapshot = ModelSettingsSnapshot(
@@ -2431,54 +2553,196 @@ final class AgentRuntime {
             apiKey: settings.apiKey
         )
 
-        let existingSkills: [(name: String, description: String, body: String)] = capabilities?.skills
+        // General → global skills only. Project → global + project skills.
+        let inProjectContext = focusedProject != nil
+        let projectRootPath = focusedProject?.rootURL.path
+        let catalogSkills = (capabilities?.skills ?? [])
             .filter(\.enabled)
-            .map { ($0.name, $0.description, SkillRegistry.readBody(for: $0)) } ?? []
+            .filter { inProjectContext || $0.scope == .global }
+        let existingSkills: [(name: String, description: String, body: String, scope: SkillScope)] =
+            catalogSkills.map { ($0.name, $0.description, SkillRegistry.readBody(for: $0), $0.scope) }
+        let pathByName = Dictionary(uniqueKeysWithValues: catalogSkills.map { ($0.name, $0.path) })
+        let scopeByName = Dictionary(uniqueKeysWithValues: catalogSkills.map { ($0.name, $0.scope) })
 
         let taskCopy = task
         let extractionService = skillExtractionService
         let queue = skillSuggestionQueue
+        let taskID = task.id
+        let generation = skillSuggestionGeneration
+        let focusedProjectID = focusedProject?.id
+        let note = userNote
 
-        Task.detached(priority: .utility) {
-            guard let result = await extractionService.analyze(
+        Task.detached(priority: .utility) { [weak self] in
+            let result = await extractionService.analyze(
                 task: taskCopy,
                 existingSkills: existingSkills,
-                settings: snapshot
-            ) else { return }
+                settings: snapshot,
+                mode: mode,
+                userNote: note
+            )
+
+            func enhanceSuggestion(name: String, description: String) -> SkillSuggestion? {
+                guard let path = pathByName[name], let scope = scopeByName[name] else { return nil }
+                return SkillSuggestion(
+                    type: .enhance,
+                    skillName: name,
+                    skillDescription: description,
+                    scope: scope,
+                    allowsScopeChoice: false,
+                    projectRootPath: scope == .project ? projectRootPath : nil,
+                    targetSkillPath: path,
+                    sourceTaskID: taskCopy.id
+                )
+            }
 
             let suggestion: SkillSuggestion?
             switch result {
-            case .skip:
+            case .none:
                 suggestion = nil
-            case .newSkill(let name, let description, let body):
-                suggestion = SkillSuggestion(
-                    type: .new,
-                    skillName: name,
-                    skillDescription: description,
-                    body: body,
-                    sourceTaskID: taskCopy.id
-                )
-            case .enhance(let existingName, let description, let body):
-                // Validate target exists — discard if model hallucinated a name
-                guard existingSkills.contains(where: { $0.name == existingName }) else {
-                    suggestion = nil
-                    break
+            case .some(.skip):
+                suggestion = nil
+            case .some(.newSkill(let name, let description)):
+                // Name already in catalog → enhance instead of creating a near-duplicate.
+                if pathByName[name] != nil {
+                    suggestion = enhanceSuggestion(name: name, description: description)
+                } else if inProjectContext {
+                    suggestion = SkillSuggestion(
+                        type: .new,
+                        skillName: name,
+                        skillDescription: description,
+                        scope: .project,
+                        allowsScopeChoice: true,
+                        projectRootPath: projectRootPath,
+                        targetSkillPath: nil,
+                        sourceTaskID: taskCopy.id
+                    )
+                } else {
+                    suggestion = SkillSuggestion(
+                        type: .new,
+                        skillName: name,
+                        skillDescription: description,
+                        scope: .global,
+                        allowsScopeChoice: false,
+                        projectRootPath: nil,
+                        targetSkillPath: nil,
+                        sourceTaskID: taskCopy.id
+                    )
                 }
-                suggestion = SkillSuggestion(
-                    type: .enhance,
-                    skillName: existingName,
-                    skillDescription: description,
-                    body: body,
-                    sourceTaskID: taskCopy.id
-                )
+            case .some(.enhance(let existingName, let description)):
+                suggestion = enhanceSuggestion(name: existingName, description: description)
             }
 
-            if let suggestion {
-                await MainActor.run {
-                    queue.enqueue(suggestion)
+            await MainActor.run { [weak self] in
+                self?.skillExtractionTaskIDs.remove(taskID)
+                // Project switched (or General) since extraction started — drop the tip.
+                guard let self,
+                      self.skillSuggestionGeneration == generation,
+                      self.focusedProject?.id == focusedProjectID else {
+                    if mode == .explicitRemember {
+                        self?.phase = .idle
+                    }
+                    return
+                }
+                if let suggestion {
+                    if presentImmediately {
+                        queue.enqueueImmediate(suggestion)
+                    } else {
+                        queue.enqueue(suggestion)
+                    }
+                    if mode == .explicitRemember {
+                        self.phase = .completed(
+                            summary: suggestion.type == .enhance
+                                ? "Ready to update “\(suggestion.skillName)”. Confirm in the tip below."
+                                : "Ready to save “\(suggestion.skillName)”. Confirm in the tip below."
+                        )
+                    }
+                } else if mode == .explicitRemember {
+                    self.phase = .failed(
+                        message: "Couldn’t identify what to remember. Try again, or add a short note: /remember …"
+                    )
                 }
             }
         }
+    }
+}
+
+// MARK: - SlashCommandHost
+
+extension AgentRuntime: SlashCommandHost {
+    var isModelConfigured: Bool { settings.isConfigured }
+
+    var usableTranscriptEventCount: Int {
+        guard let task = activeTask else { return 0 }
+        return task.events.filter {
+            $0.kind == .userInput || $0.kind == .assistantResponse || $0.kind == .toolResult
+        }.count
+    }
+
+    func reportCommandFailure(_ message: String) {
+        phase = .failed(message: message)
+    }
+
+    func reportCommandThinking() {
+        phase = .thinking
+    }
+
+    func reportCommandCompleted(summary: String) {
+        phase = .completed(summary: summary)
+    }
+
+    @discardableResult
+    func ensureActiveTaskForCommand() async -> Bool {
+        await ensureActiveTask()
+    }
+
+    @discardableResult
+    func appendProtectedUserInput(_ content: String) async -> Bool {
+        let event = AgentEvent(kind: .userInput, content: content, protected: true)
+        return await commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
+    }
+
+    func scheduleExplicitRemember(userNote: String?) {
+        guard let task = activeTask else { return }
+        scheduleSkillExtraction(
+            for: task,
+            mode: .explicitRemember,
+            userNote: userNote,
+            presentImmediately: true
+        )
+    }
+
+    func enabledSkill(named name: String) -> SkillRecord? {
+        capabilities?.enabledSkills.first { $0.name == name }
+    }
+
+    func isSkillActivated(_ name: String) -> Bool {
+        activatedSkillNames.contains(name)
+    }
+
+    func activateSkill(_ skill: SkillRecord) async -> Bool {
+        let body = SkillRegistry.readBody(for: skill)
+        guard !body.isEmpty else {
+            reportCommandFailure("Skill '\(skill.name)' has no content.")
+            return false
+        }
+
+        guard await ensureActiveTask() else { return false }
+
+        let content = buildSkillContent(for: skill)
+        let event = AgentEvent(
+            kind: .userInput,
+            content: "[Activated skill: \(skill.name)]\n\n\(content)",
+            protected: true
+        )
+
+        // Mark activated only for commit persistence; roll back if write fails.
+        activatedSkillNames.insert(skill.name)
+        let ok = await commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
+        if !ok {
+            activatedSkillNames.remove(skill.name)
+            reportCommandFailure("Couldn’t activate skill '\(skill.name)'.")
+        }
+        return ok
     }
 }
 

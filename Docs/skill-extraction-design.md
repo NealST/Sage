@@ -1,12 +1,11 @@
 # Skill 自动提炼与经验沉淀 — 设计文档
 
-> 对应 Roadmap 2.3（Skill 系统完善）和 3.1（长期记忆/知识库）中的"经验自动沉淀"能力。
+> 对应 Roadmap 2.3（Skill 系统完善）和 3.1（长期记忆/知识库）中的"经验自动沉淀"能力。  
+> 本文档与当前实现同步（识别 → 确认后生成、global/project 作用域、管理 UI）。
 
 ## 背景
 
-Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义匹配 + `load_skill` 工具），但缺少自动识别和提炼生成 skill 的能力。用户在使用过程中积累的踩坑经验、最佳实践、工作流模式等，需要手动创建 SKILL.md 文件才能复用。
-
-本方案实现"经验自动沉淀"——agent 完成任务后自动识别有价值的经验，经用户确认后保存为 skill 文件，供后续任务按需召回。
+Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义匹配 + `load_skill` 工具）。经验自动沉淀让 agent 在完成任务后识别可复用经验，经用户确认后再生成并写入 skill 文件，供后续任务召回。
 
 ## 设计决策
 
@@ -18,130 +17,134 @@ Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义�
 - 用户正在开启新话题，不会打断当前工作流
 - 比 `phase = .completed` 更可靠（后者只是 UI 状态，表示"当前回合结束"）
 
+### 两阶段：识别 vs 生成
+
+**选择：识别阶段只判定；确认后再生成全文**
+
+1. **识别**（`SkillExtractionService.analyze`）— cloud model 返回 `skip` / `new` / `enhance`（仅 name + description）
+2. **确认后生成**（`composeNewSkill` / `composeEnhancedSkill`）— 用 task transcript + `SkillAuthoring`（与 `save_skill` 同源实践）生成全文；enhance 额外注入旧 skill 全文并合并
+
 ### 识别策略
 
-**选择：Cloud model 判断（方案 A）**
+**选择：Cloud model 判断**
 
-- 直接用 cloud model 分析 task transcript，判断是否包含可复用经验
-- 判断质量高，能理解语义上下文
-- 备选方案（未采用）：
-  - 本地模型初筛：小模型判断不够准确
-  - 规则启发式：覆盖面窄，容易漏
+- 分析 task transcript，按软标准判断是否值得沉淀
+- Catalog 带 `[global]` / `[project]` 标签供去重与 enhance 决策
+- 同名已存在 → 强制走 enhance（工作区内 skill 名唯一）
 
-### 去重策略
+### 作用域（Global / Project）
 
-**选择：提交已有 skills 的 name + description 给 cloud model**
+| 环境 | 识别 catalog | 新增默认 | 用户选择 |
+|------|--------------|----------|----------|
+| General | 仅全局 skill | 全局 | 无 |
+| Project | 全局 + 当前 project | 默认 This Project | 分段控件 This Project / Everywhere + 后果说明 |
 
-- 模型在识别时同时看到已有 skill 目录
-- 由模型判断：新增 skill / 增强已有 skill / 不值得保存
-- 增强时，模型结合旧内容和新经验生成完整新版 SKILL.md（替换旧版）
+- **Enhance**：复用已有 skill 的作用域；识别时钉死 `targetSkillPath`，确认时按路径写入
+- **写入路径**：全局 → `~/Library/Application Support/Sage/Skills/`；project → `<project>/.sage/skills/`
+- **扫描**：全局 = App Support + `~/.agents/skills`；project = 项目下 `.agents/skills` 与 `.sage/skills`（项目树内一律 project）
+- **Project 切换**：清空 pending tips，丢弃切换后才返回的识别结果
+- **`save_skill`**：支持 `scope: project \| global`，语义与 banner 一致
 
 ### 粒度
 
 **选择：一个 task 合并为一条经验**
 
-- 一个 task 主要专注解决一类问题
-- 沉淀的经验应该是内聚的、围绕同一主题
-
 ### UI 交互
 
-**选择：底部 inline banner（输入框上方）**
+**选择：底部 inline tip（输入框上方）+ composer 状态 chip**
 
-- 不用 toast（打扰过重）
-- Apple inline suggestion 风格：轻量、不遮挡、不打断
-- 显示 skill 名称 + 描述预览
-- "Save" / "×" 两个操作
-- 新增提示 "New experience: xxx"，增强提示 "Enhance skill: xxx"
-- 30s 无操作自动消失
+- Apple tip 风格：轻填充、纯文字 Save、轻量关闭
+- 确认后 tip 立即消失；Creating/Enhancing 在输入框底部 capsule chip，点击可查状态
+- 20s 无操作自动消失
+- Project 新增：分段 **This Project / Everywhere** + 后果文案
 
 ### 频率控制
 
 **选择：10 秒 debounce + 展示队列聚合**
-
-- 流程：closing task → 立即异步调 model → 结果入展示队列 → 10s debounce → 聚合 UI 提示
-- 识别尽早触发（不阻塞），debounce 只控制 UI 展示节奏
-- 理论上 task 切换不会频繁发生，10s 足够
-- 极端情况（快速连续切换）下聚合展示
 
 ## 整体流程
 
 ```
 beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
     │
-    ├─ 持久化 task、生成 topic（已有逻辑）
+    ├─ 持久化 task、生成 topic
     │
     └─ scheduleSkillExtraction(for: closingTask)
          │
          ▼
     Task.detached(priority: .utility)
          │
-         ├─ SkillExtractionService.analyze(task, existingSkills, settings)
-         │    ├─ 构建 transcript（cap 6000 字符）
-         │    ├─ 构建 prompt（含已有 skills catalog）
-         │    └─ Cloud model 调用 → 解析 JSON 响应
+         ├─ analyze(task, catalog[scope-filtered], settings)
+         │    └─ skip | new(name, description) | enhance(target, description)
          │
-         ├─ 结果为 .skip → 结束
-         │
-         └─ 结果为 .newSkill / .enhance
+         └─ enqueue SkillSuggestion（enhance 带 targetSkillPath）
               │
-              ▼
-         SkillSuggestionQueue.enqueue(suggestion)
+              ├─ 10s debounce → banner tip
               │
-              ├─ 加入 buffer
-              └─ 10s debounce timer
-                   │
-                   ▼
-              flush() → pendingSuggestions 更新 → UI banner 显示
-                   │
-                   ├─ 用户点击 "Save"
-                   │    ├─ new → SkillWriter.createSkill()
-                   │    └─ enhance → SkillWriter.enhanceSkill()
-                   │    └─ CapabilityStore.reloadSkills()
-                   │
-                   └─ 用户点击 "×" 或 30s 超时 → 丢弃
+              ├─ Save → 立即 dismiss tip → startSkillSuggestionSave
+              │         ├─ composeNewSkill / composeEnhancedSkill（第二次 cloud 调用）
+              │         ├─ SkillWriter.createSkill / enhanceSkill
+              │         └─ 状态 chip：Saving… / Saved / Save failed
+              │
+              └─ × 或 20s 超时 → 丢弃
 ```
 
 ## 文件结构
 
 | 文件 | 职责 |
 |------|------|
-| `Sage/Capabilities/SkillExtractionService.swift` | Actor，调用 cloud model 分析 task transcript |
-| `Sage/Capabilities/SkillSuggestionQueue.swift` | @Observable 队列，debounce + 聚合展示 |
-| `Sage/Capabilities/SkillWriter.swift` | 写入/替换 SKILL.md 文件到磁盘 |
-| `Sage/Panel/SkillSuggestionBanner.swift` | 底部 inline banner UI |
-| `Sage/Agent/AgentRuntime.swift` | 集成触发点（`scheduleSkillExtraction`） |
-| `Sage/Panel/AgentWorkspaceView.swift` | 插入 banner 到 composer 上方 |
+| `SkillExtractionService.swift` | 识别 + 确认后 compose |
+| `SkillAuthoring.swift` | 与 `save_skill` 共享的写作实践 |
+| `SkillSuggestionQueue.swift` / `SkillSaveJob.swift` | tip 队列 + 后台保存任务 |
+| `SkillWriter.swift` | 按 scope 写入；create 标记 `source: auto-generated`；enhance 保留原 source |
+| `SkillSuggestionBanner.swift` | tip UI + scope 分段选择 |
+| `SkillSaveStatusIndicator.swift` | composer 状态 chip |
+| `SkillsManageView.swift` | Everywhere / This Project 分组管理 |
+| `AgentRuntime.swift` | 触发、确认、`save_skill`、project 切换作废 |
 
 ## Prompt 设计
 
-### 识别 Prompt 要点
+### 识别
 
-- System prompt 定义"经验分析师"角色
-- 明确什么值得保存（非显而易见的解决方案、试错后的最佳实践、可复用的工作流）
-- 明确什么不值得保存（简单 Q&A、过于特定的场景、广为人知的信息）
-- 提供已有 skills 目录供去重参考
-- 输出格式：严格 JSON（action: skip/new/enhance）
-- 生成的 SKILL.md 遵循标准 frontmatter 格式
+- 值得：非显而易见 workaround、试错最佳实践、可复用工作流、难摸的领域知识
+- 不值得：琐碎 Q&A、过窄场景、常识
+- Catalog：`name [global|project]: description`（+ body 预览）
+- 输出：仅 JSON，**不生成全文**
 
-### Transcript 构建
+### 生成（确认后）
 
-- 从 task events 提取关键交互（user input、assistant response、tool calls + results）
-- 跳过 system instructions
-- 总长度 cap 6000 字符（避免过多 token 消耗）
-- 超长时截断早期事件，保留近期
+- New：transcript + 建议 description + writing guidelines → `{description, body}`
+- Enhance：旧全文 + transcript + guidelines → 合并后的 `{description, body}`
+- body **不含** frontmatter（由 `SkillWriter` 写入）
+
+### transcript
+
+- user / assistant / tool result；跳过 system；总长约 6k；单条 tool result 最多 500
 
 ## 约束与边界
 
-- **最少 4 个 events** 才触发识别（过滤掉简单问答）
-- **需要 API 配置** 才触发（`settings.isConfigured`）
-- **不阻塞主流程** — 全程 `Task.detached(priority: .utility)`
-- **失败静默** — model 调用失败或解析失败时返回 nil，不影响用户体验
-- **auto-generated 标记** — 自动生成的 skill 在 frontmatter 中标记 `source: auto-generated`
-- **写入用户级目录** — `~/Library/Application Support/Sage/Skills/`
+- 最少 4 个 events；需 API 配置；不阻塞主流程
+- 识别失败静默；确认写入失败经状态 chip 展示
+- Create：`source: auto-generated`；Enhance：保留原 frontmatter `source`（手写 skill 不被改成 auto）
+- 工作区内 skill 名唯一（create 撞名 → 应 enhance）
 
 ## 未来扩展
 
-- 用户显式触发（"记住这个"）— 可复用 SkillExtractionService，跳过"是否值得"判断
-- 经验管理 UI — 查看、编辑、删除自动生成的 skills
-- 更智能的触发条件 — 检测"错误→重试→成功"模式，提高识别率
-- 跨 task 经验聚合 — 多个相关 task 的经验合并为一个 skill
+- ContextBudget / matcher 限流、skill 过期衰减
+- 跨 task 经验聚合
+
+## 显式记住（`/remember`）
+
+用户可主动触发沉淀，仍走**识别阶段**（判定 new vs enhance），但**不能 skip**：
+
+1. 输入 `/remember` 或 `/remember 可选备注`
+2. 对当前 task transcript 调用 `analyze(mode: .explicitRemember)`
+3. Tip **立即**展示（无 10s debounce），确认后照常 compose + 写入
+4. Project 环境下同样提供 This Project / Everywhere 选择
+
+Slash 自动补全包含 `remember`（描述来自 `SlashCommandDefinition`）。
+
+实现位于 `Sage/Commands/`：
+- `SlashCommandRegistry.builtins` 是 builtin 的唯一注册点（实现 `BuiltinSlashCommand` 后加入数组即可）
+- 动态 skill 激活按名称大小写不敏感匹配
+- Handler 只依赖 `SlashCommandHost`；`AgentRuntime` 在同文件内实现该协议，保持内部 API 私有

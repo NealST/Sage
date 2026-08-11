@@ -123,6 +123,7 @@ enum SageDesign {
         static let stepFailed = "xmark.circle.fill"
         static let tools = "wrench.and.screwdriver"
         static let skills = "book.closed"
+        static let skillSave = "tray.and.arrow.down"
         static let mcp = "server.rack"
     }
 }

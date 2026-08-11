@@ -21,37 +21,33 @@ enum SkillRegistry {
         resourcesCache.removeAll()
     }
 
-    /// Scans user-level skill locations (App Support + development repo).
+    /// Scans global (user-level) skill locations only.
+    /// App Support `Sage/Skills` and `~/.agents/skills` — never project-tree paths.
     static func scanUserSkills() -> [SkillRecord] {
         var roots: [URL] = []
 
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         roots.append(appSupport.appendingPathComponent("Sage/Skills", isDirectory: true))
 
-        // User-level cross-client location.
+        // User-level cross-client location (global, not tied to a project tree).
         let userAgentsSkills = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".agents/skills", isDirectory: true)
         if FileManager.default.fileExists(atPath: userAgentsSkills.path) {
             roots.append(userAgentsSkills)
         }
 
-        // Bundle-adjacent project skills during development (repo .agents/skills).
-        if let repoSkills = discoverRepoSkillsDirectory() {
-            roots.append(repoSkills)
-        }
-
-        return scanRoots(roots, defaultSourceLabel: "User")
+        return scanRoots(roots, defaultSourceLabel: SkillScope.global.sourceLabel)
     }
 
     /// Scans project-level skill locations under the given project root.
-    /// Checks `<root>/.agents/skills/` and `<root>/.sage/skills/`.
+    /// Any skill under the project tree (`.agents/skills` or `.sage/skills`) is project-scoped.
     static func scanProjectSkills(root: URL) -> [SkillRecord] {
         let roots: [URL] = [
             root.appendingPathComponent(".agents/skills", isDirectory: true),
             root.appendingPathComponent(".sage/skills", isDirectory: true),
         ].filter { FileManager.default.fileExists(atPath: $0.path) }
 
-        return scanRoots(roots, defaultSourceLabel: "Project")
+        return scanRoots(roots, defaultSourceLabel: SkillScope.project.sourceLabel)
     }
 
     /// Combined scan: project skills (higher priority) + user skills.
@@ -125,8 +121,8 @@ enum SkillRegistry {
         var seen = Set<String>()
 
         for root in roots {
-            // Only create directories for user-level (App Support). Don't create in project repos.
-            if defaultSourceLabel == "User" && root.path.contains("Application Support") {
+            // Only create directories for global App Support. Don't create in project repos.
+            if defaultSourceLabel == SkillScope.global.sourceLabel && root.path.contains("Application Support") {
                 try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             }
             guard let contents = try? FileManager.default.contentsOfDirectory(
@@ -163,38 +159,6 @@ enum SkillRegistry {
         return body
     }
 
-    private static func discoverRepoSkillsDirectory() -> URL? {
-        var urls: [URL] = [
-            URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-            Bundle.main.bundleURL,
-        ]
-        if let executable = Bundle.main.executableURL {
-            urls.append(executable.deletingLastPathComponent())
-        }
-
-        for start in urls {
-            var url = start
-            for _ in 0..<10 {
-                let candidate = url.appendingPathComponent(".agents/skills", isDirectory: true)
-                if FileManager.default.fileExists(atPath: candidate.path) {
-                    return candidate
-                }
-                // Xcode sometimes cwd = project root containing Sage.xcodeproj
-                let projectMarker = url.appendingPathComponent("Sage.xcodeproj", isDirectory: true)
-                if FileManager.default.fileExists(atPath: projectMarker.path) {
-                    let nested = url.appendingPathComponent(".agents/skills", isDirectory: true)
-                    if FileManager.default.fileExists(atPath: nested.path) {
-                        return nested
-                    }
-                }
-                let parent = url.deletingLastPathComponent()
-                if parent.path == url.path { break }
-                url = parent
-            }
-        }
-        return nil
-    }
-
     private static func parseSkill(at file: URL, folderName: String, sourceLabel: String) -> SkillRecord? {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         let parsed = parseFrontmatter(text)
@@ -220,7 +184,8 @@ enum SkillRegistry {
             license: parsed.scalars["license"],
             compatibility: parsed.scalars["compatibility"],
             metadata: parsed.metadata.isEmpty ? nil : parsed.metadata,
-            allowedTools: parsed.scalars["allowed-tools"]
+            allowedTools: parsed.scalars["allowed-tools"],
+            provenance: parsed.scalars["source"]
         )
     }
 
@@ -261,7 +226,7 @@ enum SkillRegistry {
 
     private static let recognizedKeys: Set<String> = [
         "name", "description", "disable-model-invocation",
-        "license", "compatibility", "allowed-tools",
+        "license", "compatibility", "allowed-tools", "source",
     ]
 
     /// Parsed frontmatter result containing scalar fields and the nested metadata map.

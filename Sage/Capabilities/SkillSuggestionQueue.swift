@@ -9,18 +9,27 @@
 import Foundation
 
 /// A suggestion to create or enhance a skill, pending user confirmation.
+/// Identification only — full skill content is composed after the user confirms.
 struct SkillSuggestion: Identifiable, Sendable {
     let id: UUID
     let type: SuggestionType
     let skillName: String
     let skillDescription: String
-    /// Full SKILL.md content to write.
-    let body: String
+    /// Resolved write/recall scope. For new skills in a project, may be overridden
+    /// by the banner when `allowsScopeChoice` is true.
+    let scope: SkillScope
+    /// When true (new skill while focused on a project), the banner asks whether
+    /// to save under the current project or as a global skill.
+    let allowsScopeChoice: Bool
+    /// Absolute project root captured at identification time (for project-scoped writes).
+    let projectRootPath: String?
+    /// Absolute SKILL.md path pinned at identification for enhance (avoids live lookup).
+    let targetSkillPath: String?
     /// The task that generated this suggestion.
     let sourceTaskID: UUID
     let createdAt: Date
 
-    enum SuggestionType: Sendable {
+    enum SuggestionType: Sendable, Equatable {
         case new
         case enhance
     }
@@ -30,7 +39,10 @@ struct SkillSuggestion: Identifiable, Sendable {
         type: SuggestionType,
         skillName: String,
         skillDescription: String,
-        body: String,
+        scope: SkillScope,
+        allowsScopeChoice: Bool = false,
+        projectRootPath: String? = nil,
+        targetSkillPath: String? = nil,
         sourceTaskID: UUID,
         createdAt: Date = .now
     ) {
@@ -38,9 +50,28 @@ struct SkillSuggestion: Identifiable, Sendable {
         self.type = type
         self.skillName = skillName
         self.skillDescription = skillDescription
-        self.body = body
+        self.scope = scope
+        self.allowsScopeChoice = allowsScopeChoice
+        self.projectRootPath = projectRootPath
+        self.targetSkillPath = targetSkillPath
         self.sourceTaskID = sourceTaskID
         self.createdAt = createdAt
+    }
+
+    /// Returns a copy with an explicit write scope (after the user chooses in the banner).
+    func resolved(scope: SkillScope) -> SkillSuggestion {
+        SkillSuggestion(
+            id: id,
+            type: type,
+            skillName: skillName,
+            skillDescription: skillDescription,
+            scope: scope,
+            allowsScopeChoice: false,
+            projectRootPath: projectRootPath,
+            targetSkillPath: targetSkillPath,
+            sourceTaskID: sourceTaskID,
+            createdAt: createdAt
+        )
     }
 }
 
@@ -70,6 +101,17 @@ final class SkillSuggestionQueue {
     func enqueue(_ suggestion: SkillSuggestion) {
         buffer.append(suggestion)
         scheduleFlush()
+    }
+
+    /// Enqueues and shows immediately (used for explicit `/remember`).
+    func enqueueImmediate(_ suggestion: SkillSuggestion) {
+        debounceTask?.cancel()
+        debounceTask = nil
+        if !buffer.isEmpty {
+            pendingSuggestions.append(contentsOf: buffer)
+            buffer.removeAll()
+        }
+        pendingSuggestions.append(suggestion)
     }
 
     /// Confirms a suggestion — caller should write the skill to disk.

@@ -22,7 +22,7 @@ struct AgentWorkspaceView: View {
     @FocusState private var isInputFocused: Bool
     @State private var stickToBottom = true
     @State private var gitBranch: String?
-    @State private var skillSuggestions: [String] = []
+    @State private var skillSuggestions: [SlashCommandDefinition] = []
     @State private var selectedSuggestionIndex: Int = 0
 
     var body: some View {
@@ -391,24 +391,23 @@ struct AgentWorkspaceView: View {
         @Bindable var appState = appState
 
         return VStack(alignment: .leading, spacing: 6) {
-            // Skill autocomplete suggestions (above the input field).
+            // Slash-command autocomplete (above the input field).
             if !skillSuggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(skillSuggestions.enumerated()), id: \.element) { index, name in
+                    ForEach(Array(skillSuggestions.enumerated()), id: \.element.id) { index, command in
                         Button {
-                            appState.draft = "/\(name)"
+                            appState.draft = "/\(command.name)"
                             skillSuggestions = []
                             submit()
                         } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "sparkles")
+                                Image(systemName: command.kind == .builtin ? "bookmark" : "sparkles")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.secondary)
-                                Text("/\(name)")
+                                Text("/\(command.name)")
                                     .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                                if let desc = appState.capabilities.enabledSkills
-                                    .first(where: { $0.name == name })?.description {
-                                    Text("— \(desc)")
+                                if !command.description.isEmpty {
+                                    Text("— \(command.description)")
                                         .font(.system(size: SageDesign.Typography.microSize))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
@@ -478,11 +477,17 @@ struct AgentWorkspaceView: View {
                     )
             }
 
-            HStack {
+            HStack(spacing: SageDesign.Spacing.sm) {
                 Text(appState.settings.model)
                     .font(.system(size: SageDesign.Typography.microSize))
                     .foregroundStyle(.tertiary)
-                Spacer()
+
+                if !appState.agent.skillSaveJobs.isEmpty {
+                    SkillSaveStatusIndicator()
+                        .transition(.opacity)
+                }
+
+                Spacer(minLength: 0)
                 if case .awaitingConfirmation = appState.agent.phase {
                     Label("Run or Cancel the pending plan", systemImage: SageDesign.Symbol.pending)
                         .font(.system(size: SageDesign.Typography.microSize))
@@ -505,6 +510,7 @@ struct AgentWorkspaceView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .animation(SageDesign.Motion.expandAnimation, value: appState.agent.skillSaveJobs.count)
         }
         .padding(.horizontal, SageDesign.Spacing.lg)
         .padding(.vertical, SageDesign.Spacing.md)
@@ -563,11 +569,11 @@ struct AgentWorkspaceView: View {
             return
         }
         let prefix = String(draft.dropFirst()).lowercased()
-        let available = appState.agent.availableSkillNames
+        let available = appState.agent.availableSlashCommandDefinitions
         let filtered = prefix.isEmpty
             ? available
-            : available.filter { $0.lowercased().hasPrefix(prefix) }
-        let capped = Array(filtered.prefix(5))
+            : available.filter { $0.name.lowercased().hasPrefix(prefix) }
+        let capped = Array(filtered.prefix(6))
         withAnimation(.easeOut(duration: 0.15)) {
             skillSuggestions = capped
             selectedSuggestionIndex = 0
