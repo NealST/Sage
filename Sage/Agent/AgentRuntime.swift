@@ -118,6 +118,8 @@ final class AgentRuntime {
     private let topicGenerator: TopicGenerator
     private let settings: ModelSettings
     private weak var capabilities: CapabilityStore?
+    private let skillExtractionService: SkillExtractionService
+    let skillSuggestionQueue = SkillSuggestionQueue()
 
     private let systemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
@@ -145,6 +147,8 @@ final class AgentRuntime {
         self.taskRouter = taskRouter
         self.topicGenerator = topicGenerator
         self.capabilities = capabilities
+
+        self.skillExtractionService = SkillExtractionService()
     }
 
     func bootstrap() async {
@@ -254,6 +258,8 @@ final class AgentRuntime {
                     // Closing via route/start-fresh often skips the .completed phase —
                     // still generate a topic so the task can re-enter the catalog.
                     scheduleTopicGeneration(for: closing)
+                    // Trigger skill extraction for the completed task (async, non-blocking).
+                    scheduleSkillExtraction(for: closing)
                     // Link the closed task so related-context injection can fire.
                     if !inheritedRelated.contains(closing.id) {
                         inheritedRelated.insert(closing.id, at: 0)
@@ -732,6 +738,8 @@ final class AgentRuntime {
                         rawResult = try await executeLoadSkillResource(argumentsJSON: step.argumentsJSON)
                     } else if step.toolName == "run_skill_script" {
                         rawResult = try await executeRunSkillScript(argumentsJSON: step.argumentsJSON)
+                    } else if step.toolName == "save_skill" {
+                        rawResult = try await executeSaveSkill(argumentsJSON: step.argumentsJSON)
                     } else if let tool = tools.tool(named: step.toolName) {
                         // Some tools manage their own timeout or may involve user interaction
                         // (permission prompts, interactive capture). Give them extended ceilings.
@@ -1437,6 +1445,120 @@ final class AgentRuntime {
         return result
     }
 
+    // MARK: - Skill Saving
+
+    /// Tool definition for `save_skill` — allows the agent to create or enhance skills
+    /// based on reusable experience identified during conversation.
+    static let saveSkillDefinition = ToolDefinition(
+        name: "save_skill",
+        description: """
+            Create a new skill or enhance an existing one to persist reusable experience as long-term memory. \
+            Use this when the user explicitly asks to save/remember an experience, or when confirming \
+            a skill suggestion. The skill content should follow best practices: focus on what the agent \
+            wouldn't know without the skill, use imperative phrasing, provide concrete procedures over \
+            declarations, and keep the body under 500 lines / 5000 tokens.
+            """,
+        parameters: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "action": .object([
+                    "type": .string("string"),
+                    "description": .string("Whether to create a new skill or enhance an existing one."),
+                    "enum": .array([.string("create"), .string("enhance")]),
+                ]),
+                "name": .object([
+                    "type": .string("string"),
+                    "description": .string("Kebab-case skill name (1-64 chars, lowercase alphanumeric and hyphens). For 'enhance', must match an existing skill name."),
+                ]),
+                "description": .object([
+                    "type": .string("string"),
+                    "description": .string("""
+                        Skill description (max 1024 chars). Use imperative phrasing: "Use this skill when..." \
+                        Focus on user intent, not implementation. Be specific about when the skill applies, \
+                        including non-obvious triggers.
+                        """),
+                ]),
+                "body": .object([
+                    "type": .string("string"),
+                    "description": .string("""
+                        Full SKILL.md content in markdown. Follow these guidelines: \
+                        (1) Add what the agent lacks, omit what it knows — focus on project-specific conventions, \
+                        non-obvious edge cases, and specific tools/APIs. \
+                        (2) Favor procedures over declarations — teach how to approach a class of problems. \
+                        (3) Include a Gotchas section for environment-specific facts that defy assumptions. \
+                        (4) Provide defaults, not menus — pick a recommended approach, mention alternatives briefly. \
+                        (5) Use templates for output format, checklists for multi-step workflows. \
+                        (6) Keep under 500 lines. Move detailed references to separate files if needed. \
+                        (7) Do NOT include frontmatter — it will be added automatically.
+                        """),
+                ]),
+            ]),
+            "required": .array([.string("action"), .string("name"), .string("description"), .string("body")]),
+        ])
+    )
+
+    private func executeSaveSkill(argumentsJSON: String) async throws -> String {
+        struct Args: Decodable {
+            let action: String
+            let name: String
+            let description: String
+            let body: String
+        }
+        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
+
+        // Validate description length (spec: max 1024 chars).
+        guard args.description.count <= 1024 else {
+            throw ToolError.invalidArguments(
+                "Description exceeds 1024 characters (\(args.description.count)). Shorten it."
+            )
+        }
+
+        // Validate body is not excessively large.
+        let bodyLines = args.body.components(separatedBy: "\n").count
+        if bodyLines > 600 {
+            throw ToolError.invalidArguments(
+                "Body has \(bodyLines) lines — exceeds the recommended 500-line limit. "
+                + "Move detailed reference material to separate files in references/."
+            )
+        }
+
+        switch args.action {
+        case "create":
+            let path = try SkillWriter.createSkill(
+                name: args.name,
+                description: args.description,
+                body: args.body
+            )
+            await capabilities?.reloadSkills(
+                projectRoot: focusedProject?.rootURL
+            )
+            return "[OK] Created skill '\(args.name)' at \(path)"
+
+        case "enhance":
+            guard let existing = capabilities?.skills
+                .first(where: { $0.name == args.name }) else {
+                let available = capabilities?.enabledSkills.map(\.name).joined(separator: ", ") ?? "none"
+                throw ToolError.operationFailed(
+                    "Skill '\(args.name)' not found. Available skills: \(available)"
+                )
+            }
+            let path = try SkillWriter.enhanceSkill(
+                existingRecord: existing,
+                description: args.description,
+                body: args.body
+            )
+            await capabilities?.reloadSkills(
+                projectRoot: focusedProject?.rootURL
+            )
+            return "[OK] Enhanced skill '\(args.name)' at \(path)"
+
+        default:
+            throw ToolError.invalidArguments(
+                "Invalid action '\(args.action)'. Must be 'create' or 'enhance'."
+            )
+        }
+    }
+
     // MARK: - Slash Command Skill Activation
 
     /// Parses `/skill-name` from user input. Returns the skill name if matched.
@@ -1538,6 +1660,8 @@ final class AgentRuntime {
                 defs.append(Self.loadSkillResourceDefinition)
                 defs.append(Self.runSkillScriptDefinition)
             }
+            // Always expose save_skill so the agent can persist reusable experience.
+            defs.append(Self.saveSkillDefinition)
             toolDefinitions = defs
         } else {
             toolDefinitions = []
@@ -2262,6 +2386,8 @@ final class AgentRuntime {
 
     /// Tasks currently undergoing topic generation — prevents duplicate runs.
     private var topicGenerationTaskIDs: Set<UUID> = []
+    /// Tasks already submitted for skill extraction — prevents duplicate analysis.
+    private var skillExtractionTaskIDs: Set<UUID> = []
 
     /// Called after a task completes to generate its topic if missing.
     func generateTopicIfNeeded() {
@@ -2283,6 +2409,73 @@ final class AgentRuntime {
                 self?.topicGenerationTaskIDs.remove(taskID)
                 if let result {
                     self?.updateTaskTopic(result, for: taskID)
+                }
+            }
+        }
+    }
+
+    // MARK: - Skill Extraction
+
+    /// Asynchronously analyzes a completed task for reusable experience.
+    /// Results are enqueued into `skillSuggestionQueue` for debounced UI presentation.
+    private func scheduleSkillExtraction(for task: TaskRecord) {
+        // Skip trivial tasks (fewer than 4 events = likely just a greeting or simple Q&A).
+        guard task.events.count >= 4 else { return }
+        guard settings.isConfigured else { return }
+        guard !skillExtractionTaskIDs.contains(task.id) else { return }
+        skillExtractionTaskIDs.insert(task.id)
+
+        let snapshot = ModelSettingsSnapshot(
+            baseURL: settings.baseURL,
+            model: settings.model,
+            apiKey: settings.apiKey
+        )
+
+        let existingSkills: [(name: String, description: String, body: String)] = capabilities?.skills
+            .filter(\.enabled)
+            .map { ($0.name, $0.description, SkillRegistry.readBody(for: $0)) } ?? []
+
+        let taskCopy = task
+        let extractionService = skillExtractionService
+        let queue = skillSuggestionQueue
+
+        Task.detached(priority: .utility) {
+            guard let result = await extractionService.analyze(
+                task: taskCopy,
+                existingSkills: existingSkills,
+                settings: snapshot
+            ) else { return }
+
+            let suggestion: SkillSuggestion?
+            switch result {
+            case .skip:
+                suggestion = nil
+            case .newSkill(let name, let description, let body):
+                suggestion = SkillSuggestion(
+                    type: .new,
+                    skillName: name,
+                    skillDescription: description,
+                    body: body,
+                    sourceTaskID: taskCopy.id
+                )
+            case .enhance(let existingName, let description, let body):
+                // Validate target exists — discard if model hallucinated a name
+                guard existingSkills.contains(where: { $0.name == existingName }) else {
+                    suggestion = nil
+                    break
+                }
+                suggestion = SkillSuggestion(
+                    type: .enhance,
+                    skillName: existingName,
+                    skillDescription: description,
+                    body: body,
+                    sourceTaskID: taskCopy.id
+                )
+            }
+
+            if let suggestion {
+                await MainActor.run {
+                    queue.enqueue(suggestion)
                 }
             }
         }

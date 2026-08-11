@@ -42,6 +42,8 @@ struct AgentWorkspaceView: View {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
             transcript
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
+            SkillSuggestionBanner()
+                .animation(SageDesign.Motion.expandAnimation, value: appState.agent.skillSuggestionQueue.showBanner)
             composer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

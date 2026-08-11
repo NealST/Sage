@@ -122,6 +122,10 @@ enum ToolCallPresentation {
         case "run_skill_script":
             let script = display(args["script_path"]) ?? "script"
             return "Run: \(script)"
+        case "save_skill":
+            let action = display(args["action"]) ?? "save"
+            let name = display(args["name"]) ?? "skill"
+            return action == "enhance" ? "Enhance skill: \(name)" : "Save skill: \(name)"
         default:
             if name.hasPrefix("mcp__") {
                 return name.split(separator: "__").last.map(String.init)?
