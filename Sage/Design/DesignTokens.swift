@@ -33,26 +33,13 @@ enum SageDesign {
     }
 
     /// Contrast-aware surface opacities for fills, strokes, and dividers.
+    /// Prefer `@Environment(AccessibilitySettings.self)` in views so values refresh live.
     enum Chrome {
-        static var fillOpacity: Double {
-            AccessibilityPreferences.increaseContrast ? 0.14 : 0.06
-        }
-
-        static var strongFillOpacity: Double {
-            AccessibilityPreferences.increaseContrast ? 0.20 : 0.10
-        }
-
-        static var pillFillOpacity: Double {
-            AccessibilityPreferences.increaseContrast ? 0.16 : 0.08
-        }
-
-        static var strokeOpacity: Double {
-            AccessibilityPreferences.increaseContrast ? 0.40 : 0.10
-        }
-
-        static var dividerOpacity: Double {
-            AccessibilityPreferences.increaseContrast ? 0.60 : 0.35
-        }
+        @MainActor static var fillOpacity: Double { AccessibilitySettings.shared.fillOpacity }
+        @MainActor static var strongFillOpacity: Double { AccessibilitySettings.shared.strongFillOpacity }
+        @MainActor static var pillFillOpacity: Double { AccessibilitySettings.shared.pillFillOpacity }
+        @MainActor static var strokeOpacity: Double { AccessibilitySettings.shared.strokeOpacity }
+        @MainActor static var dividerOpacity: Double { AccessibilitySettings.shared.dividerOpacity }
     }
 
     enum Motion {

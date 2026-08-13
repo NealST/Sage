@@ -177,10 +177,15 @@ struct ToolResultView: View {
 }
 
 private struct ToolResultHeaderButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.75 : 1)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(SageDesign.Motion.contentCrossFade, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
+                value: configuration.isPressed
+            )
     }
 }

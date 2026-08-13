@@ -13,6 +13,12 @@
       "skillPath": "skills/apple-design/SKILL.md",
       "computedHash": "8b94db67cb9edaad5f1501010804caa610131f1d2dfda0a27664b2e858deade3"
     },
+    "background-execution": {
+      "source": "n0an/Background-Execution-Agent-Skill",
+      "sourceType": "github",
+      "skillPath": "background-execution/SKILL.md",
+      "computedHash": "004e442dc25a149ee8e4acafcbd1dfebe1bfc5a51a80dbcce8358b83c9d11dd7"
+    },
     "emil-design-eng": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
@@ -24,6 +30,30 @@
       "sourceType": "github",
       "skillPath": "skills/review-animations/SKILL.md",
       "computedHash": "ca04aaa0a815f05e0910ded8fedbfbdfe0acdec8f52dfbb88277890070d134d4"
+    },
+    "swift-api-design-guidelines-skill": {
+      "source": "Erikote04/Swift-API-Design-Guidelines-Agent-Skill",
+      "sourceType": "github",
+      "skillPath": "swift-api-design-guidelines-skill/SKILL.md",
+      "computedHash": "aea51903f26bb8771e292a9e5c1ad0d5731224620fd764f7e3db1236e086d356"
+    },
+    "swift-concurrency-pro": {
+      "source": "twostraws/swift-concurrency-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swift-concurrency-pro/SKILL.md",
+      "computedHash": "aca902f3faac6d51916262ba850fe629a506ba02178dc65259ceb87874df0390"
+    },
+    "swiftui-accessibility-auditor": {
+      "source": "rgmez/apple-accessibility-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-accessibility-auditor/SKILL.md",
+      "computedHash": "fcadc11c003243b58db184ae2ca04f5992a89b876ed727abff461b78a728520a"
+    },
+    "swiftui-pro": {
+      "source": "twostraws/swiftui-agent-skill",
+      "sourceType": "github",
+      "skillPath": "swiftui-pro/SKILL.md",
+      "computedHash": "2544ac9c2307dd929ed4259d84e9a18bb27b42a2460a7b4c0b523b95cea28efa"
     }
   }
 }

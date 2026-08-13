@@ -24,15 +24,54 @@ nonisolated struct TaskWorkspaceSnapshot: Sendable, Equatable {
     var activeTaskID: UUID?
 }
 
+/// One dialogue line from a related task (user or plain assistant text).
+nonisolated struct RelatedDialogueLine: Sendable, Equatable {
+    enum Kind: String, Sendable, Equatable {
+        case user
+        case assistant
+    }
+
+    let kind: Kind
+    let content: String
+}
+
+/// Lean related-task payload for model context (no full event/tool-call graph).
+nonisolated struct RelatedTaskContextSnippet: Sendable, Equatable {
+    let id: UUID
+    let projectID: UUID?
+    let topic: String?
+    let summary: String?
+    let abstract: String?
+    /// Chronological tail of user / plain-assistant messages (no tool proposals).
+    let recentDialogue: [RelatedDialogueLine]
+}
+
 nonisolated protocol TaskRepository: Sendable {
-    func loadWorkspace() async throws -> TaskWorkspaceSnapshot
+    /// Workspace for one scope (`nil` = General). Does not read or write global focus.
+    func loadScopedWorkspace(projectID: UUID?) async throws -> TaskWorkspaceSnapshot
     func loadTask(id: UUID) async throws -> TaskRecord?
+    /// Task row + relations only — no events, tool calls, or plan graph.
+    func loadTaskMetadata(id: UUID) async throws -> TaskRecord?
     func loadProject(id: UUID) async throws -> ProjectRecord?
     func listRecentProjects(limit: Int) async throws -> [ProjectRecord]
+    /// Metadata + last N dialogue lines for related-task appendix (scoped, no full task load).
+    func loadRelatedContextSnippets(
+        ids: [UUID],
+        projectID: UUID?
+    ) async throws -> [RelatedTaskContextSnippet]
     /// Lightweight check — does not load events or plan steps.
     func hasPendingPlan(taskID: UUID) async throws -> Bool
+    /// Keep IDs that exist and belong to `projectID` (nil = General), preserving order.
+    func filterTaskIDs(_ ids: [UUID], projectID: UUID?) async throws -> [UUID]
     /// Inserts or updates task metadata/entities/relations/plan. Does not rewrite event history.
     func saveTaskState(_ task: TaskRecord, setActive: Bool) async throws
+    /// Updates one plan step's status/result without rewriting the plan graph.
+    func updatePlanStep(
+        taskID: UUID,
+        stepID: UUID,
+        status: StepStatus,
+        result: String?
+    ) async throws
     /// Atomically append/delete events and save task state.
     func mutateTask(
         _ task: TaskRecord,
@@ -51,7 +90,7 @@ nonisolated protocol TaskRepository: Sendable {
     func deleteTask(id: UUID) async throws
     /// Sets focus + active task together (enforces project/task scope invariant).
     func setFocus(projectID: UUID?, activeTaskID: UUID?) async throws
-    /// Open an existing directory as a project (reuse by root_path) and focus it.
+    /// Open an existing directory as a project (reuse by root_path). Does not change window focus.
     func openProject(rootURL: URL, displayName: String?) async throws -> ProjectRecord
     /// Create a directory under parent, optionally `git init`, then open as project.
     func createProject(
@@ -64,5 +103,7 @@ nonisolated protocol TaskRepository: Sendable {
     /// Remember which General task to restore when leaving a project.
     func setLastGeneralTaskID(_ taskID: UUID?) async throws
     func lastGeneralTaskID() async throws -> UUID?
+    /// Update per-scope last-active pointers without stomping another window's global focus.
+    func rememberScopeActiveTask(projectID: UUID?, taskID: UUID) async throws
     func eraseAllData() async throws
 }

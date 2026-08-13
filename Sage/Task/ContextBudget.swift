@@ -9,21 +9,45 @@ import Foundation
 enum ContextBudget {
     static let maxEvents = 28
     static let maxCharacters = 24_000
+    /// Soft ceiling for one protected skill payload (auto-load / slash / `load_skill`).
+    /// Aligns with Agent Skills progressive-disclosure guidance: keep SKILL.md bodies
+    /// around ≤5,000 tokens (≈10–15k characters). Use the upper bound so in-spec skills
+    /// are not truncated; oversize bodies stub and point at `load_skill_resource`.
+    static let maxSkillContentCharacters = 15_000
+    /// Aggregate ceiling for all protected events so multiple skill loads cannot starve dialogue.
+    /// Leaves at least ~8k of the 24k transcript budget for non-protected turns.
+    static let maxProtectedCharacters = 16_000
+
+    /// Truncates oversized skill bodies and points the model at progressive resource loading.
+    static func capSkillContent(_ content: String, skillName: String) -> String {
+        guard content.utf8.count > maxSkillContentCharacters else { return content }
+        let head = utf8Prefix(content, maxBytes: maxSkillContentCharacters)
+        return """
+        \(head)
+
+        … [skill '\(skillName)' truncated at \(maxSkillContentCharacters) characters (~5k-token progressive-disclosure limit)]
+        Use `load_skill_resource` for remaining reference material under this skill.
+        """
+    }
 
     static func select(from events: [AgentEvent]) -> [AgentEvent] {
         let sanitized = sanitize(events)
         guard !sanitized.isEmpty else { return [] }
 
-        // Protected events (e.g., skill instructions) are always included.
-        let protectedEvents = sanitized.filter(\.protected)
+        // Protected events stay in context, but are per-skill capped and then fit to an
+        // aggregate protected budget (newest skill payloads preferred).
+        let protectedEvents = fitProtectedBudget(
+            sanitized.filter(\.protected).map(capProtectedEvent(_:))
+        )
         let prunableEvents = sanitized.filter { !$0.protected }
 
-        var selected: [AgentEvent] = []
+        // Collect newest-first, then reverse — avoids O(n²) `insert(at: 0)`.
+        var selectedReversed: [AgentEvent] = []
         var characters = protectedEvents.reduce(0) { $0 + characterCost(of: $1) }
         var index = prunableEvents.count - 1
 
         while index >= 0 {
-            if selected.count + protectedEvents.count >= maxEvents { break }
+            if selectedReversed.count + protectedEvents.count >= maxEvents { break }
 
             let event = prunableEvents[index]
             // Keep assistant tool_calls + following tool results as an atomic block.
@@ -40,12 +64,12 @@ enum ContextBudget {
                 }
                 let block = Array(prunableEvents[blockStart...index])
                 let cost = block.reduce(0) { $0 + characterCost(of: $1) }
-                if !selected.isEmpty,
-                   selected.count + protectedEvents.count + block.count > maxEvents
+                if !selectedReversed.isEmpty,
+                   selectedReversed.count + protectedEvents.count + block.count > maxEvents
                     || characters + cost > maxCharacters {
                     break
                 }
-                selected.insert(contentsOf: block, at: 0)
+                selectedReversed.append(contentsOf: block.reversed())
                 characters += cost
                 index = blockStart - 1
                 continue
@@ -60,26 +84,97 @@ enum ContextBudget {
             }
 
             let cost = characterCost(of: event)
-            if !selected.isEmpty, characters + cost > maxCharacters {
+            if !selectedReversed.isEmpty, characters + cost > maxCharacters {
                 break
             }
-            selected.insert(event, at: 0)
+            selectedReversed.append(event)
             characters += cost
             index -= 1
         }
+
+        let selected = Array(selectedReversed.reversed())
 
         // Merge protected events back in chronological order.
         return mergeByOrder(protected: protectedEvents, pruned: selected, original: sanitized)
     }
 
+    /// Caps protected skill payloads that were stored before injection-time budgeting.
+    private static func capProtectedEvent(_ event: AgentEvent) -> AgentEvent {
+        guard event.content.utf8.count > maxSkillContentCharacters else { return event }
+        var copy = event
+        let name = inferredSkillName(from: event.content) ?? "skill"
+        copy.content = capSkillContent(event.content, skillName: name)
+        return copy
+    }
+
+    /// Prefer newest protected payloads; stub older skill bodies when the aggregate budget is exceeded.
+    private static func fitProtectedBudget(_ events: [AgentEvent]) -> [AgentEvent] {
+        var result = events
+        var cost = result.reduce(0) { $0 + characterCost(of: $1) }
+        guard cost > maxProtectedCharacters else { return result }
+
+        for index in result.indices {
+            guard cost > maxProtectedCharacters else { break }
+            let event = result[index]
+            let before = characterCost(of: event)
+            guard before > 400, looksLikeSkillPayload(event) else { continue }
+
+            var stub = event
+            let name = inferredSkillName(from: event.content) ?? "skill"
+            stub.content = """
+            [Earlier skill '\(name)' omitted from context to stay within the protected budget. \
+            Call `load_skill` again if you still need its instructions.]
+            """
+            result[index] = stub
+            cost += characterCost(of: stub) - before
+        }
+        return result
+    }
+
+    private static func looksLikeSkillPayload(_ event: AgentEvent) -> Bool {
+        let content = event.content
+        return content.contains("<skill_content")
+            || content.contains("[Activated skill:")
+            || content.contains("skill_resources")
+    }
+
+    private static func inferredSkillName(from content: String) -> String? {
+        // <skill_content name="…"> or "[Activated skill: …]"
+        if let range = content.range(of: #"name="([^"]+)""#, options: .regularExpression) {
+            let matched = String(content[range])
+            if let open = matched.firstIndex(of: "\""),
+               let close = matched.lastIndex(of: "\""),
+               open < close {
+                let start = matched.index(after: open)
+                return String(matched[start..<close])
+            }
+        }
+        if let range = content.range(of: #"\[Activated skill: ([^\]]+)\]"#, options: .regularExpression) {
+            let matched = String(content[range])
+            if let colon = matched.firstIndex(of: ":") {
+                let name = matched[matched.index(after: colon)...]
+                    .trimmingCharacters(in: CharacterSet(charactersIn: " ]"))
+                return name.isEmpty ? nil : name
+            }
+        }
+        return nil
+    }
+
     /// Merges protected and selected events maintaining their original order.
+    /// Protected copies (possibly capped) override the originals by id.
     private static func mergeByOrder(
         protected: [AgentEvent],
         pruned: [AgentEvent],
         original: [AgentEvent]
     ) -> [AgentEvent] {
-        let includedIDs = Set(protected.map(\.id)).union(pruned.map(\.id))
-        return original.filter { includedIDs.contains($0.id) }
+        var byID: [UUID: AgentEvent] = [:]
+        for event in pruned {
+            byID[event.id] = event
+        }
+        for event in protected {
+            byID[event.id] = event
+        }
+        return original.compactMap { byID[$0.id] }
     }
 
     /// Drops fully unexecuted proposals, truncates partially executed ones,
@@ -132,10 +227,27 @@ enum ContextBudget {
         let body = event.kind == .toolResult
             ? WriteFileResultCodec.modelFacing(event.content)
             : event.content
-        var cost = max(body.count, 1)
+        // UTF-8 byte length is stable and closer to tokenizers than grapheme count.
+        var cost = max(body.utf8.count, 1)
         if let calls = event.toolCalls {
-            cost += calls.reduce(0) { $0 + $1.argumentsJSON.count + $1.name.count }
+            cost += calls.reduce(0) {
+                $0 + $1.argumentsJSON.utf8.count + $1.name.utf8.count
+            }
         }
         return cost
+    }
+
+    /// Prefix truncated on a Character boundary so the result stays valid UTF-8.
+    private static func utf8Prefix(_ string: String, maxBytes: Int) -> String {
+        guard string.utf8.count > maxBytes else { return string }
+        var byteCount = 0
+        var end = string.startIndex
+        for index in string.indices {
+            let charBytes = string[index].utf8.count
+            if byteCount + charBytes > maxBytes { break }
+            byteCount += charBytes
+            end = string.index(after: index)
+        }
+        return String(string[..<end])
     }
 }

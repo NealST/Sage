@@ -21,13 +21,11 @@ struct MenuBarView: View {
         Button("Open Project…") {
             openProjectFromMenu()
         }
-        .disabled(appState.agent.isBusy)
         .keyboardShortcut("o", modifiers: [.command, .shift])
 
         Button("New Project…") {
             createProjectFromMenu()
         }
-        .disabled(appState.agent.isBusy)
         .keyboardShortcut("n", modifiers: [.command, .shift])
 
         Text(appState.statusHint)
@@ -41,17 +39,18 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
-        if case .awaitingConfirmation = appState.agent.phase {
+        if case .awaitingConfirmation = appState.agent.state.phase {
             Divider()
             Button("Run Plan") {
-                onOpenAgent()
+                appState.revealKeySession()
                 Task { await appState.agent.confirmPendingPlan() }
             }
-            .disabled(appState.agent.isBusy)
+            .disabled(appState.agent.state.isBusy)
             Button("Cancel Plan") {
+                appState.revealKeySession()
                 Task { await appState.agent.cancelPendingPlan() }
             }
-            .disabled(appState.agent.isBusy)
+            .disabled(appState.agent.state.isBusy)
         }
 
         if appState.agent.canStop {
@@ -61,10 +60,10 @@ struct MenuBarView: View {
             }
         }
 
-        if case .failed = appState.agent.phase {
+        if case .failed = appState.agent.state.phase {
             if appState.agent.canRetryFailure {
                 Button("Retry") {
-                    onOpenAgent()
+                    appState.revealKeySession()
                     Task { await appState.agent.retryLastFailure() }
                 }
             }
@@ -74,7 +73,7 @@ struct MenuBarView: View {
                 }
             } else {
                 Button("Show Error…") {
-                    onOpenAgent()
+                    appState.revealKeySession()
                 }
             }
         }
@@ -82,6 +81,7 @@ struct MenuBarView: View {
         Divider()
 
         Button("Start Fresh") {
+            appState.revealKeySession()
             appState.clearDraft()
             Task { await appState.agent.startFresh() }
         }
@@ -106,24 +106,22 @@ struct MenuBarView: View {
     }
 
     private func openProjectFromMenu() {
-        // Show panels above the menu-bar app; open the agent window first.
-        onOpenAgent()
+        // Activate without forcing General — cancel must leave keySession alone.
+        appState.activateForExternalPanels()
         DispatchQueue.main.async {
             guard let url = ProjectPanelActions.pickDirectory(
                 message: "Choose a project folder"
             ) else { return }
-            appState.clearDraft()
-            Task { await appState.agent.openProject(at: url) }
+            Task { await appState.openProject(at: url) }
         }
     }
 
     private func createProjectFromMenu() {
-        onOpenAgent()
+        appState.activateForExternalPanels()
         DispatchQueue.main.async {
             guard let created = ProjectPanelActions.promptCreateProject() else { return }
-            appState.clearDraft()
             Task {
-                await appState.agent.createProject(
+                await appState.createProject(
                     parent: created.parent,
                     name: created.name,
                     gitInit: created.gitInit

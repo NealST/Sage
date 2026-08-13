@@ -1,8 +1,3 @@
-//
-//  AppDelegate.swift
-//  Sage
-//
-
 import AppKit
 
 extension Notification.Name {
@@ -11,7 +6,6 @@ extension Notification.Name {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var agentWindowController: AgentWindowController?
     private var settingsController: SettingsWindowController?
     private var dashboardController: DashboardWindowController?
 
@@ -20,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        agentWindowController = AgentWindowController(appState: appState)
         settingsController = SettingsWindowController(appState: appState)
         dashboardController = DashboardWindowController(appState: appState)
 
@@ -40,8 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startMemoryPressureMonitor()
 
         Task {
-            await appState.capabilities.bootstrap()
-            await appState.agent.bootstrap()
+            await appState.bootstrap()
         }
     }
 
@@ -51,11 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func toggleAgentWindow() {
-        agentWindowController?.toggle()
+        appState.toggleKeyAgentWindow()
     }
 
     func showAgentWindow() {
-        agentWindowController?.show()
+        appState.showGeneralWindow()
     }
 
     func showSettings() {
@@ -67,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleToggleAgentWindow() {
-        agentWindowController?.toggle()
+        toggleAgentWindow()
     }
 
     @objc private func handleOpenSettings() {

@@ -17,6 +17,8 @@ import SwiftUI
 struct StreamingContentView: View {
     let text: String
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.sageTypography) private var type
     @State private var cursorOpacity: Double = 1.0
     @State private var throttledState = ThrottledStreamState()
 
@@ -49,9 +51,12 @@ struct StreamingContentView: View {
                 CachedMarkdownBlock(markdown: throttledState.committedMarkdown)
                     .equatable()
             }
-            // Active (last) block — throttled re-renders (~10/s instead of ~50/s)
+            // Active (last) block — throttled re-renders; no TreeSitter on the hot path.
             if !throttledState.activeBlockMarkdown.isEmpty {
-                MarkdownContentView(markdown: throttledState.activeBlockMarkdown)
+                MarkdownContentView(
+                    markdown: throttledState.activeBlockMarkdown,
+                    syntaxHighlighting: false
+                )
             }
         }
     }
@@ -59,10 +64,10 @@ struct StreamingContentView: View {
     private var streamingCursor: some View {
         RoundedRectangle(cornerRadius: 1, style: .continuous)
             .fill(Color.secondary)
-            .frame(width: 2, height: SageDesign.Typography.bodySize + 2)
+            .frame(width: 2, height: type.body + 2)
             .opacity(cursorOpacity)
             .onAppear {
-                guard !AccessibilityPreferences.reduceMotion else { return }
+                guard !reduceMotion else { return }
                 withAnimation(SageDesign.Motion.cursorPulse) {
                     cursorOpacity = 0.2
                 }

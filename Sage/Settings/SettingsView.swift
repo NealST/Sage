@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var showMCPManage = false
     @State private var showEraseConfirm = false
     @State private var eraseMessage: String?
+    /// Skills catalog session captured when Settings appears / manage opens.
+    @State private var pinnedSkillsSession: AgentSession?
 
     private enum TestState: Equatable {
         case idle
@@ -44,14 +46,26 @@ struct SettingsView: View {
         }
         .frame(width: 440)
         .background(Color(nsColor: .windowBackgroundColor))
-        .onDisappear { testTask?.cancel() }
+        .onAppear {
+            pinnedSkillsSession = appState.keySession
+        }
+        .onDisappear {
+            testTask?.cancel()
+            pinnedSkillsSession = nil
+        }
         .sheet(isPresented: $showSkillsManage) {
-            SkillsManageView()
+            SkillsManageView(pinnedSession: pinnedSkillsSession ?? appState.keySession)
                 .environment(appState)
+                .environment(AccessibilitySettings.shared)
+                .sageScaledTypography()
+                .sageAccessibilityObservation()
         }
         .sheet(isPresented: $showMCPManage) {
             MCPManageView()
                 .environment(appState)
+                .environment(AccessibilitySettings.shared)
+                .sageScaledTypography()
+                .sageAccessibilityObservation()
         }
         .confirmationDialog(
             eraseDialogTitle,
@@ -116,17 +130,7 @@ struct SettingsView: View {
                         .onChange(of: settings.apiKey) { _, _ in clearTestResult() }
                 }
             }
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
 
             statusRow
         }
@@ -140,21 +144,28 @@ struct SettingsView: View {
                 capabilityRow(
                     symbol: SageDesign.Symbol.skills,
                     title: "Skills",
-                    detail: "\(enabledSkillCount) of \(appState.capabilities.skills.count) enabled",
+                    detail: "\(enabledSkillCount) of \(skillsCatalog.skills.count) enabled",
                     isFirst: true,
-                    action: { showSkillsManage = true }
+                    action: {
+                        pinnedSkillsSession = pinnedSkillsSession ?? appState.keySession
+                        showSkillsManage = true
+                    }
                 )
 
-                ForEach(Array(appState.capabilities.skills.prefix(4).enumerated()), id: \.element.id) { _, skill in
+                ForEach(Array(skillsCatalog.skills.prefix(4).enumerated()), id: \.element.id) { _, skill in
                     sectionDivider
                     quickToggleRow(
                         title: skill.name,
                         isOn: Binding(
                             get: {
-                                appState.capabilities.skills.first(where: { $0.name == skill.name })?.enabled
+                                skillsCatalog.skills.first(where: { $0.name == skill.name })?.enabled
                                     ?? skill.enabled
                             },
-                            set: { appState.capabilities.setSkillEnabled(skill.name, enabled: $0) }
+                            set: { enabled in
+                                let session = pinnedSkillsSession ?? appState.keySession
+                                session.skillCatalog.setSkillEnabled(skill, enabled: enabled)
+                                Task { await appState.syncSkillEnablement(from: session) }
+                            }
                         )
                     )
                 }
@@ -165,37 +176,27 @@ struct SettingsView: View {
                     symbol: SageDesign.Symbol.mcp,
                     title: "MCP Servers",
                     detail: "\(connectedMCPCount) connected",
-                    isLast: appState.capabilities.mcpServers.isEmpty,
+                    isLast: appState.mcpHub.mcpServers.isEmpty,
                     action: { showMCPManage = true }
                 )
 
-                ForEach(Array(appState.capabilities.mcpServers.prefix(3).enumerated()), id: \.element.id) { index, server in
+                ForEach(Array(appState.mcpHub.mcpServers.prefix(3).enumerated()), id: \.element.id) { index, server in
                     sectionDivider
                     quickToggleRow(
                         title: server.name,
                         detail: mcpStatusDetail(server),
-                        isLast: index == min(2, appState.capabilities.mcpServers.count - 1),
+                        isLast: index == min(2, appState.mcpHub.mcpServers.count - 1),
                         isOn: Binding(
                             get: {
-                                appState.capabilities.mcpServers.first(where: { $0.id == server.id })?.enabled
+                                appState.mcpHub.mcpServers.first(where: { $0.id == server.id })?.enabled
                                     ?? server.enabled
                             },
-                            set: { appState.capabilities.setMCPEnabled(server.id, enabled: $0) }
+                            set: { appState.mcpHub.setMCPEnabled(server.id, enabled: $0) }
                         )
                     )
                 }
             }
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
         }
     }
 
@@ -227,21 +228,11 @@ struct SettingsView: View {
                     showEraseConfirm = true
                 }
                 .controlSize(.small)
-                .disabled(appState.agent.isBusy)
+                .disabled(appState.agent.state.isBusy)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
         }
     }
 
@@ -429,14 +420,14 @@ struct SettingsView: View {
     }
 
     private var eraseDialogTitle: String {
-        if case .awaitingConfirmation = appState.agent.phase {
+        if case .awaitingConfirmation = appState.agent.state.phase {
             return "Erase data and abandon pending plan?"
         }
         return "Erase all local Sage data?"
     }
 
     private var eraseDialogMessage: String {
-        if case .awaitingConfirmation = appState.agent.phase {
+        if case .awaitingConfirmation = appState.agent.state.phase {
             return "This deletes local task history and abandons the pending plan. Your API key in Keychain is kept."
         }
         return "This permanently deletes local task history from this Mac. Your API key in Keychain is kept."
@@ -474,12 +465,16 @@ struct SettingsView: View {
             && apiKeyValidationError == nil
     }
 
+    private var skillsCatalog: SkillCatalog {
+        (pinnedSkillsSession ?? appState.keySession).skillCatalog
+    }
+
     private var enabledSkillCount: Int {
-        appState.capabilities.skills.count(where: \.enabled)
+        skillsCatalog.skills.count(where: \.enabled)
     }
 
     private var connectedMCPCount: Int {
-        appState.capabilities.mcpServers.count(where: { $0.status == .connected })
+        appState.mcpHub.mcpServers.count(where: { $0.status == .connected })
     }
 
     private var statusAccessibilityLabel: String {
@@ -525,4 +520,6 @@ struct SettingsView: View {
     SettingsView(settings: .shared)
         .padding()
         .environment(AppState())
+        .environment(AccessibilitySettings.shared)
+        .sageScaledTypography()
 }

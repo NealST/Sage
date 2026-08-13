@@ -129,8 +129,12 @@ nonisolated struct AgentPlan: Identifiable, Codable, Sendable, Equatable {
 enum AgentPhase: Equatable {
     case idle
     case thinking
-    case awaitingConfirmation(AgentPlan)
-    case executing(AgentPlan)
+    /// Plan lives on `PlanProgress` / `TaskRecord.pendingPlan` — not embedded here.
+    case awaitingConfirmation
+    /// Local matcher found multiple overlapping skills — wait for user pick / skip.
+    case awaitingSkillChoice(SkillActivationChoice)
+    /// Step detail lives on `PlanProgress`.
+    case executing
     case completed(summary: String)
     case failed(message: String)
 }
@@ -144,8 +148,15 @@ struct RetryDisplayState: Equatable {
 }
 
 /// Cumulative token usage for the current session.
-struct TokenUsage: Equatable {
+nonisolated struct TokenUsage: Equatable, Sendable {
     var input: Int = 0
     var output: Int = 0
     var total: Int { input + output }
+}
+
+extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }

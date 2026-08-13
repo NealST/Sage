@@ -156,106 +156,18 @@ struct RunShellCommandTool: AgentTool {
         workingDirectory: URL,
         timeout: Int
     ) async throws -> (Int32, String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
-        process.currentDirectoryURL = workingDirectory
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        // Read pipe data asynchronously to avoid deadlock when output exceeds pipe buffer.
-        // We must start reading BEFORE the process fills the buffer.
-        let collectedData = UncheckedSendable(LockedBuffer())
-
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if !chunk.isEmpty {
-                collectedData.value.append(chunk)
-            }
-        }
-
-        do {
-            try process.run()
-        } catch {
-            pipe.fileHandleForReading.readabilityHandler = nil
-            throw ToolError.operationFailed(
-                "Failed to start command: \(error.localizedDescription)"
+        let result = try await ProcessRunner.run(
+            executable: URL(fileURLWithPath: "/bin/zsh"),
+            arguments: ["-c", command],
+            currentDirectory: workingDirectory,
+            timeout: .seconds(timeout)
+        )
+        if result.timedOut {
+            return (
+                result.exitCode,
+                result.output + "\n… (command timed out after \(timeout)s)"
             )
         }
-
-        // Wait for termination with timeout using structured concurrency.
-        // We use process.waitUntilExit() on a detached thread to avoid the race condition
-        // where the process terminates before terminationHandler is set.
-        let timedOut = await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                    DispatchQueue.global().async {
-                        process.waitUntilExit()
-                        cont.resume()
-                    }
-                }
-                return false
-            }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(timeout) * 1_000_000_000)
-                return true
-            }
-
-            let first = await group.next()!
-            group.cancelAll()
-            return first
-        }
-
-        if timedOut {
-            process.terminate()
-            // Give process a moment to exit after SIGTERM
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
-
-        // Drain any remaining data in the pipe
-        pipe.fileHandleForReading.readabilityHandler = nil
-        let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-        if !remaining.isEmpty {
-            collectedData.value.append(remaining)
-        }
-
-        let data = collectedData.value.data
-        let output = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .ascii)
-            ?? "(binary output, \(data.count) bytes)"
-
-        let exitCode = process.terminationStatus
-        if timedOut {
-            return (exitCode, output + "\n… (command timed out after \(timeout)s)")
-        }
-        return (exitCode, output)
+        return (result.exitCode, result.output)
     }
-}
-
-// MARK: - Helpers
-
-/// Thread-safe mutable data buffer for collecting pipe output.
-private final class LockedBuffer: @unchecked Sendable {
-    private var _data = Data()
-    private let lock = NSLock()
-
-    func append(_ chunk: Data) {
-        lock.lock()
-        _data.append(chunk)
-        lock.unlock()
-    }
-
-    var data: Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return _data
-    }
-}
-
-/// Wrapper to pass non-Sendable references across concurrency boundaries when safety is ensured externally.
-private struct UncheckedSendable<T>: @unchecked Sendable {
-    let value: T
-    init(_ value: T) { self.value = value }
 }

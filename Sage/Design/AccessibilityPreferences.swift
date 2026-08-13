@@ -2,19 +2,25 @@
 //  AccessibilityPreferences.swift
 //  Sage
 //
+//  Convenience accessors over live `AccessibilitySettings`. Prefer
+//  `@Environment(AccessibilitySettings.self)` in SwiftUI views so changes refresh.
+//
 
 import AppKit
 
 enum AccessibilityPreferences {
+    @MainActor
     static var reduceMotion: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        AccessibilitySettings.shared.reduceMotion
     }
 
+    @MainActor
     static var reduceTransparency: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        AccessibilitySettings.shared.reduceTransparency
     }
 
+    @MainActor
     static var increaseContrast: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        AccessibilitySettings.shared.increaseContrast
     }
 }

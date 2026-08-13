@@ -311,7 +311,7 @@ struct ToolCallView: View {
         else { return }
         let policy = pathGuardPolicy
         let state: DiskBeforeState = await Task.detached(priority: .userInitiated) {
-            guard let url = try? PathGuard.resolveAllowed(path, policy: policy) else { return .absent }
+            guard let url = try? PathGuard.resolveAllowed(path, policy: policy, access: .read) else { return .absent }
             guard FileManager.default.fileExists(atPath: url.path) else { return .absent }
             if let text = try? String(contentsOf: url, encoding: .utf8) {
                 return .text(text)
@@ -323,10 +323,15 @@ struct ToolCallView: View {
 }
 
 private struct ToolCallHeaderButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.75 : 1)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(SageDesign.Motion.contentCrossFade, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
+                value: configuration.isPressed
+            )
     }
 }

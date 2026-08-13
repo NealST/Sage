@@ -1,22 +1,11 @@
-//
-//  SkillMatcher.swift
-//  Sage
-//
-//  Implements progressive skill activation via local model matching:
-//  1. Local model available → selects relevant skills → auto-loaded via `load_skill` tool
-//  2. Local model unavailable/no match → catalog shown, cloud model calls `load_skill` itself
-//
-//  Both paths go through the unified `load_skill` execution, ensuring `activatedSkillNames`
-//  is always correctly maintained.
-//
-
 import Foundation
 
 /// Result of skill matching — determines whether skills are auto-loaded or deferred to the cloud model.
 enum SkillMatchResult: Sendable {
-    /// Local model selected specific skills — they will be auto-loaded via `load_skill`.
+    /// Local model selected specific skills (0…N). Runtime auto-loads only when count == 1;
+    /// count >= 2 pauses for user choice and may surface a consolidate tip.
     case resolved(names: [String])
-    /// Local model unavailable or no match — cloud model decides via `load_skill` tool.
+    /// Local model unavailable — cloud model decides via `load_skill` tool.
     case deferred
 }
 
@@ -60,7 +49,7 @@ actor SkillMatcher {
             let output = try await modelService.generate(
                 systemPrompt: system,
                 userPrompt: user,
-                maxTokens: 64,
+                maxTokens: 96,
                 temperature: 0
             )
             let matched = Self.parse(output: output, skills: candidates)
@@ -78,11 +67,16 @@ actor SkillMatcher {
     ) -> (system: String, user: String) {
         let system = """
         You are a skill selector. Given the user's message and a list of available skills, \
-        decide which skills are relevant to the user's request.
+        decide which skills match the user's intent.
+
+        Ideal skills are independent and cohesive — a clear intent usually matches ZERO or ONE skill.
 
         Rules:
         - Output a JSON object: {"skills": ["name1", "name2"]}
-        - Only include skills that are directly relevant to the user's message.
+        - Include a skill only when its description clearly matches the user's intent.
+        - If several skills overlap on the SAME intent, include all of them \
+          (the app will ask the user which to use, and may suggest merging).
+        - Do NOT include tangentially related skills.
         - If no skills are relevant, output: {"skills": []}
         - Output ONLY the JSON object, nothing else.
         """
@@ -107,26 +101,23 @@ actor SkillMatcher {
         output: String,
         skills: [SkillRecord]
     ) -> [String] {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let jsonStart = trimmed.firstIndex(of: "{"),
-              let jsonEnd = trimmed.lastIndex(of: "}") else {
-            return []
-        }
-
-        let jsonString = String(trimmed[jsonStart...jsonEnd])
-        guard let data = jsonString.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(MatcherOutput.self, from: data) else {
+        guard let parsed = ModelJSONSlice.decode(MatcherOutput.self, from: output) else {
             return []
         }
 
         let validNames = Set(skills.map(\.name))
-        return parsed.skills.filter { validNames.contains($0) }
+        // Preserve model order; drop unknowns / duplicates.
+        var seen = Set<String>()
+        var ordered: [String] = []
+        for name in parsed.skills where validNames.contains(name) && seen.insert(name).inserted {
+            ordered.append(name)
+        }
+        return ordered
     }
 }
 
 // MARK: - Supporting Types
 
-private nonisolated struct MatcherOutput: Decodable {
+private struct MatcherOutput: Decodable {
     let skills: [String]
 }

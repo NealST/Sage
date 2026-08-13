@@ -2,174 +2,34 @@
 //  CapabilityStore.swift
 //  Sage
 //
+//  Shared MCP hub (connections + tool defs). Skills live in SkillCatalog.
+//
 
-import AppKit
 import Foundation
 
 @MainActor
 @Observable
 final class CapabilityStore {
-    private(set) var skills: [SkillRecord] = []
     private(set) var mcpServers: [MCPServerConfig] = []
     private(set) var mcpTools: [MCPToolInfo] = []
 
-    private let store = MCPConfigStore()
+    private let store: MCPConfigStore
     private var clients: [String: MCPStdioClient] = [:]
     private var reconnectTasks: [String: Task<Void, Never>] = [:]
+    /// Per-server serial queue so rapid enable/disable/delete cannot interleave connect/disconnect.
+    private var serverOperations: [String: Task<Void, Never>] = [:]
 
-    /// Maximum consecutive reconnect attempts before giving up.
     private static let maxReconnectAttempts = 3
-    /// Base delay for exponential backoff (doubles each attempt).
     private static let reconnectBaseDelay: TimeInterval = 1.0
 
-    var enabledSkills: [SkillRecord] {
-        skills.filter(\.enabled)
+    init(store: MCPConfigStore = MCPConfigStore()) {
+        self.store = store
     }
 
     func bootstrap() async {
-        await reloadSkills()
         await reloadMCPConfigs()
         await reconnectEnabledServers()
     }
-
-    // MARK: - Skills
-
-    /// The project root currently used for skill scanning. Updated on focus change.
-    private var currentProjectRoot: URL?
-
-    /// Reload skills, merging project-level and user-level.
-    /// Project-level skills (from `projectRoot`) take priority on name collision.
-    func reloadSkills(projectRoot: URL? = nil) async {
-        currentProjectRoot = projectRoot
-        SkillRegistry.invalidateCaches()
-        let scanned = SkillRegistry.scanAll(projectRoot: projectRoot)
-        let state = await store.loadSkillState()
-        skills = scanned.map { skill in
-            var copy = skill
-            if let enabled = state[skill.name] {
-                copy.enabled = enabled
-            }
-            return copy
-        }
-    }
-
-    func setSkillEnabled(_ name: String, enabled: Bool) {
-        guard let index = skills.firstIndex(where: { $0.name == name }) else { return }
-        skills[index].enabled = enabled
-        persistSkillState()
-    }
-
-    func openSkillsFolder() {
-        openSkillsFolder(scope: .global)
-    }
-
-    /// Opens the skills directory for the given scope in Finder.
-    func openSkillsFolder(scope: SkillScope) {
-        switch scope {
-        case .global:
-            let appSupport = FileManager.default.urls(
-                for: .applicationSupportDirectory, in: .userDomainMask
-            ).first!
-            let dir = appSupport.appendingPathComponent("Sage/Skills", isDirectory: true)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(dir)
-        case .project:
-            guard let root = currentProjectRoot else { return }
-            let dir = root.appendingPathComponent(".sage/skills", isDirectory: true)
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(dir)
-        }
-    }
-
-    /// Reveals a skill's SKILL.md in Finder.
-    func revealSkill(_ skill: SkillRecord) {
-        let url = URL(fileURLWithPath: skill.path)
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    /// Deletes a skill directory from disk and reloads the catalog.
-    func deleteSkill(_ skill: SkillRecord) throws {
-        let skillFile = URL(fileURLWithPath: skill.path)
-        let skillDir = skillFile.deletingLastPathComponent()
-        try FileManager.default.trashItem(at: skillDir, resultingItemURL: nil)
-        SkillRegistry.invalidateCaches()
-        skills.removeAll { $0.path == skill.path }
-        persistSkillState()
-    }
-
-    /// Result of progressive skill activation.
-    struct SkillAppendixResult: Sendable {
-        /// The text to append to the system prompt.
-        let text: String
-        /// Always true when skills are available — activation always goes through `load_skill`.
-        let needsLoadSkillTool: Bool
-        /// Skills the local model recommends loading (empty if model unavailable).
-        let recommendedSkills: [String]
-    }
-
-    /// Builds the skill catalog for the system prompt and runs local model matching.
-    ///
-    /// When the local model identifies relevant skills, they are returned in `recommendedSkills`
-    /// so the caller can auto-load them (via `load_skill`) before the first cloud model request.
-    /// If the local model fails or returns no matches, the catalog is shown and the cloud model
-    /// can call `load_skill` itself (fallback path).
-    func skillsPromptAppendix(for userMessage: String) async -> SkillAppendixResult {
-        let active = enabledSkills
-        guard !active.isEmpty else {
-            return SkillAppendixResult(text: "", needsLoadSkillTool: false, recommendedSkills: [])
-        }
-
-        // Local model matching — determines which skills to auto-load.
-        let matchResult = await skillMatcher.match(
-            userMessage: userMessage,
-            skills: active
-        )
-
-        let recommended: [String]
-        switch matchResult {
-        case .resolved(let names):
-            recommended = names
-        case .deferred:
-            recommended = []
-        }
-
-        // Build catalog text. Skills that will be auto-loaded are excluded from the catalog
-        // (they'll appear as tool results in the conversation instead).
-        let catalogSkills = active.filter { !recommended.contains($0.name) }
-
-        var lines: [String] = []
-        if !catalogSkills.isEmpty {
-            lines.append("")
-            lines.append("## Available Skills")
-            lines.append("Use the `load_skill` tool to activate a skill's full instructions when relevant to the user's request.")
-            lines.append("")
-
-            for skill in catalogSkills {
-                var entry = "- **\(skill.name)**: \(skill.description)"
-                if let compat = skill.compatibility {
-                    entry += " _(requires: \(compat))_"
-                }
-                lines.append(entry)
-            }
-            lines.append("")
-        }
-
-        return SkillAppendixResult(
-            text: lines.joined(separator: "\n"),
-            needsLoadSkillTool: true,
-            recommendedSkills: recommended
-        )
-    }
-
-    /// Loads the full body of a skill by name. Used by the `load_skill` tool.
-    func loadSkillBody(name: String) -> String? {
-        guard let skill = skills.first(where: { $0.name == name && $0.enabled }) else {
-            return nil
-        }
-        return SkillRegistry.readBody(for: skill)
-    }
-
-    private let skillMatcher = SkillMatcher()
 
     // MARK: - MCP
 
@@ -193,7 +53,9 @@ final class CapabilityStore {
         mcpServers.append(server)
         persistMCP()
         if server.enabled {
-            Task { await connect(serverID: server.id) }
+            enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }
         }
     }
 
@@ -207,19 +69,25 @@ final class CapabilityStore {
         mcpServers[index].enabled = server.enabled
         persistMCP()
         if server.enabled {
-            Task { await connect(serverID: server.id) }
+            enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }
         } else if wasEnabled {
-            Task { await disconnect(serverID: server.id) }
+            enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.disconnect(serverID: server.id)
+            }
         }
     }
 
     func deleteMCPServer(_ id: String) {
         reconnectTasks[id]?.cancel()
         reconnectTasks[id] = nil
-        Task { await disconnect(serverID: id) }
         mcpServers.removeAll { $0.id == id }
         mcpTools.removeAll { $0.serverID == id }
         persistMCP()
+        enqueueServerOperation(serverID: id) { [weak self] in
+            await self?.disconnect(serverID: id)
+        }
     }
 
     func setMCPEnabled(_ id: String, enabled: Bool) {
@@ -229,7 +97,9 @@ final class CapabilityStore {
             mcpServers[index].status = .disconnected
             mcpServers[index].reconnectAttempts = 0
             persistMCP()
-            Task { await connect(serverID: id) }
+            enqueueServerOperation(serverID: id) { [weak self] in
+                await self?.connect(serverID: id)
+            }
         } else {
             reconnectTasks[id]?.cancel()
             reconnectTasks[id] = nil
@@ -239,7 +109,9 @@ final class CapabilityStore {
             mcpServers[index].reconnectAttempts = 0
             mcpTools.removeAll { $0.serverID == id }
             persistMCP()
-            Task { await disconnect(serverID: id) }
+            enqueueServerOperation(serverID: id) { [weak self] in
+                await self?.disconnect(serverID: id)
+            }
         }
     }
 
@@ -247,7 +119,6 @@ final class CapabilityStore {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
-        // Cancel any pending reconnect for this server.
         reconnectTasks[serverID]?.cancel()
         reconnectTasks[serverID] = nil
 
@@ -256,10 +127,13 @@ final class CapabilityStore {
 
         await disconnect(serverID: serverID)
 
-        let config = mcpServers[index]
+        guard let stillIndexed = mcpServers.firstIndex(where: { $0.id == serverID }),
+              mcpServers[stillIndexed].enabled
+        else { return }
+
+        let config = mcpServers[stillIndexed]
         let client = MCPStdioClient(config: config)
 
-        // Wire up process exit callback for auto-reconnect.
         await client.setOnProcessExit { [weak self] exitedServerID in
             await self?.handleServerProcessExit(serverID: exitedServerID)
         }
@@ -303,21 +177,19 @@ final class CapabilityStore {
         }
     }
 
-    /// Manually retry a failed server (resets reconnect counter).
     func retryServer(_ serverID: String) {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         mcpServers[index].reconnectAttempts = 0
         mcpServers[index].statusMessage = nil
-        Task { await connect(serverID: serverID) }
+        enqueueServerOperation(serverID: serverID) { [weak self] in
+            await self?.connect(serverID: serverID)
+        }
     }
 
-    /// Called when a server process exits unexpectedly. Triggers auto-reconnect with backoff.
     private func handleServerProcessExit(serverID: String) async {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
-        // Sync stderr logs from the client before it's removed.
-        // The client reference is grabbed first; after the await the array may have shifted.
         let exitedClient = clients[serverID]
         if let exitedClient {
             let logs = await exitedClient.stderrLog
@@ -326,8 +198,6 @@ final class CapabilityStore {
             }
         }
 
-        // If a new client was installed during the await (manual reconnect raced us),
-        // don't tear it down — only remove if it's still the crashed client.
         if let current = clients[serverID], current === exitedClient {
             clients[serverID] = nil
         } else if exitedClient == nil {
@@ -335,7 +205,6 @@ final class CapabilityStore {
         }
         mcpTools.removeAll { $0.serverID == serverID }
 
-        // Re-fetch index after the await — array may have mutated.
         guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[idx].enabled else { return }
 
@@ -353,10 +222,12 @@ final class CapabilityStore {
         let baseDelay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
         let jitter = Double.random(in: 0...(baseDelay * 0.3))
         let delay = baseDelay + jitter
-        reconnectTasks[serverID] = Task {
+        reconnectTasks[serverID] = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
-            await connect(serverID: serverID)
+            await self.enqueueServerOperation(serverID: serverID) {
+                await self.connect(serverID: serverID)
+            }.value
         }
     }
 
@@ -388,6 +259,21 @@ final class CapabilityStore {
         }
     }
 
+    /// Chains work behind any in-flight op for the same server id.
+    @discardableResult
+    private func enqueueServerOperation(
+        serverID: String,
+        _ body: @escaping @MainActor () async -> Void
+    ) -> Task<Void, Never> {
+        let previous = serverOperations[serverID]
+        let task = Task { @MainActor in
+            await previous?.value
+            await body()
+        }
+        serverOperations[serverID] = task
+        return task
+    }
+
     private func disconnect(serverID: String) async {
         reconnectTasks[serverID]?.cancel()
         reconnectTasks[serverID] = nil
@@ -400,16 +286,6 @@ final class CapabilityStore {
         let snapshot = mcpServers
         Task {
             await store.saveServers(snapshot)
-        }
-    }
-
-    private func persistSkillState() {
-        var map: [String: Bool] = [:]
-        for skill in skills {
-            map[skill.name] = skill.enabled
-        }
-        Task {
-            await store.saveSkillState(map)
         }
     }
 }

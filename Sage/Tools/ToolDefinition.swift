@@ -38,10 +38,16 @@ enum PathGuard: Sendable {
     @TaskLocal
     static var policy: Policy = .home
 
-    /// Additional read-only paths allowed beyond the primary policy (e.g., skill directories).
-    /// Paths in this list are permitted for read operations even if outside the project root.
+    /// Additional **read-only** paths beyond the primary policy (e.g. activated skill dirs).
+    /// Never consulted for write / mutate / shell-cwd resolution.
     @TaskLocal
     static var readAllowlist: [String] = []
+
+    /// Whether a path is being resolved for reading or for mutation / cwd.
+    enum Access: Sendable, Equatable {
+        case read
+        case write
+    }
 
     /// Sandbox policy for file/shell path resolution.
     enum Policy: Sendable, Equatable {
@@ -75,13 +81,21 @@ enum PathGuard: Sendable {
             .standardizedFileURL.resolvingSymlinksInPath().path
     }()
 
-    /// Resolve and validate a path under the current `TaskLocal` policy.
-    nonisolated static func resolveAllowed(_ raw: String) throws -> URL {
-        try resolveAllowed(raw, policy: policy)
+    /// Resolve under the current `TaskLocal` policy.
+    /// Defaults to `.write` so allowlisted skill dirs cannot be mutated by accident.
+    nonisolated static func resolveAllowed(
+        _ raw: String,
+        access: Access = .write
+    ) throws -> URL {
+        try resolveAllowed(raw, policy: policy, access: access)
     }
 
-    /// Resolve and validate a path under an explicit policy.
-    nonisolated static func resolveAllowed(_ raw: String, policy: Policy) throws -> URL {
+    /// Resolve under an explicit policy.
+    nonisolated static func resolveAllowed(
+        _ raw: String,
+        policy: Policy,
+        access: Access = .write
+    ) throws -> URL {
         let candidate = try makeCandidateURL(raw, policy: policy)
         let resolved = candidate.resolvingSymlinksInPath()
         let path = resolved.path
@@ -92,15 +106,14 @@ enum PathGuard: Sendable {
 
         switch policy {
         case .home:
-            // Return the resolved URL so symlink escapes cannot write outside ~.
             return resolved
         case .project(let root):
             let rootPath = root.resolvingSymlinksInPath().path
             if path == rootPath || path.hasPrefix(rootPath + "/") {
                 return resolved
             }
-            // Check read-allowlist (e.g., activated skill directories).
-            if isInReadAllowlist(path) {
+            // Skill directories (and similar) are read-only extras — never for writes/shell cwd.
+            if access == .read, isInReadAllowlist(path) {
                 return resolved
             }
             throw ToolError.pathNotAllowed(raw, policy: policy)
@@ -161,6 +174,21 @@ enum PathGuard: Sendable {
 
     nonisolated private static func isInsideHome(_ resolvedPath: String) -> Bool {
         resolvedPath == resolvedHomePath || resolvedPath.hasPrefix(resolvedHomePath + "/")
+    }
+
+    /// Resolves an optional exploration path: project mode may omit/`""` → `"."` (project root);
+    /// General mode still requires an explicit path.
+    nonisolated static func defaultExplorationPath(_ raw: String?) throws -> String {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty { return trimmed }
+        switch policy {
+        case .project:
+            return "."
+        case .home:
+            throw ToolError.invalidArguments(
+                "path is required in General mode. Pass an absolute or ~/ path."
+            )
+        }
     }
 }
 

@@ -9,11 +9,11 @@
 import SwiftUI
 
 struct SkillSaveStatusIndicator: View {
-    @Environment(AppState.self) private var appState
+    @Environment(AgentSession.self) private var session
     @State private var showPopover = false
 
     private var jobs: [SkillSaveJob] {
-        appState.agent.skillSaveJobs
+        session.skills.saveJobs
     }
 
     private var aggregate: AggregateState {
@@ -170,8 +170,8 @@ struct SkillSaveStatusIndicator: View {
 
             if case .failed = job.status {
                 Button {
-                    appState.agent.dismissSkillSaveJob(job.id)
-                    if appState.agent.skillSaveJobs.isEmpty {
+                    session.skills.dismissSkillSaveJob(job.id)
+                    if session.skills.saveJobs.isEmpty {
                         showPopover = false
                     }
                 } label: {
@@ -191,20 +191,23 @@ struct SkillSaveStatusIndicator: View {
     }
 
     private func jobDisplayTitle(_ job: SkillSaveJob) -> String {
-        switch job.type {
-        case .new:
-            return job.skillName
-        case .enhance:
-            return job.skillName
-        }
+        job.skillName
     }
 
     private func jobDetail(_ job: SkillSaveJob) -> String {
         switch job.status {
         case .running:
-            return job.type == .new ? "Creating skill…" : "Updating skill…"
+            switch job.type {
+            case .new: return "Creating skill…"
+            case .enhance: return "Updating skill…"
+            case .merge: return "Merging skills…"
+            }
         case .succeeded:
-            return job.type == .new ? "Created" : "Updated"
+            switch job.type {
+            case .new: return "Created"
+            case .enhance: return "Updated"
+            case .merge: return "Merged"
+            }
         case .failed(let message):
             return message
         }

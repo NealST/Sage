@@ -42,7 +42,7 @@ Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义�
 - **Enhance**：复用已有 skill 的作用域；识别时钉死 `targetSkillPath`，确认时按路径写入
 - **写入路径**：全局 → `~/Library/Application Support/Sage/Skills/`；project → `<project>/.sage/skills/`
 - **扫描**：全局 = App Support + `~/.agents/skills`；project = 项目下 `.agents/skills` 与 `.sage/skills`（项目树内一律 project）
-- **Project 切换**：清空 pending tips，丢弃切换后才返回的识别结果
+- **Project 切换**：多窗模型下打开/聚焦另一窗，**不作废**原窗 tips；仅 **关闭 Project window** 时 `prepareForWindowClose` 清理 tip / 放弃 skill choice
 - **`save_skill`**：支持 `scope: project \| global`，语义与 banner 一致
 
 ### 粒度
@@ -95,12 +95,28 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 |------|------|
 | `SkillExtractionService.swift` | 识别 + 确认后 compose |
 | `SkillAuthoring.swift` | 与 `save_skill` 共享的写作实践 |
-| `SkillSuggestionQueue.swift` / `SkillSaveJob.swift` | tip 队列 + 后台保存任务 |
-| `SkillWriter.swift` | 按 scope 写入；create 标记 `source: auto-generated`；enhance 保留原 source |
-| `SkillSuggestionBanner.swift` | tip UI + scope 分段选择 |
+| `SkillSessionController.swift` | 每窗 tip / save / consolidate / 提炼编排（挂在 `AgentSession.skills`） |
+| `SkillTipStore.swift` / `SkillSaveJob.swift` | 统一 tip 队列 + 后台保存任务 |
+| `SkillToolExecutor.swift` | skill 工具定义与执行（`SkillToolHost`） |
+| `SkillWriter.swift` / `SkillPaths.swift` / `SkillMarkdown.swift` | 写盘 / 路径 / frontmatter |
+| `SkillRegistry.swift` | actor 化扫盘与 body/resource 缓存 |
+| `SkillTipsBanner.swift` / `SkillTipChrome.swift` | tip UI + 共用 panel chrome |
 | `SkillSaveStatusIndicator.swift` | composer 状态 chip |
 | `SkillsManageView.swift` | Everywhere / This Project 分组管理 |
-| `AgentRuntime.swift` | 触发、确认、`save_skill`、project 切换作废 |
+| `AgentRuntime.swift` | 会话门面：UI 状态、公开 API、host 接线 |
+| `AgentRuntime+SlashCommands.swift` | `SlashCommandHost` 实现 |
+| `AgentRuntime+TaskStoreFacade.swift` | taskStore / routing 薄委托 |
+| `SessionLifecycle.swift` | bootstrap / close / erase / workspace / persistScope（`SessionLifecycleHost`） |
+| `AgentTaskStore.swift` | create / commit / resume / activate / restore（`AgentTaskStoreHost`） |
+| `TurnCoordinator.swift` | submit / retry / model turn / handleTurn（`TurnCoordinatorHost`） |
+| `ToolInvocationDispatcher.swift` | builtin / skill / MCP 工具分发 + PathGuard / timeout |
+| `StreamingPlayback.swift` | 独立 `@Observable` 流式缓冲（不打穿 Runtime / Workspace） |
+| `StreamingTextPump.swift` | SSE 文本 ~30Hz 合帧写入 `StreamingPlayback` |
+| `SessionOperationGate.swift` | busy lock + cancellable `workTask`（`SessionOperationHost`） |
+| `PlanExecutor.swift` | plan 确认 / 逐步执行 / Stop / Cancel（`PlanExecutionHost`） |
+| `SkillRecallCoordinator.swift` | skill 匹配 / 选择 / 自动加载 / turn 缓存 |
+| `AgentModelGateway.swift` | 拼请求 / 流式 / related-context appendix |
+| `TaskRoutingCoordinator.swift` | 本地路由（continue/new/resume）+ topic 生成 |
 
 ## Prompt 设计
 
@@ -108,7 +124,7 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 
 - 值得：非显而易见 workaround、试错最佳实践、可复用工作流、难摸的领域知识
 - 不值得：琐碎 Q&A、过窄场景、常识
-- Catalog：`name [global|project]: description`（+ body 预览）
+- Catalog：`name [global|project]: description`（识别阶段不带全文）
 - 输出：仅 JSON，**不生成全文**
 
 ### 生成（确认后）
@@ -125,14 +141,41 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 
 - 最少 4 个 events；需 API 配置；不阻塞主流程
 - 识别失败静默；确认写入失败经状态 chip 展示
+- 关窗 `prepareForTeardown`：取消 in-flight extraction，并 await 未完成的 save
 - Create：`source: auto-generated`；Enhance：保留原 frontmatter `source`（手写 skill 不被改成 auto）
 - 工作区内 skill 名唯一（create 撞名 → 应 enhance）
+- Enable 状态按 **SKILL.md path** 持久化（兼容旧 name key）
+- 目录布局唯一入口：`SkillPaths`；frontmatter parse/upsert：`SkillMarkdown`；写/trash 经 `SkillWriter` 离 MainActor
+- Frontmatter：`description` 支持 `|` / `>` 多行 YAML；body 缓存按 mtime 失效 + LRU（条数/字符上限）
+- `listResources` 上限 30；截断时在 skill payload / 缺文件错误里标明
+- Protected skill 正文：单条 ≤**15,000** 字符（对齐 ≈5k token）；全部 protected 合计 ≤**16,000** 字符（为对话预留预算）；超限先 stub 较早的 skill 正文并提示重新 `load_skill` / `load_skill_resource`
+- Event `protected` 落库；related-context 用 lean snippet（summary/topic + 末尾 N 条对话，不全量 loadTask）；plan 同 id 时 upsert steps（执行中 running 走 `updatePlanStep`）
+- Transcript：`ToolResultIndex` 按 event revision 预计算，避免 ForEach 内反复扫 events
+- Stop：`ProcessRunner.terminateAll()` + workTask cancel（shell / skill script 同源）
 
-## 未来扩展
+## 召回与上下文（当前策略）
 
-- ContextBudget / matcher 限流、skill 过期衰减
-- 跨 task 经验聚合
+理想：skill 彼此独立内聚 → **一次意图至多匹配 1 个 skill**。
 
+### 匹配与激活
+
+1. 本地模型 `SkillMatcher` 列出所有清晰相关的 skill（重叠时故意多选，作为质量信号）
+2. **0 命中**：仅 catalog；云端可 `load_skill`
+3. **1 命中**：自动 `load_skill`（不弹确认）
+4. **N 命中**：暂停本轮 → tip「Which skill should Sage use?」选用其一；**Continue without a skill** = 不自动注入，仅保留 catalog（模型仍可 `load_skill`）
+5. N 命中结束后再出 Consolidate tip：用户可选 **Keep** 主 skill，确认 Merge 后 `composeMergedSkills`（`SkillAuthoring` 同 enhance）写入主 path，其余进废纸篓
+
+### 复杂意图
+
+`IntentComplexityClassifier`（本地模型）判定 simple / complex：
+
+- **simple**：对整句做上述匹配（无多意图线索的短句跳过 Classifier，直接 Matcher）
+- **complex**：跳过整句 auto-match；system 提示先拆步；执行已有 plan 时对 **step.title** 再召回（短/工具名标题跳过 Matcher；与本轮已匹配 query 相似则复用缓存；仅明显换意图时再跑 Matcher；1 → 自动；N → 不暂停执行，只给 consolidate tip）
+
+### 仍待
+
+- skill 过期衰减、跨 task 经验聚合
+- 外部编辑 skill 目录的 FSEvents 监视（当前靠 Refresh / 写入后 reload）
 ## 显式记住（`/remember`）
 
 用户可主动触发沉淀，仍走**识别阶段**（判定 new vs enhance），但**不能 skip**：
@@ -147,4 +190,4 @@ Slash 自动补全包含 `remember`（描述来自 `SlashCommandDefinition`）�
 实现位于 `Sage/Commands/`：
 - `SlashCommandRegistry.builtins` 是 builtin 的唯一注册点（实现 `BuiltinSlashCommand` 后加入数组即可）
 - 动态 skill 激活按名称大小写不敏感匹配
-- Handler 只依赖 `SlashCommandHost`；`AgentRuntime` 在同文件内实现该协议，保持内部 API 私有
+- Handler 只依赖 `SlashCommandHost`；`AgentRuntime+SlashCommands` 实现该协议

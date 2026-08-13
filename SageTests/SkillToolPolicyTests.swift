@@ -1,0 +1,75 @@
+import XCTest
+@testable import Sage
+
+final class SkillToolPolicyTests: XCTestCase {
+    private func skill(
+        name: String,
+        allowedTools: String? = nil
+    ) -> SkillRecord {
+        SkillRecord(
+            name: name,
+            description: "test",
+            path: "/tmp/\(name)/SKILL.md",
+            enabled: true,
+            scope: .global,
+            allowedTools: allowedTools
+        )
+    }
+
+    func testNoRestrictionWhenAllowedToolsEmpty() {
+        let allowed = SkillToolPolicy.restrictedToolNames(
+            activatedSkillNames: ["demo"],
+            enabledSkills: [skill(name: "demo")]
+        )
+        XCTAssertNil(allowed)
+    }
+
+    func testAliasesMapToRegistryNames() {
+        XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("shell"), "run_shell_command")
+        XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("read"), "read_text_file")
+        XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("write"), "write_text_file")
+        XCTAssertEqual(
+            SkillToolPolicy.canonicalizeToolName("run_shell_command"),
+            "run_shell_command"
+        )
+    }
+
+    func testUnionIncludesSkillToolsAndDeclaredAliases() {
+        let allowed = SkillToolPolicy.restrictedToolNames(
+            activatedSkillNames: ["demo"],
+            enabledSkills: [skill(name: "demo", allowedTools: "read shell")]
+        )
+        XCTAssertEqual(
+            allowed,
+            Set(["read_text_file", "run_shell_command"]).union(SkillToolPolicy.skillToolNames)
+        )
+    }
+
+    func testAssertAndFilterDefinitions() throws {
+        let skills = [skill(name: "demo", allowedTools: "read_text_file")]
+        try SkillToolPolicy.assertToolAllowed(
+            "read_text_file",
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
+        XCTAssertThrowsError(
+            try SkillToolPolicy.assertToolAllowed(
+                "run_shell_command",
+                activatedSkillNames: ["demo"],
+                enabledSkills: skills
+            )
+        )
+
+        let defs = [
+            ToolDefinition(name: "read_text_file", description: "r", parameters: .schemaObject(properties: [:])),
+            ToolDefinition(name: "run_shell_command", description: "s", parameters: .schemaObject(properties: [:])),
+            ToolDefinition(name: "save_skill", description: "k", parameters: .schemaObject(properties: [:])),
+        ]
+        let filtered = SkillToolPolicy.filterDefinitions(
+            defs,
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
+        XCTAssertEqual(filtered.map(\.name), ["read_text_file", "save_skill"])
+    }
+}

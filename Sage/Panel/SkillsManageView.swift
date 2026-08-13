@@ -10,28 +10,26 @@ import SwiftUI
 
 struct SkillsManageView: View {
     @Environment(AppState.self) private var appState
+
+    /// Pinned when opened from Settings so mid-edit key-window changes don't swap catalogs.
+    var pinnedSession: AgentSession? = nil
+
+    private var session: AgentSession { pinnedSession ?? appState.keySession }
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPath: String?
     @State private var skillPendingDelete: SkillRecord?
     @State private var deleteError: String?
+    @State private var previewBody: String = ""
+    @State private var globalSkills: [SkillRecord] = []
+    @State private var projectSkills: [SkillRecord] = []
 
     private var projectName: String {
-        appState.agent.focusedProject?.name ?? "This Project"
-    }
-
-    private var globalSkills: [SkillRecord] {
-        appState.capabilities.skills.filter { $0.scope == .global }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private var projectSkills: [SkillRecord] {
-        appState.capabilities.skills.filter { $0.scope == .project }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        session.agent.state.focusedProject?.name ?? "This Project"
     }
 
     private var selectedSkill: SkillRecord? {
         guard let selectedPath else { return nil }
-        return appState.capabilities.skills.first { $0.path == selectedPath }
+        return session.skillCatalog.skills.first { $0.path == selectedPath }
     }
 
     var body: some View {
@@ -39,7 +37,7 @@ struct SkillsManageView: View {
             header
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
-            if appState.capabilities.skills.isEmpty {
+            if session.skillCatalog.skills.isEmpty {
                 ContentUnavailableView(
                     "No Skills",
                     systemImage: SageDesign.Symbol.skills,
@@ -60,6 +58,10 @@ struct SkillsManageView: View {
             footer
         }
         .frame(width: 640, height: 520)
+        .onAppear { refreshSkillSections() }
+        .onChange(of: session.skillCatalog.skills) { _, _ in
+            refreshSkillSections()
+        }
         .alert(
             "Delete “\(skillPendingDelete?.name ?? "")”?",
             isPresented: Binding(
@@ -84,9 +86,7 @@ struct SkillsManageView: View {
         }
         .onAppear {
             Task {
-                await appState.capabilities.reloadSkills(
-                    projectRoot: appState.agent.focusedProject?.rootURL
-                )
+                await appState.reloadSkillsAcrossSessions()
             }
         }
     }
@@ -100,11 +100,17 @@ struct SkillsManageView: View {
 
             Menu {
                 Button("Everywhere Folder") {
-                    appState.capabilities.openSkillsFolder(scope: .global)
+                    SkillFinderActions.openSkillsFolder(
+                        scope: .global,
+                        projectRoot: session.skillCatalog.currentProjectRoot
+                    )
                 }
-                if appState.agent.focusedProject != nil {
+                if session.agent.state.focusedProject != nil {
                     Button("“\(projectName)” Folder") {
-                        appState.capabilities.openSkillsFolder(scope: .project)
+                        SkillFinderActions.openSkillsFolder(
+                            scope: .project,
+                            projectRoot: session.skillCatalog.currentProjectRoot
+                        )
                     }
                 }
             } label: {
@@ -115,9 +121,7 @@ struct SkillsManageView: View {
 
             Button {
                 Task {
-                    await appState.capabilities.reloadSkills(
-                        projectRoot: appState.agent.focusedProject?.rootURL
-                    )
+                    await appState.reloadSkillsAcrossSessions()
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -175,7 +179,10 @@ struct SkillsManageView: View {
                 "Enabled",
                 isOn: Binding(
                     get: { skill.enabled },
-                    set: { appState.capabilities.setSkillEnabled(skill.name, enabled: $0) }
+                    set: { enabled in
+                        session.skillCatalog.setSkillEnabled(skill, enabled: enabled)
+                        Task { await appState.syncSkillEnablement(from: session) }
+                    }
                 )
             )
             .labelsHidden()
@@ -186,7 +193,7 @@ struct SkillsManageView: View {
         .padding(.vertical, 2)
         .contextMenu {
             Button("Show in Finder") {
-                appState.capabilities.revealSkill(skill)
+                SkillFinderActions.revealSkill(skill)
             }
             Divider()
             Button("Move to Trash…", role: .destructive) {
@@ -211,7 +218,7 @@ struct SkillsManageView: View {
                     Spacer()
 
                     Button("Show in Finder") {
-                        appState.capabilities.revealSkill(selected)
+                        SkillFinderActions.revealSkill(selected)
                     }
                     .controlSize(.small)
 
@@ -226,12 +233,15 @@ struct SkillsManageView: View {
                 Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
                 ScrollView {
-                    Text(SkillRegistry.readBody(for: selected))
+                    Text(previewBody)
                         .font(.system(size: SageDesign.Typography.captionSize))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                         .padding(SageDesign.Spacing.lg)
                 }
+            }
+            .task(id: selected.path) {
+                previewBody = await SkillRegistry.shared.readBody(for: selected)
             }
         } else {
             ContentUnavailableView(
@@ -259,7 +269,7 @@ struct SkillsManageView: View {
     private var footerSummary: String {
         let globalCount = globalSkills.count
         let projectCount = projectSkills.count
-        if appState.agent.focusedProject != nil {
+        if session.agent.state.focusedProject != nil {
             return "\(globalCount) everywhere · \(projectCount) in \(projectName)"
         }
         return "\(globalCount) skill\(globalCount == 1 ? "" : "s")"
@@ -279,16 +289,29 @@ struct SkillsManageView: View {
         return location
     }
 
+    private func refreshSkillSections() {
+        let skills = session.skillCatalog.skills
+        globalSkills = skills
+            .filter { $0.scope == .global }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        projectSkills = skills
+            .filter { $0.scope == .project }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     private func confirmDelete() {
         guard let skill = skillPendingDelete else { return }
         skillPendingDelete = nil
-        do {
-            try appState.capabilities.deleteSkill(skill)
-            if selectedPath == skill.path {
-                selectedPath = nil
+        Task {
+            do {
+                try await session.skillCatalog.deleteSkill(skill)
+                if selectedPath == skill.path {
+                    selectedPath = nil
+                }
+                await appState.reloadSkillsAcrossSessions()
+            } catch {
+                deleteError = error.localizedDescription
             }
-        } catch {
-            deleteError = error.localizedDescription
         }
     }
 }

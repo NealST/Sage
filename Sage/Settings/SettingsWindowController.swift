@@ -45,6 +45,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 self?.window?.performClose(nil)
             }
             .environment(appState)
+            .environment(AccessibilitySettings.shared)
+            .sageScaledTypography()
+            .sageAccessibilityObservation()
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Settings"

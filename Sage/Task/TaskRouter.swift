@@ -8,19 +8,6 @@
 
 import Foundation
 
-/// The routing decision produced by the local model.
-nonisolated struct TaskRoutingDecision: Sendable, Equatable {
-    enum Action: Sendable, Equatable {
-        case continueActive
-        case resumeTask(UUID)
-        case beginNew
-    }
-
-    var action: Action
-    var confidence: Double
-    var reason: String
-}
-
 /// Builds the task catalog string for the routing prompt.
 nonisolated struct TaskCatalog: Sendable {
     let entries: [Entry]
@@ -81,7 +68,7 @@ actor TaskRouter {
         input: String,
         currentTopic: String?,
         catalog: TaskCatalog
-    ) async -> TaskRoutingDecision {
+    ) async -> TaskRoute {
         guard await modelService.isReady else {
             return .fallbackContinue
         }
@@ -139,10 +126,9 @@ actor TaskRouter {
     private static func parse(
         output: String,
         catalog: TaskCatalog
-    ) -> TaskRoutingDecision {
+    ) -> TaskRoute {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Try to extract JSON from the output
         guard let jsonStart = trimmed.firstIndex(of: "{"),
               let jsonEnd = trimmed.lastIndex(of: "}") else {
             return .fallbackContinue
@@ -156,8 +142,7 @@ actor TaskRouter {
 
         switch json.action {
         case "continue":
-            return TaskRoutingDecision(
-                action: .continueActive,
+            return .continueActive(
                 confidence: 0.9,
                 reason: "Model: continue current topic"
             )
@@ -166,14 +151,14 @@ actor TaskRouter {
                   let resolvedID = catalog.resolve(idPrefix: idPrefix) else {
                 return .fallbackContinue
             }
-            return TaskRoutingDecision(
-                action: .resumeTask(resolvedID),
+            return .resume(
+                resolvedID,
                 confidence: 0.85,
-                reason: "Model: resume prior task"
+                reason: "Model: resume prior task",
+                userVisibleHint: nil
             )
         case "new":
-            return TaskRoutingDecision(
-                action: .beginNew,
+            return .beginNew(
                 confidence: 0.9,
                 reason: "Model: new unrelated topic"
             )
@@ -190,9 +175,8 @@ private nonisolated struct RouterOutput: Decodable {
     let id: String?
 }
 
-extension TaskRoutingDecision {
-    nonisolated static let fallbackContinue = TaskRoutingDecision(
-        action: .continueActive,
+extension TaskRoute {
+    nonisolated static let fallbackContinue = TaskRoute.continueActive(
         confidence: 0.5,
         reason: "Fallback: model unavailable or unparseable"
     )

@@ -12,9 +12,14 @@ struct MarkdownContentView: View {
     let markdown: String
     /// When true, long replies can collapse behind “Show more”.
     var collapsible: Bool = false
+    /// TreeSitter highlighting — disable on the streaming hot path.
+    var syntaxHighlighting: Bool = true
 
+    @Environment(AccessibilitySettings.self) private var accessibility
     @State private var expanded = false
     @State private var measuredHeight: CGFloat = 0
+    /// Hash of the markdown that produced `measuredHeight` — skip remounting the measurer.
+    @State private var measuredMarkdownID: Int = 0
 
     var body: some View {
         Group {
@@ -25,6 +30,11 @@ struct MarkdownContentView: View {
             }
         }
         .environment(\.openURL, PathTextSupport.openURLAction)
+        .onChange(of: markdown) { _, _ in
+            expanded = false
+            measuredMarkdownID = 0
+            measuredHeight = 0
+        }
     }
 
     /// Skip expensive dual-layout measure for short replies.
@@ -36,30 +46,51 @@ struct MarkdownContentView: View {
         measuredHeight > SageDesign.Markdown.collapsedReplyHeight + 8
     }
 
+    private var needsFreshMeasure: Bool {
+        measuredMarkdownID != markdown.hashValue || measuredHeight <= 0
+    }
+
+    /// Visible tree — TreeSitter only when `syntaxHighlighting` is on.
     private var coreMarkdown: some View {
+        Group {
+            if syntaxHighlighting {
+                Markdown(markdown)
+                    .markdownTheme(.sage)
+                    .markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())
+            } else {
+                Markdown(markdown)
+                    .markdownTheme(.sage)
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Offscreen measurer — same theme, no TreeSitter (highlighting isn't needed for height).
+    private var measureMarkdown: some View {
         Markdown(markdown)
             .markdownTheme(.sage)
-            .markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var collapsibleBody: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
             ZStack(alignment: .topLeading) {
-                // Unconstrained measurer — not visible, drives collapse decision.
-                coreMarkdown
-                    .fixedSize(horizontal: false, vertical: true)
-                    .hidden()
-                    .accessibilityHidden(true)
-                    .background {
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: MarkdownHeightKey.self,
-                                value: geo.size.height
-                            )
+                if needsFreshMeasure {
+                    measureMarkdown
+                        .hidden()
+                        .accessibilityHidden(true)
+                        .background {
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: MarkdownHeightKey.self,
+                                    value: geo.size.height
+                                )
+                            }
                         }
-                    }
+                }
 
                 coreMarkdown
                     .frame(
@@ -75,7 +106,10 @@ struct MarkdownContentView: View {
                         }
                     }
             }
-            .onPreferenceChange(MarkdownHeightKey.self) { measuredHeight = $0 }
+            .onPreferenceChange(MarkdownHeightKey.self) { height in
+                measuredHeight = height
+                measuredMarkdownID = markdown.hashValue
+            }
 
             if shouldOfferCollapse {
                 MarkdownDisclosureButton(
@@ -93,7 +127,7 @@ struct MarkdownContentView: View {
     /// Scroll-edge style fade that matches the canvas (material) instead of a hard window fill.
     private var collapseFade: some View {
         Group {
-            if AccessibilityPreferences.reduceTransparency {
+            if accessibility.reduceTransparency {
                 LinearGradient(
                     colors: [
                         Color(nsColor: .windowBackgroundColor).opacity(0),
@@ -251,7 +285,7 @@ private struct SageCodeBlockView: View {
         .background(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
-            if AccessibilityPreferences.increaseContrast {
+            if accessibility.increaseContrast {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
             }
@@ -348,9 +382,10 @@ private struct SageCodeBlockView: View {
     }
 }
 
-/// Instant press feedback — scale + fill on pointer-down (Apple response principle).
+/// Instant press feedback — opacity always; scale only when Reduce Motion is off.
 struct SagePressableChipButtonStyle: ButtonStyle {
     var emphasized: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -362,8 +397,11 @@ struct SagePressableChipButtonStyle: ButtonStyle {
                         )
                     )
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(SageDesign.Motion.contentCrossFade, value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(
+                reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
+                value: configuration.isPressed
+            )
     }
 }
 

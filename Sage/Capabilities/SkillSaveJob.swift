@@ -41,13 +41,19 @@ struct SkillSaveJob: Identifiable, Equatable, Sendable {
             return "Creating \(skillName)"
         case .enhance:
             return "Enhancing \(skillName)"
+        case .merge:
+            return "Merging into \(skillName)"
         }
     }
 
     var statusLabel: String {
         switch status {
         case .running:
-            return type == .new ? "Creating…" : "Enhancing…"
+            switch type {
+            case .new: return "Creating…"
+            case .enhance: return "Enhancing…"
+            case .merge: return "Merging…"
+            }
         case .succeeded:
             return "Saved"
         case .failed(let message):

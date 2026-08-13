@@ -1,25 +1,23 @@
-//
-//  WorkspaceChromeView.swift
-//  Sage
-//
-
 import AppKit
 import SwiftUI
 
 /// Unified titlebar strip: one row with the traffic lights, not a second stacked toolbar.
 struct WorkspaceChromeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AgentSession.self) private var session
+    @Environment(\.sageTypography) private var type
 
-    var onWillNavigate: () -> Void = {}
     @Binding var gitBranch: String?
 
-    private var focused: ProjectRecord? { appState.agent.focusedProject }
+    private var focused: ProjectRecord? { session.agent.state.focusedProject }
     private var isProject: Bool { focused != nil }
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             if isProject {
                 projectLeading
+            } else {
+                generalLeading
             }
 
             Spacer(minLength: 12)
@@ -32,39 +30,62 @@ struct WorkspaceChromeView: View {
         .padding(.trailing, SageDesign.Spacing.lg)
     }
 
+    // MARK: - General
+
+    private var generalLeading: some View {
+        HStack(spacing: 6) {
+            Button("Open Project…", action: openProject)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+
+            Button("New Project…", action: createProject)
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+
+            if !session.agent.state.recentProjects.isEmpty {
+                Menu("Recent Projects", systemImage: "clock") {
+                    ForEach(session.agent.state.recentProjects) { project in
+                        Button {
+                            Task { await appState.switchToProject(id: project.id) }
+                        } label: {
+                            Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
+                        }
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .controlSize(.small)
+                .labelStyle(.titleAndIcon)
+            }
+        }
+    }
+
     // MARK: - Project
 
     private var projectLeading: some View {
         HStack(spacing: 4) {
-            // Compact escapes back to General — primary wayfinding.
+            // Focus General window — does not close this project window or clear its draft.
             Button {
-                onWillNavigate()
-                Task { await appState.agent.closeProject() }
+                appState.showGeneralWindow()
             } label: {
                 Label("General", systemImage: "chevron.left")
             }
             .buttonStyle(.borderless)
             .controlSize(.small)
-            .disabled(appState.agent.isBusy)
-            .help("Return to General")
+            .help("Show General window")
             .foregroundStyle(.secondary)
 
-            Menu {
-                Button("Open Project…") { openProject() }
-                    .disabled(appState.agent.isBusy)
-                Button("New Project…") { createProject() }
-                    .disabled(appState.agent.isBusy)
-                if !appState.agent.recentProjects.isEmpty {
+            Menu("Projects", systemImage: "folder.badge.gearshape") {
+                Button("Open Project…", action: openProject)
+                Button("New Project…", action: createProject)
+                if !session.agent.state.recentProjects.isEmpty {
                     Divider()
-                    ForEach(appState.agent.recentProjects) { project in
+                    ForEach(session.agent.state.recentProjects) { project in
                         Button {
                             guard project.id != focused?.id else { return }
-                            onWillNavigate()
-                            Task { await appState.agent.switchProject(id: project.id) }
+                            Task { await appState.switchToProject(id: project.id) }
                         } label: {
                             Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
                         }
-                        .disabled(appState.agent.isBusy)
                     }
                 }
                 if let focused {
@@ -72,17 +93,14 @@ struct WorkspaceChromeView: View {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([focused.rootURL])
                     }
+                    Button("Close Project Window") {
+                        Task { await appState.closeProjectWindow(projectID: focused.id) }
+                    }
                 }
-            } label: {
-                Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 22)
-                    .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
+            .labelStyle(.iconOnly)
             .help("Projects")
-            .disabled(appState.agent.isBusy)
         }
     }
 
@@ -90,9 +108,9 @@ struct WorkspaceChromeView: View {
 
     @ViewBuilder
     private var trailingActions: some View {
-        if case .awaitingConfirmation = appState.agent.phase {
+        if case .awaitingConfirmation = session.agent.state.phase {
             Text("Awaiting confirmation")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                .font(.system(size: type.micro, weight: .medium))
                 .foregroundStyle(.orange)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -102,17 +120,17 @@ struct WorkspaceChromeView: View {
                 )
         }
 
-        if appState.agent.canStartFresh {
+        if session.agent.canStartFresh {
             Button("Start Fresh") {
-                onWillNavigate()
-                Task { await appState.agent.startFresh() }
+                session.draft = ""
+                Task { await session.agent.startFresh() }
             }
             .controlSize(.small)
-            .disabled(appState.agent.isBusy)
+            .disabled(session.agent.state.isBusy)
             .help(
-                appState.agent.hasPendingPlan
+                session.agent.state.hasPendingPlan
                     ? "Cancel the pending plan and start a clean task here"
-                    : "Start a clean task in the current workspace"
+                    : "Start a clean task in this window"
             )
         }
     }
@@ -123,15 +141,13 @@ struct WorkspaceChromeView: View {
         guard let url = ProjectPanelActions.pickDirectory(
             message: "Choose a project folder"
         ) else { return }
-        onWillNavigate()
-        Task { await appState.agent.openProject(at: url) }
+        Task { await appState.openProject(at: url) }
     }
 
     private func createProject() {
         guard let created = ProjectPanelActions.promptCreateProject() else { return }
-        onWillNavigate()
         Task {
-            await appState.agent.createProject(
+            await appState.createProject(
                 parent: created.parent,
                 name: created.name,
                 gitInit: created.gitInit

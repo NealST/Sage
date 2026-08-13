@@ -30,24 +30,25 @@ Sage
 
 | 概念 | 含义 | 硬规则 |
 |------|------|--------|
-| **Project** | 绑定本地目录根的代码工程 | 有 `root_path`；可多开；UI 同一时刻 **focus 一个** |
-| **General** | 无工程的默认 Sage | `project_id = NULL`；行为承接今日通用助手 |
+| **Project** | 绑定本地目录根的代码工程 | 有 `root_path`；可多开；**每个 Project 一个 window** |
+| **General** | 无工程的默认 Sage | `project_id = NULL`；**独立 General window** |
 | **Task** | 内部工作单元（不暴露为聊天列表） | **创建时写入归属**；不自动漂移；不可静默换 project |
-| **串台防护** | — | 路由 / related / catalog **仅同 `project_id`** |
+| **串台防护** | — | 路由 / related / catalog **仅同 `project_id`**；tips 跟 window/session，不跟「全局 focus 切换」 |
 
 ### 1.1 用户动作
 
-- **Open Project**：选目录 → 校验 → 注册或复用 Project → focus → 恢复该 project 的 `last_active_task`（或新建空 task）
+- **Open Project**：选目录 → 校验 → 注册或复用 Project → **打开/聚焦该 Project window**（恢复 `last_active_task` 或新建）
 - **Create Project**：父目录 + 名称 → 建文件夹（可选 `git init`）→ 等同 Open
-- **Switch Project**：切换 focus；各 project 记住自己的 last task
-- **Close Project / Back to General**：focus → General；project 与 tasks 保留
-- **Start Fresh**：仅在**当前 focus 归属**内开新 task
+- **Switch Project**：打开/聚焦目标 Project window（不销毁当前窗；各窗独立 transcript / tips）
+- **Close Project Window**：关闭该 Project window 并释放 session（tips 随窗作废）；General window 仅隐藏
+- **Start Fresh**：仅在**当前 window** 内开新 task
 
 ### 1.2 并行含义
 
-- 多个 project 可同时存在于库中；可后台执行非 focus project 的 task（执行队列若需要再单独立项）
-- 面板 transcript **只展示 focused 归属**下的 active task
-- 未来多窗口：一窗一 focus，共享 `projects` 表（见 Phase C）
+- 多个 project 可同时存在于库中；**多窗口各持一个 `AgentSession`（一窗一 focus）**
+- 面板 transcript **只展示该窗 session** 的 active task
+- Skill tips 绑定 session：**窗不关则 tip 不作废**；关窗 / Start Fresh（放弃 skill choice）才清理
+- 共享：`projects` 表、Task DB、MCP hub、ModelSettings；skills catalog 按窗 reload
 
 ### 1.3 行为差异
 
@@ -282,7 +283,7 @@ PathGuard.Policy
 
 - [ ] 项目级 `.sage` 配置（对齐 `DEVELOPMENT_ROADMAP` 3.3）
 - [ ] 文件树 / 变更感知上下文（3.3）
-- [ ] 多窗口各持 focus（4.2），共享 projects
+- [x] 多窗口各持 focus（4.2），共享 projects / MCP / settings；tips 随 window lifecycle
 - [ ] 记忆：project 级 vs global 分层（3.1）
 - [ ] Shell 更强隔离（若需要）单独立项
 - [ ] 显式跨 project 只读参考（若需要）单独立项
@@ -314,4 +315,4 @@ PathGuard.Policy
 |------|------|
 | 2026-08-09 | 初稿：多 project、task 绑定、Phase A–C；P0 PathGuard 采用项目根沙箱（非过渡方案） |
 | 2026-08-09 | Phase A 骨架落地：DB / PathGuard / Runtime / Header UI；A.5 手工验收待勾 |
-| 2026-08-09 | 自检修复：focus 切换前持久化 pending plan；Close 不再强制 `.idle`；`last_general_task_id`；PathGuard 返回 resolved URL 防 symlink 逃逸 |
+| 2026-08-12 | 多窗口：General / 每 Project 一窗一 `AgentSession`；tips 仅关窗作废 |

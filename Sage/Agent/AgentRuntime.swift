@@ -2,75 +2,62 @@
 //  AgentRuntime.swift
 //  Sage
 //
+//  Thin façade over AgentSessionState + coordinators. UI should observe
+//  `state` and `planProgress` directly (not computed projections).
+//
 
 import Foundation
 
 @MainActor
 @Observable
 final class AgentRuntime {
-    /// Full active task only — other tasks stay as lightweight summaries.
-    private(set) var activeTask: TaskRecord?
-    private(set) var recentSummaries: [TaskSummary] = []
-    private(set) var activeTaskID: UUID?
-    /// Focused code project (`nil` = General).
-    private(set) var focusedProject: ProjectRecord?
-    private(set) var recentProjects: [ProjectRecord] = []
-    private(set) var phase: AgentPhase = .idle
-    private(set) var lastAssistantText: String?
-    /// Incrementally accumulated text during streaming. Empty when not streaming.
-    private(set) var streamingText: String = ""
-    /// Retry countdown state — non-nil when waiting to retry after a transient error.
-    private(set) var retryState: RetryDisplayState?
-    /// Cumulative token usage for the current session.
-    private(set) var tokenUsage = TokenUsage()
-    /// Soft chip when Sage resumes related prior work (not ordinary continuity).
-    private(set) var contextHint: String?
-    private(set) var isBusy = false
-    /// After dismissing the context chip, the next submit starts a clean task.
-    private var forceFreshOnNextSubmit = false
-    /// Cached skill appendix for the current user turn — avoids redundant local model calls
-    /// during tool-use loops within the same turn.
-    private var cachedSkillResult: CapabilityStore.SkillAppendixResult?
-    /// Skills already loaded via `load_skill` / slash activation in this task.
-    private var activatedSkillNames: Set<String> = []
-    /// In-flight submit/confirm/retry work — cancelled by `stop()`.
-    private var workTask: Task<Void, Never>?
+    let state: AgentSessionState
+    let planProgress: PlanProgress
+    /// Streaming tokens live here — not on session state — so workspace chrome
+    /// / composer do not rebuild on every SSE chunk.
+    let streamingPlayback = StreamingPlayback()
 
-    var events: [AgentEvent] {
-        activeTask?.events ?? []
+    @ObservationIgnored let host: AgentHostSurface
+    @ObservationIgnored let skillRecall: SkillRecallCoordinator
+    @ObservationIgnored let modelGateway: AgentModelGateway
+    @ObservationIgnored let topicCoordinator: TopicCoordinator
+    @ObservationIgnored let taskStore: AgentTaskStore
+    @ObservationIgnored let turns: TurnCoordinator
+    @ObservationIgnored let streaming = StreamingTextPump()
+    @ObservationIgnored let operations: SessionOperationGate
+    @ObservationIgnored let lifecycle: SessionLifecycle
+    @ObservationIgnored let router: CompositeTaskRouter
+
+    @ObservationIgnored let tools: ToolRegistry
+    @ObservationIgnored let taskRepository: any TaskRepository
+    @ObservationIgnored let settings: ModelSettings
+    @ObservationIgnored private(set) weak var skillCatalog: SkillCatalog?
+    @ObservationIgnored private weak var mcpHub: CapabilityStore?
+    /// Per-window skill tips / save jobs (owned by AgentSession).
+    @ObservationIgnored let skills: SkillSessionController
+
+    /// Called after skills are created/enhanced/deleted so AppState can refresh all windows.
+    var onSkillsCatalogChanged: (() async -> Void)? {
+        get { host.onSkillsCatalogChanged }
+        set { host.onSkillsCatalogChanged = newValue }
     }
 
-    /// Path sandbox for tools and UI path resolution.
-    var pathGuardPolicy: PathGuard.Policy {
-        if let focusedProject {
-            return .project(root: focusedProject.rootURL)
-        }
-        return .home
-    }
+    // MARK: - Composite UI capabilities (state + plan + streaming)
 
-    var focusTitle: String {
-        focusedProject?.name ?? "General"
-    }
-
-    /// True when the model is actively streaming text (first token has arrived).
     var isStreaming: Bool {
-        if case .thinking = phase { return !streamingText.isEmpty }
+        if case .thinking = state.phase { return streamingPlayback.isActive }
         return false
     }
 
-    var availableTools: [ToolDefinition] {
-        tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
-    }
-
     var canRetryFailure: Bool {
-        guard case .failed = phase else { return false }
-        if activeTask?.pendingPlan != nil { return true }
-        return !events.isEmpty
+        guard case .failed = state.phase else { return false }
+        if state.activeTask?.pendingPlan != nil || planProgress.hasPlan { return true }
+        return !state.events.isEmpty
     }
 
     var canStop: Bool {
-        guard isBusy else { return false }
-        switch phase {
+        guard state.isBusy else { return false }
+        switch state.phase {
         case .thinking, .executing:
             return true
         default:
@@ -79,54 +66,36 @@ final class AgentRuntime {
     }
 
     var canStartFresh: Bool {
-        guard !isBusy else { return false }
-        switch phase {
+        guard !state.isBusy else { return false }
+        switch state.phase {
         case .thinking, .executing:
             return false
-        case .awaitingConfirmation:
+        case .awaitingConfirmation, .awaitingSkillChoice:
             return true
         case .idle, .completed, .failed:
-            return activeTask?.events.isEmpty == false
-                || contextHint != nil
-                || forceFreshOnNextSubmit
+            return state.activeTask?.events.isEmpty == false
+                || state.contextHint != nil
+                || state.forceFreshOnNextSubmit
         }
     }
 
-    var hasPendingPlan: Bool {
-        if case .awaitingConfirmation = phase { return true }
-        return activeTask?.pendingPlan != nil
-    }
-
-    /// Failed with a recoverable pending plan — composer should not accept new input.
     var blocksNewInput: Bool {
-        if isBusy { return true }
-        switch phase {
-        case .thinking, .executing, .awaitingConfirmation:
+        if state.isBusy { return true }
+        switch state.phase {
+        case .thinking, .executing, .awaitingConfirmation, .awaitingSkillChoice:
             return true
         case .failed:
-            return activeTask?.pendingPlan != nil
+            return state.activeTask?.pendingPlan != nil || planProgress.hasPlan
         case .idle, .completed:
             return false
         }
     }
 
-    private let modelClient = ModelClient()
-    private let tools: ToolRegistry
-    private let taskRepository: any TaskRepository
-    private let contextResolver: any TaskContextResolving
-    private let taskRouter: TaskRouter
-    private let topicGenerator: TopicGenerator
-    private let settings: ModelSettings
-    private weak var capabilities: CapabilityStore?
-    private let skillExtractionService: SkillExtractionService
-    let skillSuggestionQueue = SkillSuggestionQueue()
-    /// Bumped on project focus changes so in-flight extractions after a switch are discarded.
-    private var skillSuggestionGeneration: UInt64 = 0
-    /// Background skill create/enhance jobs started from banner confirmation.
-    private(set) var skillSaveJobs: [SkillSaveJob] = []
-    private var skillSaveSuccessClearTasks: [UUID: Task<Void, Never>] = [:]
+    var availableSlashCommandDefinitions: [SlashCommandDefinition] {
+        host.availableSlashCommandDefinitions
+    }
 
-    private let systemPrompt = """
+    let systemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
     Prefer using tools for real actions (files, clipboard, apps, notifications).
     Keep plans small and concrete. Expand ~ paths when useful.
@@ -140,2627 +109,329 @@ final class AgentRuntime {
         settings: ModelSettings,
         tools: ToolRegistry,
         taskRepository: any TaskRepository,
-        contextResolver: any TaskContextResolving,
+        contextResolver: any TaskRouting = ContinuityTaskResolver(),
         taskRouter: TaskRouter = TaskRouter(),
         topicGenerator: TopicGenerator = TopicGenerator(),
-        capabilities: CapabilityStore? = nil
+        skillCatalog: SkillCatalog? = nil,
+        mcpHub: CapabilityStore? = nil,
+        skills: SkillSessionController
     ) {
+        let state = AgentSessionState()
+        let planProgress = PlanProgress()
+        self.state = state
+        self.planProgress = planProgress
         self.settings = settings
         self.tools = tools
         self.taskRepository = taskRepository
-        self.contextResolver = contextResolver
-        self.taskRouter = taskRouter
-        self.topicGenerator = topicGenerator
-        self.capabilities = capabilities
+        self.skillCatalog = skillCatalog
+        self.mcpHub = mcpHub
+        self.skills = skills
 
-        self.skillExtractionService = SkillExtractionService()
-    }
+        weak var catalogRef = skillCatalog
+        weak var mcpRef = mcpHub
 
-    func bootstrap() async {
-        // Wire up retry status callback so UI can show countdown.
-        await modelClient.setRetryStatusHandler { [weak self] status in
-            self?.handleRetryStatus(status)
+        let continuity: ContinuityTaskResolver
+        if let continuityResolver = contextResolver as? ContinuityTaskResolver {
+            continuity = continuityResolver
+        } else {
+            continuity = ContinuityTaskResolver()
         }
+        self.router = CompositeTaskRouter(continuity: continuity, taskRouter: taskRouter)
 
-        do {
-            let snapshot = try await taskRepository.loadWorkspace()
-            applyWorkspaceSnapshot(snapshot)
-            // Reload skills scoped to the restored project (if any).
-            await capabilities?.reloadSkills(projectRoot: focusedProject?.rootURL)
-            if snapshot.activeTask != nil {
-                await restorePhaseFromActiveTask()
-            } else {
-                _ = await createAndActivateTask(relatedTo: [])
+        let taskStore = AgentTaskStore(
+            state: state,
+            planProgress: planProgress,
+            taskRepository: taskRepository,
+            skills: skills
+        )
+        self.taskStore = taskStore
+
+        let host = AgentHostSurface(
+            state: state,
+            taskStore: taskStore,
+            skills: skills,
+            settings: settings,
+            tools: tools,
+            skillCatalog: skillCatalog,
+            mcpHub: mcpHub
+        )
+        self.host = host
+
+        let skillRecall = SkillRecallCoordinator(
+            state: state,
+            skills: skills,
+            skillCatalog: { catalogRef },
+            taskStore: taskStore
+        )
+        self.skillRecall = skillRecall
+        self.streaming.attach(playback: streamingPlayback)
+
+        let modelGateway = AgentModelGateway(
+            state: state,
+            settings: settings,
+            tools: tools,
+            systemPrompt: systemPrompt,
+            skillRecall: skillRecall,
+            skillCatalog: { catalogRef },
+            mcpToolDefinitions: { mcpRef?.mcpToolDefinitions() ?? [] },
+            taskRepository: taskRepository,
+            projectPromptAppendix: {
+                SessionLifecycle.projectPromptAppendix(for: state.focusedProject)
+            },
+            streaming: streaming
+        )
+        self.modelGateway = modelGateway
+
+        let topicCoordinator = TopicCoordinator(
+            state: state,
+            taskRepository: taskRepository,
+            topicGenerator: topicGenerator
+        )
+        self.topicCoordinator = topicCoordinator
+        taskStore.bind(topicCoordinator: topicCoordinator, skillRecall: skillRecall)
+
+        let operations = SessionOperationGate(state: state)
+        self.operations = operations
+
+        let lifecycle = SessionLifecycle(
+            state: state,
+            planProgress: planProgress,
+            taskRepository: taskRepository,
+            skillCatalog: { catalogRef },
+            skills: skills,
+            skillRecall: skillRecall,
+            modelGateway: modelGateway,
+            taskStore: taskStore,
+            operations: operations
+        )
+        self.lifecycle = lifecycle
+
+        let turns = TurnCoordinator(
+            state: state,
+            planProgress: planProgress,
+            taskStore: taskStore,
+            router: router,
+            skillRecall: skillRecall,
+            modelGateway: modelGateway,
+            settings: settings,
+            skillCatalog: { catalogRef },
+            workspaceSnapshot: { lifecycle.currentWorkspaceSnapshot() },
+            streaming: streaming,
+            topicCoordinator: topicCoordinator
+        )
+        self.turns = turns
+
+        skills.attach(runtime: self)
+        skillRecall.bind(skillHost: { [weak host] in host })
+        turns.bind(
+            slashHost: host,
+            confirmPlan: { [weak self] in await self?.confirmPendingPlanUnlocked() },
+            handleStop: { [weak self] plan in
+                guard let self else { return }
+                await PlanExecutor.handleStop(plan: plan, services: self.makePlanServices())
             }
-        } catch {
-            phase = .failed(message: "Could not open Sage's local database: \(error.localizedDescription)")
-        }
-
-        // Warm up the local model in the background — non-blocking.
-        Task.detached(priority: .utility) {
-            await LocalModelService.shared.warmUp()
-        }
-    }
-
-    private func handleRetryStatus(_ status: RetryStatus) {
-        switch status {
-        case .retrying(let attempt, let total, let delay):
-            let totalSec = Int(delay.rounded(.up))
-            retryState = RetryDisplayState(
-                attempt: attempt,
-                maxAttempts: total,
-                totalSeconds: totalSec,
-                secondsRemaining: totalSec
-            )
-        case .waiting(let seconds):
-            retryState?.secondsRemaining = seconds
-            if seconds <= 0 {
-                retryState = nil
-            }
-        }
-    }
-
-    /// Starts a clean internal task boundary without exposing session management.
-    @discardableResult
-    func startFresh() async -> UUID? {
-        guard beginOperation() else { return nil }
-        defer { endOperation() }
-
-        if case .awaitingConfirmation = phase {
-            guard await performCancelPendingPlan() else { return nil }
-        } else if let plan = activeTask?.pendingPlan {
-            phase = .awaitingConfirmation(plan)
-            guard await performCancelPendingPlan() else { return nil }
-        }
-
-        forceFreshOnNextSubmit = false
-        contextHint = nil
-        return await beginNewTask(relatedTo: [])
-    }
-
-    /// Hides the chip and forces the next submit onto a fresh task boundary.
-    func dismissContextHint() {
-        contextHint = nil
-        forceFreshOnNextSubmit = true
-    }
-
-    /// Cancels in-flight model/tool work. Pending confirmation still uses Cancel.
-    func stop() {
-        guard canStop else { return }
-        workTask?.cancel()
-    }
-
-    /// Entry point for a future context resolver. The UI does not expose task creation.
-    @discardableResult
-    func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
-        var inheritedRelated = relatedTaskIDs
-        // Persist the closed prior task before switching memory.
-        if var closing = activeTask {
-            let retractIDs = unexecutedToolProposalIDs(in: closing.events)
-            if !retractIDs.isEmpty {
-                let deleteSet = Set(retractIDs)
-                closing.events.removeAll { deleteSet.contains($0.id) }
-            }
-
-            do {
-                if closing.events.isEmpty {
-                    // Empty shells must not linger as completed catalog noise.
-                    try await taskRepository.deleteTask(id: closing.id)
-                    recentSummaries.removeAll { $0.id == closing.id }
-                } else {
-                    if closing.status == .active || closing.status == .awaitingApproval {
-                        closing.status = .completed
-                    }
-                    closing.pendingPlan = nil
-                    closing.updatedAt = .now
-                    try await taskRepository.mutateTask(
-                        closing,
-                        appendEvents: [],
-                        deleteEventIDs: retractIDs,
-                        setActive: false
-                    )
-                    refreshSummary(for: closing)
-                    // Closing via route/start-fresh often skips the .completed phase —
-                    // still generate a topic so the task can re-enter the catalog.
-                    scheduleTopicGeneration(for: closing)
-                    // Trigger skill extraction for the completed task (async, non-blocking).
-                    scheduleSkillExtraction(for: closing)
-                    // Link the closed task so related-context injection can fire.
-                    if !inheritedRelated.contains(closing.id) {
-                        inheritedRelated.insert(closing.id, at: 0)
-                    }
-                }
-                phase = .idle
-                lastAssistantText = nil
-            } catch {
-                phase = .failed(message: "Could not close the previous task: \(error.localizedDescription)")
-                return nil
-            }
-        }
-
-        // Clear stale references before creating the new task so that a failure
-        // in createAndActivateTask never leaves the runtime pointing at a
-        // completed/closed task.
-        activeTask = nil
-        activeTaskID = nil
-        tokenUsage = TokenUsage()
-        activatedSkillNames = []
-
-        return await createAndActivateTask(
-            relatedTo: Array(inheritedRelated.prefix(Self.maxRelatedTaskIDs))
         )
     }
 
-    /// Entry point for future semantic retrieval. Not surfaced as chat navigation.
-    func activateTask(_ id: UUID) async {
-        guard id != activeTaskID else { return }
+    private func makePlanServices() -> PlanServices {
+        PlanServices(
+            state: state,
+            planProgress: planProgress,
+            taskStore: taskStore,
+            skillRecall: skillRecall,
+            modelGateway: modelGateway,
+            tools: tools,
+            mcp: mcpHub,
+            skillHost: host,
+            topicCoordinator: topicCoordinator,
+            clearStream: { [weak self] in self?.streaming.clear() }
+        )
+    }
 
-        if var current = activeTask {
-            if case .awaitingConfirmation(let plan) = phase {
-                current.pendingPlan = plan
-                current.status = .awaitingApproval
-            }
-            current.updatedAt = .now
-            do {
-                try await taskRepository.saveTaskState(current, setActive: false)
-            } catch {
-                phase = .failed(message: "Could not save task context: \(error.localizedDescription)")
-                return
-            }
-        }
+    /// Boots this window's session. Pass `project` for a project window; `nil` for General.
+    /// - Parameter reloadCatalog: When false, skip skill rescan (caller already applied a shared scan).
+    func bootstrap(project: ProjectRecord? = nil, reloadCatalog: Bool = true) async {
+        await lifecycle.bootstrap(project: project, reloadCatalog: reloadCatalog)
+    }
 
-        do {
-            guard let task = try await taskRepository.loadTask(id: id) else {
-                phase = .failed(message: "Could not find that task context.")
-                return
-            }
-            // Task must belong to the focused project (or General).
-            guard task.projectID == focusedProject?.id else {
-                phase = .failed(message: "That task belongs to a different project.")
-                return
-            }
-            try await taskRepository.setFocus(
-                projectID: focusedProject?.id,
-                activeTaskID: id
+    func prepareForWindowClose() async {
+        await lifecycle.prepareForWindowClose()
+    }
+
+    func broadcastSkillsCatalogChange() async {
+        await host.broadcastSkillsCatalogChange()
+    }
+
+    func applySkillExtractionPhase(_ phase: AgentPhase) {
+        state.phase = phase
+    }
+
+    func reportFailure(_ message: String) {
+        state.phase = .failed(message: message)
+    }
+
+    func applyRecentProjects(_ projects: [ProjectRecord]) {
+        state.recentProjects = projects
+    }
+
+    @discardableResult
+    func startFresh() async -> UUID? {
+        guard operations.begin() else { return nil }
+        defer { operations.end() }
+
+        if case .awaitingConfirmation = state.phase {
+            guard await performCancelPendingPlan() else { return nil }
+        } else if case .awaitingSkillChoice = state.phase {
+            await lifecycle.abandonAwaitingSkillChoice(
+                reason: "Cancelled skill choice — started a new task."
             )
-            activeTask = task
-            activeTaskID = task.id
-            refreshSummary(for: task)
-            await restorePhaseFromActiveTask()
-            contextHint = Self.hint(for: task)
-        } catch {
-            phase = .failed(message: "Could not restore task context: \(error.localizedDescription)")
+        } else if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
+            planProgress.replace(plan)
+            state.phase = .awaitingConfirmation
+            guard await performCancelPendingPlan() else { return nil }
         }
+
+        state.forceFreshOnNextSubmit = false
+        state.contextHint = nil
+        return await taskStore.beginNewTask(relatedTo: [])
+    }
+
+    func dismissContextHint() {
+        state.contextHint = nil
+        state.forceFreshOnNextSubmit = true
+    }
+
+    func stop() {
+        guard canStop else { return }
+        operations.requestStop()
     }
 
     func eraseAllData() async -> Bool {
-        guard !isBusy else { return false }
-        workTask?.cancel()
-        workTask = nil
-        do {
-            try await taskRepository.eraseAllData()
-            activeTask = nil
-            activeTaskID = nil
-            focusedProject = nil
-            recentProjects = []
-            recentSummaries = []
-            lastAssistantText = nil
-            contextHint = nil
-            forceFreshOnNextSubmit = false
-            activatedSkillNames = []
-            phase = .idle
-            guard await createAndActivateTask(relatedTo: []) != nil else { return false }
-            return true
-        } catch {
-            phase = .failed(message: "Could not erase local data: \(error.localizedDescription)")
-            return false
-        }
+        await lifecycle.eraseAllData()
     }
 
-    // MARK: - Project focus
-
-    /// Open an existing directory as the focused project (reuses same root_path).
-    @discardableResult
-    func openProject(at url: URL) async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation() }
-        do {
-            guard await persistLeavingFocus() else { return false }
-            let project = try await taskRepository.openProject(rootURL: url, displayName: nil)
-            return await focusProject(project)
-        } catch {
-            phase = .failed(message: "Could not open project: \(error.localizedDescription)")
-            return false
-        }
+    func syncGlobalFocusPointer() async {
+        await lifecycle.syncGlobalFocusPointer()
     }
 
-    /// Create a new project directory under `parentURL`, then focus it.
-    @discardableResult
-    func createProject(parent parentURL: URL, name: String, gitInit: Bool) async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation() }
-        do {
-            guard await persistLeavingFocus() else { return false }
-            let project = try await taskRepository.createProject(
-                parentURL: parentURL,
-                name: name,
-                gitInit: gitInit
-            )
-            return await focusProject(project)
-        } catch {
-            phase = .failed(message: "Could not create project: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Switch focus to an already-registered project.
-    @discardableResult
-    func switchProject(id: UUID) async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation() }
-        do {
-            guard let project = try await taskRepository.loadProject(id: id) else {
-                phase = .failed(message: "Could not find that project.")
-                return false
-            }
-            if focusedProject?.id == project.id { return true }
-            guard await persistLeavingFocus() else { return false }
-            // Refresh last_opened
-            let opened = try await taskRepository.openProject(
-                rootURL: project.rootURL,
-                displayName: project.name
-            )
-            return await focusProject(opened)
-        } catch {
-            phase = .failed(message: "Could not switch project: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Leave the project and return to General.
-    @discardableResult
-    func closeProject() async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation() }
-        guard focusedProject != nil else { return true }
-        do {
-            guard await persistLeavingFocus() else { return false }
-
-            // Prefer the General task we left earlier; else most-recent General summary.
-            var restoreID = try await taskRepository.lastGeneralTaskID()
-            if let id = restoreID,
-               let task = try await taskRepository.loadTask(id: id),
-               task.projectID != nil {
-                restoreID = nil
-            }
-
-            focusedProject = nil
-            activeTask = nil
-            activeTaskID = nil
-            try await taskRepository.setFocus(projectID: nil, activeTaskID: restoreID)
-
-            // Reload skills without project scope (global only).
-            await capabilities?.reloadSkills(projectRoot: nil)
-            invalidatePendingSkillSuggestions()
-
-            let snapshot = try await taskRepository.loadWorkspace()
-            applyWorkspaceSnapshot(snapshot)
-            contextHint = nil
-            forceFreshOnNextSubmit = false
-
-            if snapshot.activeTask == nil {
-                return await createAndActivateTask(relatedTo: []) != nil
-            }
-            await restorePhaseFromActiveTask()
-            return true
-        } catch {
-            phase = .failed(message: "Could not close project: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Retries the model turn after a failure without duplicating user input.
     func retryLastFailure() async {
-        guard beginOperation() else { return }
-        defer { endOperation(); workTask = nil }
-        guard case .failed = phase else { return }
-
-        let work = Task { @MainActor in
-            await self.performRetry()
-        }
-        workTask = work
-        await work.value
+        guard case .failed = state.phase else { return }
+        _ = await operations.run { await self.turns.performRetry() }
     }
 
-    /// Returns `true` once the user message was accepted into history (draft can clear).
     @discardableResult
     func submit(_ userText: String) async -> Bool {
-        guard beginOperation() else { return false }
-        defer { endOperation(); workTask = nil }
-
-        let box = AcceptedBox()
-        let work = Task { @MainActor in
-            box.value = await self.performSubmit(userText)
-        }
-        workTask = work
-        await work.value
-        return box.value
+        await operations.runAccepted { await self.turns.performSubmit(userText) }
     }
 
     func confirmPendingPlan() async {
-        guard beginOperation() else { return }
-        defer { endOperation(); workTask = nil }
-
-        let work = Task { @MainActor in
-            await self.confirmPendingPlanUnlocked()
-        }
-        workTask = work
-        await work.value
+        _ = await operations.run { await self.confirmPendingPlanUnlocked() }
     }
 
-    /// Explicit cancel only — hiding the agent window must not call this.
     func cancelPendingPlan() async {
-        guard beginOperation() else { return }
-        defer { endOperation() }
+        guard operations.begin() else { return }
+        defer { operations.end() }
         _ = await performCancelPendingPlan()
     }
 
     func resetPhaseToIdle() {
-        if case .completed = phase { phase = .idle }
-        if case .failed = phase, activeTask?.pendingPlan == nil {
-            phase = .idle
+        if case .completed = state.phase { state.phase = .idle }
+        if case .failed = state.phase, state.activeTask?.pendingPlan == nil, !planProgress.hasPlan {
+            state.phase = .idle
         }
     }
 
-    /// Dismisses a failure. If a pending plan is still recoverable, abandons it
-    /// (same retract path as Cancel) instead of returning to an unclean Run state.
     func dismissFailure() async {
-        guard case .failed = phase else { return }
-        if let plan = activeTask?.pendingPlan {
-            guard beginOperation() else { return }
-            defer { endOperation() }
-            phase = .awaitingConfirmation(plan)
+        guard case .failed = state.phase else { return }
+        if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
+            guard operations.begin() else { return }
+            defer { operations.end() }
+            planProgress.replace(plan)
+            state.phase = .awaitingConfirmation
             _ = await performCancelPendingPlan()
             return
         }
-        phase = .idle
+        state.phase = .idle
     }
 
-    // MARK: - Private
-
-    private func beginOperation() -> Bool {
-        guard !isBusy else { return false }
-        isBusy = true
-        return true
+    func runModelTurn() async {
+        await turns.runModelTurn()
     }
 
-    private func endOperation() {
-        isBusy = false
-    }
+    func selectSkillActivation(named name: String) async {
+        guard case .awaitingSkillChoice(let choice) = state.phase else { return }
+        guard choice.candidates.contains(where: { $0.name == name }) else { return }
 
-    private func performRetry() async {
-        if let plan = activeTask?.pendingPlan {
-            phase = .awaitingConfirmation(plan)
-            await confirmPendingPlanUnlocked()
-            return
-        }
-
-        guard settings.isConfigured else {
-            phase = .failed(message: ModelClientError.notConfigured.localizedDescription)
-            return
-        }
-        guard !events.isEmpty else { return }
-
-        let resumeWithoutTools = events.last?.kind == .toolResult
-        phase = .thinking
-        streamingText = ""
-        cachedSkillResult = nil
-        do {
-            try Task.checkCancellation()
-            let turn = try await requestModelStreaming(includeTools: !resumeWithoutTools)
-            try Task.checkCancellation()
-            await handleTurn(turn)
-        } catch is CancellationError {
-            streamingText = ""
-            await handleStop(plan: nil)
-        } catch {
-            streamingText = ""
-            await markFailed(error.localizedDescription)
+        _ = await operations.run {
+            self.skills.tips.dismissChoose()
+            self.skills.enqueueConsolidateIfNeeded(candidates: choice.candidates)
+            self.state.phase = .thinking
+            await self.skillRecall.loadSkillsByName([name])
+            await self.skillRecall.refreshCatalogWithoutRematch(query: choice.queryText)
+            await self.runModelTurn()
         }
     }
 
-    private func performSubmit(_ userText: String) async -> Bool {
-        let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+    func skipSkillActivation() async {
+        guard case .awaitingSkillChoice(let choice) = state.phase else { return }
 
-        // Slash commands (`/remember`, `/skill-name`, …) — see `Commands/`.
-        let enabledSkillNames = (capabilities?.enabledSkills ?? []).map(\.name)
-        if let handled = await SlashCommandRegistry.handle(
-            trimmed,
-            host: self,
-            enabledSkillNames: enabledSkillNames
-        ) {
-            return handled
+        _ = await operations.run {
+            self.skills.tips.dismissChoose()
+            self.skills.enqueueConsolidateIfNeeded(candidates: choice.candidates)
+            self.state.phase = .thinking
+            await self.runModelTurn()
         }
+    }
 
-        guard settings.isConfigured else {
-            phase = .failed(message: ModelClientError.notConfigured.localizedDescription)
-            return false
-        }
-
-        if activeTask?.pendingPlan != nil || hasPendingPlan {
-            phase = .failed(
-                message: "Finish, cancel, or retry the pending plan before sending a new request."
-            )
-            return false
-        }
-
-        if case .completed = phase { phase = .idle }
-        if case .failed = phase { phase = .idle }
-
-        // Dismiss-chip / force-fresh must not be undone by resume routing.
-        let forcedFresh: Bool
-        if forceFreshOnNextSubmit {
-            forceFreshOnNextSubmit = false
-            contextHint = nil
-            guard await beginNewTask(relatedTo: []) != nil else { return false }
-            forcedFresh = true
-        } else {
-            forcedFresh = false
-        }
-
-        let effectiveDecision: TaskContextDecision
-        if forcedFresh {
-            effectiveDecision = TaskContextDecision(
-                action: .continueActive,
-                relatedTaskIDs: [],
-                confidence: 1,
-                reason: "User forced a fresh task boundary",
-                userVisibleHint: nil
-            )
-        } else {
-            let workspace = currentWorkspaceSnapshot()
-            let contextDecision = await contextResolver.resolve(
-                input: trimmed,
-                workspace: workspace
-            )
-
-            // Local model routing: refine when the heuristic says "continue"
-            // (topic drift → new, or resume a prior catalogued task).
-            if case .continueActive = contextDecision.action {
-                if let routingResult = await applyLocalRouting(input: trimmed) {
-                    guard let routed = await applyRoutingDecision(
-                        routingResult,
-                        input: trimmed
-                    ) else { return false }
-                    effectiveDecision = routed
-                } else {
-                    effectiveDecision = contextDecision
-                }
-            } else {
-                guard let applied = await apply(contextDecision) else { return false }
-                effectiveDecision = applied
-            }
-        }
-
-        guard await ensureActiveTask() else { return false }
-
-        // Defensive: resume paths refuse tasks with a pending plan, but keep
-        // this guard so we never wipe a plan if state races.
-        if let plan = activeTask?.pendingPlan {
-            phase = .awaitingConfirmation(plan)
-            return false
-        }
-
-        let userEvent = AgentEvent(
-            kind: .userInput,
-            content: trimmed,
-            context: effectiveDecision.eventContext
+    @discardableResult
+    func prepareSkillsForTurn(
+        query: String,
+        pauseForAmbiguity: Bool
+    ) async -> Bool {
+        await skillRecall.prepareSkillsForTurn(
+            query: query,
+            pauseForAmbiguity: pauseForAmbiguity
         )
-        guard await commit(
-            appendEvents: [userEvent],
-            deleteEventIDs: [],
-            mutate: { task in
-                task.status = .active
-                task.pendingPlan = nil
-                if task.summary == nil {
-                    task.summary = String(trimmed.prefix(160))
-                }
-                for relatedID in effectiveDecision.relatedTaskIDs
-                    where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
-                    task.relatedTaskIDs.append(relatedID)
-                }
-            }
-        ) else { return false }
-
-        if let hint = effectiveDecision.userVisibleHint {
-            contextHint = hint
-        }
-
-        phase = .thinking
-        lastAssistantText = nil
-        streamingText = ""
-        cachedSkillResult = nil
-
-        // Auto-load skills recommended by the local model before the first cloud request.
-        // This ensures the cloud model sees skill content immediately without needing to
-        // call load_skill itself. Falls back to catalog-based activation if local model
-        // returns no matches or encounters an error.
-        await autoLoadRecommendedSkills(for: trimmed)
-
-        do {
-            try Task.checkCancellation()
-            let turn = try await requestModelStreaming()
-            try Task.checkCancellation()
-            await handleTurn(turn)
-        } catch is CancellationError {
-            streamingText = ""
-            await handleStop(plan: nil)
-        } catch {
-            streamingText = ""
-            await markFailed(error.localizedDescription)
-        }
-        return true
     }
 
-    private func confirmPendingPlanUnlocked() async {
-        guard case .awaitingConfirmation(let initialPlan) = phase else { return }
-        // Always normalize before Run/Retry so Dismiss→Run and relaunch can't skip
-        // remaining steps or duplicate ERROR tool results.
-        guard var plan = await preparePlanForResume(initialPlan) else { return }
-        phase = .executing(plan)
+    func noteSkillsActivated(_ names: Set<String>) {
+        state.activatedSkillNames.formUnion(names)
+    }
 
-        do {
-            for index in plan.steps.indices {
-                try Task.checkCancellation()
-
-                if hasSuccessfulToolResult(for: plan.steps[index].toolCallID) {
-                    plan.steps[index].status = .succeeded
-                    continue
-                }
-                if plan.steps[index].status == .succeeded {
-                    continue
-                }
-
-                plan.steps[index].status = .running
-                phase = .executing(plan)
-
-                guard await persistPlanState(plan) else {
-                    await failDuringExecution(
-                        plan: plan,
-                        message: "Could not save progress. Retry to continue remaining steps."
-                    )
-                    return
-                }
-
-                let step = plan.steps[index]
-                let resultEvent: AgentEvent
-                do {
-                    try Task.checkCancellation()
-                    let rawResult: String
-                    if step.toolName.hasPrefix("mcp__"), let capabilities {
-                        rawResult = try await capabilities.callMCPTool(
-                            qualifiedName: step.toolName,
-                            argumentsJSON: step.argumentsJSON
-                        )
-                    } else if step.toolName == "load_skill" {
-                        rawResult = try await executeLoadSkill(argumentsJSON: step.argumentsJSON)
-                    } else if step.toolName == "load_skill_resource" {
-                        rawResult = try await executeLoadSkillResource(argumentsJSON: step.argumentsJSON)
-                    } else if step.toolName == "run_skill_script" {
-                        rawResult = try await executeRunSkillScript(argumentsJSON: step.argumentsJSON)
-                    } else if step.toolName == "save_skill" {
-                        rawResult = try await executeSaveSkill(argumentsJSON: step.argumentsJSON)
-                    } else if let tool = tools.tool(named: step.toolName) {
-                        // Some tools manage their own timeout or may involve user interaction
-                        // (permission prompts, interactive capture). Give them extended ceilings.
-                        let interactiveTools: Set<String> = [
-                            "run_shell_command",   // manages its own 120s timeout
-                            "take_screenshot",     // may trigger Screen Recording permission prompt
-                            "toggle_appearance",   // may trigger System Events permission prompt
-                            "create_reminder",     // may trigger Reminders permission prompt
-                        ]
-                        let timeout: Duration = interactiveTools.contains(step.toolName)
-                            ? .seconds(130)
-                            : toolExecutionTimeout
-                        let policy = pathGuardPolicy
-                        let allowlist = skillReadAllowlist()
-                        rawResult = try await withThrowingTaskGroup(of: String.self) { group in
-                            group.addTask {
-                                try await PathGuard.$policy.withValue(policy) {
-                                    try await PathGuard.$readAllowlist.withValue(allowlist) {
-                                        try await tool.call(argumentsJSON: step.argumentsJSON)
-                                    }
-                                }
-                            }
-                            group.addTask {
-                                try await Task.sleep(for: timeout)
-                                throw ToolError.operationFailed(
-                                    "Tool '\(step.toolName)' timed out after \(Int(timeout.components.seconds))s"
-                                )
-                            }
-                            let result = try await group.next()!
-                            group.cancelAll()
-                            return result
-                        }
-                    } else {
-                        throw ToolError.operationFailed("Unknown tool: \(step.toolName)")
-                    }
-                    let result = capToolResult(rawResult)
-                    // Side effects may already have landed — persist before honoring Stop.
-                    plan.steps[index].status = .succeeded
-                    plan.steps[index].result = result
-                    let isSkillContext = step.toolName == "load_skill" || step.toolName == "load_skill_resource"
-                    resultEvent = AgentEvent(
-                        kind: .toolResult,
-                        content: result,
-                        toolCallID: step.toolCallID,
-                        protected: isSkillContext
-                    )
-                } catch is CancellationError {
-                    plan.steps[index].status = .pending
-                    throw CancellationError()
-                } catch {
-                    plan.steps[index].status = .failed
-                    plan.steps[index].result = error.localizedDescription
-                    resultEvent = AgentEvent(
-                        kind: .toolResult,
-                        content: "ERROR: \(error.localizedDescription)",
-                        toolCallID: step.toolCallID
-                    )
-
-                    for later in (index + 1)..<plan.steps.count
-                        where plan.steps[later].status != .succeeded {
-                        plan.steps[later].status = .skipped
-                    }
-
-                    phase = .executing(plan)
-                    guard await commit(
-                        appendEvents: [resultEvent],
-                        deleteEventIDs: [],
-                        mutate: { task in
-                            task.pendingPlan = plan
-                            task.status = .awaitingApproval
-                        }
-                    ) else {
-                        await failDuringExecution(
-                            plan: plan,
-                            message: "Could not save progress. Retry to continue remaining steps."
-                        )
-                        return
-                    }
-                    await failDuringExecution(
-                        plan: plan,
-                        message: "Step failed: \(error.localizedDescription)"
-                    )
-                    return
-                }
-
-                phase = .executing(plan)
-                guard await commit(
-                    appendEvents: [resultEvent],
-                    deleteEventIDs: [],
-                    mutate: { task in
-                        task.pendingPlan = plan
-                        task.status = .active
-                    }
-                ) else {
-                    await failDuringExecution(
-                        plan: plan,
-                        message: "Could not save progress. Retry to continue remaining steps."
-                    )
-                    return
-                }
-
-                // Stop between steps only — never discard a committed success.
-                try Task.checkCancellation()
-            }
-
-            guard await commit(
-                appendEvents: [],
-                deleteEventIDs: [],
-                mutate: { task in
-                    task.pendingPlan = nil
-                }
-            ) else {
-                await failDuringExecution(
-                    plan: plan,
-                    message: "Could not save progress. Retry to continue remaining steps."
-                )
-                return
-            }
-            phase = .thinking
-            streamingText = ""
-
-            try Task.checkCancellation()
-            let turn = try await requestModelStreaming(includeTools: false)
-            try Task.checkCancellation()
-            let summary = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let text: String
-            if let summary, !summary.isEmpty {
-                text = summary
-            } else {
-                let fallback = plan.steps.compactMap(\.result).joined(separator: "\n")
-                text = fallback.isEmpty ? "Done." : fallback
-            }
-            guard await commit(
-                appendEvents: [AgentEvent(kind: .assistantResponse, content: text)],
-                deleteEventIDs: [],
-                mutate: { task in
-                    task.status = .completed
-                }
-            ) else {
-                streamingText = ""
-                phase = .failed(message: "Could not save the completion summary.")
-                return
-            }
-            streamingText = ""
-            lastAssistantText = text
-            phase = .completed(summary: text)
-            generateTopicIfNeeded()
-        } catch is CancellationError {
-            streamingText = ""
-            await handleStop(plan: plan)
-        } catch {
-            streamingText = ""
-            await markFailed(error.localizedDescription)
-        }
+    func confirmPendingPlanUnlocked() async {
+        guard case .awaitingConfirmation = state.phase else { return }
+        let plan = planProgress.plan ?? state.activeTask?.pendingPlan
+        guard let initialPlan = plan else { return }
+        await PlanExecutor.execute(initialPlan: initialPlan, services: makePlanServices())
     }
 
     @discardableResult
     private func performCancelPendingPlan() async -> Bool {
-        guard case .awaitingConfirmation = phase else { return false }
-
-        let retractIDs = unexecutedToolProposalIDs(in: events)
-        let text = "Cancelled. Nothing was changed."
-        let cancelEvent = AgentEvent(kind: .assistantResponse, content: text)
-
-        guard await commit(
-            appendEvents: [cancelEvent],
-            deleteEventIDs: retractIDs,
-            mutate: { task in
-                task.pendingPlan = nil
-                task.status = .active
-            }
-        ) else { return false }
-
-        lastAssistantText = text
-        phase = .idle
-        return true
+        guard case .awaitingConfirmation = state.phase else { return false }
+        return await PlanExecutor.cancelPendingPlan(services: makePlanServices())
     }
 
-    private func handleStop(plan: AgentPlan?) async {
-        if var plan {
-            for index in plan.steps.indices where plan.steps[index].status == .running {
-                plan.steps[index].status = .pending
-            }
-            await failDuringExecution(
-                plan: plan,
-                message: "Stopped. Retry to continue remaining steps."
-            )
-            return
-        }
+    // MARK: - Task store façades used by UI / AppState
 
-        // Keep a Retry path when work was already committed (user turn / tool results).
-        switch events.last?.kind {
-        case .toolResult:
-            phase = .failed(message: "Stopped. Retry to summarize.")
-        case .userInput:
-            phase = .failed(message: "Stopped. Retry to continue.")
-        default:
-            phase = .idle
-        }
+    @discardableResult
+    func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
+        await taskStore.beginNewTask(relatedTo: relatedTaskIDs)
     }
 
-    /// Clears ERROR tool results and reopens failed/skipped steps before Run/Retry.
-    private func preparePlanForResume(_ plan: AgentPlan) async -> AgentPlan? {
-        var plan = plan
-        let errorEventIDs = events.compactMap { event -> UUID? in
-            guard event.kind == .toolResult,
-                  event.content.hasPrefix("ERROR:")
-            else { return nil }
-            return event.id
-        }
-
-        for index in plan.steps.indices {
-            if hasSuccessfulToolResult(for: plan.steps[index].toolCallID) {
-                plan.steps[index].status = .succeeded
-                continue
-            }
-            if plan.steps[index].status == .failed
-                || plan.steps[index].status == .skipped
-                || plan.steps[index].status == .running {
-                plan.steps[index].status = .pending
-                plan.steps[index].result = nil
-            }
-        }
-
-        let ok = await commit(
-            appendEvents: [],
-            deleteEventIDs: errorEventIDs,
-            mutate: { task in
-                task.pendingPlan = plan
-                task.status = .awaitingApproval
-            }
-        )
-        guard ok else { return nil }
-        return plan
-    }
-
-    private func handleTurn(_ turn: ModelTurn) async {
-        if !turn.toolCalls.isEmpty {
-            let summary = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-                ?? "I can do this in \(turn.toolCalls.count) step\(turn.toolCalls.count == 1 ? "" : "s")."
-
-            let storedCalls = turn.toolCalls.map {
-                ToolCallRecord(id: $0.id, name: $0.name, argumentsJSON: $0.argumentsJSON)
-            }
-            let plan = AgentPlan(
-                summary: summary,
-                steps: turn.toolCalls.map { call in
-                    AgentStep(
-                        toolCallID: call.id,
-                        toolName: call.name,
-                        argumentsJSON: call.argumentsJSON,
-                        title: humanTitle(for: call)
-                    )
-                }
-            )
-            guard await commit(
-                appendEvents: [
-                    AgentEvent(
-                        kind: .assistantResponse,
-                        content: summary,
-                        toolCalls: storedCalls
-                    ),
-                ],
-                deleteEventIDs: [],
-                mutate: { task in
-                    task.pendingPlan = plan
-                    task.status = .awaitingApproval
-                }
-            ) else { return }
-
-            streamingText = ""
-            phase = .awaitingConfirmation(plan)
-            return
-        }
-
-        let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let reply = text.isEmpty ? "I couldn't produce a reply." : text
-        guard await commit(
-            appendEvents: [AgentEvent(kind: .assistantResponse, content: reply)],
-            deleteEventIDs: [],
-            mutate: { task in
-                task.status = .completed
-            }
-        ) else { return }
-        // Clear streaming state AFTER the event is committed — the committed event bubble
-        // is now in the transcript, so clearing streamingText won't cause a visual flash.
-        streamingText = ""
-        lastAssistantText = reply
-        phase = .completed(summary: reply)
-        generateTopicIfNeeded()
-    }
-
-    // MARK: - Skill Loading
-
-    /// Tool definition for `load_skill` — exposed to the cloud model when skills are deferred.
-    static let loadSkillDefinition = ToolDefinition(
-        name: "load_skill",
-        description: "Load a skill's full content by name. Use this when a skill from the Available Skills list is relevant to the user's request. Returns the skill's complete instructions.",
-        parameters: .object([
-            "type": .string("object"),
-            "properties": .object([
-                "name": .object([
-                    "type": .string("string"),
-                    "description": .string("The exact name of the skill to load (from the Available Skills list)."),
-                ]),
-            ]),
-            "required": .array([.string("name")]),
-        ])
-    )
-
-    /// Computes read-allowlisted directories from activated skills.
-    /// Allows the model to read bundled resources in skill directories even in project mode.
-    private func skillReadAllowlist() -> [String] {
-        guard !activatedSkillNames.isEmpty else { return [] }
-        let skills = capabilities?.enabledSkills ?? []
-        return activatedSkillNames.compactMap { name in
-            guard let skill = skills.first(where: { $0.name == name }) else { return nil }
-            return URL(fileURLWithPath: skill.path)
-                .deletingLastPathComponent()
-                .resolvingSymlinksInPath()
-                .path
-        }
-    }
-
-    /// Auto-loads skills recommended by the local model by injecting synthetic
-    /// tool-call + tool-result events into the conversation. This gives the cloud model
-    /// immediate access to skill instructions without requiring it to call `load_skill`.
-    ///
-    /// If the local model returns no recommendations (deferred/error), this is a no-op
-    /// and the cloud model will see the catalog and can call `load_skill` itself.
-    private func autoLoadRecommendedSkills(for userMessage: String) async {
-        guard let capabilities else { return }
-
-        let skillResult = await capabilities.skillsPromptAppendix(for: userMessage)
-        cachedSkillResult = skillResult
-
-        let toLoad = skillResult.recommendedSkills.filter { !activatedSkillNames.contains($0) }
-        guard !toLoad.isEmpty else { return }
-
-        // For each recommended skill, generate a synthetic load_skill call + result pair.
-        var syntheticEvents: [AgentEvent] = []
-
-        for skillName in toLoad {
-            let callID = "auto_skill_\(skillName)_\(UUID().uuidString.prefix(8))"
-            let argsJSON = "{\"name\":\"\(skillName)\"}"
-
-            // Execute the actual load logic.
-            let result: String
-            do {
-                result = try await executeLoadSkill(argumentsJSON: argsJSON)
-            } catch {
-                // If loading fails for one skill, skip it — don't block others.
-                continue
-            }
-
-            // Synthetic assistant response with a tool call (protected to stay paired with result).
-            let assistantEvent = AgentEvent(
-                kind: .assistantResponse,
-                content: "",
-                toolCalls: [ToolCallRecord(id: callID, name: "load_skill", argumentsJSON: argsJSON)],
-                protected: true
-            )
-
-            // Synthetic tool result (protected from context pruning).
-            let resultEvent = AgentEvent(
-                kind: .toolResult,
-                content: result,
-                toolCallID: callID,
-                protected: true
-            )
-
-            syntheticEvents.append(assistantEvent)
-            syntheticEvents.append(resultEvent)
-        }
-
-        guard !syntheticEvents.isEmpty else { return }
-
-        // Commit the synthetic events so they persist and appear in the conversation.
-        _ = await commit(
-            appendEvents: syntheticEvents,
-            deleteEventIDs: [],
-            mutate: { _ in }
-        )
-    }
-
-    /// Builds the structured `<skill_content>` block for a skill record.
-    /// Shared by `executeLoadSkill`, slash activation, and `autoLoadRecommendedSkills`.
-    private func buildSkillContent(for skill: SkillRecord) -> String {
-        let body = SkillRegistry.readBody(for: skill)
-        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent().path
-        var content = "<skill_content name=\"\(skill.name)\">\n"
-        content += body
-
-        let resources = SkillRegistry.listResources(for: skill)
-        let hasScripts = resources.contains { $0.hasPrefix("scripts/") }
-
-        if !resources.isEmpty {
-            content += "\n\nSkill directory: \(skillDir)"
-            content += "\nUse `load_skill_resource` to read any resource file by relative path."
-            if hasScripts {
-                content += "\nUse `run_skill_script` to execute scripts in the scripts/ directory."
-            }
-            content += "\n\n<skill_resources>"
-            for resource in resources {
-                content += "\n  <file>\(resource)</file>"
-            }
-            content += "\n</skill_resources>"
-        } else {
-            content += "\n\nSkill directory: \(skillDir)"
-        }
-
-        content += "\n</skill_content>"
-        return content
-    }
-
-    private func executeLoadSkill(argumentsJSON: String) async throws -> String {
-        struct Args: Decodable { let name: String }
-        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-
-        // Deduplication: don't re-inject a skill already loaded in this task.
-        if activatedSkillNames.contains(args.name) {
-            return "Skill '\(args.name)' is already loaded in this session. Its instructions are active."
-        }
-
-        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.name }) else {
-            throw ToolError.operationFailed(
-                "Skill '\(args.name)' not found or not enabled. Available skills: \(capabilities?.enabledSkills.map(\.name).joined(separator: ", ") ?? "none")"
-            )
-        }
-
-        let body = SkillRegistry.readBody(for: skill)
-        guard !body.isEmpty else {
-            throw ToolError.operationFailed("Skill '\(args.name)' has no content.")
-        }
-
-        activatedSkillNames.insert(args.name)
-        return buildSkillContent(for: skill)
-    }
-
-    // MARK: - Skill Resource Loading
-
-    /// Tool definition for `load_skill_resource` — available when any skill is activated.
-    static let loadSkillResourceDefinition = ToolDefinition(
-        name: "load_skill_resource",
-        description: """
-            Load a reference or resource file from an activated skill's directory. \
-            Use this to progressively read documentation, templates, or data files \
-            bundled with a skill (e.g. files in references/, assets/). \
-            The skill must have been activated via load_skill or a slash command first.
-            """,
-        parameters: .object([
-            "type": .string("object"),
-            "properties": .object([
-                "skill_name": .object([
-                    "type": .string("string"),
-                    "description": .string("Name of the activated skill that owns the resource."),
-                ]),
-                "path": .object([
-                    "type": .string("string"),
-                    "description": .string("Relative path to the resource file within the skill directory (e.g. 'references/REFERENCE.md')."),
-                ]),
-            ]),
-            "required": .array([.string("skill_name"), .string("path")]),
-        ])
-    )
-
-    /// Tool definition for `run_skill_script` — available when any skill is activated.
-    static let runSkillScriptDefinition = ToolDefinition(
-        name: "run_skill_script",
-        description: """
-            Execute a script bundled with an activated skill. \
-            The script path is relative to the skill's root directory (e.g. 'scripts/extract.py'). \
-            Scripts run with the skill directory as working directory. \
-            Supports any executable script — specify an interpreter or ensure the script has a shebang.
-            """,
-        parameters: .object([
-            "type": .string("object"),
-            "properties": .object([
-                "skill_name": .object([
-                    "type": .string("string"),
-                    "description": .string("Name of the activated skill that owns the script."),
-                ]),
-                "script_path": .object([
-                    "type": .string("string"),
-                    "description": .string("Relative path to the script within the skill directory (e.g. 'scripts/extract.py')."),
-                ]),
-                "arguments": .object([
-                    "type": .string("string"),
-                    "description": .string("Optional space-separated arguments to pass to the script."),
-                ]),
-                "interpreter": .object([
-                    "type": .string("string"),
-                    "description": .string("Optional interpreter (e.g. 'python3', 'node', 'bash'). If omitted, the script is executed directly."),
-                ]),
-                "timeout_seconds": .object([
-                    "type": .string("integer"),
-                    "description": .string("Timeout in seconds (default 30). The script is terminated if it exceeds this limit."),
-                ]),
-            ]),
-            "required": .array([.string("skill_name"), .string("script_path")]),
-        ])
-    )
-
-    private func executeLoadSkillResource(argumentsJSON: String) async throws -> String {
-        struct Args: Decodable {
-            let skillName: String
-            let path: String
-        }
-        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-
-        guard activatedSkillNames.contains(args.skillName) else {
-            throw ToolError.operationFailed(
-                "Skill '\(args.skillName)' is not activated in this session. Use load_skill first."
-            )
-        }
-
-        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.skillName }) else {
-            throw ToolError.operationFailed("Skill '\(args.skillName)' not found.")
-        }
-
-        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent()
-
-        // Validate the relative path doesn't escape the skill directory.
-        let normalizedPath = args.path.replacingOccurrences(of: "\\", with: "/")
-        guard !normalizedPath.contains("..") else {
-            throw ToolError.operationFailed(
-                "Path must not contain '..'. Use a relative path within the skill directory."
-            )
-        }
-        guard !normalizedPath.hasPrefix("/") else {
-            throw ToolError.operationFailed(
-                "Path must be relative to the skill directory, not absolute."
-            )
-        }
-
-        let fileURL = skillDir.appendingPathComponent(normalizedPath).standardizedFileURL
-        let resolvedPath = fileURL.resolvingSymlinksInPath().path
-        let resolvedSkillDir = skillDir.resolvingSymlinksInPath().path
-        guard resolvedPath.hasPrefix(resolvedSkillDir + "/") else {
-            throw ToolError.operationFailed("Resolved path escapes the skill directory.")
-        }
-
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            let resources = SkillRegistry.listResources(for: skill)
-            var msg = "File not found: \(args.path)"
-            if !resources.isEmpty {
-                msg += "\n\nAvailable resources:\n" + resources.map { "  \($0)" }.joined(separator: "\n")
-            }
-            throw ToolError.operationFailed(msg)
-        }
-
-        let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-        let fileSize = (attrs[.size] as? Int) ?? 0
-
-        let data = try Data(contentsOf: fileURL)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw ToolError.operationFailed("Resource file is not valid UTF-8 text: \(args.path)")
-        }
-
-        var result = ""
-        if fileSize > 100_000 {
-            result += "⚠️ Warning: Resource file is large (\(fileSize) bytes). This may consume significant context.\n\n"
-        }
-        result += "<skill_resource skill=\"\(args.skillName)\" path=\"\(args.path)\">\n\(text)\n</skill_resource>"
-        return result
-    }
-
-    private func executeRunSkillScript(argumentsJSON: String) async throws -> String {
-        struct Args: Decodable {
-            let skillName: String
-            let scriptPath: String
-            let arguments: String?
-            let interpreter: String?
-            let timeoutSeconds: Int?
-        }
-        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-
-        guard activatedSkillNames.contains(args.skillName) else {
-            throw ToolError.operationFailed(
-                "Skill '\(args.skillName)' is not activated in this session. Use load_skill first."
-            )
-        }
-
-        guard let skill = capabilities?.enabledSkills.first(where: { $0.name == args.skillName }) else {
-            throw ToolError.operationFailed("Skill '\(args.skillName)' not found.")
-        }
-
-        let skillDir = URL(fileURLWithPath: skill.path).deletingLastPathComponent()
-
-        // Validate script path.
-        let normalizedPath = args.scriptPath.replacingOccurrences(of: "\\", with: "/")
-        guard !normalizedPath.contains("..") else {
-            throw ToolError.operationFailed(
-                "Script path must not contain '..'. Use a relative path within the skill directory."
-            )
-        }
-        guard !normalizedPath.hasPrefix("/") else {
-            throw ToolError.operationFailed(
-                "Script path must be relative to the skill directory, not absolute."
-            )
-        }
-
-        let scriptURL = skillDir.appendingPathComponent(normalizedPath).standardizedFileURL
-        let resolvedPath = scriptURL.resolvingSymlinksInPath().path
-        let resolvedSkillDir = skillDir.resolvingSymlinksInPath().path
-        guard resolvedPath.hasPrefix(resolvedSkillDir + "/") else {
-            throw ToolError.operationFailed("Resolved script path escapes the skill directory.")
-        }
-
-        guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-            throw ToolError.operationFailed(
-                "Script not found: \(args.scriptPath) in skill '\(args.skillName)'."
-            )
-        }
-
-        // Block dangerous argument patterns.
-        if let arguments = args.arguments {
-            let dangerousPatterns = ["rm -rf /", "rm -rf /*", "rm -rf ~/", "rm -rf ~/*"]
-            for pattern in dangerousPatterns {
-                if arguments.contains(pattern) {
-                    throw ToolError.operationFailed("Blocked: arguments contain dangerous pattern.")
-                }
-            }
-        }
-
-        // Build the command.
-        let command: String
-        if let interpreter = args.interpreter, !interpreter.isEmpty {
-            let escapedScript = scriptURL.path.replacingOccurrences(of: "'", with: "'\\''")
-            command = "\(interpreter) '\(escapedScript)'" + (args.arguments.map { " \($0)" } ?? "")
-        } else {
-            // Ensure executable permission.
-            let attrs = try FileManager.default.attributesOfItem(atPath: scriptURL.path)
-            let perms = (attrs[.posixPermissions] as? Int) ?? 0
-            if perms & 0o111 == 0 {
-                try FileManager.default.setAttributes(
-                    [.posixPermissions: perms | 0o755],
-                    ofItemAtPath: scriptURL.path
-                )
-            }
-            let escapedScript = scriptURL.path.replacingOccurrences(of: "'", with: "'\\''")
-            command = "'\(escapedScript)'" + (args.arguments.map { " \($0)" } ?? "")
-        }
-
-        let timeout = max(args.timeoutSeconds ?? 30, 1)
-
-        // Run process off the MainActor to avoid UI freezes.
-        // Read pipe data concurrently with process execution to avoid deadlock
-        // when output exceeds the pipe buffer (~64KB).
-        let scriptCommand = command
-        let scriptDir = skillDir
-
-        let (output, exitCode, timedOut) = try await Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-c", scriptCommand]
-            process.currentDirectoryURL = scriptDir
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            try process.run()
-
-            // Read pipe data asynchronously to prevent buffer-full deadlock.
-            let readTask = Task { () -> Data in
-                pipe.fileHandleForReading.readDataToEndOfFile()
-            }
-
-            // Timeout watchdog — terminates the process if it exceeds the limit.
-            // Sends SIGTERM first, then SIGKILL after a 5s grace period.
-            var didTimeout = false
-            let timeoutTask = Task {
-                try await Task.sleep(for: .seconds(timeout))
-                if process.isRunning {
-                    didTimeout = true
-                    process.terminate()
-                    // Grace period: if still running after 5s, force kill.
-                    try? await Task.sleep(for: .seconds(5))
-                    if process.isRunning {
-                        kill(process.processIdentifier, SIGKILL)
-                    }
-                }
-            }
-
-            process.waitUntilExit()
-            timeoutTask.cancel()
-
-            let data = await readTask.value
-            let text = String(data: data, encoding: .utf8) ?? "(non-UTF-8 output)"
-            return (text, process.terminationStatus, didTimeout)
-        }.value
-
-        var result = ""
-        if timedOut {
-            result += "⚠️ Script terminated: exceeded timeout of \(timeout)s.\n"
-        }
-        result += "[exit \(exitCode)]\n"
-        if output.utf8.count > 50_000 {
-            result += "⚠️ Warning: Script output is large (\(output.utf8.count) bytes). This may consume significant context.\n\n"
-        }
-        result += output
-        return result
-    }
-
-    // MARK: - Skill Saving
-
-    /// Tool definition for `save_skill` — allows the agent to create or enhance skills
-    /// based on reusable experience identified during conversation.
-    static let saveSkillDefinition = ToolDefinition(
-        name: "save_skill",
-        description: """
-            Create a new skill or enhance an existing one to persist reusable experience as long-term memory. \
-            Use this when the user explicitly asks to save/remember an experience. \
-            Scope matches the product tips: "project" saves under the current project (only used there); \
-            "global" saves everywhere. When a project is focused, prefer "project" for project-specific \
-            knowledge; when none is focused, only "global" is valid. Enhance keeps the existing skill's location.
-            """,
-        parameters: .object([
-            "type": .string("object"),
-            "properties": .object([
-                "action": .object([
-                    "type": .string("string"),
-                    "description": .string("Whether to create a new skill or enhance an existing one."),
-                    "enum": .array([.string("create"), .string("enhance")]),
-                ]),
-                "name": .object([
-                    "type": .string("string"),
-                    "description": .string("Kebab-case skill name (1-64 chars, lowercase alphanumeric and hyphens). For 'enhance', must match an existing skill name."),
-                ]),
-                "description": .object([
-                    "type": .string("string"),
-                    "description": .string(SkillAuthoring.descriptionGuidelines),
-                ]),
-                "body": .object([
-                    "type": .string("string"),
-                    "description": .string(
-                        "Full SKILL.md content in markdown. Follow these guidelines: "
-                        + SkillAuthoring.bodyGuidelines
-                    ),
-                ]),
-                "scope": .object([
-                    "type": .string("string"),
-                    "description": .string("""
-                        Where to save a NEW skill. "project" = This Project (current project only). \
-                        "global" = Everywhere (all workspaces). Defaults to "project" when a project \
-                        is focused, otherwise "global". Ignored for enhance.
-                        """),
-                    "enum": .array([.string("project"), .string("global")]),
-                ]),
-            ]),
-            "required": .array([.string("action"), .string("name"), .string("description"), .string("body")]),
-        ])
-    )
-
-    /// Starts a background skill create/enhance job after the user confirms a banner tip.
-    /// The banner should dismiss immediately; progress is tracked in `skillSaveJobs`.
-    func startSkillSuggestionSave(_ suggestion: SkillSuggestion) {
-        let job = SkillSaveJob(
-            type: suggestion.type,
-            skillName: suggestion.skillName,
-            status: .running
-        )
-        skillSaveJobs.insert(job, at: 0)
-        let jobID = job.id
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await self.confirmSkillSuggestion(suggestion)
-                self.updateSkillSaveJob(jobID, status: .succeeded)
-                self.scheduleSkillSaveJobClear(jobID)
-            } catch {
-                self.skillSaveSuccessClearTasks[jobID]?.cancel()
-                self.skillSaveSuccessClearTasks[jobID] = nil
-                self.updateSkillSaveJob(jobID, status: .failed(error.localizedDescription))
-            }
-        }
-    }
-
-    /// Dismisses a finished skill-save job from the status indicator.
-    func dismissSkillSaveJob(_ jobID: UUID) {
-        skillSaveSuccessClearTasks[jobID]?.cancel()
-        skillSaveSuccessClearTasks[jobID] = nil
-        skillSaveJobs.removeAll { $0.id == jobID }
-    }
-
-    private func updateSkillSaveJob(_ jobID: UUID, status: SkillSaveJob.Status) {
-        guard let index = skillSaveJobs.firstIndex(where: { $0.id == jobID }) else { return }
-        skillSaveJobs[index].status = status
-    }
-
-    private func scheduleSkillSaveJobClear(_ jobID: UUID) {
-        skillSaveSuccessClearTasks[jobID]?.cancel()
-        skillSaveSuccessClearTasks[jobID] = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            self?.dismissSkillSaveJob(jobID)
-        }
-    }
-
-    /// Persists a banner skill suggestion. Both new and enhance suggestions are composed
-    /// by the cloud model on confirm (task transcript + save_skill guidelines; enhance
-    /// also includes the existing skill body).
-    func confirmSkillSuggestion(_ suggestion: SkillSuggestion) async throws {
-        guard let sourceTask = try await taskRepository.loadTask(id: suggestion.sourceTaskID) else {
-            throw SkillCompositionError.sourceTaskMissing
-        }
-
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: settings.baseURL,
-            model: settings.model,
-            apiKey: settings.apiKey
-        )
-
-        switch suggestion.type {
-        case .new:
-            let draft = try await skillExtractionService.composeNewSkill(
-                skillName: suggestion.skillName,
-                suggestedDescription: suggestion.skillDescription,
-                task: sourceTask,
-                settings: snapshot
-            )
-            if capabilities?.skills.contains(where: { $0.name == suggestion.skillName }) == true {
-                throw SkillWriter.WriteError.alreadyExists(suggestion.skillName)
-            }
-            let projectRoot = suggestion.projectRootPath.map { URL(fileURLWithPath: $0) }
-            try SkillWriter.createSkill(
-                name: suggestion.skillName,
-                description: draft.description,
-                body: draft.body,
-                scope: suggestion.scope,
-                projectRoot: projectRoot
-            )
-
-        case .enhance:
-            guard let path = suggestion.targetSkillPath,
-                  FileManager.default.fileExists(atPath: path) else {
-                throw SkillWriter.WriteError.skillNotFound(suggestion.skillName)
-            }
-            let existing = capabilities?.skills.first(where: { $0.path == path })
-                ?? SkillRecord(
-                    name: suggestion.skillName,
-                    description: suggestion.skillDescription,
-                    path: path,
-                    enabled: true,
-                    sourceLabel: suggestion.scope.sourceLabel
-                )
-            let draft = try await skillExtractionService.composeEnhancedSkill(
-                skillName: existing.name,
-                currentDescription: existing.description,
-                currentBody: SkillRegistry.readBody(for: existing),
-                suggestedDescription: suggestion.skillDescription,
-                task: sourceTask,
-                settings: snapshot
-            )
-            try SkillWriter.enhanceSkill(
-                existingRecord: existing,
-                description: draft.description,
-                body: draft.body
-            )
-        }
-
-        await capabilities?.reloadSkills(projectRoot: focusedProject?.rootURL)
-    }
-
-    private func executeSaveSkill(argumentsJSON: String) async throws -> String {
-        struct Args: Decodable {
-            let action: String
-            let name: String
-            let description: String
-            let body: String
-            let scope: String?
-        }
-        let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-
-        // Validate description length (spec: max 1024 chars).
-        guard args.description.count <= 1024 else {
-            throw ToolError.invalidArguments(
-                "Description exceeds 1024 characters (\(args.description.count)). Shorten it."
-            )
-        }
-
-        // Validate body is not excessively large.
-        let bodyLines = args.body.components(separatedBy: "\n").count
-        if bodyLines > 600 {
-            throw ToolError.invalidArguments(
-                "Body has \(bodyLines) lines — exceeds the recommended 500-line limit. "
-                + "Move detailed reference material to separate files in references/."
-            )
-        }
-
-        switch args.action {
-        case "create":
-            let scope = try resolveSaveSkillScope(args.scope)
-            if capabilities?.skills.contains(where: { $0.name == args.name }) == true {
-                throw ToolError.operationFailed(
-                    "Skill '\(args.name)' already exists in this workspace. Use action 'enhance' instead."
-                )
-            }
-            let path = try SkillWriter.createSkill(
-                name: args.name,
-                description: args.description,
-                body: args.body,
-                scope: scope,
-                projectRoot: focusedProject?.rootURL
-            )
-            await capabilities?.reloadSkills(
-                projectRoot: focusedProject?.rootURL
-            )
-            return "[OK] Created \(scope.catalogLabel) skill '\(args.name)' at \(path)"
-
-        case "enhance":
-            guard let existing = capabilities?.skills
-                .first(where: { $0.name == args.name }) else {
-                let available = capabilities?.enabledSkills.map(\.name).joined(separator: ", ") ?? "none"
-                throw ToolError.operationFailed(
-                    "Skill '\(args.name)' not found. Available skills: \(available)"
-                )
-            }
-            let path = try SkillWriter.enhanceSkill(
-                existingRecord: existing,
-                description: args.description,
-                body: args.body
-            )
-            await capabilities?.reloadSkills(
-                projectRoot: focusedProject?.rootURL
-            )
-            return "[OK] Enhanced \(existing.scope.catalogLabel) skill '\(args.name)' at \(path)"
-
-        default:
-            throw ToolError.invalidArguments(
-                "Invalid action '\(args.action)'. Must be 'create' or 'enhance'."
-            )
-        }
-    }
-
-    /// Resolves create scope the same way as the banner: project when focused (unless
-    /// explicitly global), otherwise global only.
-    private func resolveSaveSkillScope(_ raw: String?) throws -> SkillScope {
-        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch trimmed {
-        case nil, "":
-            return focusedProject != nil ? .project : .global
-        case "project":
-            guard focusedProject != nil else {
-                throw ToolError.invalidArguments(
-                    "scope 'project' requires a focused project. Use 'global', or open a project first."
-                )
-            }
-            return .project
-        case "global":
-            return .global
-        default:
-            throw ToolError.invalidArguments(
-                "Invalid scope '\(raw ?? "")'. Must be 'project' or 'global'."
-            )
-        }
-    }
-
-    // MARK: - Slash Commands (see `Commands/`)
-
-    /// Autocomplete entries: builtins + inactive enabled skills (with descriptions).
-    var availableSlashCommandDefinitions: [SlashCommandDefinition] {
-        let skills = (capabilities?.enabledSkills ?? [])
-            .filter { !activatedSkillNames.contains($0.name) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return SlashCommandRegistry.definitions(
-            skills: skills.map { ($0.name, $0.description) }
-        )
-    }
-
-    /// Builds the model events and tool definitions shared by both streaming and non-streaming paths.
-    private func prepareModelRequest(includeTools: Bool) async -> (events: [AgentEvent], tools: [ToolDefinition], settings: ModelSettingsSnapshot) {
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: settings.baseURL,
-            model: settings.model,
-            apiKey: settings.apiKey
-        )
-
-        // Use cached skill result if available (same user turn); otherwise compute and cache.
-        let skillResult: CapabilityStore.SkillAppendixResult?
-        if let cached = cachedSkillResult {
-            skillResult = cached
-        } else {
-            let latestUserMessage = events.last(where: { $0.kind == .userInput })?.content ?? ""
-            let computed = await capabilities?.skillsPromptAppendix(for: latestUserMessage)
-            cachedSkillResult = computed
-            skillResult = computed
-        }
-
-        let skillsAppendix = skillResult?.text ?? ""
-        let relatedAppendix = await relatedContextAppendix()
-        var modelEvents = [
-            AgentEvent(
-                kind: .systemInstruction,
-                content: systemPrompt + projectPromptAppendix() + skillsAppendix + relatedAppendix
-            )
-        ]
-        modelEvents.append(contentsOf: ContextBudget.select(from: events))
-
-        let toolDefinitions: [ToolDefinition]
-        if includeTools {
-            var defs = tools.definitions + (capabilities?.mcpToolDefinitions() ?? [])
-            if skillResult?.needsLoadSkillTool == true {
-                defs.append(Self.loadSkillDefinition)
-            }
-            // Expose resource/script tools when any skill has been activated.
-            if !activatedSkillNames.isEmpty {
-                defs.append(Self.loadSkillResourceDefinition)
-                defs.append(Self.runSkillScriptDefinition)
-            }
-            // Always expose save_skill so the agent can persist reusable experience.
-            defs.append(Self.saveSkillDefinition)
-            toolDefinitions = defs
-        } else {
-            toolDefinitions = []
-        }
-
-        return (modelEvents, toolDefinitions, snapshot)
-    }
-
-    private func requestModel(includeTools: Bool = true) async throws -> ModelTurn {
-        let req = await prepareModelRequest(includeTools: includeTools)
-        let turn = try await modelClient.complete(
-            events: req.events,
-            tools: req.tools,
-            settings: req.settings
-        )
-        retryState = nil
-        return turn
-    }
-
-    /// Streaming variant of `requestModel` — incrementally updates `streamingText`
-    /// and returns the assembled `ModelTurn` when the stream finishes.
-    private func requestModelStreaming(includeTools: Bool = true) async throws -> ModelTurn {
-        let req = await prepareModelRequest(includeTools: includeTools)
-        let stream = try await modelClient.streamComplete(
-            events: req.events,
-            tools: req.tools,
-            settings: req.settings
-        )
-
-        // Stream obtained — clear any retry countdown (retries succeeded or weren't needed).
-        retryState = nil
-
-        // Accumulate deltas into the final turn
-        var contentBuffer = ""
-        // Tool call accumulators keyed by index
-        var toolCallBuilders: [Int: ToolCallBuilder] = [:]
-
-        streamingText = ""
-
-        for try await delta in stream {
-            try Task.checkCancellation()
-
-            switch delta {
-            case .text(let chunk):
-                contentBuffer += chunk
-                streamingText = contentBuffer
-
-            case .toolCallDelta(let index, let id, let name, let arguments):
-                var builder = toolCallBuilders[index] ?? ToolCallBuilder()
-                if let id { builder.id = id }
-                if let name { builder.name = name }
-                if let arguments { builder.arguments += arguments }
-                toolCallBuilders[index] = builder
-
-            case .done:
-                break
-            }
-        }
-
-        // Note: streamingText is intentionally NOT cleared here.
-        // handleTurn will commit the text as an event, then clear streamingText,
-        // ensuring no visual flash between streaming content and the committed bubble.
-
-        // Assemble tool calls from builders, sorted by index
-        let toolCalls = toolCallBuilders.keys.sorted().compactMap { index -> ToolCallProposal? in
-            guard let builder = toolCallBuilders[index],
-                  let id = builder.id,
-                  let name = builder.name
-            else { return nil }
-            return ToolCallProposal(id: id, name: name, argumentsJSON: builder.arguments)
-        }
-
-        let content = contentBuffer.isEmpty ? nil : contentBuffer
-        return ModelTurn(content: content, toolCalls: toolCalls)
-    }
-
-    private func relatedContextAppendix() async -> String {
-        guard let task = activeTask else { return "" }
-        let relatedIDs = Array(
-            task.relatedTaskIDs
-                .filter { $0 != task.id }
-                .prefix(3)
-        )
-        guard !relatedIDs.isEmpty else { return "" }
-
-        var lines = ["", "## Related prior work", "Use only if relevant to the current request:"]
-        let scopeProjectID = focusedProject?.id
-        for id in relatedIDs {
-            guard let related = try? await taskRepository.loadTask(id: id) else { continue }
-            // Never inject cross-project context.
-            guard related.projectID == scopeProjectID else { continue }
-            let topic = related.topic?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            let summary = related.summary?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            let title = topic ?? summary ?? "Prior task"
-            lines.append("- \(title)")
-            if let abstract = related.abstract?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !abstract.isEmpty {
-                lines.append("  Intent: \(abstract)")
-            }
-            if let lastUser = related.events.last(where: { $0.kind == .userInput })?.content {
-                lines.append("  Last request: \(String(lastUser.prefix(220)))")
-            }
-            if let lastAssistant = related.events.last(where: {
-                $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
-            })?.content {
-                lines.append("  Last result: \(String(lastAssistant.prefix(220)))")
-            }
-        }
-        return lines.count > 3 ? lines.joined(separator: "\n") : ""
+    func activateTask(_ id: UUID) async {
+        await taskStore.activateTask(id)
     }
 
     @discardableResult
-    private func ensureActiveTask() async -> Bool {
-        if activeTaskID != nil, activeTask != nil { return true }
-        return await createAndActivateTask(relatedTo: []) != nil
-    }
-
-    @discardableResult
-    private func createAndActivateTask(relatedTo relatedTaskIDs: [UUID]) async -> UUID? {
-        let scopedRelated = await filterRelatedIDsToScope(relatedTaskIDs)
-        let task = TaskRecord(
-            projectID: focusedProject?.id,
-            relatedTaskIDs: scopedRelated
-        )
-        do {
-            try await taskRepository.saveTaskState(task, setActive: true)
-            try await taskRepository.setFocus(
-                projectID: focusedProject?.id,
-                activeTaskID: task.id
-            )
-            activeTask = task
-            activeTaskID = task.id
-            refreshSummary(for: task)
-            phase = .idle
-            lastAssistantText = nil
-            return task.id
-        } catch {
-            phase = .failed(message: "Could not create task storage: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    private func applyWorkspaceSnapshot(_ snapshot: TaskWorkspaceSnapshot) {
-        focusedProject = snapshot.focusedProject
-        recentProjects = snapshot.recentProjects
-        recentSummaries = snapshot.recentSummaries
-        activeTask = snapshot.activeTask
-        activeTaskID = snapshot.activeTask?.id ?? snapshot.activeTaskID
-    }
-
-    private func currentWorkspaceSnapshot() -> TaskWorkspaceSnapshot {
-        TaskWorkspaceSnapshot(
-            focusedProject: focusedProject,
-            activeTask: activeTask,
-            recentSummaries: recentSummaries,
-            recentProjects: recentProjects,
-            activeTaskID: activeTaskID
-        )
-    }
-
-    private func projectPromptAppendix() -> String {
-        guard let project = focusedProject else {
-            return """
-
-
-            ## Active sandbox
-            Mode: General. File and shell paths must stay under the user's home directory (~/).
-            Default shell working directory is ~.
-            """
-        }
-        return """
-
-
-        ## Active sandbox
-        Mode: Code Project.
-        Project name: \(project.name)
-        Project root: \(project.rootPath)
-        All file reads/writes and shell working directories must stay inside this project root.
-        Relative paths resolve against the project root. Prefer project-relative paths.
-        Default shell working directory is the project root.
-        """
-    }
-
-    /// Save the in-memory task (including pending plan) and remember last-active
-    /// pointers before changing project focus.
-    @discardableResult
-    private func persistLeavingFocus() async -> Bool {
-        if var current = activeTask {
-            if case .awaitingConfirmation(let plan) = phase {
-                current.pendingPlan = plan
-                current.status = .awaitingApproval
-            }
-            current.updatedAt = .now
-            do {
-                try await taskRepository.saveTaskState(current, setActive: false)
-                activeTask = current
-            } catch {
-                phase = .failed(message: "Could not save task before switching project: \(error.localizedDescription)")
-                return false
-            }
-        }
-
-        do {
-            if let project = focusedProject {
-                try await taskRepository.setProjectLastActiveTask(
-                    projectID: project.id,
-                    taskID: activeTaskID
-                )
-            } else if let activeTaskID, activeTask?.projectID == nil {
-                try await taskRepository.setLastGeneralTaskID(activeTaskID)
-            }
-            return true
-        } catch {
-            phase = .failed(message: "Could not remember project focus: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    private func focusProject(_ project: ProjectRecord) async -> Bool {
-        do {
-            contextHint = nil
-            forceFreshOnNextSubmit = false
-            invalidatePendingSkillSuggestions()
-
-            // Reload skills scoped to the new project.
-            await capabilities?.reloadSkills(projectRoot: project.rootURL)
-
-            // Reload project so last_active_task_id reflects what we just persisted.
-            let project = try await taskRepository.loadProject(id: project.id) ?? project
-
-            if let lastID = project.lastActiveTaskID,
-               let task = try await taskRepository.loadTask(id: lastID),
-               task.projectID == project.id {
-                try await taskRepository.setFocus(projectID: project.id, activeTaskID: lastID)
-                let snapshot = try await taskRepository.loadWorkspace()
-                applyWorkspaceSnapshot(snapshot)
-                focusedProject = snapshot.focusedProject ?? project
-                await restorePhaseFromActiveTask()
-                return true
-            }
-
-            focusedProject = project
-            activeTask = nil
-            activeTaskID = nil
-            try await taskRepository.setFocus(projectID: project.id, activeTaskID: nil)
-            guard await createAndActivateTask(relatedTo: []) != nil else { return false }
-            let snapshot = try await taskRepository.loadWorkspace()
-            applyWorkspaceSnapshot(snapshot)
-            focusedProject = snapshot.focusedProject ?? project
-            return true
-        } catch {
-            phase = .failed(message: "Could not focus project: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Drops pending skill tips and ignores in-flight extraction results after a project switch.
-    private func invalidatePendingSkillSuggestions() {
-        skillSuggestionGeneration &+= 1
-        skillSuggestionQueue.dismissAll()
-    }
-
-    private func filterRelatedIDsToScope(_ ids: [UUID]) async -> [UUID] {
-        let scope = focusedProject?.id
-        var result: [UUID] = []
-        for id in ids {
-            guard let task = try? await taskRepository.loadTask(id: id) else { continue }
-            guard task.projectID == scope else { continue }
-            if !result.contains(id) { result.append(id) }
-        }
-        return Array(result.prefix(Self.maxRelatedTaskIDs))
-    }
-
-    private static let maxRelatedTaskIDs = 8
-
-    /// Applies a heuristic context decision. Returns the effective decision
-    /// (may downgrade a blocked resume to continue), or nil on hard failure.
-    private func apply(_ decision: TaskContextDecision) async -> TaskContextDecision? {
-        switch decision.action {
-        case .continueActive:
-            return decision
-        case .beginNew:
-            contextHint = nil
-            guard await beginNewTask(relatedTo: decision.relatedTaskIDs) != nil else {
-                return nil
-            }
-            return decision
-        case .resumeTask(let id):
-            return await resumeTask(
-                id,
-                extraRelatedIDs: decision.relatedTaskIDs,
-                inputForTopicUpdate: nil,
-                confidence: decision.confidence,
-                reason: decision.reason,
-                userVisibleHint: decision.userVisibleHint
-            )
-        }
-    }
-
-    /// Shared resume path for heuristic + local-model routing.
-    private func resumeTask(
-        _ id: UUID,
-        extraRelatedIDs: [UUID],
-        inputForTopicUpdate: String?,
-        confidence: Double,
-        reason: String,
-        userVisibleHint: String?
-    ) async -> TaskContextDecision? {
-        if await taskHasPendingPlan(id) {
-            return TaskContextDecision(
-                action: .continueActive,
-                relatedTaskIDs: [],
-                confidence: confidence,
-                reason: "Resume skipped: target has pending plan",
-                userVisibleHint: nil
-            )
-        }
-
-        let previousID = activeTaskID
-        await activateTask(id)
-        guard activeTaskID == id else { return nil }
-
-        if var task = activeTask {
-            var changed = false
-            if let previousID,
-               previousID != task.id,
-               !task.relatedTaskIDs.contains(previousID) {
-                task.relatedTaskIDs.insert(previousID, at: 0)
-                changed = true
-            }
-            for relatedID in extraRelatedIDs
-                where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
-                task.relatedTaskIDs.append(relatedID)
-                changed = true
-            }
-            if task.relatedTaskIDs.count > Self.maxRelatedTaskIDs {
-                task.relatedTaskIDs = Array(task.relatedTaskIDs.prefix(Self.maxRelatedTaskIDs))
-                changed = true
-            }
-            if changed {
-                task.updatedAt = .now
-                do {
-                    try await taskRepository.saveTaskState(task, setActive: true)
-                    adoptTaskInMemory(task)
-                } catch {
-                    phase = .failed(message: "Could not update related context: \(error.localizedDescription)")
-                    return nil
-                }
-            }
-
-            if let inputForTopicUpdate,
-               let existingTopic = task.topic,
-               let existingAbstract = task.abstract {
-                let targetID = id
-                Task.detached(priority: .utility) { [topicGenerator] in
-                    if let updated = await topicGenerator.update(
-                        existingTopic: existingTopic,
-                        existingAbstract: existingAbstract,
-                        newInput: inputForTopicUpdate
-                    ) {
-                        await MainActor.run { [weak self] in
-                            self?.updateTaskTopic(updated, for: targetID)
-                        }
-                    }
-                }
-            }
-        }
-
-        let hint = userVisibleHint ?? activeTask.map(Self.hint(for:))
-        if let hint { contextHint = hint }
-        return TaskContextDecision(
-            action: .resumeTask(id),
-            relatedTaskIDs: [],
-            confidence: confidence,
-            reason: reason,
-            userVisibleHint: hint
-        )
-    }
-
-    private func taskHasPendingPlan(_ id: UUID) async -> Bool {
-        if activeTaskID == id { return activeTask?.pendingPlan != nil }
-        return (try? await taskRepository.hasPendingPlan(taskID: id)) ?? false
-    }
-
-    /// Updates memory only after a successful atomic DB mutation.
-    @discardableResult
-    private func commit(
+    func commit(
         appendEvents: [AgentEvent],
         deleteEventIDs: [UUID],
         mutate: (inout TaskRecord) -> Void = { _ in }
     ) async -> Bool {
-        guard var task = activeTask else { return false }
-        mutate(&task)
-        if !deleteEventIDs.isEmpty {
-            let deleteSet = Set(deleteEventIDs)
-            task.events.removeAll { deleteSet.contains($0.id) }
-        }
-        task.events.append(contentsOf: appendEvents)
-        // Keep persisted skill set in sync with runtime state.
-        task.activatedSkillNames = activatedSkillNames
-        task.updatedAt = .now
-        do {
-            try await taskRepository.mutateTask(
-                task,
-                appendEvents: appendEvents,
-                deleteEventIDs: deleteEventIDs,
-                setActive: true
-            )
-            adoptTaskInMemory(task)
-            return true
-        } catch {
-            phase = .failed(message: "Could not save task history: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    private func persistPlanState(_ plan: AgentPlan) async -> Bool {
-        guard var task = activeTask else { return false }
-        task.pendingPlan = plan
-        task.status = .active
-        task.updatedAt = .now
-        do {
-            try await taskRepository.saveTaskState(task, setActive: true)
-            adoptTaskInMemory(task)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    /// Writes `task` into memory, preserving a topic that arrived concurrently
-    /// (topic generation finishing while commit/plan save was in flight).
-    private func adoptTaskInMemory(_ task: TaskRecord) {
-        var merged = task
-        if merged.topic == nil,
-           let current = activeTask,
-           current.id == merged.id,
-           let topic = current.topic {
-            merged.topic = topic
-            merged.abstract = current.abstract
-            merged.topicUpdatedAt = current.topicUpdatedAt
-        }
-        activeTask = merged
-        refreshSummary(for: merged)
-    }
-
-    private func failDuringExecution(plan: AgentPlan, message: String) async {
-        retryState = nil
-        if var task = activeTask {
-            task.pendingPlan = plan
-            task.status = .awaitingApproval
-            task.updatedAt = .now
-            activeTask = task
-            try? await taskRepository.saveTaskState(task, setActive: true)
-            refreshSummary(for: task)
-        }
-        phase = .failed(message: message)
-    }
-
-    private func markFailed(_ message: String) async {
-        retryState = nil
-        phase = .failed(message: message)
-        guard var task = activeTask else { return }
-        task.status = .failed
-        task.updatedAt = .now
-        do {
-            try await taskRepository.saveTaskState(task, setActive: true)
-            activeTask = task
-            refreshSummary(for: task)
-        } catch {
-            activeTask = task
-        }
-    }
-
-    private func refreshSummary(for task: TaskRecord) {
-        // Keep the in-memory catalog scoped to the focused project.
-        guard task.projectID == focusedProject?.id else { return }
-        let summary = TaskSummary(
-            id: task.id,
-            status: task.status,
-            projectID: task.projectID,
-            summary: task.summary,
-            topic: task.topic,
-            abstract: task.abstract,
-            updatedAt: task.updatedAt
-        )
-        if let index = recentSummaries.firstIndex(where: { $0.id == task.id }) {
-            recentSummaries[index] = summary
-            recentSummaries.sort { $0.updatedAt > $1.updatedAt }
-        } else {
-            recentSummaries.insert(summary, at: 0)
-        }
-    }
-
-    private func restorePhaseFromActiveTask() async {
-        guard let task = activeTask else {
-            phase = .idle
-            lastAssistantText = nil
-            return
-        }
-        // Restore activated skills from the persisted task record.
-        activatedSkillNames = task.activatedSkillNames
-        lastAssistantText = task.events.last(where: {
-            $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
-        })?.content
-        if var plan = task.pendingPlan {
-            for index in plan.steps.indices {
-                if let result = task.events.last(where: {
-                    $0.kind == .toolResult && $0.toolCallID == plan.steps[index].toolCallID
-                }) {
-                    if result.content.hasPrefix("ERROR:") {
-                        plan.steps[index].status = .failed
-                    } else {
-                        plan.steps[index].status = .succeeded
-                    }
-                } else if plan.steps[index].status == .running {
-                    plan.steps[index].status = .pending
-                }
-            }
-            var updated = task
-            let unfinished = plan.steps.contains {
-                $0.status != .succeeded && $0.status != .skipped
-            }
-            if unfinished {
-                updated.pendingPlan = plan
-                activeTask = updated
-                phase = .awaitingConfirmation(plan)
-            } else {
-                // All tools finished; clear persisted plan and offer summary retry.
-                updated.pendingPlan = nil
-                activeTask = updated
-                try? await taskRepository.saveTaskState(updated, setActive: true)
-                refreshSummary(for: updated)
-                if updated.events.last?.kind == .toolResult {
-                    phase = .failed(
-                        message: "Interrupted after tools finished. Retry to summarize."
-                    )
-                } else {
-                    phase = .idle
-                }
-            }
-        } else {
-            phase = .idle
-        }
-    }
-
-    private func hasSuccessfulToolResult(for toolCallID: String) -> Bool {
-        events.contains {
-            $0.kind == .toolResult
-                && $0.toolCallID == toolCallID
-                && !$0.content.hasPrefix("ERROR:")
-        }
-    }
-
-    private func unexecutedToolProposalIDs(in events: [AgentEvent]) -> [UUID] {
-        let completed = Set(
-            events.compactMap { event -> String? in
-                guard event.kind == .toolResult else { return nil }
-                return event.toolCallID
-            }
-        )
-        return events.compactMap { event in
-            guard event.kind == .assistantResponse,
-                  let calls = event.toolCalls,
-                  !calls.isEmpty,
-                  !calls.contains(where: { completed.contains($0.id) })
-            else { return nil }
-            return event.id
-        }
-    }
-
-    private func humanTitle(for call: ToolCallProposal) -> String {
-        ToolCallPresentation.humanTitle(name: call.name, argumentsJSON: call.argumentsJSON)
-    }
-
-    private static func hint(for task: TaskRecord) -> String {
-        if let topic = task.topic?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !topic.isEmpty {
-            return "Using context from \u{201C}\(topic)\u{201D}"
-        }
-        if let summary = task.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !summary.isEmpty {
-            let clipped = summary.count > 48
-                ? String(summary.prefix(45)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
-                : summary
-            return "Using context from \u{201C}\(clipped)\u{201D}"
-        }
-        return "Using context from a related task"
-    }
-
-    // MARK: - Local Model Routing
-
-    /// Asks the local model to route the input. Returns nil if the model decides
-    /// (or falls back to) continuing the current task.
-    private func applyLocalRouting(input: String) async -> TaskRoutingDecision? {
-        let catalog = TaskCatalog.build(
-            from: recentSummaries,
-            excluding: activeTaskID
-        )
-        let activeIsEmpty = activeTask?.events.isEmpty ?? true
-        // Skip only when there is neither a conversation to leave nor a catalog
-        // to resume. A non-empty active task with an empty catalog still needs
-        // routing so the model can emit `new` on topic drift.
-        if catalog.entries.isEmpty && activeIsEmpty {
-            return heuristicRoutingDecision(input: input)
-        }
-
-        let decision = await taskRouter.route(
-            input: input,
-            currentTopic: activeTask?.topic ?? activeTask?.summary.map {
-                String($0.prefix(20))
-            },
-            catalog: catalog
-        )
-
-        switch decision.action {
-        case .continueActive:
-            // Low confidence = model unavailable / unparseable — try lexical fallback.
-            if decision.confidence <= 0.5 {
-                return heuristicRoutingDecision(input: input)
-            }
-            return nil
-        case .resumeTask, .beginNew:
-            return decision
-        }
-    }
-
-    private func heuristicRoutingDecision(input: String) -> TaskRoutingDecision? {
-        let workspace = currentWorkspaceSnapshot()
-        guard let decision = HeuristicTaskFallback.decide(
-            input: input,
-            workspace: workspace
-        ) else {
-            return nil
-        }
-        switch decision.action {
-        case .continueActive:
-            return nil
-        case .beginNew:
-            return TaskRoutingDecision(
-                action: .beginNew,
-                confidence: decision.confidence,
-                reason: decision.reason
-            )
-        case .resumeTask(let id):
-            return TaskRoutingDecision(
-                action: .resumeTask(id),
-                confidence: decision.confidence,
-                reason: decision.reason
-            )
-        }
-    }
-
-    /// Applies a local model routing decision. Returns the effective context
-    /// decision for event metadata, or nil on hard failure.
-    private func applyRoutingDecision(
-        _ decision: TaskRoutingDecision,
-        input: String
-    ) async -> TaskContextDecision? {
-        switch decision.action {
-        case .continueActive:
-            return TaskContextDecision(
-                action: .continueActive,
-                relatedTaskIDs: activeTask?.relatedTaskIDs ?? [],
-                confidence: decision.confidence,
-                reason: decision.reason,
-                userVisibleHint: nil
-            )
-        case .beginNew:
-            contextHint = nil
-            guard await beginNewTask(relatedTo: []) != nil else { return nil }
-            return TaskContextDecision(
-                action: .beginNew,
-                relatedTaskIDs: [],
-                confidence: decision.confidence,
-                reason: decision.reason,
-                userVisibleHint: nil
-            )
-        case .resumeTask(let id):
-            return await resumeTask(
-                id,
-                extraRelatedIDs: [],
-                inputForTopicUpdate: input,
-                confidence: decision.confidence,
-                reason: decision.reason,
-                userVisibleHint: nil
-            )
-        }
-    }
-
-    /// Updates a task's topic/abstract in memory (if still active) and persists
-    /// via a topic-only write so concurrent plan/event saves cannot be clobbered.
-    private func updateTaskTopic(_ result: TopicResult, for taskID: UUID? = nil) {
-        let targetID = taskID ?? activeTask?.id
-        guard let targetID else { return }
-        let stampedAt = Date.now
-
-        if var task = activeTask, task.id == targetID {
-            task.topic = result.topic
-            task.abstract = result.abstract
-            task.topicUpdatedAt = stampedAt
-            task.updatedAt = stampedAt
-            activeTask = task
-            refreshSummary(for: task)
-        } else if let index = recentSummaries.firstIndex(where: { $0.id == targetID }) {
-            recentSummaries[index] = TaskSummary(
-                id: recentSummaries[index].id,
-                status: recentSummaries[index].status,
-                projectID: recentSummaries[index].projectID,
-                summary: recentSummaries[index].summary,
-                topic: result.topic,
-                abstract: result.abstract,
-                updatedAt: stampedAt
-            )
-            recentSummaries.sort { $0.updatedAt > $1.updatedAt }
-        }
-
-        Task {
-            try? await taskRepository.updateTopic(
-                taskID: targetID,
-                topic: result.topic,
-                abstract: result.abstract,
-                topicUpdatedAt: stampedAt
-            )
-        }
-    }
-
-    // MARK: - Topic Generation on Completion
-
-    /// Tasks currently undergoing topic generation — prevents duplicate runs.
-    private var topicGenerationTaskIDs: Set<UUID> = []
-    /// Tasks already submitted for skill extraction — prevents duplicate analysis.
-    private var skillExtractionTaskIDs: Set<UUID> = []
-
-    /// Called after a task completes to generate its topic if missing.
-    func generateTopicIfNeeded() {
-        guard let task = activeTask else { return }
-        scheduleTopicGeneration(for: task)
-    }
-
-    /// Schedules topic generation for any task (active or just closed).
-    private func scheduleTopicGeneration(for task: TaskRecord) {
-        guard task.topic == nil, !task.events.isEmpty else { return }
-        guard !topicGenerationTaskIDs.contains(task.id) else { return }
-        topicGenerationTaskIDs.insert(task.id)
-
-        let taskID = task.id
-        let events = task.events
-        Task.detached(priority: .utility) { [topicGenerator, weak self] in
-            let result = await topicGenerator.generate(from: events)
-            await MainActor.run { [weak self] in
-                self?.topicGenerationTaskIDs.remove(taskID)
-                if let result {
-                    self?.updateTaskTopic(result, for: taskID)
-                }
-            }
-        }
-    }
-
-    // MARK: - Skill Extraction
-
-    /// Asynchronously analyzes a task for reusable experience.
-    /// Results are enqueued into `skillSuggestionQueue` for UI presentation.
-    private func scheduleSkillExtraction(
-        for task: TaskRecord,
-        mode: SkillExtractionMode = .automatic,
-        userNote: String? = nil,
-        presentImmediately: Bool = false
-    ) {
-        // Passive extraction skips trivial tasks; explicit /remember already validated content.
-        if mode == .automatic {
-            guard task.events.count >= 4 else { return }
-        }
-        guard settings.isConfigured else { return }
-        guard !skillExtractionTaskIDs.contains(task.id) else {
-            if mode == .explicitRemember {
-                phase = .failed(message: "Already identifying what to remember for this task.")
-            }
-            return
-        }
-        skillExtractionTaskIDs.insert(task.id)
-
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: settings.baseURL,
-            model: settings.model,
-            apiKey: settings.apiKey
-        )
-
-        // General → global skills only. Project → global + project skills.
-        let inProjectContext = focusedProject != nil
-        let projectRootPath = focusedProject?.rootURL.path
-        let catalogSkills = (capabilities?.skills ?? [])
-            .filter(\.enabled)
-            .filter { inProjectContext || $0.scope == .global }
-        let existingSkills: [(name: String, description: String, body: String, scope: SkillScope)] =
-            catalogSkills.map { ($0.name, $0.description, SkillRegistry.readBody(for: $0), $0.scope) }
-        let pathByName = Dictionary(uniqueKeysWithValues: catalogSkills.map { ($0.name, $0.path) })
-        let scopeByName = Dictionary(uniqueKeysWithValues: catalogSkills.map { ($0.name, $0.scope) })
-
-        let taskCopy = task
-        let extractionService = skillExtractionService
-        let queue = skillSuggestionQueue
-        let taskID = task.id
-        let generation = skillSuggestionGeneration
-        let focusedProjectID = focusedProject?.id
-        let note = userNote
-
-        Task.detached(priority: .utility) { [weak self] in
-            let result = await extractionService.analyze(
-                task: taskCopy,
-                existingSkills: existingSkills,
-                settings: snapshot,
-                mode: mode,
-                userNote: note
-            )
-
-            func enhanceSuggestion(name: String, description: String) -> SkillSuggestion? {
-                guard let path = pathByName[name], let scope = scopeByName[name] else { return nil }
-                return SkillSuggestion(
-                    type: .enhance,
-                    skillName: name,
-                    skillDescription: description,
-                    scope: scope,
-                    allowsScopeChoice: false,
-                    projectRootPath: scope == .project ? projectRootPath : nil,
-                    targetSkillPath: path,
-                    sourceTaskID: taskCopy.id
-                )
-            }
-
-            let suggestion: SkillSuggestion?
-            switch result {
-            case .none:
-                suggestion = nil
-            case .some(.skip):
-                suggestion = nil
-            case .some(.newSkill(let name, let description)):
-                // Name already in catalog → enhance instead of creating a near-duplicate.
-                if pathByName[name] != nil {
-                    suggestion = enhanceSuggestion(name: name, description: description)
-                } else if inProjectContext {
-                    suggestion = SkillSuggestion(
-                        type: .new,
-                        skillName: name,
-                        skillDescription: description,
-                        scope: .project,
-                        allowsScopeChoice: true,
-                        projectRootPath: projectRootPath,
-                        targetSkillPath: nil,
-                        sourceTaskID: taskCopy.id
-                    )
-                } else {
-                    suggestion = SkillSuggestion(
-                        type: .new,
-                        skillName: name,
-                        skillDescription: description,
-                        scope: .global,
-                        allowsScopeChoice: false,
-                        projectRootPath: nil,
-                        targetSkillPath: nil,
-                        sourceTaskID: taskCopy.id
-                    )
-                }
-            case .some(.enhance(let existingName, let description)):
-                suggestion = enhanceSuggestion(name: existingName, description: description)
-            }
-
-            await MainActor.run { [weak self] in
-                self?.skillExtractionTaskIDs.remove(taskID)
-                // Project switched (or General) since extraction started — drop the tip.
-                guard let self,
-                      self.skillSuggestionGeneration == generation,
-                      self.focusedProject?.id == focusedProjectID else {
-                    if mode == .explicitRemember {
-                        self?.phase = .idle
-                    }
-                    return
-                }
-                if let suggestion {
-                    if presentImmediately {
-                        queue.enqueueImmediate(suggestion)
-                    } else {
-                        queue.enqueue(suggestion)
-                    }
-                    if mode == .explicitRemember {
-                        self.phase = .completed(
-                            summary: suggestion.type == .enhance
-                                ? "Ready to update “\(suggestion.skillName)”. Confirm in the tip below."
-                                : "Ready to save “\(suggestion.skillName)”. Confirm in the tip below."
-                        )
-                    }
-                } else if mode == .explicitRemember {
-                    self.phase = .failed(
-                        message: "Couldn’t identify what to remember. Try again, or add a short note: /remember …"
-                    )
-                }
-            }
-        }
-    }
-}
-
-// MARK: - SlashCommandHost
-
-extension AgentRuntime: SlashCommandHost {
-    var isModelConfigured: Bool { settings.isConfigured }
-
-    var usableTranscriptEventCount: Int {
-        guard let task = activeTask else { return 0 }
-        return task.events.filter {
-            $0.kind == .userInput || $0.kind == .assistantResponse || $0.kind == .toolResult
-        }.count
-    }
-
-    func reportCommandFailure(_ message: String) {
-        phase = .failed(message: message)
-    }
-
-    func reportCommandThinking() {
-        phase = .thinking
-    }
-
-    func reportCommandCompleted(summary: String) {
-        phase = .completed(summary: summary)
-    }
-
-    @discardableResult
-    func ensureActiveTaskForCommand() async -> Bool {
-        await ensureActiveTask()
-    }
-
-    @discardableResult
-    func appendProtectedUserInput(_ content: String) async -> Bool {
-        let event = AgentEvent(kind: .userInput, content: content, protected: true)
-        return await commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
-    }
-
-    func scheduleExplicitRemember(userNote: String?) {
-        guard let task = activeTask else { return }
-        scheduleSkillExtraction(
-            for: task,
-            mode: .explicitRemember,
-            userNote: userNote,
-            presentImmediately: true
+        await taskStore.commit(
+            appendEvents: appendEvents,
+            deleteEventIDs: deleteEventIDs,
+            mutate: mutate
         )
     }
-
-    func enabledSkill(named name: String) -> SkillRecord? {
-        capabilities?.enabledSkills.first { $0.name == name }
-    }
-
-    func isSkillActivated(_ name: String) -> Bool {
-        activatedSkillNames.contains(name)
-    }
-
-    func activateSkill(_ skill: SkillRecord) async -> Bool {
-        let body = SkillRegistry.readBody(for: skill)
-        guard !body.isEmpty else {
-            reportCommandFailure("Skill '\(skill.name)' has no content.")
-            return false
-        }
-
-        guard await ensureActiveTask() else { return false }
-
-        let content = buildSkillContent(for: skill)
-        let event = AgentEvent(
-            kind: .userInput,
-            content: "[Activated skill: \(skill.name)]\n\n\(content)",
-            protected: true
-        )
-
-        // Mark activated only for commit persistence; roll back if write fails.
-        activatedSkillNames.insert(skill.name)
-        let ok = await commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
-        if !ok {
-            activatedSkillNames.remove(skill.name)
-            reportCommandFailure("Couldn’t activate skill '\(skill.name)'.")
-        }
-        return ok
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-}
-
-/// Accumulates streamed tool call fragments into a complete proposal.
-private struct ToolCallBuilder {
-    var id: String?
-    var name: String?
-    var arguments: String = ""
-}
-
-/// Tiny box so `submit` can return a Bool from a cancellable `Task<Void, Never>`.
-private final class AcceptedBox: @unchecked Sendable {
-    var value = false
 }

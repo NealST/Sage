@@ -43,6 +43,7 @@ struct DashboardView: View {
             VStack(spacing: SageDesign.Spacing.md) {
                 HStack(spacing: SageDesign.Spacing.sm) {
                     statusDot
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(statusTitle)
                             .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
@@ -55,6 +56,9 @@ struct DashboardView: View {
                     Spacer()
                     modelActionButton
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Local model, \(statusTitle)")
+                .accessibilityValue(statusSubtitle)
                 .animation(SageDesign.Motion.contentCrossFade, value: statusColorKey)
 
                 if case .downloading(let progress) = modelStatus {
@@ -64,17 +68,7 @@ struct DashboardView: View {
                 }
             }
             .padding(SageDesign.Spacing.md)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
         }
     }
 
@@ -168,17 +162,7 @@ struct DashboardView: View {
             }
             .animation(SageDesign.Motion.contentCrossFade, value: memoryBytes)
             .padding(SageDesign.Spacing.md)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
         }
     }
 
@@ -223,22 +207,12 @@ struct DashboardView: View {
                 Spacer()
             }
             .padding(SageDesign.Spacing.md)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                        lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                    )
-            }
+            .sagePanelBackground(cornerRadius: 10)
         }
     }
 
     private var tokenSummary: String {
-        let usage = appState.agent.tokenUsage
+        let usage = appState.agent.state.tokenUsage
         return "In: \(formatTokenCount(usage.input)) • Out: \(formatTokenCount(usage.output))"
     }
 
@@ -246,7 +220,7 @@ struct DashboardView: View {
 
     private var mcpServersSection: some View {
         dashboardSection("MCP Servers") {
-            let servers = appState.capabilities.mcpServers
+            let servers = appState.mcpHub.mcpServers
             if servers.isEmpty {
                 Text("No servers configured")
                     .font(.system(size: SageDesign.Typography.captionSize))
@@ -256,7 +230,7 @@ struct DashboardView: View {
                 VStack(spacing: SageDesign.Spacing.sm) {
                     ForEach(servers, id: \.id) { server in
                         MCPServerRow(server: server) {
-                            appState.capabilities.retryServer(server.id)
+                            appState.mcpHub.retryServer(server.id)
                         }
                     }
                 }
@@ -337,10 +311,12 @@ private struct MCPServerRow: View {
                 Circle()
                     .fill(serverStatusColor)
                     .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
 
                 Text(server.name)
                     .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
                     .lineLimit(1)
+                    .accessibilityLabel("\(server.name), \(serverStatusAccessibilityName)")
 
                 Spacer()
 
@@ -350,18 +326,17 @@ private struct MCPServerRow: View {
                 }
 
                 if !server.recentLogs.isEmpty {
-                    Button {
+                    Button(logsExpanded ? "Hide logs" : "Show logs", systemImage: "chevron.right") {
                         withAnimation(SageDesign.Motion.contentCrossFade) {
                             logsExpanded.toggle()
                         }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .rotationEffect(.degrees(logsExpanded ? 90 : 0))
-                            .animation(.easeInOut(duration: 0.2), value: logsExpanded)
                     }
+                    .labelStyle(.iconOnly)
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .rotationEffect(.degrees(logsExpanded ? 90 : 0))
+                    .animation(.easeInOut(duration: 0.2), value: logsExpanded)
                 }
             }
 
@@ -390,17 +365,7 @@ private struct MCPServerRow: View {
             }
         }
         .padding(SageDesign.Spacing.md)
-        .background {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(
-                    Color.primary.opacity(SageDesign.Chrome.strokeOpacity),
-                    lineWidth: AccessibilityPreferences.increaseContrast ? 1 : 0.5
-                )
-        }
+        .sagePanelBackground(cornerRadius: 10)
         .animation(SageDesign.Motion.contentCrossFade, value: server.status)
     }
 
@@ -410,6 +375,17 @@ private struct MCPServerRow: View {
         case .connecting, .reconnecting: .orange
         case .error: .red
         case .disabled, .disconnected: Color.secondary
+        }
+    }
+
+    private var serverStatusAccessibilityName: String {
+        switch server.status {
+        case .connected: "Connected"
+        case .connecting: "Connecting"
+        case .reconnecting: "Reconnecting"
+        case .error: "Error"
+        case .disconnected: "Disconnected"
+        case .disabled: "Disabled"
         }
     }
 }

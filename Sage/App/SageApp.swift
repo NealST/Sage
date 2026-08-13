@@ -26,6 +26,7 @@ struct SageApp: App {
                 }
             )
             .environment(appDelegate.appState)
+            .environment(AccessibilitySettings.shared)
         }
         .menuBarExtraStyle(.menu)
     }

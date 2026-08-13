@@ -5,70 +5,33 @@
 
 import Foundation
 
-nonisolated enum TaskContextAction: Sendable, Equatable {
-    case continueActive
-    case beginNew
-    case resumeTask(UUID)
-}
-
-nonisolated struct TaskContextDecision: Sendable, Equatable {
-    var action: TaskContextAction
-    var relatedTaskIDs: [UUID]
-    var confidence: Double
-    var reason: String
-    var userVisibleHint: String?
-
-    var eventContext: EventContext {
-        EventContext(
-            relatedTaskIDs: relatedTaskIDs,
-            confidence: confidence,
-            reason: reason
-        )
-    }
-}
-
-/// Strategy seam for deterministic rules, an on-device model, or a hybrid resolver.
-nonisolated protocol TaskContextResolving: Sendable {
-    func resolve(
-        input: String,
-        workspace: TaskWorkspaceSnapshot
-    ) async -> TaskContextDecision
-}
-
 /// First-pass filter only: explicit fresh-start language, or no active task.
-/// Semantic resume / topic-drift is handled by `TaskRouter` (+ heuristic fallback).
-nonisolated struct ContinuityTaskResolver: TaskContextResolving {
-    func resolve(
+/// Semantic resume / topic-drift is handled by `CompositeTaskRouter` (+ heuristic).
+nonisolated struct ContinuityTaskResolver: TaskRouting {
+    func route(
         input: String,
         workspace: TaskWorkspaceSnapshot
-    ) async -> TaskContextDecision {
+    ) async -> TaskRoute {
         if Self.requestsFreshStart(input) {
-            return TaskContextDecision(
-                action: .beginNew,
-                relatedTaskIDs: [],
-                confidence: 1,
-                reason: "User requested a fresh start",
-                userVisibleHint: nil
-            )
+            return .beginNew(reason: "User requested a fresh start")
         }
 
         guard workspace.activeTaskID != nil else {
-            return TaskContextDecision(
-                action: .beginNew,
-                relatedTaskIDs: [],
-                confidence: 1,
-                reason: "No active task",
-                userVisibleHint: nil
-            )
+            return .beginNew(reason: "No active task")
         }
 
-        return TaskContextDecision(
-            action: .continueActive,
+        return .continueActive(
             relatedTaskIDs: workspace.activeTask?.relatedTaskIDs ?? [],
-            confidence: 1,
-            reason: "Continuous workspace policy",
-            userVisibleHint: nil
+            reason: "Continuous workspace policy"
         )
+    }
+
+    /// Legacy name used by older call sites / tests.
+    func resolve(
+        input: String,
+        workspace: TaskWorkspaceSnapshot
+    ) async -> TaskRoute {
+        await route(input: input, workspace: workspace)
     }
 
     private static func requestsFreshStart(_ input: String) -> Bool {
@@ -103,7 +66,7 @@ nonisolated enum HeuristicTaskFallback {
     static func decide(
         input: String,
         workspace: TaskWorkspaceSnapshot
-    ) -> TaskContextDecision? {
+    ) -> TaskRoute? {
         let activeID = workspace.activeTaskID
         let active = workspace.activeTask
         let activeIsEmpty = active?.events.isEmpty ?? true
@@ -115,12 +78,14 @@ nonisolated enum HeuristicTaskFallback {
                 summaries: workspace.recentSummaries,
                 excluding: activeID
             ) else { return nil }
-            return TaskContextDecision(
-                action: .resumeTask(match.id),
-                relatedTaskIDs: [],
+            return .resume(
+                match.id,
                 confidence: match.score,
                 reason: "Fallback: matched prior task",
-                userVisibleHint: hint(from: match)
+                userVisibleHint: ContextHint.forResumedTask(
+                    topic: match.topic,
+                    summary: match.summary
+                )
             )
         }
 
@@ -141,12 +106,9 @@ nonisolated enum HeuristicTaskFallback {
         let score = Double(overlap) / Double(inputTokens.count)
         guard overlap == 0, score < 0.15 else { return nil }
 
-        return TaskContextDecision(
-            action: .beginNew,
-            relatedTaskIDs: [],
+        return .beginNew(
             confidence: 0.55,
-            reason: "Fallback: low overlap with current topic",
-            userVisibleHint: nil
+            reason: "Fallback: low overlap with current topic"
         )
     }
 
@@ -222,22 +184,6 @@ nonisolated enum HeuristicTaskFallback {
             }
         }
         return tokens
-    }
-
-    private static func hint(from match: RelatedMatch) -> String {
-        if let topic = match.topic?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !topic.isEmpty {
-            return "Using context from “\(topic)”"
-        }
-        guard let summary = match.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !summary.isEmpty
-        else {
-            return "Using context from a related task"
-        }
-        let clipped = summary.count > 48
-            ? String(summary.prefix(45)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
-            : summary
-        return "Using context from “\(clipped)”"
     }
 }
 
