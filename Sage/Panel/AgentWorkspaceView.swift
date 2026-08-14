@@ -24,34 +24,45 @@ struct AgentWorkspaceView: View {
     @FocusState private var isInputFocused: Bool
     @State private var stickToBottom = true
     @State private var gitBranch: String?
+    @State private var branchSwitchError: String?
+    @State private var projectTab: ProjectWorkspaceTab = .task
+
+    private var isProjectWindow: Bool {
+        session.agent.state.focusedProject != nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            WorkspaceChromeView(gitBranch: $gitBranch)
-            if let hint = session.agent.state.contextHint {
+            WorkspaceChromeView(
+                gitBranch: $gitBranch,
+                branchSwitchError: $branchSwitchError
+            )
+
+            if let branchSwitchError, !branchSwitchError.isEmpty {
+                branchErrorBanner(branchSwitchError)
+            }
+
+            if let hint = session.agent.state.contextHint, projectTab == .task || !isProjectWindow {
                 contextChip(hint)
             }
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
-            AgentTranscriptPane(
-                stickToBottom: $stickToBottom,
-                onFailureAppear: { isInputFocused = false }
-            )
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
-            SkillTipsBanner()
-                .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)
-            AgentComposerView(
-                isInputFocused: $isInputFocused,
-                stickToBottom: $stickToBottom
-            )
+
+            if isProjectWindow {
+                projectTabPicker
+                Divider().opacity(SageDesign.Chrome.dividerOpacity)
+                projectTabBody
+            } else {
+                Divider().opacity(SageDesign.Chrome.dividerOpacity)
+                taskPane
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.pathGuardPolicy, session.agent.state.pathGuardPolicy)
-        // Isolate SSE observation from chrome / tips / composer.
         .environment(session.agent.streamingPlayback)
         .onAppear {
             focusInputSoon()
             refreshGitBranch()
             updateWindowTitle()
+            projectTab = .task
         }
         .onReceive(NotificationCenter.default.publisher(for: .sageFocusAgentInput)) { note in
             guard note.object as? AgentSession.Kind == session.kind else { return }
@@ -70,11 +81,18 @@ struct AgentWorkspaceView: View {
             focusInputSoon()
         }
         .onChange(of: session.agent.state.focusedProject?.id) { _, _ in
+            projectTab = .task
+            branchSwitchError = nil
             refreshGitBranch()
             updateWindowTitle()
         }
         .onChange(of: gitBranch) { _, _ in
             updateWindowTitle()
+        }
+        .onChange(of: projectTab) { _, tab in
+            if tab == .task {
+                focusInputSoon()
+            }
         }
         .onChange(of: session.agent.state.phase) { _, phase in
             switch phase {
@@ -83,9 +101,87 @@ struct AgentWorkspaceView: View {
             case .failed:
                 isInputFocused = false
             case .idle, .completed:
-                focusInputSoon()
+                if projectTab == .task || !isProjectWindow {
+                    focusInputSoon()
+                }
             }
         }
+    }
+
+    // MARK: - Tabs
+
+    private var projectTabPicker: some View {
+        Picker("Workspace", selection: $projectTab) {
+            ForEach(ProjectWorkspaceTab.allCases) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .frame(maxWidth: 280)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, SageDesign.Spacing.lg)
+        .padding(.vertical, SageDesign.Spacing.sm)
+        .accessibilityLabel("Workspace tabs")
+    }
+
+    @ViewBuilder
+    private var projectTabBody: some View {
+        switch projectTab {
+        case .task:
+            taskPane
+        case .files:
+            if let root = session.agent.state.focusedProject?.rootURL {
+                ProjectFilesBrowserView(rootURL: root)
+                    .id("\(root.path)-\(gitBranch ?? "none")")
+            }
+        case .history:
+            if let root = session.agent.state.focusedProject?.rootURL {
+                ProjectHistoryBrowserView(rootURL: root)
+                    // Refresh when branch changes after checkout.
+                    .id(gitBranch ?? "none")
+            }
+        }
+    }
+
+    private var taskPane: some View {
+        VStack(spacing: 0) {
+            AgentTranscriptPane(
+                stickToBottom: $stickToBottom,
+                onFailureAppear: { isInputFocused = false }
+            )
+            Divider().opacity(SageDesign.Chrome.dividerOpacity)
+            SkillTipsBanner()
+                .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)
+            AgentComposerView(
+                isInputFocused: $isInputFocused,
+                stickToBottom: $stickToBottom
+            )
+        }
+    }
+
+    private func branchErrorBanner(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.system(size: type.micro))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button("Dismiss") {
+                branchSwitchError = nil
+            }
+            .controlSize(.mini)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, SageDesign.Spacing.lg)
+        .padding(.vertical, SageDesign.Spacing.sm)
+        .background(Color.orange.opacity(0.08))
+        .accessibilityElement(children: .combine)
     }
 
     private func refreshGitBranch() {
@@ -120,7 +216,6 @@ struct AgentWorkspaceView: View {
         } else {
             window.representedURL = nil
             window.title = "Sage"
-            // Avoid “Sage” stacked above Open / New in the unified strip.
             window.titleVisibility = .hidden
         }
     }
@@ -153,7 +248,6 @@ struct AgentWorkspaceView: View {
         DispatchQueue.main.async {
             if session.agent.blocksNewInput { return }
             if case .failed = session.agent.state.phase, session.agent.canRetryFailure {
-                // Keep focus off the composer so Return activates Retry.
                 isInputFocused = false
                 return
             }

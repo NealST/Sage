@@ -37,6 +37,7 @@ extension GRDBTaskRepository {
 
     func openProject(rootURL: URL, displayName: String?) throws -> ProjectRecord {
         let validated = try PathGuard.validateProjectRoot(rootURL)
+        try ProjectSageLayout.ensureLayout(at: validated)
         let pool = try database()
         return try pool.write { db in
             if let existing = try loadProject(rootPath: validated.path, database: db) {

@@ -84,28 +84,38 @@ actor SkillExtractionService {
     ///   - settings: Model settings snapshot (captured on MainActor before calling).
     ///   - mode: `.automatic` may skip; `.explicitRemember` must return new or enhance.
     ///   - userNote: Optional hint from `/remember …` (explicit mode only).
+    ///   - preferredEnhanceTargets: Local-matcher neighbors; biases analyze toward enhance.
     /// - Returns: Extraction result indicating skip, new skill, or enhancement.
     func analyze(
         task: TaskRecord,
         existingSkills: [SkillCatalogSummary],
         settings: ModelSettingsSnapshot,
         mode: SkillExtractionMode = .automatic,
-        userNote: String? = nil
+        userNote: String? = nil,
+        preferredEnhanceTargets: [String] = []
     ) async -> SkillExtractionResult? {
 
         let transcript = buildTranscript(from: task)
         guard !transcript.isEmpty else { return nil }
 
+        let preferredSet = Set(preferredEnhanceTargets)
         let skillsCatalog = existingSkills.map { skill in
-            "- \(skill.name) [\(skill.scope.catalogLabel)]: \(skill.description)"
+            let mark = preferredSet.contains(skill.name) ? " ← preferred enhance target" : ""
+            return "- \(skill.name) [\(skill.scope.catalogLabel)]: \(skill.description)\(mark)"
         }.joined(separator: "\n")
 
         let systemPrompt: String
         switch mode {
         case .automatic:
-            systemPrompt = SkillExtractionPrompts.automaticSystemPrompt(skillsCatalog: skillsCatalog)
+            systemPrompt = SkillExtractionPrompts.automaticSystemPrompt(
+                skillsCatalog: skillsCatalog,
+                preferredEnhanceTargets: preferredEnhanceTargets
+            )
         case .explicitRemember:
-            systemPrompt = SkillExtractionPrompts.explicitRememberSystemPrompt(skillsCatalog: skillsCatalog)
+            systemPrompt = SkillExtractionPrompts.explicitRememberSystemPrompt(
+                skillsCatalog: skillsCatalog,
+                preferredEnhanceTargets: preferredEnhanceTargets
+            )
         }
 
         var userPrompt = """
@@ -131,6 +141,8 @@ actor SkillExtractionService {
             AgentEvent(kind: .userInput, content: userPrompt),
         ]
 
+        let catalogNames = Set(existingSkills.map(\.name))
+
         do {
             let turn = try await modelClient.complete(
                 events: events,
@@ -142,7 +154,11 @@ actor SkillExtractionService {
             guard let content = turn.content else {
                 return mode == .explicitRemember ? nil : .skip
             }
-            let parsed = parseResponse(content)
+            let parsed = SkillExtractionParsing.reconcile(
+                parseResponse(content),
+                catalogNames: catalogNames,
+                preferredTargets: preferredEnhanceTargets
+            )
             // Explicit remember must not soft-skip; treat skip as failure for retry UX.
             if mode == .explicitRemember, case .skip = parsed {
                 return nil
@@ -210,9 +226,11 @@ actor SkillExtractionService {
             into one coherent, improved skill document.
             """,
             goals: """
+            - Treat the existing skill as the cumulative experience document across prior tasks.
             - Preserve durable, still-correct guidance from the existing skill.
-            - Integrate new non-obvious knowledge from the task transcript.
-            - Remove outdated, duplicated, or contradicted guidance (prefer the newer task evidence).
+            - Fold in new non-obvious knowledge from this task (edge cases, corrections, better steps).
+            - When the new transcript contradicts the old skill, prefer the newer evidence and drop the stale guidance.
+            - Deduplicate overlapping procedures; keep one clear path per situation.
             - Follow the skill writing best practices below (same standards as the save_skill tool).
             """,
             descriptionField: "Updated one-sentence description"

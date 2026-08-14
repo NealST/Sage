@@ -145,15 +145,24 @@ struct AgentTranscriptPane: View {
 
     private var emptyTranscript: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-            Text("Ask Sage to work on your Mac")
-                .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
-            Text("Try “Summarize my Downloads folder” or “Rewrite what’s on my clipboard.”")
-                .font(.system(size: SageDesign.Typography.bodySize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(hotkeyHint)
-                .font(.system(size: SageDesign.Typography.microSize))
-                .foregroundStyle(.tertiary)
+            if let project = session.agent.state.focusedProject {
+                Text("Tell me what to do")
+                    .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
+                Text("Sage can explore and edit files under \(ProjectPanelActions.displayPath(project.rootPath)).")
+                    .font(.system(size: SageDesign.Typography.bodySize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Ask Sage to work on your Mac")
+                    .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
+                Text("Try “Summarize my Downloads folder” or “Rewrite what’s on my clipboard.”")
+                    .font(.system(size: SageDesign.Typography.bodySize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(hotkeyHint)
+                    .font(.system(size: SageDesign.Typography.microSize))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, SageDesign.Spacing.lg)

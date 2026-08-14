@@ -54,4 +54,52 @@ final class SaveSkillActionTests: XCTestCase {
             XCTFail("expected newSkill")
         }
     }
+
+    func testReconcileCoercesNewIntoCatalogName() {
+        let result = SkillExtractionParsing.reconcile(
+            .newSkill(name: "shell-gotchas", description: "When shell fails"),
+            catalogNames: ["shell-gotchas"],
+            preferredTargets: []
+        )
+        XCTAssertEqual(
+            result,
+            .enhance(existingName: "shell-gotchas", description: "When shell fails")
+        )
+    }
+
+    func testReconcileSinglePreferredForcesEnhance() {
+        let result = SkillExtractionParsing.reconcile(
+            .newSkill(name: "almost-same", description: "Related tip"),
+            catalogNames: ["shell-gotchas", "other"],
+            preferredTargets: ["shell-gotchas"]
+        )
+        XCTAssertEqual(
+            result,
+            .enhance(existingName: "shell-gotchas", description: "Related tip")
+        )
+    }
+
+    func testReconcileDoesNotForceEnhanceWhenMultiplePreferred() {
+        let result = SkillExtractionParsing.reconcile(
+            .newSkill(name: "fresh-topic", description: "Something else"),
+            catalogNames: ["a", "b"],
+            preferredTargets: ["a", "b"]
+        )
+        XCTAssertEqual(
+            result,
+            .newSkill(name: "fresh-topic", description: "Something else")
+        )
+    }
+
+    func testReconcileRemapsUnknownEnhanceTarget() {
+        let result = SkillExtractionParsing.reconcile(
+            .enhance(existingName: "Shell Gotchas", description: "Updated"),
+            catalogNames: ["shell-gotchas"],
+            preferredTargets: ["shell-gotchas"]
+        )
+        XCTAssertEqual(
+            result,
+            .enhance(existingName: "shell-gotchas", description: "Updated")
+        )
+    }
 }

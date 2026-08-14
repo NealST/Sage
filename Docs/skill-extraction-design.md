@@ -1,7 +1,8 @@
 # Skill 自动提炼与经验沉淀 — 设计文档
 
 > 对应 Roadmap 2.3（Skill 系统完善）和 3.1（长期记忆/知识库）中的"经验自动沉淀"能力。  
-> 本文档与当前实现同步（识别 → 确认后生成、global/project 作用域、管理 UI）。
+> 本文档与当前实现同步（识别 → 确认后生成、global/project 作用域、管理 UI）。  
+> 跨 task 聚合决策见下文「跨 task 经验聚合（= Enhance 主路径）」——不做延迟簇池。
 
 ## 背景
 
@@ -47,7 +48,11 @@ Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义�
 
 ### 粒度
 
-**选择：一个 task 合并为一条经验**
+**选择：一次关闭/remember 产出至多一条建议（new 或 enhance）**
+
+- New：结晶为新 skill 文件  
+- Enhance：把本次 task 经验合入已有 skill（跨 task 累加发生在这里）
+- 不做：多 task 一次性合成；也不做「一 task 多条 skill」
 
 ### UI 交互
 
@@ -172,10 +177,38 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 - **simple**：对整句做上述匹配（无多意图线索的短句跳过 Classifier，直接 Matcher）
 - **complex**：跳过整句 auto-match；system 提示先拆步；执行已有 plan 时对 **step.title** 再召回（短/工具名标题跳过 Matcher；与本轮已匹配 query 相似则复用缓存；仅明显换意图时再跑 Matcher；1 → 自动；N → 不暂停执行，只给 consolidate tip）
 
-### 仍待
+### 跨 task 经验聚合（= Enhance 主路径）
 
-- skill 过期衰减、跨 task 经验聚合
+**决策（2026-08-13）：** 不做「多 task 待聚合池 / 延迟簇」。  
+Skill 文件即经验累加态；跨 task 聚合 **就是** analyze → enhance → compose。Consolidate 仅作碎片补救。
+
+```text
+Task A 值得沉淀 → new skill X（第一次结晶，允许偏窄）
+Task B 同类     → analyze 命中 X → enhance → compose(旧全文 + B transcript)
+Task C 再同类   → 再 enhance X
+误 new 碎片     → 召回 N 命中 → Consolidate tip → merge
+```
+
+| 原则 | 说明 |
+|------|------|
+| 文件即历史 | 历次 enhance 写进 SKILL.md 后，不必再拼多份旧 transcript |
+| 偏 enhance | 同问题类 / 同域 → `enhance`；仅明确新主题才 `new` |
+| 第一次可窄 | 靠后续 enhance 变厚，不靠识别阶段一次写全 |
+| 不做 | pending 池、跨 task transcript join、独立向量记忆层 |
+
+#### 实现清单（相对现状）
+
+- [x] **Analyze 更敢 enhance**：automatic / `/remember` prompt 明确「近邻优先 enhance」；近重复名强制 enhance（已有同名规则可保留并加强近义描述）
+- [x] **可选：近邻预筛**：识别前用本地 `SkillMatcher`（topic/summary/末条 user）标出候选 target，注入 analyze 上下文；单候选时 reconcile 强制 enhance
+- [x] **Compose 合并准则**：保留仍正确的旧结论；用新 transcript 补边 / 修正矛盾；去重；文件即跨 task 累加态
+- [x] **Tip 文案**：enhance 写成「Update existing experience」/ 按钮「Update」
+- [x] **Consolidate**：保持为误 `new` 后的回收路径，不升级为主聚合器
+
+#### 后置（不阻塞本决策）
+
+- skill 过期衰减（usage / lastUsed → 召回排序，不参与如何聚合）
 - 外部编辑 skill 目录的 FSEvents 监视（当前靠 Refresh / 写入后 reload）
+
 ## 显式记住（`/remember`）
 
 用户可主动触发沉淀，仍走**识别阶段**（判定 new vs enhance），但**不能 skip**：

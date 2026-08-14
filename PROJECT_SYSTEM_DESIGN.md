@@ -270,21 +270,40 @@ PathGuard.Policy
 
 ---
 
-### Phase B — 代码体验
+### Phase B — 代码体验 / Project 工作台
 
-- [ ] `search_files` / `list_directory` 在缺省 path 时默认 root（若参数模型允许；否则靠 description + prompt）
-- [ ] 空 project 首次进入的轻量提示（可选）
-- [ ] 与 write-file unified diff 在 project 路径下的展示联调（短路径 / root 相对路径）
-- [ ] Project 切换时 transcript/plan 状态无串台闪烁
+> 决策（2026-08-13）：Project 窗升级为轻量工程工作台；General 仍为单面板对话。
+
+#### 已拍板
+
+| 议题 | 决定 |
+|------|------|
+| `.sage` | Open/Create 时幂等创建 `<root>/.sage/` + `skills/`；**不**默认写入 `.gitignore` |
+| Chrome | 只展示工程信息（名、root 短路径、分支）；**无**「切回 General」入口 |
+| 分支 | 有 git 时展示当前分支，并支持切换本地分支 |
+| Tabs | Task（默认）\| Files \| History；后两者 **先纯浏览** |
+| 空引导 | 空 task 时一句「Tell me what to do」类提示即可（无 starter checklist） |
+
+#### 清单
+
+- [x] Open/Create 确保 `.sage` + `.sage/skills`
+- [x] Project chrome：名 + root 路径（可点 Finder）；无 General 返回按钮
+- [x] 分支菜单：列出本地分支并 `checkout`（失败表面错误）
+- [x] 多 tab 壳：Task / Files / History（Files/History 浏览优先）
+- [x] Project 空 transcript：Tell me what to do
+- [x] `search_files` / `list_directory` 缺省 path → root
+- [ ] write-file / 工具结果项目相对路径联调
+- [ ] 开窗 bootstrap 无串台闪烁
 
 ---
 
 ### Phase C — 加深（对齐路线图）
 
-- [ ] 项目级 `.sage` 配置（对齐 `DEVELOPMENT_ROADMAP` 3.3）
-- [ ] 文件树 / 变更感知上下文（3.3）
+- [ ] 项目级 `.sage` 配置（instructions / ignore；skills 目录已有）
+- [ ] Files tab 真文件树 + 可选变更感知（FSEvents）
+- [ ] History tab 真 commit log
 - [x] 多窗口各持 focus（4.2），共享 projects / MCP / settings；tips 随 window lifecycle
-- [ ] 记忆：project 级 vs global 分层（3.1）
+- [ ] 记忆：project 级 vs global 分层（3.1）— enhance 主路径已强化
 - [ ] Shell 更强隔离（若需要）单独立项
 - [ ] 显式跨 project 只读参考（若需要）单独立项
 - [ ] Project 硬删 / 归档策略
@@ -315,4 +334,4 @@ PathGuard.Policy
 |------|------|
 | 2026-08-09 | 初稿：多 project、task 绑定、Phase A–C；P0 PathGuard 采用项目根沙箱（非过渡方案） |
 | 2026-08-09 | Phase A 骨架落地：DB / PathGuard / Runtime / Header UI；A.5 手工验收待勾 |
-| 2026-08-12 | 多窗口：General / 每 Project 一窗一 `AgentSession`；tips 仅关窗作废 |
+| 2026-08-13 | Phase B 工作台决策：`.sage` 不进 gitignore；chrome 无 General 入口；分支可切换；Task/Files/History 多 tab（后两者先浏览）；空引导 Tell me what to do |

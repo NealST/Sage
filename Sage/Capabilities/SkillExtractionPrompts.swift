@@ -8,7 +8,10 @@
 import Foundation
 
 enum SkillExtractionPrompts {
-    static func automaticSystemPrompt(skillsCatalog: String) -> String {
+    static func automaticSystemPrompt(
+        skillsCatalog: String,
+        preferredEnhanceTargets: [String] = []
+    ) -> String {
         """
         You are an experience analyst. Your job is to examine a completed task conversation \
         and determine if it contains reusable knowledge worth saving as a "skill" (a reusable \
@@ -25,8 +28,15 @@ enum SkillExtractionPrompts {
         - The knowledge is too specific to one situation with no reuse potential
         - The information is widely known and easily searchable
 
-        Existing skills are labeled [global] or [project]. Prefer enhancing an existing skill \
-        when the new knowledge belongs with it; do not invent a near-duplicate name.
+        ## New vs enhance (cross-task aggregation)
+        Skills are cumulative experience documents. Prefer **enhance** whenever the new knowledge \
+        belongs to the same problem class, domain, or workflow as an existing skill — even if the \
+        first skill is narrow and this task only adds an edge case, correction, or better procedure.
+        Choose **new** only when the topic is clearly distinct and would not belong inside any \
+        existing skill without diluting it.
+        Do not invent a near-duplicate name for knowledge that should update an existing skill.
+        Existing skills are labeled [global] or [project].
+        \(preferredTargetsSection(preferredEnhanceTargets))
 
         ## Existing Skills
         \(skillsCatalog.isEmpty ? "(none)" : skillsCatalog)
@@ -50,17 +60,22 @@ enum SkillExtractionPrompts {
         """
     }
 
-    static func explicitRememberSystemPrompt(skillsCatalog: String) -> String {
+    static func explicitRememberSystemPrompt(
+        skillsCatalog: String,
+        preferredEnhanceTargets: [String] = []
+    ) -> String {
         """
         You are an experience analyst. The user explicitly asked to remember knowledge from \
         this task as a skill. You MUST choose either a new skill or an enhancement — do not skip.
 
-        Decide:
-        - "enhance" when the knowledge belongs with an existing skill (same problem class / domain).
-        - "new" when it is a distinct reusable topic with no good existing target.
-
-        Existing skills are labeled [global] or [project]. Prefer enhancing when appropriate; \
-        do not invent a near-duplicate name.
+        ## New vs enhance (cross-task aggregation)
+        Skills are cumulative experience documents. Prefer **enhance** when the knowledge belongs \
+        with an existing skill (same problem class / domain / workflow), including when this task \
+        only refines or extends a narrower earlier skill.
+        Choose **new** only for a distinct reusable topic with no good existing target.
+        Do not invent a near-duplicate name.
+        Existing skills are labeled [global] or [project].
+        \(preferredTargetsSection(preferredEnhanceTargets))
 
         ## Existing Skills
         \(skillsCatalog.isEmpty ? "(none)" : skillsCatalog)
@@ -80,6 +95,7 @@ enum SkillExtractionPrompts {
         Output ONLY the JSON object, nothing else.
         """
     }
+
     static func authoringSystemPrompt(
         role: String,
         mission: String,
@@ -102,6 +118,18 @@ enum SkillExtractionPrompts {
         {"description": "\(descriptionField)", "body": "Full skill markdown body without frontmatter"}
 
         Output ONLY the JSON object, nothing else.
+        """
+    }
+
+    private static func preferredTargetsSection(_ names: [String]) -> String {
+        guard !names.isEmpty else { return "" }
+        let list = names.map { "- \($0)" }.joined(separator: "\n")
+        return """
+
+        Local matching already flagged these existing skills as likely related to this task. \
+        If the new knowledge fits any of them, you MUST enhance that target instead of creating \
+        a new skill:
+        \(list)
         """
     }
 }

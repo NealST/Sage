@@ -91,4 +91,51 @@ enum SkillExtractionParsing {
             return .skip
         }
     }
+
+    /// Coerces analyze output toward enhance when the catalog / preferred neighbors make `new` redundant.
+    ///
+    /// - Exact catalog name collision → enhance
+    /// - Single preferred neighbor + `new` → enhance that neighbor (cross-task aggregation)
+    /// - `enhance` with unknown target → remap via catalog / preferred list when possible
+    static func reconcile(
+        _ result: SkillExtractionResult,
+        catalogNames: Set<String>,
+        preferredTargets: [String]
+    ) -> SkillExtractionResult {
+        let preferredInCatalog = preferredTargets.filter { catalogNames.contains($0) }
+
+        switch result {
+        case .skip:
+            return .skip
+
+        case .newSkill(let name, let description):
+            if catalogNames.contains(name) {
+                return .enhance(existingName: name, description: description)
+            }
+            if preferredInCatalog.count == 1, let only = preferredInCatalog.first {
+                return .enhance(existingName: only, description: description)
+            }
+            return .newSkill(name: name, description: description)
+
+        case .enhance(let target, let description):
+            if catalogNames.contains(target) {
+                return .enhance(existingName: target, description: description)
+            }
+            if let match = catalogNames.first(where: {
+                $0.caseInsensitiveCompare(target) == .orderedSame
+            }) {
+                return .enhance(existingName: match, description: description)
+            }
+            if preferredInCatalog.contains(target) {
+                return .enhance(existingName: target, description: description)
+            }
+            if preferredInCatalog.count == 1, let only = preferredInCatalog.first {
+                return .enhance(existingName: only, description: description)
+            }
+            if let first = preferredInCatalog.first {
+                return .enhance(existingName: first, description: description)
+            }
+            return .skip
+        }
+    }
 }

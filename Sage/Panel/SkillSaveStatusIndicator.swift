@@ -199,7 +199,7 @@ struct SkillSaveStatusIndicator: View {
         case .running:
             switch job.type {
             case .new: return "Creating skill…"
-            case .enhance: return "Updating skill…"
+            case .enhance: return "Updating experience…"
             case .merge: return "Merging skills…"
             }
         case .succeeded:

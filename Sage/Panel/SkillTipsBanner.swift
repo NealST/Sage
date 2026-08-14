@@ -78,13 +78,14 @@ struct SkillTipsBanner: View {
 
                         Spacer(minLength: SageDesign.Spacing.sm)
 
-                        Button("Save") {
+                        Button(saveButtonTitle(for: suggestion)) {
                             confirmSuggestion(suggestion)
                         }
                         .font(.system(size: type.micro, weight: .semibold))
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .help(saveHelp(for: suggestion))
+                        .accessibilityLabel(saveButtonTitle(for: suggestion))
 
                         SkillTipChrome.dismissButton {
                             withAnimation(SageDesign.Motion.expandAnimation) {
@@ -315,15 +316,23 @@ struct SkillTipsBanner: View {
     private func bannerTitle(for suggestion: SkillSuggestion) -> String {
         switch suggestion.type {
         case .new: return "Save experience “\(suggestion.skillName)”?"
-        case .enhance: return "Update skill “\(suggestion.skillName)”?"
+        case .enhance: return "Update existing experience “\(suggestion.skillName)”?"
         case .merge: return "Merge into “\(suggestion.skillName)”?"
+        }
+    }
+
+    private func saveButtonTitle(for suggestion: SkillSuggestion) -> String {
+        switch suggestion.type {
+        case .new: return "Save"
+        case .enhance: return "Update"
+        case .merge: return "Merge"
         }
     }
 
     private func enhanceScopeCaption(for scope: SkillScope) -> String {
         switch scope {
-        case .global: return "Updates the global skill — available in every workspace."
-        case .project: return "Updates the project skill — only used in “\(projectDisplayName)”."
+        case .global: return "Folds this task into the global experience — available in every workspace."
+        case .project: return "Folds this task into the project experience — only used in “\(projectDisplayName)”."
         }
     }
 
@@ -340,7 +349,7 @@ struct SkillTipsBanner: View {
             return suggestion.allowsScopeChoice
                 ? scopeConsequence(for: selectedScope(for: suggestion))
                 : "Create a skill from this task"
-        case .enhance: return enhanceScopeCaption(for: suggestion.scope)
+        case .enhance: return "Update existing experience with knowledge from this task"
         case .merge: return "Merge overlapping skills into one"
         }
     }

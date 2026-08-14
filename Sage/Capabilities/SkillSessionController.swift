@@ -133,12 +133,18 @@ final class SkillSessionController {
                 }
             }
 
+            let preferredEnhanceTargets = await Self.preferredEnhanceTargets(
+                for: taskCopy,
+                catalogSkills: catalogSkills
+            )
+
             let result = await extractionService.analyze(
                 task: taskCopy,
                 existingSkills: existingSkills,
                 settings: snapshot,
                 mode: mode,
-                userNote: note
+                userNote: note,
+                preferredEnhanceTargets: preferredEnhanceTargets
             )
 
             guard !Task.isCancelled else { return }
@@ -213,7 +219,7 @@ final class SkillSessionController {
                         runtime.applySkillExtractionPhase(
                             .completed(
                                 summary: suggestion.type == .enhance
-                                    ? "Ready to update “\(suggestion.skillName)”. Confirm in the tip below."
+                                    ? "Ready to update existing experience “\(suggestion.skillName)”. Confirm in the tip below."
                                     : "Ready to save “\(suggestion.skillName)”. Confirm in the tip below."
                             )
                         )
@@ -417,6 +423,26 @@ final class SkillSessionController {
         if !deleteFailures.isEmpty {
             throw SkillCompositionError.mergeCleanupFailed(deleteFailures)
         }
+    }
+
+    /// Local matcher neighbors for the closed task — biases extraction toward enhance.
+    private nonisolated static func preferredEnhanceTargets(
+        for task: TaskRecord,
+        catalogSkills: [SkillRecord]
+    ) async -> [String] {
+        guard !catalogSkills.isEmpty else { return [] }
+        let query = [
+            task.topic,
+            task.summary,
+            task.events.reversed().first(where: { $0.kind == .userInput })?.content,
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+        guard let query else { return [] }
+
+        let match = await SkillMatcher().match(userMessage: query, skills: catalogSkills)
+        guard case .resolved(let names) = match else { return [] }
+        return names
     }
 }
 

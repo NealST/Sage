@@ -1,3 +1,8 @@
+//
+//  WorkspaceChromeView.swift
+//  Sage
+//
+
 import AppKit
 import SwiftUI
 
@@ -8,6 +13,7 @@ struct WorkspaceChromeView: View {
     @Environment(\.sageTypography) private var type
 
     @Binding var gitBranch: String?
+    @Binding var branchSwitchError: String?
 
     private var focused: ProjectRecord? { session.agent.state.focusedProject }
     private var isProject: Bool { focused != nil }
@@ -62,18 +68,7 @@ struct WorkspaceChromeView: View {
     // MARK: - Project
 
     private var projectLeading: some View {
-        HStack(spacing: 4) {
-            // Focus General window — does not close this project window or clear its draft.
-            Button {
-                appState.showGeneralWindow()
-            } label: {
-                Label("General", systemImage: "chevron.left")
-            }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .help("Show General window")
-            .foregroundStyle(.secondary)
-
+        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
             Menu("Projects", systemImage: "folder.badge.gearshape") {
                 Button("Open Project…", action: openProject)
                 Button("New Project…", action: createProject)
@@ -93,6 +88,10 @@ struct WorkspaceChromeView: View {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([focused.rootURL])
                     }
+                    Button("Copy Root Path") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(focused.rootPath, forType: .string)
+                    }
                     Button("Close Project Window") {
                         Task { await appState.closeProjectWindow(projectID: focused.id) }
                     }
@@ -101,7 +100,80 @@ struct WorkspaceChromeView: View {
             .menuStyle(.borderlessButton)
             .labelStyle(.iconOnly)
             .help("Projects")
+            .accessibilityLabel("Projects")
+
+            if let focused {
+                projectIdentity(focused)
+            }
+
+            if gitBranch != nil {
+                branchMenu
+            }
         }
+    }
+
+    private func projectIdentity(_ project: ProjectRecord) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(project.name)
+                .font(.system(size: type.caption, weight: .semibold))
+                .lineLimit(1)
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
+            } label: {
+                Text(ProjectPanelActions.displayPath(project.rootPath))
+                    .font(.system(size: type.micro))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .buttonStyle(.plain)
+            .help("Show in Finder")
+            .accessibilityLabel("Project path \(ProjectPanelActions.displayPath(project.rootPath))")
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+    }
+
+    private var branchMenu: some View {
+        Menu {
+            let root = focused?.rootURL
+            let branches = root.map { GitBranchReader.localBranches(inProjectRoot: $0) } ?? []
+            if branches.isEmpty {
+                Text("No local branches")
+            } else {
+                ForEach(branches, id: \.self) { name in
+                    Button {
+                        switchToBranch(name)
+                    } label: {
+                        HStack {
+                            Text(name)
+                            Spacer(minLength: 12)
+                            if name == gitBranch {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: type.micro, weight: .semibold))
+                Text(gitBranch ?? "")
+                    .font(.system(size: type.micro, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .help("Switch branch")
+        .accessibilityLabel("Branch \(gitBranch ?? "")")
+        .disabled(session.agent.state.isBusy)
     }
 
     // MARK: - Trailing
@@ -136,6 +208,25 @@ struct WorkspaceChromeView: View {
     }
 
     // MARK: - Actions
+
+    private func switchToBranch(_ name: String) {
+        guard let root = focused?.rootURL else { return }
+        guard name != gitBranch else { return }
+        branchSwitchError = nil
+        let rootURL = root
+        Task.detached(priority: .userInitiated) {
+            let error = GitBranchReader.checkout(branch: name, inProjectRoot: rootURL)
+            let refreshed = GitBranchReader.currentBranch(inProjectRoot: rootURL)
+            await MainActor.run {
+                if let error {
+                    branchSwitchError = error
+                } else {
+                    gitBranch = refreshed
+                    branchSwitchError = nil
+                }
+            }
+        }
+    }
 
     private func openProject() {
         guard let url = ProjectPanelActions.pickDirectory(
