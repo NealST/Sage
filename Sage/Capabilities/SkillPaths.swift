@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillPathsError: LocalizedError {
+nonisolated enum SkillPathsError: LocalizedError {
     case projectRootRequired
     case directoryCreationFailed(String)
 
@@ -21,7 +21,7 @@ enum SkillPathsError: LocalizedError {
     }
 }
 
-enum SkillPaths {
+nonisolated enum SkillPaths {
     /// Sage-managed global skills: `~/Library/Application Support/Sage/Skills`.
     static func userSkillsDirectory(createIfNeeded: Bool = false) -> URL {
         AppSupportPaths.userSkillsDirectory(createIfNeeded: createIfNeeded)

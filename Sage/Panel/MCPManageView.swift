@@ -22,11 +22,11 @@ struct MCPManageView: View {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             if appState.mcpHub.mcpServers.isEmpty {
-                ContentUnavailableView(
-                    "No MCP Servers",
-                    systemImage: "cable.connector",
-                    description: Text("Add a stdio MCP server to expose its tools to Sage.")
-                ) {
+                ContentUnavailableView {
+                    Label("No MCP Servers", systemImage: "cable.connector")
+                } description: {
+                    Text("Add a stdio MCP server to expose its tools to Sage.")
+                } actions: {
                     Button("Add Server") { showingAdd = true }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.regular)

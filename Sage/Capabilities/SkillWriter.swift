@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum SkillWriter {
+nonisolated enum SkillWriter {
     enum WriteError: LocalizedError, Sendable {
         case invalidName(String)
         case alreadyExists(String)

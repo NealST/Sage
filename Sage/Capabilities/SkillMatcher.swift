@@ -1,7 +1,7 @@
 import Foundation
 
 /// Result of skill matching — determines whether skills are auto-loaded or deferred to the cloud model.
-enum SkillMatchResult: Sendable {
+nonisolated enum SkillMatchResult: Sendable {
     /// Local model selected specific skills (0…N). Runtime auto-loads only when count == 1;
     /// count >= 2 pauses for user choice and may surface a consolidate tip.
     case resolved(names: [String])
@@ -118,6 +118,6 @@ actor SkillMatcher {
 
 // MARK: - Supporting Types
 
-private struct MatcherOutput: Decodable {
+private nonisolated struct MatcherOutput: Decodable, Sendable {
     let skills: [String]
 }

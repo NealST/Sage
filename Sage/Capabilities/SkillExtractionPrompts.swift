@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillExtractionPrompts {
+nonisolated enum SkillExtractionPrompts {
     static func automaticSystemPrompt(
         skillsCatalog: String,
         preferredEnhanceTargets: [String] = []

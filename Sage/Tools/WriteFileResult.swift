@@ -22,7 +22,7 @@ nonisolated struct WriteFileDiffPayload: Codable, Equatable, Sendable {
     }
 }
 
-enum WriteFileResultCodec {
+nonisolated enum WriteFileResultCodec {
     static let beginMarker = "\n<<<sage_write_diff>>>\n"
     static let endMarker = "\n<<<end_sage_write_diff>>>"
 
@@ -95,7 +95,6 @@ enum WriteFileResultCodec {
     // MARK: - Budget
 
     private static func fitToBudget(_ payload: WriteFileDiffPayload) -> WriteFileDiffPayload {
-        var payload = payload
         guard encodedLength(payload) <= maxEmbeddedChars else {
             return truncateSides(payload)
         }

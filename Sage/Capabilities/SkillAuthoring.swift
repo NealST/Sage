@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillAuthoring {
+nonisolated enum SkillAuthoring {
     /// Guidance for the skill `description` field (frontmatter / catalog).
     static let descriptionGuidelines = """
     Use imperative phrasing: "Use this skill when..." \

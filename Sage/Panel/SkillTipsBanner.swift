@@ -408,8 +408,8 @@ struct SkillTipsBanner: View {
                 element: NSApp as Any,
                 notification: .announcementRequested,
                 userInfo: [
-                    .announcementKey: "Skill suggestion dismissed",
-                    .priorityKey: NSAccessibilityPriorityLevel.medium.rawValue,
+                    .announcement: "Skill suggestion dismissed",
+                    .priority: NSAccessibilityPriorityLevel.medium.rawValue,
                 ]
             )
             withAnimation(SageDesign.Motion.expandAnimation) {

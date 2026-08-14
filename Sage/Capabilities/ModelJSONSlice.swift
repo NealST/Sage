@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum ModelJSONSlice {
+nonisolated enum ModelJSONSlice {
     /// Returns the substring spanning the first `{` through the last `}`, if both exist.
     static func objectString(in content: String) -> String? {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)

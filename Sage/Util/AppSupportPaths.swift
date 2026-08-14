@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum AppSupportPaths {
+nonisolated enum AppSupportPaths {
     /// `~/Library/Application Support/Sage`, creating the directory when requested.
     static func sageDirectory(createIfNeeded: Bool = true) -> URL {
         let appSupport = FileManager.default.urls(

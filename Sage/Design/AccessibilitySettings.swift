@@ -31,16 +31,10 @@ final class AccessibilitySettings {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
             object: NSWorkspace.shared,
             queue: .main
-        ) { [weak self] _ in
+        ) { _ in
             Task { @MainActor in
-                self?.refresh()
+                AccessibilitySettings.shared.refresh()
             }
-        }
-    }
-
-    deinit {
-        if let observer {
-            NotificationCenter.default.removeObserver(observer)
         }
     }
 

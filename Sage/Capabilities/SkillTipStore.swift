@@ -8,7 +8,7 @@
 import Foundation
 
 /// A suggestion to create or enhance a skill, pending user confirmation.
-struct SkillSuggestion: Identifiable, Equatable, Sendable {
+nonisolated struct SkillSuggestion: Identifiable, Equatable, Sendable {
     let id: UUID
     let type: SuggestionType
     let skillName: String
@@ -20,7 +20,7 @@ struct SkillSuggestion: Identifiable, Equatable, Sendable {
     let sourceTaskID: UUID
     let createdAt: Date
 
-    enum SuggestionType: Sendable, Equatable {
+    nonisolated enum SuggestionType: Sendable, Equatable {
         case new
         case enhance
         case merge
@@ -67,7 +67,7 @@ struct SkillSuggestion: Identifiable, Equatable, Sendable {
 }
 
 /// Typed tip items shared by save + recall UI.
-enum SkillTipItem: Identifiable, Equatable, Sendable {
+nonisolated enum SkillTipItem: Identifiable, Equatable, Sendable {
     case save(SkillSuggestion)
     case choose(SkillActivationChoice)
     case consolidate(SkillConsolidateSuggestion)

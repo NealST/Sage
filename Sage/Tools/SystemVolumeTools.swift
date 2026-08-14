@@ -126,7 +126,7 @@ private func getOutputVolume() throws -> (Float32, Bool) {
 private func setOutputVolume(_ volume: Float32) throws {
     let deviceID = try getDefaultOutputDeviceID()
     var vol = volume
-    var size = UInt32(MemoryLayout<Float32>.size)
+    let size = UInt32(MemoryLayout<Float32>.size)
     var address = AudioObjectPropertyAddress(
         mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
         mScope: kAudioDevicePropertyScopeOutput,
@@ -141,7 +141,7 @@ private func setOutputVolume(_ volume: Float32) throws {
 private func setOutputMute(_ mute: Bool) throws {
     let deviceID = try getDefaultOutputDeviceID()
     var muted = UInt32(mute ? 1 : 0)
-    var size = UInt32(MemoryLayout<UInt32>.size)
+    let size = UInt32(MemoryLayout<UInt32>.size)
     var address = AudioObjectPropertyAddress(
         mSelector: kAudioDevicePropertyMute,
         mScope: kAudioDevicePropertyScopeOutput,

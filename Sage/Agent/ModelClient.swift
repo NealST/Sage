@@ -5,13 +5,13 @@
 
 import Foundation
 
-struct ToolCallProposal: Sendable, Equatable {
+nonisolated struct ToolCallProposal: Sendable, Equatable {
     let id: String
     let name: String
     let argumentsJSON: String
 }
 
-struct ModelTurn: Sendable {
+nonisolated struct ModelTurn: Sendable {
     let content: String?
     let toolCalls: [ToolCallProposal]
     let usage: TokenUsage

@@ -48,7 +48,7 @@ nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
 }
 
 /// Where a skill is stored and recalled from.
-enum SkillScope: String, Sendable, Equatable, Codable {
+nonisolated enum SkillScope: String, Sendable, Equatable, Codable {
     case global
     case project
 

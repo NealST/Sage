@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-enum GRDBTaskSchema {
+nonisolated enum GRDBTaskSchema {
     static let schemaSQL = """
     CREATE TABLE tasks (
         id TEXT PRIMARY KEY NOT NULL,

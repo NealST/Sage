@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ProcessRunResult: Sendable {
+nonisolated struct ProcessRunResult: Sendable {
     let exitCode: Int32
     let output: String
     let timedOut: Bool
@@ -15,7 +15,7 @@ struct ProcessRunResult: Sendable {
 
 /// Shared process lifecycle for shell / skill scripts.
 /// Registered processes are terminated when the calling Task is cancelled or via `terminateAll()`.
-enum ProcessRunner {
+nonisolated enum ProcessRunner {
     private static let lock = NSLock()
     private static var liveProcesses: [ObjectIdentifier: Process] = [:]
 
@@ -149,17 +149,17 @@ enum ProcessRunner {
 }
 
 /// Thread-safe mutable data buffer for collecting pipe output.
-final class LockedDataBuffer: @unchecked Sendable {
+nonisolated final class LockedDataBuffer: @unchecked Sendable {
     private var _data = Data()
     private let lock = NSLock()
 
-    func append(_ chunk: Data) {
+    nonisolated func append(_ chunk: Data) {
         lock.lock()
         _data.append(chunk)
         lock.unlock()
     }
 
-    var data: Data {
+    nonisolated var data: Data {
         lock.lock()
         defer { lock.unlock() }
         return _data

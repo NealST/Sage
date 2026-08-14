@@ -263,6 +263,7 @@ extension Theme {
 private struct SageCodeBlockView: View {
     let configuration: CodeBlockConfiguration
 
+    @Environment(AccessibilitySettings.self) private var accessibility
     @State private var copied = false
     @State private var expanded = false
 

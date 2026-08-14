@@ -258,8 +258,32 @@ actor MCPStdioClient {
     /// avoiding blocking the Swift concurrency cooperative thread pool.
     private static func asyncDataStream(from handle: FileHandle) -> AsyncStream<Data> {
         AsyncStream { continuation in
-            let thread = Thread {
-                while true {
+            // `Thread` is not Sendable; box it so `onTermination` can cancel safely.
+            final class ReaderThread: @unchecked Sendable {
+                private let lock = NSLock()
+                private var thread: Thread?
+
+                func start(_ body: @escaping @Sendable () -> Void) {
+                    let thread = Thread(block: body)
+                    thread.qualityOfService = .userInitiated
+                    lock.lock()
+                    self.thread = thread
+                    lock.unlock()
+                    thread.start()
+                }
+
+                func cancel() {
+                    lock.lock()
+                    let thread = thread
+                    self.thread = nil
+                    lock.unlock()
+                    thread?.cancel()
+                }
+            }
+
+            let reader = ReaderThread()
+            reader.start {
+                while !Thread.current.isCancelled {
                     let data = handle.availableData
                     if data.isEmpty {
                         // EOF — pipe closed or process exited.
@@ -268,11 +292,10 @@ actor MCPStdioClient {
                     }
                     continuation.yield(data)
                 }
+                continuation.finish()
             }
-            thread.qualityOfService = .userInitiated
-            thread.start()
             continuation.onTermination = { _ in
-                thread.cancel()
+                reader.cancel()
             }
         }
     }

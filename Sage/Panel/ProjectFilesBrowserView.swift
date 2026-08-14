@@ -50,7 +50,7 @@ struct ProjectFilesBrowserView: View {
     }
 }
 
-private struct FileNode: Identifiable, Sendable {
+private nonisolated struct FileNode: Identifiable, Sendable {
     let id: String
     let name: String
     let url: URL

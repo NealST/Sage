@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillToolPolicy {
+nonisolated enum SkillToolPolicy {
     /// Built-in skill tools — always callable, and always kept in the model tool list
     /// when restrictions apply.
     static let skillToolNames: Set<String> = [

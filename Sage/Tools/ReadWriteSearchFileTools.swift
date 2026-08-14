@@ -236,7 +236,7 @@ struct SearchFilesTool: AgentTool {
             throw ToolError.operationFailed("Cannot enumerate directory: \(effectivePath)")
         }
 
-        for case let fileURL as URL in enumerator {
+        while let fileURL = enumerator.nextObject() as? URL {
             try Task.checkCancellation()
             if results.count >= Self.maxResults { break }
 

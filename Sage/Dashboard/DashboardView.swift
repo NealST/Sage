@@ -29,7 +29,8 @@ struct DashboardView: View {
                 .padding(.bottom, SageDesign.Spacing.lg)
             }
         }
-        .frame(width: 400, minHeight: 360)
+        .frame(width: 400)
+        .frame(minHeight: 360)
         .background(Color(nsColor: .windowBackgroundColor))
         .task { await refreshModelState() }
         .onAppear { startPolling() }

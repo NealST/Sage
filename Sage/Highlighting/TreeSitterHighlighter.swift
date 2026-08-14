@@ -88,13 +88,13 @@ private extension TreeSitterCodeHighlighter {
             if range.location > lastEnd {
                 let gapRange = NSRange(location: lastEnd, length: range.location - lastEnd)
                 let gap = nsString.substring(with: gapRange)
-                result = result + Text(gap).foregroundColor(SageCodeTheme.plain)
+                result = Text("\(result)\(Text(gap).foregroundColor(SageCodeTheme.plain))")
             }
 
             // Add the highlighted token
             let token = nsString.substring(with: range)
             let color = SageCodeTheme.color(for: namedRange.name)
-            result = result + Text(token).foregroundColor(color)
+            result = Text("\(result)\(Text(token).foregroundColor(color))")
 
             lastEnd = range.location + range.length
         }
@@ -103,7 +103,7 @@ private extension TreeSitterCodeHighlighter {
         if lastEnd < nsString.length {
             let trailingRange = NSRange(location: lastEnd, length: nsString.length - lastEnd)
             let trailing = nsString.substring(with: trailingRange)
-            result = result + Text(trailing).foregroundColor(SageCodeTheme.plain)
+            result = Text("\(result)\(Text(trailing).foregroundColor(SageCodeTheme.plain))")
         }
 
         return result

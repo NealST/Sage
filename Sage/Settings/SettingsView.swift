@@ -413,6 +413,7 @@ struct SettingsView: View {
         switch server.status {
         case .connected: return nil
         case .connecting: return "Connecting…"
+        case .reconnecting: return "Reconnecting…"
         case .error: return server.statusMessage ?? "Error"
         case .disconnected: return server.enabled ? "Disconnected" : nil
         case .disabled: return nil

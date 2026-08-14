@@ -19,7 +19,7 @@ protocol SkillToolHost: AnyObject {
 }
 
 /// Create vs enhance for `save_skill` tool arguments.
-enum SaveSkillAction: String, Decodable, Sendable {
+nonisolated enum SaveSkillAction: String, Decodable, Sendable {
     case create
     case enhance
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A skill candidate surfaced by local recall (activation choice or consolidate tip).
-struct SkillRecallCandidate: Identifiable, Equatable, Sendable, Hashable {
+nonisolated struct SkillRecallCandidate: Identifiable, Equatable, Sendable, Hashable {
     var id: String { path }
 
     let name: String
@@ -25,7 +25,7 @@ struct SkillRecallCandidate: Identifiable, Equatable, Sendable, Hashable {
 }
 
 /// Paused turn: user must pick one overlapping skill (or skip) before the agent continues.
-struct SkillActivationChoice: Equatable, Sendable {
+nonisolated struct SkillActivationChoice: Equatable, Sendable {
     let id: UUID
     let candidates: [SkillRecallCandidate]
     /// Message or plan-step text used for matching.
@@ -43,7 +43,7 @@ struct SkillActivationChoice: Equatable, Sendable {
 }
 
 /// Quality signal: multiple skills matched the same intent — offer merge / rewrite.
-struct SkillConsolidateSuggestion: Identifiable, Equatable, Sendable {
+nonisolated struct SkillConsolidateSuggestion: Identifiable, Equatable, Sendable {
     let id: UUID
     let candidates: [SkillRecallCandidate]
     /// Which candidate path to keep when merging (defaults to first).

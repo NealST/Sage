@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum AgentEventHelpers {
+nonisolated enum AgentEventHelpers {
     /// Assistant tool-proposal events that never received a matching tool result.
     static func unexecutedToolProposalIDs(in events: [AgentEvent]) -> [UUID] {
         let completed = Set(
@@ -33,7 +33,7 @@ enum AgentEventHelpers {
     }
 }
 
-enum ContextHint {
+nonisolated enum ContextHint {
     static func forResumedTask(topic: String?, summary: String?) -> String {
         if let topic = topic?.trimmingCharacters(in: .whitespacesAndNewlines), !topic.isEmpty {
             return "Using context from \u{201C}\(topic)\u{201D}"

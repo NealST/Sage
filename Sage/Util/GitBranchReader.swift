@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum GitBranchReader {
+nonisolated enum GitBranchReader {
     /// Returns the current branch name, or a short detached HEAD SHA. `nil` if not a git repo.
     static func currentBranch(inProjectRoot root: URL) -> String? {
         guard let headURL = gitHEADFile(in: root),
@@ -133,7 +133,7 @@ enum GitBranchReader {
     }
 }
 
-struct GitCommitSummary: Identifiable, Equatable, Sendable {
+nonisolated struct GitCommitSummary: Identifiable, Equatable, Sendable {
     var id: String { shortHash }
     let shortHash: String
     let subject: String

@@ -447,7 +447,7 @@ final class SkillSessionController {
 }
 
 /// Lightweight catalog entry for extraction analysis (no body).
-struct SkillCatalogSummary: Sendable {
+nonisolated struct SkillCatalogSummary: Sendable {
     let name: String
     let description: String
     let scope: SkillScope

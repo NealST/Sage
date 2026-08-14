@@ -127,8 +127,8 @@ final class AgentRuntime {
         self.mcpHub = mcpHub
         self.skills = skills
 
-        weak var catalogRef = skillCatalog
-        weak var mcpRef = mcpHub
+        weak let catalogRef = skillCatalog
+        weak let mcpRef = mcpHub
 
         let continuity: ContinuityTaskResolver
         if let continuityResolver = contextResolver as? ContinuityTaskResolver {

@@ -10,7 +10,7 @@
 import Foundation
 
 /// How skill extraction was triggered.
-enum SkillExtractionMode: Sendable {
+nonisolated enum SkillExtractionMode: Sendable {
     /// Passive close-task extraction — may return skip.
     case automatic
     /// User explicitly asked to remember (`/remember`) — must choose new or enhance.
@@ -18,7 +18,7 @@ enum SkillExtractionMode: Sendable {
 }
 
 /// Result of skill extraction analysis (identification only — no full body yet).
-enum SkillExtractionResult: Sendable, Equatable {
+nonisolated enum SkillExtractionResult: Sendable, Equatable {
     /// The task does not contain experience worth saving.
     case skip
     /// A new skill should be created.
@@ -28,12 +28,12 @@ enum SkillExtractionResult: Sendable, Equatable {
 }
 
 /// Draft produced when composing a skill after user confirmation.
-struct SkillDraft: Sendable {
+nonisolated struct SkillDraft: Sendable {
     let description: String
     let body: String
 }
 
-enum SkillCompositionError: LocalizedError {
+nonisolated enum SkillCompositionError: LocalizedError {
     case emptyTranscript
     case sourceTaskMissing
     case modelFailed(String)

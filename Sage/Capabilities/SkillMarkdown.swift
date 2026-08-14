@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillMarkdown {
+nonisolated enum SkillMarkdown {
     /// Validates a skill name per the Agent Skills spec:
     /// - 1–64 characters
     /// - Only lowercase alphanumeric and hyphens

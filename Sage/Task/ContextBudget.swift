@@ -6,7 +6,7 @@
 import Foundation
 
 /// Caps history sent to cloud models. Prefer recent, paired turns over raw truncation.
-enum ContextBudget {
+nonisolated enum ContextBudget {
     static let maxEvents = 28
     static let maxCharacters = 24_000
     /// Soft ceiling for one protected skill payload (auto-load / slash / `load_skill`).

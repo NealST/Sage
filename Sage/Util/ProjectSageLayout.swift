@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum ProjectSageLayout {
+nonisolated enum ProjectSageLayout {
     /// Idempotently creates `<root>/.sage/skills`. Does not touch `.gitignore`.
     static func ensureLayout(at root: URL) throws {
         let sage = root.appendingPathComponent(".sage", isDirectory: true)

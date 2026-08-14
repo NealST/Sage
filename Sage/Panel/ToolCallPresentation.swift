@@ -6,7 +6,7 @@
 import Foundation
 
 /// Shared parsing + titles for tool-call UI (transcript pills and plan steps).
-enum ToolCallPresentation {
+nonisolated enum ToolCallPresentation {
     enum Body: Equatable {
         /// Full-file write / create preview.
         case fileEdit(path: String, content: String, language: String?)
@@ -278,12 +278,5 @@ enum ToolCallPresentation {
             return path
         }
         return (path as NSString).lastPathComponent
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

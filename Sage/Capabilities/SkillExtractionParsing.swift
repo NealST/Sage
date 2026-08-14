@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SkillExtractionParsing {
+nonisolated enum SkillExtractionParsing {
 
     // MARK: - Response Parsing
 

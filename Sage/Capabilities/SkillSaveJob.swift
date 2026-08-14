@@ -8,14 +8,14 @@
 import Foundation
 
 /// A background skill create/enhance job started after the user confirms a banner tip.
-struct SkillSaveJob: Identifiable, Equatable, Sendable {
+nonisolated struct SkillSaveJob: Identifiable, Equatable, Sendable {
     let id: UUID
     let type: SkillSuggestion.SuggestionType
     let skillName: String
     var status: Status
     let startedAt: Date
 
-    enum Status: Equatable, Sendable {
+    nonisolated enum Status: Equatable, Sendable {
         case running
         case succeeded
         case failed(String)

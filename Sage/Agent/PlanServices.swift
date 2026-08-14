@@ -53,6 +53,7 @@ struct PlanServices {
         )
     }
 
+    @discardableResult
     func prepareSkillsForTurn(query: String, pauseForAmbiguity: Bool) async -> Bool {
         await skillRecall.prepareSkillsForTurn(
             query: query,

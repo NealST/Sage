@@ -16,7 +16,7 @@ protocol AgentTool: Sendable {
     func call(argumentsJSON: String) async throws -> String
 }
 
-enum ToolError: LocalizedError {
+nonisolated enum ToolError: LocalizedError {
     case invalidArguments(String)
     case pathNotAllowed(String, policy: PathGuard.Policy)
     case operationFailed(String)
@@ -33,7 +33,7 @@ enum ToolError: LocalizedError {
     }
 }
 
-enum PathGuard: Sendable {
+nonisolated enum PathGuard: Sendable {
     /// Active sandbox for the current tool call (set by AgentRuntime via TaskLocal).
     @TaskLocal
     static var policy: Policy = .home
