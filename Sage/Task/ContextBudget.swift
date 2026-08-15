@@ -9,7 +9,7 @@ import Foundation
 nonisolated enum ContextBudget {
     static let maxEvents = 28
     static let maxCharacters = 24_000
-    /// Soft ceiling for one protected skill payload (auto-load / slash / `load_skill`).
+    /// Soft ceiling for one protected skill payload (slash / `load_skill`).
     /// Aligns with Agent Skills progressive-disclosure guidance: keep SKILL.md bodies
     /// around ≤5,000 tokens (≈10–15k characters). Use the upper bound so in-spec skills
     /// are not truncated; oversize bodies stub and point at `load_skill_resource`.

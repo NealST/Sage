@@ -88,8 +88,10 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         )
 
         window.delegate = self
-        window.title = session.isGeneral ? "Sage" : (session.agent.state.focusedProject?.name ?? "Sage")
-        window.titleVisibility = session.isGeneral ? .hidden : .visible
+        window.title = session.isGeneral
+            ? "Sage"
+            : (session.agent.state.focusedProject?.name ?? "Opening…")
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]

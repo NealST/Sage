@@ -176,6 +176,46 @@ nonisolated enum PathGuard: Sendable {
         resolvedPath == resolvedHomePath || resolvedPath.hasPrefix(resolvedHomePath + "/")
     }
 
+    /// Formats a filesystem path for tool results and UI.
+    /// - Project: relative to root when inside (`.` for the root itself); otherwise tilde / absolute.
+    /// - Home: tilde-shortened under `~`; otherwise absolute.
+    nonisolated static func displayPath(_ path: String, policy: Policy = policy) -> String {
+        let expanded = (path as NSString).expandingTildeInPath
+        let resolved = URL(fileURLWithPath: expanded)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+            .path
+
+        switch policy {
+        case .project(let root):
+            let rootPath = root.resolvingSymlinksInPath().path
+            if resolved == rootPath { return "." }
+            if resolved.hasPrefix(rootPath + "/") {
+                return String(resolved.dropFirst(rootPath.count + 1))
+            }
+            return homeDisplayPath(resolved)
+        case .home:
+            return homeDisplayPath(resolved)
+        }
+    }
+
+    /// Resolves a display path (project-relative, `~/…`, or absolute) for Finder / Quick Look.
+    nonisolated static func fileURL(forDisplayPath path: String, policy: Policy = policy) -> URL? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let url = try? resolveAllowed(trimmed, policy: policy, access: .read) else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    nonisolated private static func homeDisplayPath(_ absolute: String) -> String {
+        if absolute == resolvedHomePath { return "~" }
+        if absolute.hasPrefix(resolvedHomePath + "/") {
+            return "~" + absolute.dropFirst(resolvedHomePath.count)
+        }
+        return absolute
+    }
+
     /// Resolves an optional exploration path: project mode may omit/`""` → `"."` (project root);
     /// General mode still requires an explicit path.
     nonisolated static func defaultExplorationPath(_ raw: String?) throws -> String {

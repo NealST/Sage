@@ -80,7 +80,7 @@ nonisolated enum SkillMarkdown {
     }
 
     private static let recognizedKeys: Set<String> = [
-        "name", "description", "disable-model-invocation",
+        "name", "description",
         "license", "compatibility", "allowed-tools", "source",
     ]
 

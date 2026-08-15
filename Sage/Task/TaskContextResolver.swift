@@ -58,8 +58,7 @@ nonisolated struct ContinuityTaskResolver: TaskRouting {
     }
 }
 
-/// Cheap bag-of-words fallback used when the local model is unavailable or
-/// returns an unparseable result. Never blocks the user.
+/// Bag-of-words resume / topic-drift signal. Never blocks the user.
 nonisolated enum HeuristicTaskFallback {
     /// Returns a non-continue decision when the heuristic is confident enough;
     /// otherwise `nil` (caller should continue the active task).

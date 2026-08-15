@@ -23,7 +23,7 @@ struct CreateDirectoryTool: AgentTool {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return "[OK] Created \(url.path)"
+        return "[OK] Created \(PathGuard.displayPath(url.path))"
     }
 }
 
@@ -71,7 +71,7 @@ struct DeleteFileTool: AgentTool {
             }
         }
         try FileManager.default.removeItem(at: url)
-        return "[OK] Deleted \(url.path)"
+        return "[OK] Deleted \(PathGuard.displayPath(url.path))"
     }
 }
 

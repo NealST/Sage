@@ -44,39 +44,52 @@ nonisolated enum ToolCallPresentation {
         }
     }
 
-    static func model(name: String, argumentsJSON: String, titleOverride: String? = nil) -> Model {
+    static func model(
+        name: String,
+        argumentsJSON: String,
+        titleOverride: String? = nil,
+        policy: PathGuard.Policy = .home
+    ) -> Model {
         let args = decodeArgs(argumentsJSON)
         let title = titleOverride?.nilIfEmpty
-            ?? humanTitle(name: name, args: args)
-        return Model(title: title, body: body(name: name, args: args))
+            ?? humanTitle(name: name, args: args, policy: policy)
+        return Model(title: title, body: body(name: name, args: args, policy: policy))
     }
 
-    static func humanTitle(name: String, argumentsJSON: String) -> String {
-        humanTitle(name: name, args: decodeArgs(argumentsJSON))
+    static func humanTitle(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy = .home
+    ) -> String {
+        humanTitle(name: name, args: decodeArgs(argumentsJSON), policy: policy)
     }
 
     // MARK: - Title
 
-    static func humanTitle(name: String, args: [String: JSONValue]) -> String {
+    static func humanTitle(
+        name: String,
+        args: [String: JSONValue],
+        policy: PathGuard.Policy = .home
+    ) -> String {
         switch name {
         case "list_directory":
-            return "List \(display(args["path"]) ?? "folder")"
+            return "List \(shortPath(display(args["path"]), policy: policy) ?? "folder")"
         case "move_file":
-            return "Move \(display(args["source"]) ?? "file")"
+            return "Move \(shortPath(display(args["source"]), policy: policy) ?? "file")"
         case "rename_file":
             return "Rename to \(display(args["new_name"]) ?? "…")"
         case "create_directory":
-            return "Create \(display(args["path"]) ?? "folder")"
+            return "Create \(shortPath(display(args["path"]), policy: policy) ?? "folder")"
         case "search_files":
-            return "Search \(display(args["path"]) ?? "files")"
+            return "Search \(shortPath(display(args["path"]), policy: policy) ?? "files")"
         case "read_text_file":
-            return "Read \(shortPath(display(args["path"])) ?? "file")"
+            return "Read \(shortPath(display(args["path"]), policy: policy) ?? "file")"
         case "write_text_file":
-            return "Write \(shortPath(display(args["path"])) ?? "file")"
+            return "Write \(shortPath(display(args["path"]), policy: policy) ?? "file")"
         case "copy_file":
-            return "Copy \(display(args["source"]) ?? "file")"
+            return "Copy \(shortPath(display(args["source"]), policy: policy) ?? "file")"
         case "delete_file":
-            return "Delete \(shortPath(display(args["path"])) ?? "file")"
+            return "Delete \(shortPath(display(args["path"]), policy: policy) ?? "file")"
         case "run_shell_command":
             let cmd = display(args["command"]) ?? "command"
             let short = cmd.count > 30 ? String(cmd.prefix(27)) + "…" : cmd
@@ -137,17 +150,24 @@ nonisolated enum ToolCallPresentation {
 
     // MARK: - Body
 
-    private static func body(name: String, args: [String: JSONValue]) -> Body {
+    private static func body(
+        name: String,
+        args: [String: JSONValue],
+        policy: PathGuard.Policy
+    ) -> Body {
         switch name {
         case "write_text_file":
             guard let path = display(args["path"]),
                   let content = display(args["content"])
-            else { return fieldsBody(args) }
-            return .fileEdit(path: path, content: content, language: language(forPath: path))
+            else { return fieldsBody(args, policy: policy) }
+            let shown = PathGuard.displayPath(path, policy: policy)
+            return .fileEdit(path: shown, content: content, language: language(forPath: path))
 
         case "read_text_file":
             var pairs: [(String, String)] = []
-            if let path = display(args["path"]) { pairs.append(("path", path)) }
+            if let path = display(args["path"]) {
+                pairs.append(("path", PathGuard.displayPath(path, policy: policy)))
+            }
             if let start = display(args["line_start"]) { pairs.append(("line_start", start)) }
             if let end = display(args["line_end"]) { pairs.append(("line_end", end)) }
             return pairs.isEmpty ? .empty : .fields(pairs)
@@ -156,7 +176,7 @@ nonisolated enum ToolCallPresentation {
             if let cmd = display(args["command"]) {
                 var parts = [("command", cmd)]
                 if let cwd = display(args["working_directory"]) {
-                    parts.append(("working_directory", cwd))
+                    parts.append(("working_directory", PathGuard.displayPath(cwd, policy: policy)))
                 }
                 if let timeout = display(args["timeout_seconds"]) {
                     parts.append(("timeout_seconds", timeout))
@@ -173,20 +193,33 @@ nonisolated enum ToolCallPresentation {
 
         case "move_file", "copy_file":
             var pairs: [(String, String)] = []
-            if let source = display(args["source"]) { pairs.append(("source", source)) }
-            if let dest = display(args["destination"]) { pairs.append(("destination", dest)) }
+            if let source = display(args["source"]) {
+                pairs.append(("source", PathGuard.displayPath(source, policy: policy)))
+            }
+            if let dest = display(args["destination"]) {
+                pairs.append(("destination", PathGuard.displayPath(dest, policy: policy)))
+            }
             return pairs.isEmpty ? .empty : .fields(pairs)
 
         default:
-            return fieldsBody(args)
+            return fieldsBody(args, policy: policy)
         }
     }
 
-    private static func fieldsBody(_ args: [String: JSONValue]) -> Body {
+    private static func fieldsBody(
+        _ args: [String: JSONValue],
+        policy: PathGuard.Policy
+    ) -> Body {
+        let pathKeys: Set<String> = [
+            "path", "source", "destination", "working_directory", "script_path",
+        ]
         let pairs = args.keys.sorted().compactMap { key -> (String, String)? in
             guard let value = display(args[key]), !value.isEmpty else { return nil }
+            let shown = pathKeys.contains(key)
+                ? PathGuard.displayPath(value, policy: policy)
+                : value
             // Avoid dumping enormous blobs in the generic view.
-            let clipped = value.count > 4_000 ? String(value.prefix(4_000)) + "\n…" : value
+            let clipped = shown.count > 4_000 ? String(shown.prefix(4_000)) + "\n…" : shown
             return (key, clipped)
         }
         return pairs.isEmpty ? .empty : .fields(pairs)
@@ -267,16 +300,11 @@ nonisolated enum ToolCallPresentation {
         }
     }
 
-    private static func shortPath(_ path: String?) -> String? {
+    private static func shortPath(
+        _ path: String?,
+        policy: PathGuard.Policy = .home
+    ) -> String? {
         guard let path, !path.isEmpty else { return nil }
-        let expanded = (path as NSString).expandingTildeInPath
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        if expanded.hasPrefix(home + "/") {
-            return "~" + expanded.dropFirst(home.count)
-        }
-        if path.hasPrefix("~/") || !path.contains("/") {
-            return path
-        }
-        return (path as NSString).lastPathComponent
+        return PathGuard.displayPath(path, policy: policy)
     }
 }

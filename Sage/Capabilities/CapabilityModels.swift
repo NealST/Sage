@@ -14,9 +14,6 @@ nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     var enabled: Bool
     /// Global (user-level) vs project-scoped skill — set at scan time from the root.
     var scope: SkillScope
-    /// When true, the local model should not be used to match this skill;
-    /// it will only be offered via the `load_skill` tool catalog.
-    var disableModelInvocation: Bool = false
     /// Optional license information for the skill.
     var license: String?
     /// Optional compatibility/environment requirements description.

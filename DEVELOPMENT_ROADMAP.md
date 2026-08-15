@@ -8,9 +8,8 @@
 
 - **Agent Runtime**：完整的 agent 循环（submit → think → plan → confirm → execute → summarize）
 - **Task 管理**：基于 GRDB 的 task 持久化、task 生命周期、workspace snapshot
-- **Task 路由**：本地 MLX 模型（Qwen3-0.6B-4bit）做语义路由，自动判断 continue / resume / new
-- **主题生成**：本地模型生成 topic + abstract，支持 resume 时更新
-- **HuggingFace 端点解析**：Locale 预判 + HEAD 竞速，自动选择官方 vs 国内镜像
+- **Task 路由**：continuity 关键词 + 词面启发式（continue / resume / new）
+- **主题生成**：从首条用户消息截取 topic + abstract
 - **MCP 协议**：stdio 方式的 MCP client，支持 tools/list + tools/call
 - **Skill 系统**：SkillRegistry 基础框架
 - **HUD 窗口**：原生 NSWindow，⌘⇧Space 全局热键唤起
@@ -20,28 +19,24 @@
 **待提交的修复（6 个文件 + 1 个新文件）：**
 
 - `AgentRuntime.swift`：修复 beginNewTask 过期引用、topic 生成重入、updateTaskTopic 竞态
-- `LocalModelService.swift`：修复 HubClient init、EOS tokens、LMInput Sendable、warmUp 编译错误、并发加载竞态
-- `TaskRouter.swift` / `TopicGenerator.swift`：prompt 从原始 ChatML 重构为 system/user 元组
+- `TopicGenerator.swift`：确定性截取 topic / abstract（不再走本地模型）
 - `GRDBTaskRepository.swift`：修复 sequence 计算排序
 - `TaskContextResolver.swift`：修复中文分词阈值
-- `HubEndpointResolver.swift`（新文件）：端点自动选择
-
 ---
 
 ## Phase 0 — 收尾（立即）
 
 当前修复的收尾工作，确保项目可以正常构建。
 
-### 0.1 提交当前修复并集成 MLX 依赖
+### 0.1 提交当前修复
 
-- [x] 将 `HubEndpointResolver.swift` 添加到 Xcode 项目（PBXFileSystemSynchronizedRootGroup 自动包含）
-- [x] 添加 SPM 依赖：`mlx-swift-lm`、`swift-huggingface`、`swift-transformers`
+- [x] 已移除本地 MLX / HuggingFace 下载链路，推理统一走云端
 - [ ] 提交所有修改
 
 ### 0.2 修复 Xcode 项目文件
 
 - [x] 修复 `project.pbxproj` 中损坏的 `isa` key（当前工程文件干净）
-- [x] 完整构建验证，确保所有 MLX API 签名编译通过
+- [x] 完整构建验证
 
 ---
 
@@ -125,12 +120,10 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 - [x] 部分工具执行失败时的回滚/跳过策略（失败步骤标记 `.failed`，后续步骤 `.skipped`，支持 resume 重试）
 - [x] 错误消息附带可操作建议 — 401→检查 API Key，403→权限不足，404→检查 URL，429→限流，5xx→服务端问题；UI 已有 Open Settings 按钮
 
-### 1.5 MLX 模型内存压力卸载
+### 1.5 本地模型（已移除）
 
-- [x] 监听 `DispatchSource.makeMemoryPressureSource()` 的 warning/critical 事件 — `MemoryPressureMonitor` 单例
-- [x] 内存压力时自动调用 `LocalModelService.unload()` — warning 级别自动卸载
-- [x] 下次推理时自动重新加载（`ensureLoaded()` 懒加载）
-- [x] Dashboard 面板显示模型状态（idle / loading / ready / unloaded）+ 内存占用 + 压力等级
+- [x] 不再运行 on-device MLX；skill 召回与任务路由不再依赖本地推理
+- [x] Dashboard 只保留 session tokens 与 MCP 状态
 
 ---
 
@@ -236,7 +229,7 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 - [ ] 模型选择器（按 task 类型选择不同模型）
 - [ ] 模型 fallback 链（主模型失败时切换备用）
 - [ ] 用量/成本追踪
-- [ ] 本地模型作为 API 不可用时的降级方案
+- [ ] 云端 API 不可用时的明确降级提示（不再回落到本地模型）
 
 ### 5.2 高级 Agent 规划
 

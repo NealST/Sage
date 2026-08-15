@@ -74,7 +74,8 @@ enum SageDesign {
 
     enum Markdown {
         /// Collapsed assistant reply height before “Show more”.
-        static let collapsedReplyHeight: CGFloat = 280
+        /// Slightly taller than before to match airier paragraph rhythm.
+        static let collapsedReplyHeight: CGFloat = 320
         /// Code blocks taller than this show a collapse control.
         static let collapsedCodeLineLimit = 20
         /// Cheap gate before measuring full markdown height (avoids double layout on tiny replies).
@@ -82,20 +83,27 @@ enum SageDesign {
         /// Tool results at or under this size start expanded.
         static let shortToolResultCharacterLimit = 180
         static let shortToolResultLineLimit = 2
-        /// Monospaced code font size used by the sage theme code blocks.
+        /// Monospaced code font size (~85% of 14pt body, matching github-markdown `pre`).
         static let codeFontSize: CGFloat = 12
-        /// Padding inside code block content (matches `.padding(12)`).
-        static let codeBlockContentPadding: CGFloat = 12
+        /// Content padding — github-markdown uses 16; top is taller to clear floating chrome.
+        static let codeBlockContentPadding: CGFloat = 16
+        /// Extra top inset so the first line clears the floating language / copy chrome.
+        static let codeBlockChromeClearance: CGFloat = 22
+        /// Continuous corner radius aligned with github-markdown (6) + Apple continuous).
+        static let codeBlockCornerRadius: CGFloat = 6
 
-        /// Line height for fenced code, including theme `relativeLineSpacing(.em(0.2))`.
+        /// Line height for fenced code, including theme `relativeLineSpacing(.em(0.25))` (~1.45).
         static var codeLineHeight: CGFloat {
             let font = NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular)
             let native = font.ascender - font.descender + font.leading
-            return ceil(native * 1.2)
+            return ceil(native * 1.45)
         }
 
         static func collapsedCodeContentHeight(lineLimit: Int = collapsedCodeLineLimit) -> CGFloat {
-            CGFloat(lineLimit) * codeLineHeight + codeBlockContentPadding * 2
+            CGFloat(lineLimit) * codeLineHeight
+                + codeBlockContentPadding
+                + codeBlockChromeClearance
+                + codeBlockContentPadding
         }
     }
 

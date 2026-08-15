@@ -64,7 +64,8 @@ final class ModelSettings {
                 UserDefaults.standard.removeObject(forKey: DefaultsKey.apiKeyFallback)
             } catch {
                 // Keep plaintext until Keychain accepts the key.
-                apiKeyPersistenceError = "Could not move API key into Keychain."
+                let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                apiKeyPersistenceError = "Could not move API key into Keychain. \(detail)"
             }
         } else {
             apiKey = ""
@@ -85,7 +86,8 @@ final class ModelSettings {
         } catch {
             // Keep a plaintext fallback so a failed Keychain write doesn't lose the key on quit.
             UserDefaults.standard.set(key, forKey: DefaultsKey.apiKeyFallback)
-            apiKeyPersistenceError = "Could not save API key to Keychain. Kept a local fallback."
+            let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            apiKeyPersistenceError = "Could not save API key to Keychain. Kept a local fallback. \(detail)"
         }
     }
 }

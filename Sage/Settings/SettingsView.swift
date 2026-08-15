@@ -9,10 +9,10 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @Bindable var settings: ModelSettings
     var onDone: (() -> Void)?
+    var onOpenSkills: ((AgentSession) -> Void)?
 
     @State private var testState: TestState = .idle
     @State private var testTask: Task<Void, Never>?
-    @State private var showSkillsManage = false
     @State private var showMCPManage = false
     @State private var showEraseConfirm = false
     @State private var eraseMessage: String?
@@ -46,6 +46,7 @@ struct SettingsView: View {
         }
         .frame(width: 440)
         .background(Color(nsColor: .windowBackgroundColor))
+        .textSelection(.enabled)
         .onAppear {
             pinnedSkillsSession = appState.keySession
         }
@@ -53,19 +54,12 @@ struct SettingsView: View {
             testTask?.cancel()
             pinnedSkillsSession = nil
         }
-        .sheet(isPresented: $showSkillsManage) {
-            SkillsManageView(pinnedSession: pinnedSkillsSession ?? appState.keySession)
-                .environment(appState)
-                .environment(AccessibilitySettings.shared)
-                .sageScaledTypography()
-                .sageAccessibilityObservation()
-        }
         .sheet(isPresented: $showMCPManage) {
             MCPManageView()
-                .environment(appState)
-                .environment(AccessibilitySettings.shared)
                 .sageScaledTypography()
                 .sageAccessibilityObservation()
+                .environment(appState)
+                .environment(AccessibilitySettings.shared)
         }
         .confirmationDialog(
             eraseDialogTitle,
@@ -147,8 +141,11 @@ struct SettingsView: View {
                     detail: "\(enabledSkillCount) of \(skillsCatalog.skills.count) enabled",
                     isFirst: true,
                     action: {
-                        pinnedSkillsSession = pinnedSkillsSession ?? appState.keySession
-                        showSkillsManage = true
+                        let session = pinnedSkillsSession ?? appState.keySession
+                        pinnedSkillsSession = session
+                        if let onOpenSkills {
+                            onOpenSkills(session)
+                        }
                     }
                 )
 

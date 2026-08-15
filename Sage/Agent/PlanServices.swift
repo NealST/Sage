@@ -54,11 +54,8 @@ struct PlanServices {
     }
 
     @discardableResult
-    func prepareSkillsForTurn(query: String, pauseForAmbiguity: Bool) async -> Bool {
-        await skillRecall.prepareSkillsForTurn(
-            query: query,
-            pauseForAmbiguity: pauseForAmbiguity
-        )
+    func prepareSkillsForTurn(query: String) async -> Bool {
+        await skillRecall.prepareSkillsForTurn(query: query)
     }
 
     func loadSkillName(from argumentsJSON: String) -> String? {

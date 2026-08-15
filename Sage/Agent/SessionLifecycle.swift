@@ -42,6 +42,10 @@ final class SessionLifecycle {
 
     /// Boots this window's session. Pass `project` for a project window; `nil` for General.
     func bootstrap(project: ProjectRecord?, reloadCatalog: Bool) async {
+        state.didBootstrap = false
+        // Pin focus before any await so kind-driven chrome never paints the wrong scope.
+        state.focusedProject = project
+
         await modelGateway.setRetryStatusHandler { [state] status in
             switch status {
             case .retrying(let attempt, let total, let delay):
@@ -61,7 +65,6 @@ final class SessionLifecycle {
         }
 
         do {
-            state.focusedProject = project
             if reloadCatalog {
                 await skillCatalog()?.reloadSkills(projectRoot: project?.rootURL)
             } else {
@@ -70,7 +73,7 @@ final class SessionLifecycle {
 
             let snapshot = try await taskRepository.loadScopedWorkspace(projectID: project?.id)
             applyWorkspaceSnapshot(snapshot)
-            // Pin this window's focus regardless of any other session's DB singleton.
+            // Keep this window's focus — never inherit another session's DB singleton.
             state.focusedProject = project
 
             if state.activeTask != nil {
@@ -83,6 +86,7 @@ final class SessionLifecycle {
                 message: "Could not open Sage's local database: \(error.localizedDescription)"
             )
         }
+        state.didBootstrap = true
     }
 
     /// Clears tips and abandons a paused skill choice before this window is destroyed.
@@ -142,7 +146,7 @@ final class SessionLifecycle {
     }
 
     func applyWorkspaceSnapshot(_ snapshot: TaskWorkspaceSnapshot) {
-        state.focusedProject = snapshot.focusedProject
+        // Focus is owned by the window/session bootstrap, not by app_state singleton.
         state.recentProjects = snapshot.recentProjects
         state.recentSummaries = snapshot.recentSummaries
         state.activeTask = snapshot.activeTask
@@ -164,7 +168,7 @@ final class SessionLifecycle {
         )
     }
 
-    static func projectPromptAppendix(for project: ProjectRecord?) -> String {
+    nonisolated static func projectPromptAppendix(for project: ProjectRecord?) -> String {
         guard let project else {
             return """
 
@@ -173,7 +177,7 @@ final class SessionLifecycle {
             Default shell working directory is ~.
             """
         }
-        return """
+        let sandbox = """
 
         ## Active sandbox
         Mode: Code Project.
@@ -183,6 +187,7 @@ final class SessionLifecycle {
         Relative paths resolve against the project root. Prefer project-relative paths.
         Default shell working directory is the project root.
         """
+        return sandbox + ProjectAgentsMarkdown.promptSection(projectRoot: project.rootURL)
     }
 
     /// Ends a paused skill-choice turn without running the model.

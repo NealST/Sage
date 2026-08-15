@@ -51,7 +51,8 @@ struct ToolCallView: View {
         let model = ToolCallPresentation.model(
             name: name,
             argumentsJSON: argumentsJSON,
-            titleOverride: titleOverride
+            titleOverride: titleOverride,
+            policy: .home
         )
         let shouldExpand: Bool
         if case .fileEdit = model.body, startExpandedIfFileEdit {
@@ -66,7 +67,8 @@ struct ToolCallView: View {
         ToolCallPresentation.model(
             name: name,
             argumentsJSON: argumentsJSON,
-            titleOverride: titleOverride
+            titleOverride: titleOverride,
+            policy: pathGuardPolicy
         )
     }
 
@@ -220,7 +222,7 @@ struct ToolCallView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "doc.text")
                         .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
-                    Text(PathTextSupport.attributedString(from: path))
+                    Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
                         .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
                         .textSelection(.enabled)
                         .lineLimit(2)
@@ -255,7 +257,7 @@ struct ToolCallView: View {
                     Text(pair.key)
                         .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                         .foregroundStyle(.tertiary)
-                    Text(PathTextSupport.attributedString(from: pair.value))
+                    Text(PathTextSupport.attributedString(from: pair.value, policy: pathGuardPolicy))
                         .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)

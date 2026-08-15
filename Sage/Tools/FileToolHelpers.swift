@@ -19,7 +19,7 @@ enum FileTransferDestination {
         }
         if FileManager.default.fileExists(atPath: destination.path) {
             throw ToolError.operationFailed(
-                "Destination already exists: \(destination.path). Delete it first or choose a different name."
+                "Destination already exists: \(PathGuard.displayPath(destination.path)). Delete it first or choose a different name."
             )
         }
         try FileManager.default.createDirectory(

@@ -40,7 +40,7 @@ struct MoveFileTool: AgentTool {
             destination: try PathGuard.resolveAllowed(args.destination)
         )
         try FileManager.default.moveItem(at: source, to: destination)
-        return "[OK] Moved to \(destination.path)"
+        return "[OK] Moved to \(PathGuard.displayPath(destination.path))"
     }
 }
 
@@ -81,7 +81,7 @@ struct RenameFileTool: AgentTool {
         let destination = source.deletingLastPathComponent().appendingPathComponent(args.newName)
         _ = try PathGuard.resolveAllowed(destination.path)
         try FileManager.default.moveItem(at: source, to: destination)
-        return "[OK] Renamed to \(destination.path)"
+        return "[OK] Renamed to \(PathGuard.displayPath(destination.path))"
     }
 }
 
@@ -123,7 +123,7 @@ struct CopyFileTool: AgentTool {
             destination: destination
         )
         try FileManager.default.copyItem(at: source, to: finalDestination)
-        return "[OK] Copied to \(finalDestination.path)"
+        return "[OK] Copied to \(PathGuard.displayPath(finalDestination.path))"
     }
 }
 

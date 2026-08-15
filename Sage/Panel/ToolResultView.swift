@@ -11,6 +11,7 @@ import SwiftUI
 struct ToolResultView: View {
     let content: String
 
+    @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @State private var expanded: Bool
 
     init(content: String) {
@@ -40,6 +41,13 @@ struct ToolResultView: View {
             line = String(line.dropFirst(5))
         } else if line.hasPrefix("[OK]") {
             line = String(line.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+        }
+        // Legacy absolute write payloads → show project-relative in the chip title.
+        if let payload = split.payload {
+            let relative = PathGuard.displayPath(payload.path, policy: pathGuardPolicy)
+            if relative != payload.path {
+                line = line.replacingOccurrences(of: payload.path, with: relative)
+            }
         }
         if line.count <= 72 { return line }
         return String(line.prefix(69)) + "…"
@@ -122,12 +130,12 @@ struct ToolResultView: View {
                     after: payload.after,
                     created: payload.created,
                     truncated: payload.truncated,
-                    path: payload.path,
+                    path: PathGuard.displayPath(payload.path, policy: pathGuardPolicy),
                     statsOverride: payload.stats
                 )
                 .padding(.bottom, 10)
             } else {
-                Text(PathTextSupport.attributedString(from: split.summary))
+                Text(PathTextSupport.attributedString(from: split.summary, policy: pathGuardPolicy))
                     .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -141,7 +149,7 @@ struct ToolResultView: View {
     @ViewBuilder
     private var pathContextMenu: some View {
         let display = split.summary
-        let urls = PathTextSupport.allFileURLs(in: display)
+        let urls = PathTextSupport.allFileURLs(in: display, policy: pathGuardPolicy)
         if urls.isEmpty {
             Button("Copy Result") {
                 NSPasteboard.general.clearContents()

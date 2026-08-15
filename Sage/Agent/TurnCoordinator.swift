@@ -144,10 +144,7 @@ final class TurnCoordinator {
         streaming.clear()
         skillRecall.clearTurnCache()
 
-        let readyForModel = await skillRecall.prepareSkillsForTurn(
-            query: trimmed,
-            pauseForAmbiguity: true
-        )
+        let readyForModel = await skillRecall.prepareSkillsForTurn(query: trimmed)
         guard readyForModel else { return true }
 
         await runModelTurn()
@@ -200,7 +197,11 @@ final class TurnCoordinator {
             let storedCalls = turn.toolCalls.map {
                 ToolCallRecord(id: $0.id, name: $0.name, argumentsJSON: $0.argumentsJSON)
             }
-            let plan = PlanExecutor.makePlan(from: turn.toolCalls, summary: summary)
+            let plan = PlanExecutor.makePlan(
+                from: turn.toolCalls,
+                summary: summary,
+                pathGuardPolicy: state.pathGuardPolicy
+            )
             guard await taskStore.commit(
                 appendEvents: [
                     AgentEvent(

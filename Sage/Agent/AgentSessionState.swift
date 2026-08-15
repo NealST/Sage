@@ -33,6 +33,9 @@ final class AgentSessionState {
     var activatedSkillNames: Set<String> = []
     /// Set when the owning window is closing — blocks further DB commits.
     var isTornDown = false
+    /// Becomes true after the first `bootstrap` finishes (success or failure).
+    /// UI must not paint workspace chrome/transcript until this is set.
+    var didBootstrap = false
 
     var events: [AgentEvent] {
         activeTask?.events ?? []

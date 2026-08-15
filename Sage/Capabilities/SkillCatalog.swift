@@ -14,18 +14,8 @@ final class SkillCatalog {
     private(set) var skills: [SkillRecord] = []
 
     private let store: SkillStateStore
-    private let skillMatcher = SkillMatcher()
     /// Serializes enablement flush / delete so a stale merge cannot resurrect removed keys.
     private var stateWriteChain: Task<Void, Never>?
-    /// Short-lived local matcher cache (normalized query → result).
-    private var matchCache: [String: MatchCacheEntry] = [:]
-    private let matchCacheTTL: TimeInterval = 120
-
-    private struct MatchCacheEntry {
-        let names: [String]
-        let deferred: Bool
-        let cachedAt: Date
-    }
 
     /// Project root used for Finder “Open Folder” and last reload.
     private(set) var currentProjectRoot: URL?
@@ -53,7 +43,6 @@ final class SkillCatalog {
             }
             return copy
         }
-        matchCache.removeAll()
     }
 
     /// Reload from disk for this catalog's scope only.
@@ -137,87 +126,35 @@ final class SkillCatalog {
     struct SkillAppendixResult: Sendable {
         let text: String
         let needsLoadSkillTool: Bool
-        let recommendedSkills: [String]
-        let deferredToCloud: Bool
     }
 
-    func skillsPromptAppendix(
-        for userMessage: String,
-        skipMatching: Bool = false
-    ) async -> SkillAppendixResult {
+    /// Catalog for the cloud model. Activation is via `load_skill` only.
+    func skillsPromptAppendix() async -> SkillAppendixResult {
         let active = enabledSkills
         guard !active.isEmpty else {
-            return SkillAppendixResult(
-                text: "",
-                needsLoadSkillTool: false,
-                recommendedSkills: [],
-                deferredToCloud: false
-            )
+            return SkillAppendixResult(text: "", needsLoadSkillTool: false)
         }
 
-        let recommended: [String]
-        let deferred: Bool
-        if skipMatching {
-            recommended = []
-            deferred = false
-        } else {
-            let cacheKey = Self.normalizedMatchKey(userMessage)
-            if let hit = matchCache[cacheKey],
-               Date().timeIntervalSince(hit.cachedAt) < matchCacheTTL {
-                recommended = hit.names
-                deferred = hit.deferred
-            } else {
-                let matchResult = await skillMatcher.match(
-                    userMessage: userMessage,
-                    skills: active
-                )
-                switch matchResult {
-                case .resolved(let names):
-                    recommended = names
-                    deferred = false
-                case .deferred:
-                    recommended = []
-                    deferred = true
-                }
-                matchCache[cacheKey] = MatchCacheEntry(
-                    names: recommended,
-                    deferred: deferred,
-                    cachedAt: Date()
-                )
+        var lines: [String] = [
+            "",
+            "## Available Skills",
+            "Use the `load_skill` tool to activate a skill's full instructions when relevant to the user's request.",
+            "Activate at most one skill at a time for a given step of work.",
+            "",
+        ]
+
+        for skill in active {
+            var entry = "- **\(skill.name)**: \(skill.description)"
+            if let compat = skill.compatibility {
+                entry += " _(requires: \(compat))_"
             }
+            lines.append(entry)
         }
-
-        let excludeFromCatalog: Set<String>
-        if recommended.count == 1 {
-            excludeFromCatalog = Set(recommended)
-        } else {
-            excludeFromCatalog = []
-        }
-        let catalogSkills = active.filter { !excludeFromCatalog.contains($0.name) }
-
-        var lines: [String] = []
-        if !catalogSkills.isEmpty {
-            lines.append("")
-            lines.append("## Available Skills")
-            lines.append("Use the `load_skill` tool to activate a skill's full instructions when relevant to the user's request.")
-            lines.append("Activate at most one skill at a time for a given step of work.")
-            lines.append("")
-
-            for skill in catalogSkills {
-                var entry = "- **\(skill.name)**: \(skill.description)"
-                if let compat = skill.compatibility {
-                    entry += " _(requires: \(compat))_"
-                }
-                lines.append(entry)
-            }
-            lines.append("")
-        }
+        lines.append("")
 
         return SkillAppendixResult(
             text: lines.joined(separator: "\n"),
-            needsLoadSkillTool: true,
-            recommendedSkills: recommended,
-            deferredToCloud: deferred
+            needsLoadSkillTool: true
         )
     }
 
@@ -226,12 +163,5 @@ final class SkillCatalog {
             return nil
         }
         return await SkillRegistry.shared.readBody(for: skill)
-    }
-
-    private static func normalizedMatchKey(_ message: String) -> String {
-        message
-            .lowercased()
-            .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
-            .joined(separator: " ")
     }
 }

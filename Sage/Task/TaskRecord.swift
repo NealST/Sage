@@ -12,7 +12,7 @@ nonisolated enum TaskStatus: String, Codable, Sendable {
     case failed
 }
 
-/// A normalized entity available to future context retrieval and local models.
+/// A normalized entity available to future context retrieval.
 nonisolated struct TaskEntity: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var kind: String
@@ -34,7 +34,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var summary: String?
     /// Short semantic label (≤20 chars) for task catalog display and routing.
     var topic: String?
-    /// One-sentence intent description (≤80 chars) used by the local model router.
+    /// One-sentence intent description (≤80 chars) used for routing and catalog display.
     var abstract: String?
     var topicUpdatedAt: Date?
     var events: [AgentEvent]

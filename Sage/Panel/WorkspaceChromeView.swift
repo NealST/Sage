@@ -14,21 +14,27 @@ struct WorkspaceChromeView: View {
 
     @Binding var gitBranch: String?
     @Binding var branchSwitchError: String?
+    @Binding var projectTab: ProjectWorkspaceTab
 
     private var focused: ProjectRecord? { session.agent.state.focusedProject }
-    private var isProject: Bool { focused != nil }
+    private var isProject: Bool { !session.isGeneral }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
             if isProject {
                 projectLeading
             } else {
                 generalLeading
             }
 
-            Spacer(minLength: 12)
-
             trailingActions
+
+            Spacer(minLength: SageDesign.Spacing.md)
+
+            // Flush trailing edge with the composer field (same `.lg` inset).
+            if isProject {
+                projectTabPicker
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: SageDesign.Panel.titlebarContentHeight)
@@ -40,16 +46,26 @@ struct WorkspaceChromeView: View {
 
     private var generalLeading: some View {
         HStack(spacing: 6) {
-            Button("Open Project…", action: openProject)
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+            Button(action: openProject) {
+                Label("Open Project", systemImage: "folder")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .labelStyle(.titleAndIcon)
+            .help("Open an existing project folder")
+            .accessibilityLabel("Open Project")
 
-            Button("New Project…", action: createProject)
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+            Button(action: createProject) {
+                Label("New Project", systemImage: "folder.badge.plus")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .labelStyle(.titleAndIcon)
+            .help("Create a new project folder")
+            .accessibilityLabel("New Project")
 
             if !session.agent.state.recentProjects.isEmpty {
-                Menu("Recent Projects", systemImage: "clock") {
+                Menu {
                     ForEach(session.agent.state.recentProjects) { project in
                         Button {
                             Task { await appState.switchToProject(id: project.id) }
@@ -57,10 +73,14 @@ struct WorkspaceChromeView: View {
                             Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
                         }
                     }
+                } label: {
+                    Label("Recent Projects", systemImage: "clock")
                 }
                 .menuStyle(.borderlessButton)
                 .controlSize(.small)
                 .labelStyle(.titleAndIcon)
+                .help("Recent projects")
+                .accessibilityLabel("Recent Projects")
             }
         }
     }
@@ -68,69 +88,37 @@ struct WorkspaceChromeView: View {
     // MARK: - Project
 
     private var projectLeading: some View {
-        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
-            Menu("Projects", systemImage: "folder.badge.gearshape") {
-                Button("Open Project…", action: openProject)
-                Button("New Project…", action: createProject)
-                if !session.agent.state.recentProjects.isEmpty {
-                    Divider()
-                    ForEach(session.agent.state.recentProjects) { project in
-                        Button {
-                            guard project.id != focused?.id else { return }
-                            Task { await appState.switchToProject(id: project.id) }
-                        } label: {
-                            Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
-                        }
-                    }
-                }
-                if let focused {
-                    Divider()
-                    Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([focused.rootURL])
-                    }
-                    Button("Copy Root Path") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(focused.rootPath, forType: .string)
-                    }
-                    Button("Close Project Window") {
-                        Task { await appState.closeProjectWindow(projectID: focused.id) }
-                    }
-                }
-            }
-            .menuStyle(.borderlessButton)
-            .labelStyle(.iconOnly)
-            .help("Projects")
-            .accessibilityLabel("Projects")
-
+        HStack(alignment: .center, spacing: 4) {
             if let focused {
-                projectIdentity(focused)
+                projectPathLabel(focused)
+            } else {
+                Text("Opening…")
+                    .font(.system(size: type.caption, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
 
             if gitBranch != nil {
                 branchMenu
             }
         }
+        // Keep path + branch as one compact cluster; don’t let the menu stretch.
+        .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func projectIdentity(_ project: ProjectRecord) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(project.name)
-                .font(.system(size: type.caption, weight: .semibold))
+    private func projectPathLabel(_ project: ProjectRecord) -> some View {
+        Button {
+            NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
+        } label: {
+            Text(ProjectPanelActions.displayPath(project.rootPath))
+                .font(.system(size: type.caption, weight: .medium))
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
-            } label: {
-                Text(ProjectPanelActions.displayPath(project.rootPath))
-                    .font(.system(size: type.micro))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .buttonStyle(.plain)
-            .help("Show in Finder")
-            .accessibilityLabel("Project path \(ProjectPanelActions.displayPath(project.rootPath))")
+                .truncationMode(.middle)
         }
-        .frame(maxWidth: 320, alignment: .leading)
+        .buttonStyle(.plain)
+        .help("Show in Finder")
+        .accessibilityLabel("Project path \(ProjectPanelActions.displayPath(project.rootPath))")
+        .frame(maxWidth: 280, alignment: .leading)
     }
 
     private var branchMenu: some View {
@@ -144,36 +132,43 @@ struct WorkspaceChromeView: View {
                     Button {
                         switchToBranch(name)
                     } label: {
-                        HStack {
+                        if name == gitBranch {
+                            Label(name, systemImage: "checkmark")
+                        } else {
                             Text(name)
-                            Spacer(minLength: 12)
-                            if name == gitBranch {
-                                Image(systemName: "checkmark")
-                            }
                         }
                     }
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 3) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: type.micro, weight: .semibold))
                 Text(gitBranch ?? "")
-                    .font(.system(size: type.micro, weight: .medium))
                     .lineLimit(1)
             }
+            .font(.system(size: type.caption, weight: .medium))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
-            )
         }
         .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
         .help("Switch branch")
         .accessibilityLabel("Branch \(gitBranch ?? "")")
         .disabled(session.agent.state.isBusy)
+    }
+
+    private var projectTabPicker: some View {
+        Picker("Workspace", selection: $projectTab) {
+            ForEach(ProjectWorkspaceTab.allCases) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.small)
+        .frame(minWidth: 200, idealWidth: 220, maxWidth: 240)
+        .labelsHidden()
+        .accessibilityLabel("Workspace")
+        .help("Switch between Task, Files, and History")
     }
 
     // MARK: - Trailing

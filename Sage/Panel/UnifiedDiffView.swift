@@ -17,6 +17,7 @@ struct UnifiedDiffView: View {
     /// Collapsed height budget (line count) before “Show more”.
     var collapsedLineLimit: Int = 24
 
+    @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @State private var expanded = false
 
     private var ops: [LineDiff.Op] {
@@ -41,7 +42,7 @@ struct UnifiedDiffView: View {
                 if let path {
                     Image(systemName: created ? "doc.badge.plus" : "doc.text")
                         .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
-                    Text(PathTextSupport.attributedString(from: path))
+                    Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
                         .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
                         .textSelection(.enabled)
                         .lineLimit(2)

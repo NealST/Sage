@@ -9,9 +9,9 @@
 
 | Phase | 主题 | 状态 |
 |-------|------|------|
-| A | 数据模型 + Focus + Open/Create/Switch + 路由隔离 + PathGuard（理想策略）+ UI | **进行中（骨架已落地，待手工验收）** |
-| B | 代码体验加深（默认 search/list、空项目引导、与 write-diff 联调） | 未开始 |
-| C | `.sage` / 文件感知 / 多窗口 focus / 记忆分层 | 未开始 |
+| A | 数据模型 + Focus + Open/Create/Switch + 路由隔离 + PathGuard（理想策略）+ UI | **骨架已落地；A.5 待手工验收** |
+| B | 代码体验 / Project 工作台（相对路径、bootstrap 无串台、Files/History 浏览壳） | **清单已完成；A.5 验收仍待勾** |
+| C | `.sage` / 文件感知加深 / 记忆分层 | 未开始 |
 
 ---
 
@@ -292,14 +292,15 @@ PathGuard.Policy
 - [x] 多 tab 壳：Task / Files / History（Files/History 浏览优先）
 - [x] Project 空 transcript：Tell me what to do
 - [x] `search_files` / `list_directory` 缺省 path → root
-- [ ] write-file / 工具结果项目相对路径联调
-- [ ] 开窗 bootstrap 无串台闪烁
+- [x] write-file / 工具结果项目相对路径联调
+- [x] 开窗 bootstrap 无串台闪烁
 
 ---
 
 ### Phase C — 加深（对齐路线图）
 
 - [ ] 项目级 `.sage` 配置（instructions / ignore；skills 目录已有）
+- [x] 项目根 `AGENTS.md` 注入系统提示（全 task 生效）
 - [ ] Files tab 真文件树 + 可选变更感知（FSEvents）
 - [ ] History tab 真 commit log
 - [x] 多窗口各持 focus（4.2），共享 projects / MCP / settings；tips 随 window lifecycle
@@ -335,3 +336,6 @@ PathGuard.Policy
 | 2026-08-09 | 初稿：多 project、task 绑定、Phase A–C；P0 PathGuard 采用项目根沙箱（非过渡方案） |
 | 2026-08-09 | Phase A 骨架落地：DB / PathGuard / Runtime / Header UI；A.5 手工验收待勾 |
 | 2026-08-13 | Phase B 工作台决策：`.sage` 不进 gitignore；chrome 无 General 入口；分支可切换；Task/Files/History 多 tab（后两者先浏览）；空引导 Tell me what to do |
+| 2026-08-14 | Phase B：工具结果项目相对路径联调（`PathGuard.displayPath` + write/list/search/… + UI 回链） |
+| 2026-08-14 | Phase B：开窗 bootstrap 门闩（`didBootstrap` + kind 驱动 chrome + 热键排队） |
+| 2026-08-14 | Project 根目录 `AGENTS.md` 注入 system prompt（经 `projectPromptAppendix`，全 task） |

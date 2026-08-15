@@ -60,4 +60,58 @@ final class PathGuardTests: XCTestCase {
             XCTAssertEqual(try PathGuard.defaultExplorationPath("~/Documents"), "~/Documents")
         }
     }
+
+    func testDisplayPathProjectRelative() throws {
+        let nested = projectRoot.appendingPathComponent("src/App.swift")
+        try FileManager.default.createDirectory(
+            at: nested.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try "ok".write(to: nested, atomically: true, encoding: .utf8)
+
+        let policy = PathGuard.Policy.project(root: projectRoot)
+        XCTAssertEqual(PathGuard.displayPath(projectRoot.path, policy: policy), ".")
+        XCTAssertEqual(PathGuard.displayPath(nested.path, policy: policy), "src/App.swift")
+        XCTAssertEqual(
+            PathGuard.displayPath("src/App.swift", policy: policy),
+            "src/App.swift"
+        )
+
+        let homeFile = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("SagePathGuardDisplay-\(UUID().uuidString).txt")
+        // Outside project → tilde form (file need not exist for display formatting).
+        let outside = skillDir.appendingPathComponent("notes.txt")
+        let displayed = PathGuard.displayPath(outside.path, policy: policy)
+        XCTAssertFalse(displayed.hasPrefix(projectRoot.path))
+        XCTAssertTrue(displayed.hasPrefix("~") || displayed.hasPrefix("/"))
+        _ = homeFile
+    }
+
+    func testDisplayPathHomeTilde() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let docs = home.appendingPathComponent("Documents")
+        XCTAssertEqual(PathGuard.displayPath(home.path, policy: .home), "~")
+        XCTAssertEqual(
+            PathGuard.displayPath(docs.path, policy: .home),
+            "~/Documents"
+        )
+    }
+
+    func testFileURLForDisplayPath() throws {
+        let nested = projectRoot.appendingPathComponent("readme.md")
+        try "hi".write(to: nested, atomically: true, encoding: .utf8)
+        let policy = PathGuard.Policy.project(root: projectRoot)
+
+        let fromRelative = PathGuard.fileURL(forDisplayPath: "readme.md", policy: policy)
+        XCTAssertEqual(
+            fromRelative?.resolvingSymlinksInPath().path,
+            nested.resolvingSymlinksInPath().path
+        )
+
+        let fromAbsolute = PathGuard.fileURL(forDisplayPath: nested.path, policy: policy)
+        XCTAssertEqual(
+            fromAbsolute?.resolvingSymlinksInPath().path,
+            nested.resolvingSymlinksInPath().path
+        )
+    }
 }

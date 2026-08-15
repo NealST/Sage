@@ -84,7 +84,7 @@ actor SkillExtractionService {
     ///   - settings: Model settings snapshot (captured on MainActor before calling).
     ///   - mode: `.automatic` may skip; `.explicitRemember` must return new or enhance.
     ///   - userNote: Optional hint from `/remember …` (explicit mode only).
-    ///   - preferredEnhanceTargets: Local-matcher neighbors; biases analyze toward enhance.
+    ///   - preferredEnhanceTargets: Optional names to bias analyze toward enhance.
     /// - Returns: Extraction result indicating skip, new skill, or enhancement.
     func analyze(
         task: TaskRecord,

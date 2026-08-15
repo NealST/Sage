@@ -65,8 +65,7 @@ final class AgentModelGateway {
         if let cached = skillRecall.cachedResult {
             skillResult = cached
         } else {
-            let latestUserMessage = state.events.last(where: { $0.kind == .userInput })?.content ?? ""
-            skillResult = await skillCatalog()?.skillsPromptAppendix(for: latestUserMessage)
+            skillResult = await skillCatalog()?.skillsPromptAppendix()
         }
 
         if skillResult?.needsLoadSkillTool == true {
@@ -96,7 +95,7 @@ final class AgentModelGateway {
             skillResult = cached
         } else {
             let latestUserMessage = state.events.last(where: { $0.kind == .userInput })?.content ?? ""
-            let computed = await skillCatalog()?.skillsPromptAppendix(for: latestUserMessage)
+            let computed = await skillCatalog()?.skillsPromptAppendix()
             if let computed {
                 skillRecall.rememberCache(computed, query: latestUserMessage)
             }
@@ -104,12 +103,6 @@ final class AgentModelGateway {
         }
 
         let skillsAppendix = skillResult?.text ?? ""
-        let complexAppendix = skillRecall.complexIntentHintActive ? """
-
-        ## Multi-intent request
-        This message appears to contain multiple distinct goals. Break the work into ordered steps first. \
-        Activate at most one skill per step via `load_skill` when that step begins — do not load several skills at once for the whole request.
-        """ : ""
         let relatedAppendix = await relatedContextAppendix()
         var modelEvents = [
             AgentEvent(
@@ -117,7 +110,6 @@ final class AgentModelGateway {
                 content: systemPrompt
                     + projectPromptAppendix()
                     + skillsAppendix
-                    + complexAppendix
                     + relatedAppendix
             )
         ]

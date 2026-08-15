@@ -27,7 +27,14 @@ enum PathTextSupport {
         return imageExtensions.contains(ext)
     }
 
-    static func fileURL(fromPath path: String) -> URL? {
+    static func fileURL(
+        fromPath path: String,
+        policy: PathGuard.Policy = .home
+    ) -> URL? {
+        if let url = PathGuard.fileURL(forDisplayPath: path, policy: policy) {
+            return url
+        }
+        // Legacy absolute / tilde paths that fall outside the active project root.
         let expanded = (path as NSString).expandingTildeInPath
         let url = URL(fileURLWithPath: expanded).standardizedFileURL
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
@@ -35,8 +42,17 @@ enum PathTextSupport {
     }
 
     /// All existing local file URLs mentioned in `text` (deduped, path order).
-    static func allFileURLs(in text: String) -> [URL] {
-        rawPathMatches(in: text).compactMap { fileURL(fromPath: $0) }
+    static func allFileURLs(
+        in text: String,
+        policy: PathGuard.Policy = .home
+    ) -> [URL] {
+        var urls = rawPathMatches(in: text).compactMap { fileURL(fromPath: $0, policy: policy) }
+        // Whole-string project-relative path (e.g. UnifiedDiffView header).
+        if urls.isEmpty,
+           let only = fileURL(fromPath: text.trimmingCharacters(in: .whitespacesAndNewlines), policy: policy) {
+            urls = [only]
+        }
+        return urls
     }
 
     static func actionURL(forFileURL fileURL: URL, quickLook: Bool) -> URL? {
@@ -58,11 +74,28 @@ enum PathTextSupport {
 
     /// Builds an AttributedString with tappable local paths (reveal / Quick Look).
     /// Missing files stay visible but muted and non-interactive.
-    static func attributedString(from text: String) -> AttributedString {
+    static func attributedString(
+        from text: String,
+        policy: PathGuard.Policy = .home
+    ) -> AttributedString {
         var attributed = AttributedString(text)
         let ns = text as NSString
         let full = NSRange(location: 0, length: ns.length)
         let matches = pathRegex.matches(in: text, options: [], range: full)
+
+        if matches.isEmpty {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty,
+               let fileURL = fileURL(fromPath: trimmed, policy: policy),
+               let link = actionURL(forFileURL: fileURL, quickLook: isImagePath(trimmed)),
+               let range = text.range(of: trimmed),
+               let attrRange = Range(range, in: attributed) {
+                attributed[attrRange].link = link
+                attributed[attrRange].foregroundColor = Color.accentColor
+                attributed[attrRange].underlineStyle = .single
+            }
+            return attributed
+        }
 
         for match in matches.reversed() {
             guard match.numberOfRanges >= 1 else { continue }
@@ -76,7 +109,7 @@ enum PathTextSupport {
             let pathRange = swiftRange.lowerBound..<trimmedEnd
             guard let attrRange = Range(pathRange, in: attributed) else { continue }
 
-            if let fileURL = fileURL(fromPath: raw),
+            if let fileURL = fileURL(fromPath: raw, policy: policy),
                let link = actionURL(forFileURL: fileURL, quickLook: isImagePath(raw)) {
                 attributed[attrRange].link = link
                 attributed[attrRange].foregroundColor = Color.accentColor

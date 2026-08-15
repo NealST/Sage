@@ -10,6 +10,7 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private var window: NSWindow?
+    private lazy var skillsController = SkillsManageWindowController(appState: appState)
 
     init(appState: AppState) {
         self.appState = appState
@@ -21,6 +22,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.present()
         }
+    }
+
+    func showSkills(pinnedSession: AgentSession) {
+        skillsController.show(pinnedSession: pinnedSession)
     }
 
     private func present() {
@@ -41,13 +46,19 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let root = SettingsView(settings: appState.settings) { [weak self] in
-                self?.window?.performClose(nil)
+        // Environments must wrap `.sageAccessibilityObservation()` — that modifier
+        // reads `@Environment(AccessibilitySettings.self)` from ancestors, not content.
+        let root = SettingsView(
+            settings: appState.settings,
+            onDone: { [weak self] in self?.window?.performClose(nil) },
+            onOpenSkills: { [weak self] session in
+                self?.showSkills(pinnedSession: session)
             }
-            .environment(appState)
-            .environment(AccessibilitySettings.shared)
+        )
             .sageScaledTypography()
             .sageAccessibilityObservation()
+            .environment(appState)
+            .environment(AccessibilitySettings.shared)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Settings"
@@ -58,7 +69,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isOpaque = true
         window.backgroundColor = .windowBackgroundColor
         window.hasShadow = true
-        window.isMovableByWindowBackground = true
+        // Keep false so field/text drag selects content instead of moving the window.
+        window.isMovableByWindowBackground = false
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
         window.setContentSize(NSSize(width: 440, height: 620))
@@ -69,10 +81,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        let agentOpen = NSApp.windows.contains {
-            $0.title == "Sage" && $0.isVisible
+        let otherOpen = NSApp.windows.contains {
+            ($0.title == "Sage" || $0.title == "Skills" || $0.title == "Dashboard") && $0.isVisible
         }
-        if !agentOpen {
+        if !otherOpen {
             NSApp.setActivationPolicy(.accessory)
         }
     }

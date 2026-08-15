@@ -154,7 +154,7 @@ struct WriteTextFileTool: AgentTool {
         )
         try args.content.write(to: url, atomically: true, encoding: .utf8)
         return WriteFileResultCodec.makeResult(
-            path: url.path,
+            path: PathGuard.displayPath(url.path),
             created: !existed,
             before: before,
             after: args.content
@@ -263,13 +263,13 @@ struct SearchFilesTool: AgentTool {
                     if results.count >= Self.maxResults { return false }
                     let range = NSRange(line.startIndex..., in: line)
                     if regex.firstMatch(in: line, range: range) != nil {
-                        results.append("\(fileURL.path):\(lineNumber):\(line)")
+                        results.append("\(PathGuard.displayPath(fileURL.path)):\(lineNumber):\(line)")
                     }
                     return results.count < Self.maxResults
                 }
             } else {
                 // Name-only search
-                results.append(fileURL.path)
+                results.append(PathGuard.displayPath(fileURL.path))
             }
         }
 

@@ -19,14 +19,15 @@
 - 路由匹配更精确
 - 上下文窗口不会被无关历史污染
 
-### 路由方式 = 本地模型分类
+### 路由方式 = continuity + 启发式
 
-使用本地 MLX 模型（Qwen3-0.6B-4bit）做一次轻量推理，替代之前的 bag-of-words 词汇重叠匹配。
+不再运行本地 MLX。顺序是：
 
-之前方案的问题：
-- 纯词汇重叠，不是语义相关性
-- 中文分词失效（`count >= 3` 过滤掉了大部分中文词）
-- 无法检测主题漂移
+1. `ContinuityTaskResolver`：显式「新任务 / start fresh」或没有 active task → `beginNew`
+2. `HeuristicTaskFallback`：词面重叠（含中文 bigram）决定 resume / 主题漂移开新 task
+3. 否则 continue 当前 task
+
+语义分类交给云端对话，不在本地再跑一轮小模型。
 
 ### 主题摘要 = topic + abstract
 
@@ -34,7 +35,7 @@
 - **topic**：极短标签（≤20 字符），如 "整理 Downloads"、"PDF 合并脚本"
 - **abstract**：一句话意图描述（≤80 字符），如 "把 Downloads 里的文件按类型分类到子文件夹"
 
-这两个字段由本地模型生成，不是简单的消息截断。
+这两个字段由 `TopicGenerator` 从首条（或 resume 时的新）用户消息截取，不调用模型。
 
 ## 整体流程
 
@@ -46,38 +47,16 @@ ContinuityTaskResolver（处理显式关键词："start fresh"、"新任务" 等
     │
     ├─ 匹配到关键词 → 直接开新 task
     │
-    └─ 未匹配 → 进入本地模型路由
+    └─ 未匹配 → HeuristicTaskFallback
             │
-            ▼
-      TaskRouter（本地模型推理）
-      输入：用户消息 + 当前 topic + task 目录
-            │
-            ├─ "continue" → 追加到当前 task
-            │
-            ├─ "resume [id]" → 召回旧 task
-            │       │
-            │       ▼
-            │   恢复上下文 + 追加新 input + 更新 topic/abstract
-            │
-            └─ "new" → 关闭当前 task（生成最终 topic）→ 开新 task
+            ├─ 空 active + 命中旧 task → resume
+            ├─ 与当前 topic 几乎无重叠 → beginNew
+            └─ 否则 continue
 ```
 
-## Task 目录（Task Catalog）
+## Task 目录
 
-路由模型的输入包含一份 task 目录，格式如下：
-
-```
-Current topic: "整理 Downloads 文件夹"
-
-Task catalog:
-1. [a1b2c3d4] PDF 合并脚本: 用 Python 把多个 PDF 合并成一个文件
-2. [e5f6g7h8] 管理 Downloads 整理规则: 按文件类型自动分类到子文件夹
-3. [i9j0k1l2] 配置 Homebrew 环境: 安装和配置开发工具链
-
-New message: "之前整理 Downloads 的规则能不能加一条，把 .dmg 自动删除"
-```
-
-模型输出：`{"action":"resume","id":"e5f6g7h8"}`
+启发式 resume 会扫 `workspace.recentSummaries` 的 topic / abstract / summary，不再构造给本地模型的 catalog prompt。
 
 ### 目录构建规则
 
@@ -122,27 +101,17 @@ Output ONLY: {"topic":"...","abstract":"..."}
 - **last userInput** — 如果和 first 不同，说明有追问或主题演进
 - **last assistantResponse**（纯文本）— 代表最终结果
 
-因为每个 task 是单主题的（主题漂移时会自动拆分），首尾一定描述同一件事，三条 events 足够模型理解 "这个 task 做了什么"。
+因为每个 task 是单主题的（主题漂移时会自动拆分），首条用户消息通常足够当标签。
 
 ## 技术实现
-
-### 本地模型选型
-
-| 选项 | 结论 |
-|------|------|
-| Apple Foundation Models | 黑盒 API，无法精确控制 prompt 格式和输出约束，仅 macOS 26+ |
-| MLX | 完全可控，支持 macOS 14+，可选极小模型，推理延迟 <200ms |
-
-**选择 MLX**，使用 `mlx-community/Qwen3-0.6B-4bit`（~350MB，4-bit 量化）。
 
 ### 关键文件
 
 | 文件 | 职责 |
 |------|------|
-| `Sage/Agent/LocalModelService.swift` | MLX 模型生命周期（下载、加载、推理、卸载） |
-| `Sage/Task/TaskRouter.swift` | 路由 prompt 构建 + JSON 解析 + catalog 管理 |
-| `Sage/Task/TopicGenerator.swift` | Topic/abstract 生成和更新 |
-| `Sage/Task/TaskContextResolver.swift` | 保留的显式关键词匹配（第一道过滤） |
+| `Sage/Task/TopicGenerator.swift` | 从用户文本截取 topic / abstract |
+| `Sage/Task/TaskContextResolver.swift` | 显式关键词 + 词面启发式 |
+| `Sage/Task/TaskRoute.swift` | `CompositeTaskRouter`（continuity → heuristic） |
 
 ### 数据模型变更
 
@@ -162,22 +131,12 @@ ALTER TABLE tasks ADD COLUMN topic_updated_at REAL;
 
 ### 容错设计
 
-- 本地模型不可用时（未下载、加载失败），**静默降级**为 `continueActive`，不阻塞用户
-- 模型输出无法解析时，同样降级
+- 启发式不够自信时 **continue** 当前 task，不阻塞用户
 - Topic 生成是异步后台任务，不阻塞主流程
-- 首次启动时模型在后台预热，不影响首次交互
 
-### SPM 依赖
+## 启发式限制
 
-```swift
-.package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3"))
-```
-
-Target 依赖：`MLXLLM`、`MLXLMCommon`
-
-## 之前方案的问题（已替换）
-
-`ContinuityTaskResolver` 使用 bag-of-words 重叠率：
+`HeuristicTaskFallback` 使用 bag-of-words 重叠率：
 
 ```swift
 let overlap = inputTokens.intersection(summaryTokens).count
@@ -195,5 +154,4 @@ guard score >= 0.5, overlap >= 2
 
 - **动态 context budget**：根据 `settings.model` 的上下文窗口大小调整 `ContextBudget` 限制
 - **Task 历史搜索**：提供轻量入口让用户搜索/浏览过去的 task（类似 Spotlight）
-- **Embedding 索引**：当 task 数量增长到 100+ 时，catalog 的 15 条限制可能不够，可以用 embedding 做预筛选再交给模型精排
-- **Apple Foundation Models 备选**：当 macOS 26 普及后，可以作为 MLX 的备选后端
+- **Embedding 索引**：当 task 数量增长到 100+ 时，词面启发式可能不够，可以用 embedding 做预筛选

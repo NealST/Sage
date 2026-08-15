@@ -2,7 +2,7 @@
 //  DashboardView.swift
 //  Sage
 //
-//  Runtime status dashboard — model state, memory usage, token consumption.
+//  Runtime status dashboard — session tokens and MCP.
 //  Designed as a live monitoring panel, separate from configuration (Settings).
 //
 
@@ -10,17 +10,11 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
-    @State private var modelStatus: LocalModelService.Status = .idle
-    @State private var memoryBytes: Int = 0
-    @State private var pressureLevel: MemoryPressureMonitor.PressureLevel = .normal
-    @State private var refreshTimer: Timer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
-                    localModelSection
-                    memorySection
                     tokenUsageSection
                     mcpServersSection
                 }
@@ -32,165 +26,6 @@ struct DashboardView: View {
         .frame(width: 400)
         .frame(minHeight: 360)
         .background(Color(nsColor: .windowBackgroundColor))
-        .task { await refreshModelState() }
-        .onAppear { startPolling() }
-        .onDisappear { stopPolling() }
-    }
-
-    // MARK: - Local Model
-
-    private var localModelSection: some View {
-        dashboardSection("Local Model") {
-            VStack(spacing: SageDesign.Spacing.md) {
-                HStack(spacing: SageDesign.Spacing.sm) {
-                    statusDot
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(statusTitle)
-                            .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                            .contentTransition(.opacity)
-                        Text(statusSubtitle)
-                            .font(.system(size: SageDesign.Typography.microSize))
-                            .foregroundStyle(.secondary)
-                            .contentTransition(.opacity)
-                    }
-                    Spacer()
-                    modelActionButton
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Local model, \(statusTitle)")
-                .accessibilityValue(statusSubtitle)
-                .animation(SageDesign.Motion.contentCrossFade, value: statusColorKey)
-
-                if case .downloading(let progress) = modelStatus {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                        .tint(.accentColor)
-                }
-            }
-            .padding(SageDesign.Spacing.md)
-            .sagePanelBackground(cornerRadius: 10)
-        }
-    }
-
-    private var statusDot: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
-            .animation(.easeInOut(duration: 0.3), value: statusColorKey)
-    }
-
-    private var statusColor: Color {
-        switch modelStatus {
-        case .ready: .green
-        case .loading, .downloading: .orange
-        case .failed: .red
-        case .idle, .unloadedByPressure: .secondary
-        }
-    }
-
-    private var statusColorKey: Int {
-        switch modelStatus {
-        case .ready: 0
-        case .loading, .downloading: 1
-        case .failed: 2
-        case .idle, .unloadedByPressure: 3
-        }
-    }
-
-    private var statusTitle: String {
-        switch modelStatus {
-        case .idle: "Idle"
-        case .downloading: "Downloading…"
-        case .loading: "Loading…"
-        case .ready: "Ready"
-        case .failed: "Failed"
-        case .unloadedByPressure: "Unloaded (Memory Pressure)"
-        }
-    }
-
-    private var statusSubtitle: String {
-        switch modelStatus {
-        case .idle: "Model not loaded"
-        case .downloading(let p): "Progress: \(Int(p * 100))%"
-        case .loading: "Loading model into memory…"
-        case .ready: "Qwen3-0.6B-4bit • \(formattedMemory)"
-        case .failed(let msg): msg
-        case .unloadedByPressure: "Released due to system memory pressure"
-        }
-    }
-
-    @ViewBuilder
-    private var modelActionButton: some View {
-        switch modelStatus {
-        case .ready:
-            Button("Unload") {
-                Task {
-                    await LocalModelService.shared.unload()
-                    await refreshModelState()
-                }
-            }
-            .controlSize(.small)
-        case .idle, .unloadedByPressure, .failed:
-            Button("Load") {
-                Task {
-                    await LocalModelService.shared.warmUp()
-                    await refreshModelState()
-                }
-            }
-            .controlSize(.small)
-        case .loading, .downloading:
-            ProgressView()
-                .controlSize(.small)
-        }
-    }
-
-    // MARK: - Memory
-
-    private var memorySection: some View {
-        dashboardSection("Memory") {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("MLX Buffer Usage")
-                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    Text(formattedMemory)
-                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.numericText())
-                }
-                Spacer()
-                pressureBadge
-            }
-            .animation(SageDesign.Motion.contentCrossFade, value: memoryBytes)
-            .padding(SageDesign.Spacing.md)
-            .sagePanelBackground(cornerRadius: 10)
-        }
-    }
-
-    private var pressureBadge: some View {
-        let (text, color): (String, Color) = switch pressureLevel {
-        case .normal: ("Normal", .green)
-        case .warning: ("Warning", .orange)
-        case .critical: ("Critical", .red)
-        }
-        return Text(text)
-            .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-            .foregroundStyle(color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(color.opacity(0.14))
-            )
-            .animation(.easeInOut(duration: 0.3), value: pressureLevelKey)
-    }
-
-    private var pressureLevelKey: Int {
-        switch pressureLevel {
-        case .normal: 0
-        case .warning: 1
-        case .critical: 2
-        }
     }
 
     // MARK: - Token Usage
@@ -241,45 +76,10 @@ struct DashboardView: View {
 
     // MARK: - Helpers
 
-    private var formattedMemory: String {
-        formatBytes(memoryBytes)
-    }
-
-    private func formatBytes(_ bytes: Int) -> String {
-        if bytes < 1024 { return "\(bytes) B" }
-        let kb = Double(bytes) / 1024
-        if kb < 1024 { return String(format: "%.0f KB", kb) }
-        let mb = kb / 1024
-        return String(format: "%.1f MB", mb)
-    }
-
     private func formatTokenCount(_ count: Int) -> String {
         if count < 1000 { return "\(count)" }
         let k = Double(count) / 1000
         return String(format: "%.1fk", k)
-    }
-
-    private func refreshModelState() async {
-        let newStatus = await LocalModelService.shared.status
-        let newBytes = await LocalModelService.shared.memoryFootprintBytes
-        let newPressure = MemoryPressureMonitor.shared.currentLevel
-        withAnimation(SageDesign.Motion.contentCrossFade) {
-            modelStatus = newStatus
-            memoryBytes = newBytes
-            pressureLevel = newPressure
-        }
-    }
-
-    private func startPolling() {
-        guard refreshTimer == nil else { return }
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-            Task { @MainActor in await refreshModelState() }
-        }
-    }
-
-    private func stopPolling() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
     }
 
     // MARK: - Section Builder

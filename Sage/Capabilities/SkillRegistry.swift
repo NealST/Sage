@@ -196,14 +196,12 @@ actor SkillRegistry {
         guard let description = parsed.scalars["description"], !description.isEmpty else {
             return nil
         }
-        let disableModel = parsed.scalars["disable-model-invocation"]?.lowercased() == "true"
         return SkillRecord(
             name: name,
             description: description,
             path: file.path,
             enabled: true,
             scope: scope,
-            disableModelInvocation: disableModel,
             license: parsed.scalars["license"],
             compatibility: parsed.scalars["compatibility"],
             metadata: parsed.metadata.isEmpty ? nil : parsed.metadata,

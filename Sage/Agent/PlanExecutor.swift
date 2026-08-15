@@ -33,11 +33,8 @@ enum PlanExecutor {
                 plan.steps[index].status = .running
                 services.planProgress.update(plan)
 
-                // Per-step skill recall (title as query). 1 → auto-load; N → consolidate tip only.
-                await services.prepareSkillsForTurn(
-                    query: plan.steps[index].title,
-                    pauseForAmbiguity: false
-                )
+                // Refresh the Available Skills appendix for this step (cloud load_skill).
+                await services.prepareSkillsForTurn(query: plan.steps[index].title)
 
                 // Step status only — avoid rewriting the whole plan graph on every tick.
                 guard await services.persistPlanStepStatus(plan.steps[index], in: plan) else {
@@ -268,7 +265,11 @@ enum PlanExecutor {
         }
     }
 
-    static func makePlan(from toolCalls: [ToolCallProposal], summary: String) -> AgentPlan {
+    static func makePlan(
+        from toolCalls: [ToolCallProposal],
+        summary: String,
+        pathGuardPolicy: PathGuard.Policy = .home
+    ) -> AgentPlan {
         AgentPlan(
             summary: summary,
             steps: toolCalls.map { call in
@@ -278,7 +279,8 @@ enum PlanExecutor {
                     argumentsJSON: call.argumentsJSON,
                     title: ToolCallPresentation.humanTitle(
                         name: call.name,
-                        argumentsJSON: call.argumentsJSON
+                        argumentsJSON: call.argumentsJSON,
+                        policy: pathGuardPolicy
                     )
                 )
             }

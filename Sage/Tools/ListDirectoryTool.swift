@@ -93,7 +93,7 @@ struct ListDirectoryTool: AgentTool {
             let kind = isDirectory ? "dir" : "file"
             let size = isDirectory ? "-" : "\(values?.fileSize ?? 0)"
             let indent = String(repeating: "  ", count: currentDepth)
-            lines.append("\(indent)\(kind)\t\(size)\t\(item.path)")
+            lines.append("\(indent)\(kind)\t\(size)\t\(PathGuard.displayPath(item.path))")
             if isDirectory {
                 listRecursive(
                     url: item,

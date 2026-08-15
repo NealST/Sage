@@ -28,31 +28,40 @@ struct AgentWorkspaceView: View {
     @State private var projectTab: ProjectWorkspaceTab = .task
 
     private var isProjectWindow: Bool {
-        session.agent.state.focusedProject != nil
+        !session.isGeneral
+    }
+
+    private var isWorkspaceReady: Bool {
+        session.agent.state.didBootstrap
     }
 
     var body: some View {
         VStack(spacing: 0) {
             WorkspaceChromeView(
                 gitBranch: $gitBranch,
-                branchSwitchError: $branchSwitchError
+                branchSwitchError: $branchSwitchError,
+                projectTab: $projectTab
             )
 
             if let branchSwitchError, !branchSwitchError.isEmpty {
                 branchErrorBanner(branchSwitchError)
             }
 
-            if let hint = session.agent.state.contextHint, projectTab == .task || !isProjectWindow {
-                contextChip(hint)
-            }
+            if isWorkspaceReady {
+                if let hint = session.agent.state.contextHint, projectTab == .task || !isProjectWindow {
+                    contextChip(hint)
+                }
 
-            if isProjectWindow {
-                projectTabPicker
                 Divider().opacity(SageDesign.Chrome.dividerOpacity)
-                projectTabBody
+
+                if isProjectWindow {
+                    projectTabBody
+                } else {
+                    taskPane
+                }
             } else {
                 Divider().opacity(SageDesign.Chrome.dividerOpacity)
-                taskPane
+                bootstrapPlaceholder
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -86,6 +95,12 @@ struct AgentWorkspaceView: View {
             refreshGitBranch()
             updateWindowTitle()
         }
+        .onChange(of: session.agent.state.didBootstrap) { _, ready in
+            guard ready else { return }
+            focusInputSoon()
+            refreshGitBranch()
+            updateWindowTitle()
+        }
         .onChange(of: gitBranch) { _, _ in
             updateWindowTitle()
         }
@@ -109,22 +124,6 @@ struct AgentWorkspaceView: View {
     }
 
     // MARK: - Tabs
-
-    private var projectTabPicker: some View {
-        Picker("Workspace", selection: $projectTab) {
-            ForEach(ProjectWorkspaceTab.allCases) { tab in
-                Text(tab.title).tag(tab)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.small)
-        .frame(maxWidth: 280)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.sm)
-        .accessibilityLabel("Workspace tabs")
-    }
 
     @ViewBuilder
     private var projectTabBody: some View {
@@ -159,6 +158,19 @@ struct AgentWorkspaceView: View {
                 stickToBottom: $stickToBottom
             )
         }
+    }
+
+    private var bootstrapPlaceholder: some View {
+        VStack(spacing: SageDesign.Spacing.md) {
+            ProgressView()
+                .controlSize(.regular)
+            Text(isProjectWindow ? "Opening project…" : "Starting Sage…")
+                .font(.system(size: type.micro))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isProjectWindow ? "Opening project" : "Starting Sage")
     }
 
     private func branchErrorBanner(_ message: String) -> some View {
@@ -196,8 +208,8 @@ struct AgentWorkspaceView: View {
         }
     }
 
-    /// Unify window chrome: General hides title (actions live in the strip);
-    /// Project uses the system title + folder proxy for path / branch.
+    /// Identity lives in the chrome strip (path + branch). Keep the system
+    /// titlebar text hidden so it doesn’t repeat the same information.
     private func updateWindowTitle() {
         let autosave = session.windowAutosaveName
         guard let window = NSApp.windows.first(where: {
@@ -205,18 +217,19 @@ struct AgentWorkspaceView: View {
                 || $0.frameAutosaveName == autosave
         }) else { return }
 
-        if let project = session.agent.state.focusedProject {
-            window.titleVisibility = .visible
-            window.representedURL = project.rootURL
-            if let gitBranch, !gitBranch.isEmpty {
-                window.title = "\(project.name) — \(gitBranch)"
-            } else {
-                window.title = project.name
-            }
-        } else {
-            window.representedURL = nil
+        window.titleVisibility = .hidden
+        window.representedURL = nil
+
+        if session.isGeneral {
             window.title = "Sage"
-            window.titleVisibility = .hidden
+            return
+        }
+
+        if let project = session.agent.state.focusedProject {
+            // Still set for Window menu / Mission Control; not shown in the titlebar.
+            window.title = project.name
+        } else {
+            window.title = "Opening…"
         }
     }
 

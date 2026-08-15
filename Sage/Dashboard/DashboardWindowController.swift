@@ -58,11 +58,13 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
+        // Environments must wrap `.sageAccessibilityObservation()` — that modifier
+        // reads `@Environment(AccessibilitySettings.self)` from ancestors, not content.
         let root = DashboardView()
-            .environment(appState)
-            .environment(AccessibilitySettings.shared)
             .sageScaledTypography()
             .sageAccessibilityObservation()
+            .environment(appState)
+            .environment(AccessibilitySettings.shared)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Dashboard"

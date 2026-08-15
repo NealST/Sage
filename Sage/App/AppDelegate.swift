@@ -30,8 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .sageOpenSettings,
             object: nil
         )
-        startMemoryPressureMonitor()
-
         Task {
             await appState.bootstrap()
         }
@@ -64,15 +62,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleOpenSettings() {
         showSettings()
-    }
-
-    private func startMemoryPressureMonitor() {
-        MemoryPressureMonitor.shared.onPressureChange = { level in
-            guard level == .warning || level == .critical else { return }
-            Task {
-                await LocalModelService.shared.handleMemoryPressure()
-            }
-        }
-        MemoryPressureMonitor.shared.start()
     }
 }

@@ -2,7 +2,7 @@
 //  TaskRoute.swift
 //  Sage
 //
-//  Single routing decision + composite resolver (continuity → local model → heuristic).
+//  Single routing decision + composite resolver (continuity → heuristic).
 //
 
 import Foundation
@@ -75,7 +75,7 @@ nonisolated struct TaskRoute: Sendable, Equatable {
     }
 }
 
-/// Strategy seam for deterministic rules, an on-device model, or a hybrid resolver.
+/// Strategy seam for deterministic routing rules.
 nonisolated protocol TaskRouting: Sendable {
     func route(
         input: String,
@@ -83,18 +83,13 @@ nonisolated protocol TaskRouting: Sendable {
     ) async -> TaskRoute
 }
 
-/// Continuity filter → local MLX router → heuristic fallback. Always returns a `TaskRoute`.
+/// Continuity filter → heuristic fallback. Always returns a `TaskRoute`.
 @MainActor
 final class CompositeTaskRouter {
     private let continuity: ContinuityTaskResolver
-    private let taskRouter: TaskRouter
 
-    init(
-        continuity: ContinuityTaskResolver = ContinuityTaskResolver(),
-        taskRouter: TaskRouter = TaskRouter()
-    ) {
+    init(continuity: ContinuityTaskResolver = ContinuityTaskResolver()) {
         self.continuity = continuity
-        self.taskRouter = taskRouter
     }
 
     func route(
@@ -106,52 +101,14 @@ final class CompositeTaskRouter {
             return firstPass
         }
 
-        let catalog = TaskCatalog.build(
-            from: workspace.recentSummaries,
-            excluding: workspace.activeTaskID
-        )
-        let activeIsEmpty = workspace.activeTask?.events.isEmpty ?? true
-
-        if catalog.entries.isEmpty && activeIsEmpty {
-            return HeuristicTaskFallback.decide(input: input, workspace: workspace)
-                ?? firstPass
+        if let heuristic = HeuristicTaskFallback.decide(input: input, workspace: workspace) {
+            return heuristic
         }
 
-        let modelRoute = await taskRouter.route(
-            input: input,
-            currentTopic: workspace.activeTask?.topic
-                ?? workspace.activeTask?.summary.map { String($0.prefix(20)) },
-            catalog: catalog
-        )
-
-        switch modelRoute.action {
-        case .continueActive:
-            if modelRoute.confidence <= 0.5 {
-                return HeuristicTaskFallback.decide(input: input, workspace: workspace)
-                    ?? enrichContinue(modelRoute, workspace: workspace)
-            }
-            return enrichContinue(modelRoute, workspace: workspace)
-        case .beginNew:
-            return modelRoute
-        case .resumeTask(let id):
-            let hint = ContextHint.forResumedTask(
-                topic: workspace.recentSummaries.first(where: { $0.id == id })?.topic,
-                summary: workspace.recentSummaries.first(where: { $0.id == id })?.summary
-            )
-            return TaskRoute.resume(
-                id,
-                confidence: modelRoute.confidence,
-                reason: modelRoute.reason,
-                userVisibleHint: hint
-            )
+        var continued = firstPass
+        if continued.relatedTaskIDs.isEmpty {
+            continued.relatedTaskIDs = workspace.activeTask?.relatedTaskIDs ?? []
         }
-    }
-
-    private func enrichContinue(_ route: TaskRoute, workspace: TaskWorkspaceSnapshot) -> TaskRoute {
-        var enriched = route
-        if enriched.relatedTaskIDs.isEmpty {
-            enriched.relatedTaskIDs = workspace.activeTask?.relatedTaskIDs ?? []
-        }
-        return enriched
+        return continued
     }
 }

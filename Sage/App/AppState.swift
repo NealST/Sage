@@ -24,6 +24,8 @@ final class AppState {
     private var isReloadingSkillsAcrossSessions = false
     private var pendingSkillsReload = false
     private var focusPointerSyncTask: Task<Void, Never>?
+    /// Hotkey/menu asked to show General before app bootstrap finished.
+    private var revealGeneralWhenReady = false
 
     /// Session whose window is key (menu bar / hotkey target).
     private(set) var keySession: AgentSession
@@ -118,16 +120,16 @@ final class AppState {
         await generalSession.skillCatalog.reloadSkills(projectRoot: nil)
         await generalSession.agent.bootstrap(project: nil, reloadCatalog: false)
         makeKeyAndShow(generalSession)
-
-        Task.detached(priority: .utility) {
-            await LocalModelService.shared.warmUp()
-        }
+        revealGeneralWhenReady = false
     }
 
     func toggleKeyAgentWindow() {
         let kind = keySession.kind
         if let controller = windowControllers[kind] {
             controller.toggle()
+        } else if keySession.isGeneral, !keySession.agent.state.didBootstrap {
+            // Launch still loading — show as soon as bootstrap finishes.
+            revealGeneralWhenReady = true
         } else {
             showGeneralWindow()
         }
@@ -145,6 +147,10 @@ final class AppState {
     }
 
     func showGeneralWindow() {
+        if !generalSession.agent.state.didBootstrap {
+            revealGeneralWhenReady = true
+            return
+        }
         makeKeyAndShow(generalSession)
     }
 
@@ -207,6 +213,8 @@ final class AppState {
             mcpHub: mcpHub,
             skillStateStore: skillStateStore
         )
+        // Pin focus before bootstrap awaits so a premature paint can't look like General.
+        session.agent.state.focusedProject = project
         wireSkillsBroadcast(session)
         projectSessions[project.id] = session
         await session.agent.bootstrap(project: project)
@@ -289,6 +297,14 @@ final class AppState {
     }
 
     private func makeKeyAndShow(_ session: AgentSession) {
+        if session.isGeneral, !session.agent.state.didBootstrap {
+            revealGeneralWhenReady = true
+            return
+        }
+        if case .project = session.kind, !session.agent.state.didBootstrap {
+            // Project windows are only shown after bootstrap in openOrFocusProject.
+            return
+        }
         keySession = session
         windowController(for: session).show()
         isAgentWindowVisible = true

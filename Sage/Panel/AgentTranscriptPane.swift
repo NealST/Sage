@@ -272,8 +272,8 @@ struct AgentTranscriptPane: View {
                             ToolCallView(
                                 name: call.name,
                                 argumentsJSON: call.argumentsJSON,
-                                titleOverride: call.id.hasPrefix("auto_skill_")
-                                    ? "Auto-loaded skill: \(ToolCallPresentation.extractArg(call.argumentsJSON, key: "name") ?? "…")"
+                                titleOverride: Self.isSyntheticSkillLoad(call.id)
+                                    ? "Loaded skill: \(ToolCallPresentation.extractArg(call.argumentsJSON, key: "name") ?? "…")"
                                     : nil,
                                 resultContent: toolIndex.successContent(for: call.id),
                                 previewAgainstDisk: toolIndex.shouldPreviewAgainstDisk(callID: call.id)
@@ -315,6 +315,11 @@ struct AgentTranscriptPane: View {
         } else {
             proxy.scrollTo("phase-accessory", anchor: .bottom)
         }
+    }
+
+    /// Slash / explicit `load_skill` events (legacy `auto_skill_` ids still match).
+    private static func isSyntheticSkillLoad(_ callID: String) -> Bool {
+        callID.hasPrefix("skill_load_") || callID.hasPrefix("auto_skill_")
     }
 }
 

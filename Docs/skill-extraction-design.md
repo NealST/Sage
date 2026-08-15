@@ -6,7 +6,7 @@
 
 ## 背景
 
-Sage 的 Skill 系统已支持按需激活（`SkillMatcher` 本地模型语义匹配 + `load_skill` 工具）。经验自动沉淀让 agent 在完成任务后识别可复用经验，经用户确认后再生成并写入 skill 文件，供后续任务召回。
+Sage 的 Skill 系统按需激活：把 Available Skills 目录交给云端，由 `load_skill` 决定是否加载正文。经验自动沉淀让 agent 在完成任务后识别可复用经验，经用户确认后再生成并写入 skill 文件，供后续任务召回。
 
 ## 设计决策
 
@@ -164,18 +164,14 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 
 ### 匹配与激活
 
-1. 本地模型 `SkillMatcher` 列出所有清晰相关的 skill（重叠时故意多选，作为质量信号）
-2. **0 命中**：仅 catalog；云端可 `load_skill`
-3. **1 命中**：自动 `load_skill`（不弹确认）
-4. **N 命中**：暂停本轮 → tip「Which skill should Sage use?」选用其一；**Continue without a skill** = 不自动注入，仅保留 catalog（模型仍可 `load_skill`）
-5. N 命中结束后再出 Consolidate tip：用户可选 **Keep** 主 skill，确认 Merge 后 `composeMergedSkills`（`SkillAuthoring` 同 enhance）写入主 path，其余进废纸篓
+1. 每轮只注入 **Available Skills** 目录（name + description），不预加载正文
+2. 云端模型在需要时调用 `load_skill`（斜杠激活仍走同一工具）
+3. 不再用本地小模型做 auto-match / auto-load
+4. Consolidate tip 仍可作为碎片 skill 的合并入口：用户 **Keep** 主 skill，确认 Merge 后 `composeMergedSkills` 写入主 path，其余进废纸篓
 
 ### 复杂意图
 
-`IntentComplexityClassifier`（本地模型）判定 simple / complex：
-
-- **simple**：对整句做上述匹配（无多意图线索的短句跳过 Classifier，直接 Matcher）
-- **complex**：跳过整句 auto-match；system 提示先拆步；执行已有 plan 时对 **step.title** 再召回（短/工具名标题跳过 Matcher；与本轮已匹配 query 相似则复用缓存；仅明显换意图时再跑 Matcher；1 → 自动；N → 不暂停执行，只给 consolidate tip）
+拆步由云端 plan 负责。执行已有 plan 时按 step 刷新 catalog appendix，不在本地再跑一轮匹配。
 
 ### 跨 task 经验聚合（= Enhance 主路径）
 
@@ -199,7 +195,7 @@ Task C 再同类   → 再 enhance X
 #### 实现清单（相对现状）
 
 - [x] **Analyze 更敢 enhance**：automatic / `/remember` prompt 明确「近邻优先 enhance」；近重复名强制 enhance（已有同名规则可保留并加强近义描述）
-- [x] **可选：近邻预筛**：识别前用本地 `SkillMatcher`（topic/summary/末条 user）标出候选 target，注入 analyze 上下文；单候选时 reconcile 强制 enhance
+- [x] **近邻预筛**：已去掉本地 matcher；analyze 仍看到完整 catalog，由云端决定 new vs enhance
 - [x] **Compose 合并准则**：保留仍正确的旧结论；用新 transcript 补边 / 修正矛盾；去重；文件即跨 task 累加态
 - [x] **Tip 文案**：enhance 写成「Update existing experience」/ 按钮「Update」
 - [x] **Consolidate**：保持为误 `new` 后的回收路径，不升级为主聚合器

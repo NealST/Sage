@@ -21,6 +21,11 @@ struct MarkdownContentView: View {
     /// Hash of the markdown that produced `measuredHeight` — skip remounting the measurer.
     @State private var measuredMarkdownID: Int = 0
 
+    /// Presentation-only markdown (completed tasks softened). Source `markdown` is unchanged.
+    private var displayMarkdown: String {
+        MarkdownPresentation.softenCompletedTasks(in: markdown)
+    }
+
     var body: some View {
         Group {
             if collapsible, mayNeedCollapse {
@@ -39,7 +44,7 @@ struct MarkdownContentView: View {
 
     /// Skip expensive dual-layout measure for short replies.
     private var mayNeedCollapse: Bool {
-        markdown.count >= SageDesign.Markdown.assistantMeasureCharacterGate
+        displayMarkdown.count >= SageDesign.Markdown.assistantMeasureCharacterGate
     }
 
     private var shouldOfferCollapse: Bool {
@@ -47,18 +52,18 @@ struct MarkdownContentView: View {
     }
 
     private var needsFreshMeasure: Bool {
-        measuredMarkdownID != markdown.hashValue || measuredHeight <= 0
+        measuredMarkdownID != displayMarkdown.hashValue || measuredHeight <= 0
     }
 
     /// Visible tree — TreeSitter only when `syntaxHighlighting` is on.
     private var coreMarkdown: some View {
         Group {
             if syntaxHighlighting {
-                Markdown(markdown)
+                Markdown(displayMarkdown)
                     .markdownTheme(.sage)
                     .markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())
             } else {
-                Markdown(markdown)
+                Markdown(displayMarkdown)
                     .markdownTheme(.sage)
             }
         }
@@ -68,7 +73,7 @@ struct MarkdownContentView: View {
 
     /// Offscreen measurer — same theme, no TreeSitter (highlighting isn't needed for height).
     private var measureMarkdown: some View {
-        Markdown(markdown)
+        Markdown(displayMarkdown)
             .markdownTheme(.sage)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,7 +113,7 @@ struct MarkdownContentView: View {
             }
             .onPreferenceChange(MarkdownHeightKey.self) { height in
                 measuredHeight = height
-                measuredMarkdownID = markdown.hashValue
+                measuredMarkdownID = displayMarkdown.hashValue
             }
 
             if shouldOfferCollapse {
@@ -186,14 +191,23 @@ struct MarkdownDisclosureButton: View {
 // MARK: - Theme
 
 extension Theme {
-    /// Calm, system-native look for macOS agent transcripts.
+    /// GitHub-flavored structure with Apple system colors and airy reading rhythm.
+    ///
+    /// Layout mirrors `Theme.gitHub` / github-markdown-css (heading rules, tables,
+    /// blockquotes, task lists) but uses semantic AppKit colors so light/dark and
+    /// accessibility contrast follow the system — no Primer hex tokens.
+    /// Deliberately omits a page `BackgroundColor` so the panel material shows through.
     static let sage = Theme()
         .text {
             ForegroundColor(.primary)
-            FontSize(13)
+            FontSize(14)
         }
         .strong {
             FontWeight(.semibold)
+        }
+        .strikethrough {
+            StrikethroughStyle(.single)
+            ForegroundColor(.secondary)
         }
         .link {
             ForegroundColor(.accentColor)
@@ -201,71 +215,170 @@ extension Theme {
         }
         .code {
             FontFamilyVariant(.monospaced)
-            FontSize(12)
-            BackgroundColor(Color.primary.opacity(0.06))
+            FontSize(.em(0.88))
+            BackgroundColor(Color(nsColor: .quaternarySystemFill))
         }
+        // Modest top margins so a leading heading isn’t airy-empty (CSS first-child
+        // collapse). Breathing between blocks comes mostly from previous bottom margins.
         .heading1 { configuration in
-            configuration.label
-                .markdownTextStyle {
-                    FontWeight(.bold)
-                    FontSize(18)
-                }
-                .markdownMargin(top: 12, bottom: 6)
+            VStack(alignment: .leading, spacing: 0) {
+                configuration.label
+                    .relativePadding(.bottom, length: .em(0.35))
+                    .relativeLineSpacing(.em(0.2))
+                    .markdownMargin(top: 8, bottom: 16)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(1.65))
+                    }
+                Divider().overlay(Color(nsColor: .separatorColor))
+            }
         }
         .heading2 { configuration in
-            configuration.label
-                .markdownTextStyle {
-                    FontWeight(.semibold)
-                    FontSize(15)
-                }
-                .markdownMargin(top: 10, bottom: 4)
+            VStack(alignment: .leading, spacing: 0) {
+                configuration.label
+                    .relativePadding(.bottom, length: .em(0.3))
+                    .relativeLineSpacing(.em(0.2))
+                    .markdownMargin(top: 10, bottom: 14)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(.em(1.35))
+                    }
+                Divider().overlay(Color(nsColor: .separatorColor))
+            }
         }
         .heading3 { configuration in
             configuration.label
+                .relativeLineSpacing(.em(0.2))
+                .markdownMargin(top: 10, bottom: 12)
                 .markdownTextStyle {
                     FontWeight(.semibold)
-                    FontSize(13)
+                    FontSize(.em(1.15))
                 }
-                .markdownMargin(top: 8, bottom: 4)
+        }
+        .heading4 { configuration in
+            configuration.label
+                .relativeLineSpacing(.em(0.2))
+                .markdownMargin(top: 8, bottom: 10)
+                .markdownTextStyle {
+                    FontWeight(.semibold)
+                    FontSize(.em(1.0))
+                }
+        }
+        .heading5 { configuration in
+            configuration.label
+                .relativeLineSpacing(.em(0.2))
+                .markdownMargin(top: 8, bottom: 8)
+                .markdownTextStyle {
+                    FontWeight(.semibold)
+                    FontSize(.em(0.92))
+                    ForegroundColor(.secondary)
+                }
+        }
+        .heading6 { configuration in
+            configuration.label
+                .relativeLineSpacing(.em(0.2))
+                .markdownMargin(top: 8, bottom: 8)
+                .markdownTextStyle {
+                    FontWeight(.semibold)
+                    FontSize(.em(0.88))
+                    ForegroundColor(.secondary)
+                }
         }
         .paragraph { configuration in
             configuration.label
                 .fixedSize(horizontal: false, vertical: true)
-                .relativeLineSpacing(.em(0.2))
-                .markdownMargin(top: 0, bottom: 8)
-        }
-        .listItem { configuration in
-            configuration.label
-                .markdownMargin(top: 2, bottom: 2)
-        }
-        .codeBlock { configuration in
-            SageCodeBlockView(configuration: configuration)
-                .markdownMargin(top: 6, bottom: 10)
+                .relativeLineSpacing(.em(0.38))
+                .markdownMargin(top: 0, bottom: 16)
         }
         .blockquote { configuration in
             HStack(alignment: .top, spacing: 0) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.secondary.opacity(0.35))
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color(nsColor: .separatorColor))
                     .frame(width: 3)
                 configuration.label
                     .markdownTextStyle {
                         ForegroundColor(.secondary)
                     }
-                    .padding(.leading, 10)
+                    .padding(.leading, 14)
+                    .padding(.vertical, 2)
             }
             .fixedSize(horizontal: false, vertical: true)
-            .markdownMargin(top: 6, bottom: 8)
+            .markdownMargin(top: 8, bottom: 16)
+        }
+        .codeBlock { configuration in
+            SageCodeBlockView(configuration: configuration)
+                .markdownMargin(top: 8, bottom: 16)
+        }
+        .image { configuration in
+            configuration.label
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .markdownMargin(top: 10, bottom: 16)
+        }
+        .list { configuration in
+            configuration.label
+                .markdownMargin(top: 4, bottom: 16)
+        }
+        .listItem { configuration in
+            configuration.label
+                .markdownMargin(top: .em(0.28), bottom: .em(0.12))
+        }
+        .taskListMarker { configuration in
+            Image(systemName: configuration.isCompleted ? "checkmark.square.fill" : "square")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(
+                    configuration.isCompleted ? Color.secondary.opacity(0.7) : Color.secondary,
+                    Color(nsColor: .quaternarySystemFill)
+                )
+                .imageScale(.small)
+                .relativeFrame(minWidth: .em(1.6), alignment: .trailing)
+        }
+        .table { configuration in
+            ScrollView(.horizontal, showsIndicators: true) {
+                configuration.label
+                    .fixedSize(horizontal: true, vertical: true)
+                    .markdownTableBorderStyle(.init(color: Color(nsColor: .separatorColor)))
+                    .markdownTableBackgroundStyle(
+                        .alternatingRows(
+                            Color.clear,
+                            Color(nsColor: .quaternarySystemFill)
+                        )
+                    )
+            }
+            .markdownMargin(top: 4, bottom: 16)
+        }
+        .tableCell { configuration in
+            configuration.label
+                .markdownTextStyle {
+                    if configuration.row == 0 {
+                        FontWeight(.semibold)
+                    }
+                    BackgroundColor(nil)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .relativeLineSpacing(.em(0.3))
+        }
+        .thematicBreak {
+            Divider()
+                .overlay(Color(nsColor: .separatorColor))
+                .padding(.vertical, 8)
+                .markdownMargin(top: 20, bottom: 20)
         }
 }
 
 // MARK: - Code block chrome
 
+/// Fenced code — github-markdown `pre` shape (muted well, 6pt radius, airy padding)
+/// with Apple-native floating chrome instead of a heavy header / always-on scrollbar.
 private struct SageCodeBlockView: View {
     let configuration: CodeBlockConfiguration
 
     @Environment(AccessibilitySettings.self) private var accessibility
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var copied = false
     @State private var expanded = false
+    @State private var hovering = false
 
     private var lineCount: Int {
         configuration.content.split(separator: "\n", omittingEmptySubsequences: false).count
@@ -275,72 +388,47 @@ private struct SageCodeBlockView: View {
         lineCount > SageDesign.Markdown.collapsedCodeLineLimit
     }
 
+    private var languageLabel: String? {
+        let raw = configuration.language?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return raw.isEmpty ? nil : raw
+    }
+
+    private var cornerRadius: CGFloat { SageDesign.Markdown.codeBlockCornerRadius }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            codeScroll
+            ZStack(alignment: .topLeading) {
+                codeScroll
+                floatingChrome
+            }
             if needsCollapse {
-                collapseBar
+                collapseControl
             }
         }
-        .background(Color.primary.opacity(SageDesign.Chrome.fillOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(Color(nsColor: .quaternarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
-            if accessibility.increaseContrast {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-            }
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    Color(nsColor: .separatorColor).opacity(accessibility.increaseContrast ? 0.9 : 0.28),
+                    lineWidth: 1
+                )
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: SageDesign.Spacing.sm) {
-            if let language = configuration.language?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !language.isEmpty {
-                Text(language)
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            copyButton
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.03))
-    }
-
-    private var copyButton: some View {
-        Button {
-            copyCode()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10, weight: .semibold))
-                Text(copied ? "Copied" : "Copy")
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-            }
-            .foregroundStyle(.secondary)
-            // ~10pt hit padding beyond the visual chip (Apple tap target guidance).
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .padding(6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SagePressableChipButtonStyle())
-        .help("Copy code")
-        .accessibilityLabel(copied ? "Copied" : "Copy code")
+        .onHover { hovering = $0 }
     }
 
     private var codeScroll: some View {
-        ScrollView(.horizontal, showsIndicators: true) {
+        ScrollView(.horizontal) {
             configuration.label
                 .fixedSize(horizontal: false, vertical: true)
-                .relativeLineSpacing(.em(0.2))
+                .relativeLineSpacing(.em(0.25))
                 .markdownTextStyle {
                     FontFamilyVariant(.monospaced)
                     FontSize(SageDesign.Markdown.codeFontSize)
                 }
-                .padding(SageDesign.Markdown.codeBlockContentPadding)
+                .padding(.top, SageDesign.Markdown.codeBlockContentPadding + SageDesign.Markdown.codeBlockChromeClearance)
+                .padding(.horizontal, SageDesign.Markdown.codeBlockContentPadding)
+                .padding(.bottom, SageDesign.Markdown.codeBlockContentPadding)
                 .frame(
                     maxHeight: needsCollapse && !expanded
                         ? SageDesign.Markdown.collapsedCodeContentHeight()
@@ -349,21 +437,82 @@ private struct SageCodeBlockView: View {
                 )
                 .clipped()
         }
+        // Trackpad / Magic Mouse still scroll; hide the fat always-visible bar.
+        .scrollIndicators(.hidden)
     }
 
-    private var collapseBar: some View {
-        MarkdownDisclosureButton(
-            title: expanded ? "Show less" : "Show more",
-            expanded: expanded
-        ) {
+    /// Language caption + icon-only copy — GitHub-style hover affordance, SF chrome.
+    private var floatingChrome: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if let languageLabel {
+                Text(languageLabel)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            copyButton
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .opacity(chromeOpacity)
+        .animation(SageDesign.Motion.contentCrossFade, value: hovering)
+        .animation(SageDesign.Motion.contentCrossFade, value: copied)
+    }
+
+    private var chromeOpacity: Double {
+        if copied || accessibility.increaseContrast { return 1 }
+        return hovering ? 1 : 0.55
+    }
+
+    private var copyButton: some View {
+        Button {
+            copyCode()
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(copied ? Color.secondary : Color.secondary.opacity(0.9))
+                .frame(width: 26, height: 22)
+                .background {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 1)
+                        }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(copied ? "Copied" : "Copy code")
+        .accessibilityLabel(copied ? "Copied" : "Copy code")
+    }
+
+    /// Quiet text control — no filled footer strip.
+    private var collapseControl: some View {
+        Button {
             withAnimation(SageDesign.Motion.expandAnimation) {
                 expanded.toggle()
             }
+        } label: {
+            HStack(spacing: 4) {
+                Text(expanded ? "Show less" : "Show more")
+                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .rotationEffect(.degrees(expanded ? 180 : 0))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color.primary.opacity(0.03))
+        .buttonStyle(.plain)
+        .overlay(alignment: .top) {
+            Divider().opacity(SageDesign.Chrome.dividerOpacity)
+        }
+        .help(expanded ? "Collapse" : "Expand")
     }
 
     private func copyCode() {
@@ -371,11 +520,11 @@ private struct SageCodeBlockView: View {
         pasteboard.clearContents()
         pasteboard.setString(configuration.content, forType: .string)
 
-        withAnimation(SageDesign.Motion.copiedFeedback) {
+        withAnimation(reduceMotion ? nil : SageDesign.Motion.copiedFeedback) {
             copied = true
         }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.6))
+            try? await Task.sleep(for: .seconds(1.4))
             withAnimation(SageDesign.Motion.contentCrossFade) {
                 copied = false
             }

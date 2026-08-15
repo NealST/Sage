@@ -8,11 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A10GRDB000000000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A10GRDB000000000000000002 /* GRDB */; };
-		A10HFHUBF000000000000000 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = A10HFHUBP000000000000000 /* HuggingFace */; };
-		A10HFTOKF000000000000000 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = A10HFTOKP000000000000000 /* Tokenizers */; };
 		A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10MARKDOWN00000000000002 /* MarkdownUI */; };
-		A10MLXLMF000000000000000 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = A10MLXLMP000000000000000 /* MLXLLM */; };
-		A10MLXLMF100000000000000 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = A10MLXLMP100000000000000 /* MLXLMCommon */; };
 		A10STSF00000000000000000 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = A10STSP00000000000000000 /* SwiftTreeSitter */; };
 		A10TSBASHF00000000000000 /* TreeSitterBash in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSBASHP00000000000000 /* TreeSitterBash */; };
 		A10TSCF00000000000000000 /* TreeSitterC in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSCP00000000000000000 /* TreeSitterC */; };
@@ -50,10 +46,6 @@
 			files = (
 				A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */,
 				A10GRDB000000000000000001 /* GRDB in Frameworks */,
-				A10MLXLMF000000000000000 /* MLXLLM in Frameworks */,
-				A10MLXLMF100000000000000 /* MLXLMCommon in Frameworks */,
-				A10HFHUBF000000000000000 /* HuggingFace in Frameworks */,
-				A10HFTOKF000000000000000 /* Tokenizers in Frameworks */,
 				A10STSF00000000000000000 /* SwiftTreeSitter in Frameworks */,
 				A10TSSWIFTF0000000000000 /* TreeSitterSwift in Frameworks */,
 				A10TSPYF0000000000000000 /* TreeSitterPython in Frameworks */,
@@ -114,10 +106,6 @@
 			packageProductDependencies = (
 				A10MARKDOWN00000000000002 /* MarkdownUI */,
 				A10GRDB000000000000000002 /* GRDB */,
-				A10MLXLMP000000000000000 /* MLXLLM */,
-				A10MLXLMP100000000000000 /* MLXLMCommon */,
-				A10HFHUBP000000000000000 /* HuggingFace */,
-				A10HFTOKP000000000000000 /* Tokenizers */,
 				A10STSP00000000000000000 /* SwiftTreeSitter */,
 				A10TSSWIFTP0000000000000 /* TreeSitterSwift */,
 				A10TSPYP0000000000000000 /* TreeSitterPython */,
@@ -166,9 +154,6 @@
 			packageReferences = (
 				A10MARKDOWN00000000000003 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				A10GRDB000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
-				A10MLXLMPKG0000000000000 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				A10HFHUBPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
-				A10HFTOKPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 				A10STSPKG000000000000000 /* XCRemoteSwiftPackageReference "swift-tree-sitter" */,
 				A10TSSWIFTPKG00000000000 /* XCRemoteSwiftPackageReference "tree-sitter-swift" */,
 				A10TSPYPKG00000000000000 /* XCLocalSwiftPackageReference "ThirdParty/tree-sitter-python" */,
@@ -446,36 +431,12 @@
 				minimumVersion = 7.11.1;
 			};
 		};
-		A10HFHUBPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/huggingface/swift-huggingface";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.0;
-			};
-		};
-		A10HFTOKPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/huggingface/swift-transformers";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.3.0;
-			};
-		};
 		A10MARKDOWN00000000000003 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 2.4.1;
-			};
-		};
-		A10MLXLMPKG0000000000000 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.31.3;
 			};
 		};
 		A10STSPKG000000000000000 /* XCRemoteSwiftPackageReference "swift-tree-sitter" */ = {
@@ -590,30 +551,10 @@
 			package = A10GRDB000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		A10HFHUBP000000000000000 /* HuggingFace */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10HFHUBPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
-			productName = HuggingFace;
-		};
-		A10HFTOKP000000000000000 /* Tokenizers */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10HFTOKPKG0000000000000 /* XCRemoteSwiftPackageReference "swift-transformers" */;
-			productName = Tokenizers;
-		};
 		A10MARKDOWN00000000000002 /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10MARKDOWN00000000000003 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
-		};
-		A10MLXLMP000000000000000 /* MLXLLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10MLXLMPKG0000000000000 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLLM;
-		};
-		A10MLXLMP100000000000000 /* MLXLMCommon */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10MLXLMPKG0000000000000 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLMCommon;
 		};
 		A10STSP00000000000000000 /* SwiftTreeSitter */ = {
 			isa = XCSwiftPackageProductDependency;

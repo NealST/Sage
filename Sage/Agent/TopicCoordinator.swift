@@ -11,17 +11,14 @@ import Foundation
 final class TopicCoordinator {
     private let state: AgentSessionState
     private let taskRepository: any TaskRepository
-    private let topicGenerator: TopicGenerator
     private var topicGenerationTaskIDs: Set<UUID> = []
 
     init(
         state: AgentSessionState,
-        taskRepository: any TaskRepository,
-        topicGenerator: TopicGenerator = TopicGenerator()
+        taskRepository: any TaskRepository
     ) {
         self.state = state
         self.taskRepository = taskRepository
-        self.topicGenerator = topicGenerator
     }
 
     func generateTopicIfNeeded(for task: TaskRecord?) {
@@ -36,8 +33,8 @@ final class TopicCoordinator {
 
         let taskID = task.id
         let events = task.events
-        Task(priority: .utility) { [weak self, topicGenerator] in
-            let result = await topicGenerator.generate(from: events)
+        Task(priority: .utility) { [weak self] in
+            let result = TopicGenerator.generate(from: events)
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.topicGenerationTaskIDs.remove(taskID)
@@ -55,8 +52,8 @@ final class TopicCoordinator {
         existingAbstract: String,
         newInput: String
     ) {
-        Task(priority: .utility) { [weak self, topicGenerator] in
-            if let updated = await topicGenerator.update(
+        Task(priority: .utility) { [weak self] in
+            if let updated = TopicGenerator.update(
                 existingTopic: existingTopic,
                 existingAbstract: existingAbstract,
                 newInput: newInput

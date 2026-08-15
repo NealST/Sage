@@ -6,38 +6,95 @@
 import Foundation
 import Security
 
-/// Data-protection keychain avoids the "allow access to keychain" password
-/// dialog that appears on every ad-hoc Xcode rebuild with the legacy keychain ACL.
+/// Generic-password helpers for the file-based macOS keychain.
+///
+/// Sage is not App Sandboxed (`ENABLE_APP_SANDBOX = NO`). The data-protection
+/// keychain (`kSecUseDataProtectionKeychain`) is unavailable in that configuration
+/// and returns `errSecNotAvailable`, so we use the traditional keychain instead.
 enum KeychainStore {
     private static let service = "mozheng.Sage"
 
     static func set(_ value: String, account: String) throws {
         let data = Data(value.utf8)
-        delete(account: account)
 
-        let item: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+        ]
+
+        let update: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-            kSecUseDataProtectionKeychain as String: true,
         ]
-        let status = SecItemAdd(item as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(status)
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        switch updateStatus {
+        case errSecSuccess:
+            // Drop any leftover data-protection copy from earlier builds.
+            deleteDataProtectionItem(account: account)
+            return
+        case errSecItemNotFound:
+            break
+        default:
+            throw KeychainError.unexpectedStatus(updateStatus)
         }
+
+        var add = query
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(addStatus)
+        }
+        deleteDataProtectionItem(account: account)
     }
 
     static func get(account: String) -> String? {
-        let query: [String: Any] = [
+        if let value = copyMatching(account: account, dataProtection: false) {
+            return value
+        }
+        // Older builds may still have a data-protection item; migrate on read.
+        guard let value = copyMatching(account: account, dataProtection: true) else {
+            return nil
+        }
+        try? set(value, account: account)
+        return value
+    }
+
+    static func delete(account: String) {
+        let legacy: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(legacy as CFDictionary)
+        deleteDataProtectionItem(account: account)
+    }
+
+    // MARK: - Private
+
+    private static func deleteDataProtectionItem(account: String) {
+        let modern: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
+        ]
+        SecItemDelete(modern as CFDictionary)
+    }
+
+    private static func copyMatching(account: String, dataProtection: Bool) -> String? {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        if dataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -50,25 +107,16 @@ enum KeychainStore {
         return value
     }
 
-    static func delete(account: String) {
-        let modern: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true,
-        ]
-        SecItemDelete(modern as CFDictionary)
-
-        // Also drop any legacy ACL item so macOS stops prompting on launch.
-        let legacy: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(legacy as CFDictionary)
-    }
-
-    enum KeychainError: Error {
+    enum KeychainError: LocalizedError {
         case unexpectedStatus(OSStatus)
+
+        var errorDescription: String? {
+            switch self {
+            case .unexpectedStatus(let status):
+                let message = SecCopyErrorMessageString(status, nil) as String?
+                    ?? "status \(status)"
+                return "Keychain error: \(message)"
+            }
+        }
     }
 }

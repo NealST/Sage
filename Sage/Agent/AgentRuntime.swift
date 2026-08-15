@@ -110,8 +110,6 @@ final class AgentRuntime {
         tools: ToolRegistry,
         taskRepository: any TaskRepository,
         contextResolver: any TaskRouting = ContinuityTaskResolver(),
-        taskRouter: TaskRouter = TaskRouter(),
-        topicGenerator: TopicGenerator = TopicGenerator(),
         skillCatalog: SkillCatalog? = nil,
         mcpHub: CapabilityStore? = nil,
         skills: SkillSessionController
@@ -136,7 +134,7 @@ final class AgentRuntime {
         } else {
             continuity = ContinuityTaskResolver()
         }
-        self.router = CompositeTaskRouter(continuity: continuity, taskRouter: taskRouter)
+        self.router = CompositeTaskRouter(continuity: continuity)
 
         let taskStore = AgentTaskStore(
             state: state,
@@ -184,8 +182,7 @@ final class AgentRuntime {
 
         let topicCoordinator = TopicCoordinator(
             state: state,
-            taskRepository: taskRepository,
-            topicGenerator: topicGenerator
+            taskRepository: taskRepository
         )
         self.topicCoordinator = topicCoordinator
         taskStore.bind(topicCoordinator: topicCoordinator, skillRecall: skillRecall)
@@ -384,14 +381,8 @@ final class AgentRuntime {
     }
 
     @discardableResult
-    func prepareSkillsForTurn(
-        query: String,
-        pauseForAmbiguity: Bool
-    ) async -> Bool {
-        await skillRecall.prepareSkillsForTurn(
-            query: query,
-            pauseForAmbiguity: pauseForAmbiguity
-        )
+    func prepareSkillsForTurn(query: String) async -> Bool {
+        await skillRecall.prepareSkillsForTurn(query: query)
     }
 
     func noteSkillsActivated(_ names: Set<String>) {
