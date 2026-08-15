@@ -1,157 +1,100 @@
 # Task 路由与主题管理设计
 
-> Sage 的 task 是内部工作单元，不暴露为用户可管理的 "chat"。本文档记录 task 生命周期管理的设计决策与实现方案。
+> Sage 的 task 是窗口里的**当前线程**，不是用户可管理的 chat 列表。  
+> 默认粘住当前线程；新开只来自用户确认。
 
 ## 核心问题
 
-1. **Task 颗粒度**：如何定义一个 task 的边界？用户在同一个 task 里聊了多个不同主题时怎么办？
-2. **Task 召回**：用户在新输入中提到之前 task 相关的内容时，如何自动恢复上下文？
-3. **主题抽象**：如何为每个 task 生成高质量的语义标签，供路由和检索使用？
+1. **线程边界**：什么时候结束当前 task、开一条新的？
+2. **召回**：用户想接上旧工作怎么办？（本轮不做 Recent 点选，保留 `activateTask`）
+3. **标题**：topic / abstract 只做展示，不驱动自动拆分。
 
 ## 设计决策
 
-### Task 颗粒度 = 单主题
+### 默认 = continue 当前 task
 
-每个 task 应该是**单主题**的。当检测到主题漂移时，自动关闭当前 task 并开新 task，而不是让多个主题堆积在一个 task 下。
+新输入写入当前 `TaskRecord` 并立刻开跑。不因词面不像就静默 `beginNew` 或 resume 旧 task。
 
-好处：
-- 每个 task 的 topic/abstract 天然准确，不需要综合多个主题
-- 路由匹配更精确
-- 上下文窗口不会被无关历史污染
+Topic 是标题（首条用户消息截取），允许和后来的内容不完全对齐。标题过时不是换线程的理由。
 
-### 路由方式 = continuity + 启发式
+### 新开 = 用户确认
 
-不再运行本地 MLX。顺序是：
+只在这些情况下创建新 task：
 
-1. `ContinuityTaskResolver`：显式「新任务 / start fresh」或没有 active task → `beginNew`
-2. `HeuristicTaskFallback`：词面重叠（含中文 bigram）决定 resume / 主题漂移开新 task
-3. 否则 continue 当前 task
+| 入口 | 行为 |
+|------|------|
+| Chrome **Start Fresh** | 关闭整条当前线程，开空白新 task |
+| 输入含「新任务 / start fresh」等 | 先拆再写入本条（本条成为新线程首条） |
+| 主题漂移提示条 **New Task** | 把**触发那一轮**剥离到新 task，旧线程保留此前内容 |
+| 提示条关闭（x） | 继续当前线程，本线程不再提示 |
 
-语义分类交给云端对话，不在本地再跑一轮小模型。
+自动 resume / 自动拆 task 已从提交路径移除。
 
-### 主题摘要 = topic + abstract
+### 主题漂移提示 = 邀请，不是闸门
 
-每个 task 维护两个语义字段：
-- **topic**：极短标签（≤20 字符），如 "整理 Downloads"、"PDF 合并脚本"
-- **abstract**：一句话意图描述（≤80 字符），如 "把 Downloads 里的文件按类型分类到子文件夹"
+`TopicDriftDetector` 只决定要不要出条，**不**返回 `TaskRoute`。
 
-这两个字段由 `TopicGenerator` 从首条（或 resume 时的新）用户消息截取，不调用模型。
+消息照常进当前 task。Chrome 下方出一条非阻塞提示（与系统 inline banner 同密度，无警告色、无弹窗）：
+
+> This doesn’t look like “整理 Downloads”. Start a new task?
+
+- **New Task**：剥离触发用的 `userInput` 及之后的事件到新 task；若当时只有用户那句，再跑模型。
+- **Keep going**（x）：关掉提示，记下 `suppressedDriftOfferTaskID`，本线程不再问。
+
+检测必须保守（宁可不问）：
+
+- 已有 topic/abstract/summary 锚点
+- 当前 task `events.count >= 4`
+- 输入 ≥ 16 字符且有效 token ≥ 4
+- 与锚点 **零重叠**
+- 本线程未被抑制，且本条不是显式「新任务」
 
 ## 整体流程
 
 ```
-新 userInput 进来
+新 userInput
     │
     ▼
-ContinuityTaskResolver（处理显式关键词："start fresh"、"新任务" 等）
-    │
-    ├─ 匹配到关键词 → 直接开新 task
-    │
-    └─ 未匹配 → HeuristicTaskFallback
+ContinuityTaskResolver
+    ├─ 「start fresh」/「新任务」等 → beginNew（写入本条之前）
+    ├─ 无 active task → beginNew
+    └─ 否则 continue
             │
-            ├─ 空 active + 命中旧 task → resume
-            ├─ 与当前 topic 几乎无重叠 → beginNew
-            └─ 否则 continue
+            ▼
+commit 用户事件并开跑
+            │
+            ▼
+若 continue 且检测器认为漂移 → 出 TopicDriftOffer
 ```
 
-## Task 目录
+## Topic 生成
 
-启发式 resume 会扫 `workspace.recentSummaries` 的 topic / abstract / summary，不再构造给本地模型的 catalog prompt。
+仍由 `TopicGenerator` 从首条用户消息截取，不调用模型。
 
-### 目录构建规则
-
-- 从 `recentSummaries` 构建，排除当前 active task
-- 只包含有 topic 的 task（没有 topic 的旧 task 不参与路由）
-- 排除 `awaitingApproval` 状态的 task
-- 最多 15 条，按 `updatedAt` 降序
-
-## Topic 生成策略
-
-### 生成时机
-
-| 时机 | 触发条件 | 目的 |
-|------|----------|------|
-| Task 首次完成 | `phase → .completed` 且 `topic == nil` | 建立初始主题 |
-| Task 被召回 | 旧 task 被 resume 且有新输入 | 更新主题以反映扩展的范围 |
-
-### 生成 Prompt
-
-**首次生成**（输入：首条 userInput + 末条 userInput + 末条 assistantResponse）：
-
-```
-Given this task's conversation history, produce a concise topic label and abstract.
-- topic: max 20 characters, in the user's language
-- abstract: one sentence, max 80 characters, in the user's language
-
-Output ONLY: {"topic":"...","abstract":"..."}
-```
-
-**更新**（输入：现有 topic/abstract + 新输入）：
-
-```
-A task is being resumed with new content. Update the topic and abstract.
-Keep the original intent but incorporate the new direction.
-
-Output ONLY: {"topic":"...","abstract":"..."}
-```
-
-### 为什么用"首尾 events"而不是完整历史
-
-- **first userInput** — 代表用户最初的意图
-- **last userInput** — 如果和 first 不同，说明有追问或主题演进
-- **last assistantResponse**（纯文本）— 代表最终结果
-
-因为每个 task 是单主题的（主题漂移时会自动拆分），首条用户消息通常足够当标签。
+- Continue 不改标题
+- 剥离后：旧 task 保持原标题；新 task 用挪过去的那条用户消息生成
 
 ## 技术实现
 
-### 关键文件
-
 | 文件 | 职责 |
 |------|------|
-| `Sage/Task/TopicGenerator.swift` | 从用户文本截取 topic / abstract |
-| `Sage/Task/TaskContextResolver.swift` | 显式关键词 + 词面启发式 |
-| `Sage/Task/TaskRoute.swift` | `CompositeTaskRouter`（continuity → heuristic） |
+| `Sage/Task/TaskRoute.swift` | `CompositeTaskRouter`（仅 continuity） |
+| `Sage/Task/TaskContextResolver.swift` | 显式新鲜开始用语 |
+| `Sage/Task/TopicDrift.swift` | `TopicDriftDetector` + `TopicDriftOffer` |
+| `Sage/Agent/AgentTaskStore.swift` | `splitOffTurn`：原子剥离最后一轮 |
+| `Sage/Panel/TranscriptNoticeBar.swift` | 漂移提示 + 既有 context hint |
+| `Sage/Panel/WorkspaceChromeView.swift` | 当前线程标题 + Start Fresh |
 
-### 数据模型变更
+- 剥离 / Start Fresh 后新 task **不**继承旧线程的 `relatedTaskIDs` 或已激活 skill，避免「新开」后模型仍吃到上一件工作
 
-`TaskRecord` 新增字段：
-```swift
-var topic: String?          // 短标签，≤20 字符
-var abstract: String?       // 一句话描述，≤80 字符
-var topicUpdatedAt: Date?   // 追踪是否需要刷新
-```
+## 明确不做
 
-DB migration：
-```sql
-ALTER TABLE tasks ADD COLUMN topic TEXT;
-ALTER TABLE tasks ADD COLUMN abstract TEXT;
-ALTER TABLE tasks ADD COLUMN topic_updated_at REAL;
-```
-
-### 容错设计
-
-- 启发式不够自信时 **continue** 当前 task，不阻塞用户
-- Topic 生成是异步后台任务，不阻塞主流程
-
-## 启发式限制
-
-`HeuristicTaskFallback` 使用 bag-of-words 重叠率：
-
-```swift
-let overlap = inputTokens.intersection(summaryTokens).count
-let score = Double(overlap) / Double(inputTokens.count)
-guard score >= 0.5, overlap >= 2
-```
-
-问题：
-1. 纯词汇匹配，不是语义相关性
-2. 中文词多为 2 字符，被 `count >= 3` 过滤，中文场景基本不生效
-3. 无法检测主题漂移（只能匹配旧 task，不能判断"当前输入是否偏离当前 task"）
-4. `summary` 是第一条消息的前 160 字符截断，质量差
+- 云端/模型分类每轮路由
+- 发送前 Continue / New 弹窗
+- 为了对齐标题自动改 topic
+- 本轮不做 Recent 列表（见未来方向）
 
 ## 未来方向
 
-- **动态 context budget**：根据 `settings.model` 的上下文窗口大小调整 `ContextBudget` 限制
-- **Task 历史搜索**：提供轻量入口让用户搜索/浏览过去的 task（类似 Spotlight）
-- **Embedding 索引**：当 task 数量增长到 100+ 时，词面启发式可能不够，可以用 embedding 做预筛选
+- **Task 历史搜索 / Recent**：当前 Project 内轻量点选旧线程（`activateTask`）
+- **动态 context budget**：按模型窗口压缩旧轮次（脏上下文靠截断，不靠拆 task）

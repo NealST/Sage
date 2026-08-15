@@ -25,7 +25,8 @@ nonisolated struct TaskEntity: Identifiable, Codable, Sendable, Equatable {
     }
 }
 
-/// An internal unit of work. Tasks are intentionally not exposed as user-managed chats.
+    /// An internal unit of work. Tasks are the current thread in a window,
+    /// not a user-managed chat list.
 nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var status: TaskStatus

@@ -8,7 +8,7 @@
 
 - **Agent Runtime**：完整的 agent 循环（submit → think → plan → confirm → execute → summarize）
 - **Task 管理**：基于 GRDB 的 task 持久化、task 生命周期、workspace snapshot
-- **Task 路由**：continuity 关键词 + 词面启发式（continue / resume / new）
+- **Task 路由**：默认粘住当前线程；显式 Start Fresh /「新任务」才开新 task；主题漂移仅非阻塞提示
 - **主题生成**：从首条用户消息截取 topic + abstract
 - **MCP 协议**：stdio 方式的 MCP client，支持 tools/list + tools/call
 - **Skill 系统**：SkillRegistry 基础框架

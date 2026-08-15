@@ -31,6 +31,17 @@ nonisolated enum AgentEventHelpers {
                 && !$0.content.hasPrefix("ERROR:")
         }
     }
+
+    /// Splits a transcript at a user turn so that turn can move to a new task.
+    static func splitTurn(
+        events: [AgentEvent],
+        fromUserEventID: UUID
+    ) -> (kept: [AgentEvent], moved: [AgentEvent])? {
+        guard let index = events.firstIndex(where: {
+            $0.id == fromUserEventID && $0.kind == .userInput
+        }) else { return nil }
+        return (Array(events[..<index]), Array(events[index...]))
+    }
 }
 
 nonisolated enum ContextHint {

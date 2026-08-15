@@ -187,6 +187,19 @@ struct WorkspaceChromeView: View {
                 )
         }
 
+        if let title = session.agent.state.threadTitle,
+           session.agent.state.activeTask?.events.isEmpty == false {
+            Text(title)
+                .font(.system(size: type.micro, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 160, alignment: .leading)
+                .layoutPriority(0)
+                .help("Current task")
+                .accessibilityLabel("Current task \(title)")
+        }
+
         if session.agent.canStartFresh {
             Button("Start Fresh") {
                 session.draft = ""

@@ -48,8 +48,16 @@ struct AgentWorkspaceView: View {
             }
 
             if isWorkspaceReady {
-                if let hint = session.agent.state.contextHint, projectTab == .task || !isProjectWindow {
-                    contextChip(hint)
+                if projectTab == .task || !isProjectWindow {
+                    TranscriptNoticeBar()
+                        .animation(
+                            SageDesign.Motion.expandAnimation,
+                            value: session.agent.state.topicDriftOffer?.triggeringUserEventID
+                        )
+                        .animation(
+                            SageDesign.Motion.expandAnimation,
+                            value: session.agent.state.contextHint
+                        )
                 }
 
                 Divider().opacity(SageDesign.Chrome.dividerOpacity)
@@ -231,30 +239,6 @@ struct AgentWorkspaceView: View {
         } else {
             window.title = "Opening…"
         }
-    }
-
-    private func contextChip(_ hint: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "link")
-                .font(.system(size: type.micro, weight: .semibold))
-                .accessibilityHidden(true)
-            Text(hint)
-                .font(.system(size: type.micro))
-                .lineLimit(1)
-                .accessibilityLabel(hint)
-            Spacer(minLength: 4)
-            Button("Don’t reuse") {
-                session.agent.dismissContextHint()
-            }
-            .controlSize(.mini)
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Next request starts without this prior context")
-            .accessibilityHint("Next request starts without this prior context")
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.bottom, SageDesign.Spacing.sm)
     }
 
     private func focusInputSoon() {

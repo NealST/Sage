@@ -26,6 +26,12 @@ final class AgentSessionState {
     var tokenUsage = TokenUsage()
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     var contextHint: String?
+    /// Non-blocking offer to peel the latest turn into a new task.
+    var topicDriftOffer: TopicDriftOffer?
+    /// After “Keep Going”, don’t re-offer on this task until a new thread starts.
+    var suppressedDriftOfferTaskID: UUID?
+    /// True while peeling the latest turn into a new task (blocks double-taps).
+    var isAcceptingTopicDrift = false
     var isBusy = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
@@ -55,6 +61,33 @@ final class AgentSessionState {
 
     var focusTitle: String {
         focusedProject?.name ?? "General"
+    }
+
+    /// Short label for the current thread (chrome wayfinding).
+    var threadTitle: String? {
+        TopicDriftDetector.threadLabel(
+            topic: activeTask?.topic,
+            abstract: activeTask?.abstract,
+            summary: activeTask?.summary
+        )
+    }
+
+    func clearTopicDriftOffer() {
+        topicDriftOffer = nil
+    }
+
+    func dismissTopicDriftOffer() {
+        if let taskID = topicDriftOffer?.taskID {
+            suppressedDriftOfferTaskID = taskID
+        }
+        topicDriftOffer = nil
+    }
+
+    func clearThreadRoutingNotices() {
+        topicDriftOffer = nil
+        suppressedDriftOfferTaskID = nil
+        contextHint = nil
+        forceFreshOnNextSubmit = false
     }
 
     func clearTokenUsage() {

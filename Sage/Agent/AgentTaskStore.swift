@@ -128,9 +128,6 @@ final class AgentTaskStore {
                     state.refreshSummary(for: closing)
                     topicCoordinator?.scheduleTopicGeneration(for: closing)
                     skills.scheduleExtraction(for: closing)
-                    if !inheritedRelated.contains(closing.id) {
-                        inheritedRelated.insert(closing.id, at: 0)
-                    }
                 }
                 state.phase = .idle
                 state.lastAssistantText = nil
@@ -147,6 +144,7 @@ final class AgentTaskStore {
         state.activeTaskID = nil
         state.clearTokenUsage()
         state.activatedSkillNames = []
+        state.clearThreadRoutingNotices()
         skillRecall?.clearTurnCache()
 
         return await createAndActivateTask(
@@ -190,12 +188,100 @@ final class AgentTaskStore {
             state.activeTaskID = task.id
             state.refreshSummary(for: task)
             await restorePhaseFromActiveTask()
+            state.clearTopicDriftOffer()
+            state.suppressedDriftOfferTaskID = nil
+            state.forceFreshOnNextSubmit = false
             state.contextHint = ContextHint.forTask(task)
         } catch {
             state.phase = .failed(
                 message: "Could not restore task context: \(error.localizedDescription)"
             )
         }
+    }
+
+    struct SplitOffTurnResult: Equatable {
+        var newTaskID: UUID
+        var needsModelTurn: Bool
+        var userQuery: String
+    }
+
+    /// Peels events from `userEventID` onward onto a new task. Old thread stays put.
+    func splitOffTurn(from userEventID: UUID) async -> SplitOffTurnResult? {
+        guard !state.isTornDown else { return nil }
+        guard var closing = state.activeTask else { return nil }
+        guard let split = AgentEventHelpers.splitTurn(
+            events: closing.events,
+            fromUserEventID: userEventID
+        ) else { return nil }
+        guard !split.moved.isEmpty else { return nil }
+
+        let movedPlan = closing.pendingPlan
+        let oldID = closing.id
+        let userQuery = split.moved.first(where: { $0.kind == .userInput })?.content ?? ""
+
+        closing.events = split.kept
+        closing.pendingPlan = nil
+        closing.updatedAt = .now
+        if !closing.events.isEmpty,
+           closing.status == .active || closing.status == .awaitingApproval {
+            closing.status = .completed
+        }
+
+        var opening = TaskRecord(
+            projectID: closing.projectID ?? state.focusedProject?.id,
+            summary: userQuery.isEmpty ? nil : String(userQuery.prefix(160)),
+            events: split.moved,
+            pendingPlan: movedPlan,
+            relatedTaskIDs: [],
+            activatedSkillNames: []
+        )
+        if movedPlan != nil {
+            opening.status = .awaitingApproval
+        } else if split.moved.last?.kind == .assistantResponse {
+            opening.status = .completed
+        }
+
+        do {
+            try await taskRepository.splitOffTurn(
+                closingTask: closing,
+                openingTask: opening,
+                movedEventIDs: split.moved.map(\.id)
+            )
+        } catch {
+            state.phase = .failed(
+                message: "Could not start a new task: \(error.localizedDescription)"
+            )
+            return nil
+        }
+
+        if closing.events.isEmpty {
+            state.removeSummary(id: oldID)
+        } else {
+            state.refreshSummary(for: closing)
+            topicCoordinator?.scheduleTopicGeneration(for: closing)
+            skills.scheduleExtraction(for: closing)
+        }
+
+        state.activeTask = opening
+        state.activeTaskID = opening.id
+        state.refreshSummary(for: opening)
+        state.clearTokenUsage()
+        state.activatedSkillNames = opening.activatedSkillNames
+        state.lastAssistantText = opening.events.last(where: {
+            $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
+        })?.content
+        skillRecall?.clearTurnCache()
+        planProgress.clear()
+        state.clearThreadRoutingNotices()
+        await restorePhaseFromActiveTask()
+        topicCoordinator?.scheduleTopicGeneration(for: opening)
+
+        let needsModel = movedPlan == nil && split.moved.last?.kind == .userInput
+        return SplitOffTurnResult(
+            newTaskID: opening.id,
+            needsModelTurn: needsModel,
+            userQuery: userQuery
+        )
     }
 
     /// Shared resume path for heuristic + local-model routing.
@@ -276,6 +362,7 @@ final class AgentTaskStore {
         case .continueActive:
             return route
         case .beginNew:
+            state.clearTopicDriftOffer()
             state.contextHint = nil
             guard await beginNewTask(relatedTo: route.relatedTaskIDs) != nil else {
                 return nil

@@ -114,8 +114,7 @@ final class SessionLifecycle {
             state.recentProjects = []
             state.recentSummaries = []
             state.lastAssistantText = nil
-            state.contextHint = nil
-            state.forceFreshOnNextSubmit = false
+            state.clearThreadRoutingNotices()
             state.activatedSkillNames = []
             planProgress.clear()
             skills.invalidatePendingSuggestions()

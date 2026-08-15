@@ -289,13 +289,53 @@ final class AgentRuntime {
         }
 
         state.forceFreshOnNextSubmit = false
-        state.contextHint = nil
+        state.clearThreadRoutingNotices()
         return await taskStore.beginNewTask(relatedTo: [])
     }
 
     func dismissContextHint() {
         state.contextHint = nil
         state.forceFreshOnNextSubmit = true
+    }
+
+    func dismissTopicDriftOffer() {
+        state.dismissTopicDriftOffer()
+    }
+
+    func acceptTopicDriftOffer() async {
+        guard !state.isAcceptingTopicDrift else { return }
+        guard let offer = state.topicDriftOffer else { return }
+        guard offer.taskID == state.activeTaskID else {
+            state.clearTopicDriftOffer()
+            return
+        }
+
+        state.isAcceptingTopicDrift = true
+        defer { state.isAcceptingTopicDrift = false }
+
+        if state.isBusy {
+            operations.requestStop()
+            await operations.cancelInFlight()
+        }
+
+        guard operations.begin() else { return }
+        defer { operations.end() }
+
+        if case .awaitingSkillChoice = state.phase {
+            skills.tips.dismissChoose()
+            state.phase = .idle
+        }
+
+        streaming.clear()
+        guard let result = await taskStore.splitOffTurn(from: offer.triggeringUserEventID) else {
+            return
+        }
+
+        guard result.needsModelTurn else { return }
+        state.phase = .thinking
+        let ready = await skillRecall.prepareSkillsForTurn(query: result.userQuery)
+        guard ready else { return }
+        await turns.runModelTurn()
     }
 
     func stop() {

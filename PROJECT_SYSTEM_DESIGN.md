@@ -118,9 +118,9 @@ Sage
 ```text
 submit
   → snapshot(focusedProject, activeTask, summaries ∈ same scope)
-  → Continuity / TaskRouter / Heuristic
-       catalog 仅同 project_id（或仅 NULL）
-  → beginNew / resume / continue 保持同一 project_id
+  → ContinuityTaskRouter（显式新任务 / 无 active → beginNew，否则 continue）
+  → beginNew / continue 保持同一 project_id
+  → 可选 TopicDriftOffer（非阻塞；确认后剥离最后一轮）
   → model：system + project appendix + related（同 scope）
   → tools：PathGuard + 默认 cwd 取自 focus
 ```

@@ -2,7 +2,7 @@
 //  TaskRoute.swift
 //  Sage
 //
-//  Single routing decision + composite resolver (continuity → heuristic).
+//  Single routing decision + continuity resolver (sticky current task).
 //
 
 import Foundation
@@ -83,7 +83,8 @@ nonisolated protocol TaskRouting: Sendable {
     ) async -> TaskRoute
 }
 
-/// Continuity filter → heuristic fallback. Always returns a `TaskRoute`.
+/// Continuity only: explicit fresh-start language, or keep the current task.
+/// Topic drift is a UI offer (`TopicDriftDetector`), never a route.
 @MainActor
 final class CompositeTaskRouter {
     private let continuity: ContinuityTaskResolver
@@ -99,10 +100,6 @@ final class CompositeTaskRouter {
         let firstPass = await continuity.route(input: input, workspace: workspace)
         guard case .continueActive = firstPass.action else {
             return firstPass
-        }
-
-        if let heuristic = HeuristicTaskFallback.decide(input: input, workspace: workspace) {
-            return heuristic
         }
 
         var continued = firstPass

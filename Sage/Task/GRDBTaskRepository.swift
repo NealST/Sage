@@ -404,6 +404,59 @@ actor GRDBTaskRepository: TaskRepository {
         }
     }
 
+    func splitOffTurn(
+        closingTask: TaskRecord,
+        openingTask: TaskRecord,
+        movedEventIDs: [UUID]
+    ) throws {
+        let pool = try database()
+        try pool.write { db in
+            try upsertTask(openingTask, database: db)
+            try replaceEntitiesIfNeeded(openingTask.entities, taskID: openingTask.id, database: db)
+            try replaceRelations(openingTask.relatedTaskIDs, taskID: openingTask.id, database: db)
+
+            for (sequence, eventID) in movedEventIDs.enumerated() {
+                try db.execute(
+                    sql: """
+                    UPDATE events SET task_id = ?, sequence = ?
+                    WHERE id = ? AND task_id = ?
+                    """,
+                    arguments: [
+                        openingTask.id.uuidString,
+                        sequence,
+                        eventID.uuidString,
+                        closingTask.id.uuidString,
+                    ]
+                )
+            }
+
+            if openingTask.pendingPlan != nil {
+                try db.execute(
+                    sql: "UPDATE plans SET task_id = ? WHERE task_id = ?",
+                    arguments: [openingTask.id.uuidString, closingTask.id.uuidString]
+                )
+            }
+
+            if closingTask.events.isEmpty {
+                try db.execute(
+                    sql: "DELETE FROM tasks WHERE id = ?",
+                    arguments: [closingTask.id.uuidString]
+                )
+            } else {
+                try upsertTask(closingTask, database: db)
+                try replaceRelations(closingTask.relatedTaskIDs, taskID: closingTask.id, database: db)
+                try syncPendingPlan(nil, taskID: closingTask.id, database: db)
+            }
+
+            try syncPendingPlan(openingTask.pendingPlan, taskID: openingTask.id, database: db)
+            try writeScopeActiveTask(
+                projectID: openingTask.projectID,
+                taskID: openingTask.id,
+                database: db
+            )
+        }
+    }
+
     func rememberScopeActiveTask(projectID: UUID?, taskID: UUID) throws {
         let pool = try database()
         try pool.write { db in

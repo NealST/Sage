@@ -91,19 +91,24 @@ final class TurnCoordinator {
         if case .completed = state.phase { state.phase = .idle }
         if case .failed = state.phase { state.phase = .idle }
 
+        let snapshot = workspaceSnapshot()
         let route: TaskRoute
+        let beganNewThread: Bool
         if state.forceFreshOnNextSubmit {
             state.forceFreshOnNextSubmit = false
             state.contextHint = nil
+            state.clearTopicDriftOffer()
             guard await taskStore.beginNewTask(relatedTo: []) != nil else { return false }
             route = .continueActive(reason: "User forced a fresh task boundary")
+            beganNewThread = true
         } else {
             let decided = await router.route(
                 input: trimmed,
-                workspace: workspaceSnapshot()
+                workspace: snapshot
             )
             guard let applied = await taskStore.apply(decided) else { return false }
             route = applied
+            beganNewThread = applied.action != .continueActive
         }
 
         guard await taskStore.ensureActiveTask() else { return false }
@@ -137,6 +142,17 @@ final class TurnCoordinator {
 
         if let hint = route.userVisibleHint {
             state.contextHint = hint
+        }
+
+        if !beganNewThread, state.topicDriftOffer == nil,
+           let offer = TopicDriftDetector.offer(
+            input: trimmed,
+            workspace: snapshot,
+            triggeringUserEventID: userEvent.id,
+            suppressedTaskID: state.suppressedDriftOfferTaskID
+           ) {
+            state.topicDriftOffer = offer
+            state.contextHint = nil
         }
 
         state.phase = .thinking
