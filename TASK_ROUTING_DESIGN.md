@@ -19,13 +19,13 @@ Topic 是标题（首条用户消息截取），允许和后来的内容不完�
 
 ### 新开 = 用户确认
 
-只在这些情况下创建新 task：
+只在这些情况下创建新 task，入口都叫 **Start Fresh**（同一语义：新开一条当前正在做的事）：
 
 | 入口 | 行为 |
 |------|------|
-| Chrome **Start Fresh** | 关闭整条当前线程，开空白新 task |
+| Chrome / 菜单 **Start Fresh** | 无漂移提示：关闭整条当前线程，开空白新 task。有提示：把刚发出的那一轮带到新 task |
 | 输入含「新任务 / start fresh」等 | 先拆再写入本条（本条成为新线程首条） |
-| 主题漂移提示条 **New Task** | 把**触发那一轮**剥离到新 task，旧线程保留此前内容 |
+| 主题漂移提示条 **Start Fresh** | 同上，有提示时带走最后一轮 |
 | 提示条关闭（x） | 继续当前线程，本线程不再提示 |
 
 自动 resume / 自动拆 task 已从提交路径移除。
@@ -36,9 +36,9 @@ Topic 是标题（首条用户消息截取），允许和后来的内容不完�
 
 消息照常进当前 task。Chrome 下方出一条非阻塞提示（与系统 inline banner 同密度，无警告色、无弹窗）：
 
-> This doesn’t look like “整理 Downloads”. Start a new task?
+> This doesn’t look like “整理 Downloads”.
 
-- **New Task**：剥离触发用的 `userInput` 及之后的事件到新 task；若当时只有用户那句，再跑模型。
+- **Start Fresh**：新开一条。若提示条认为刚那句不像当前标题，只带走**最后一条用户输入**（意图分叉），旧线程停在分叉前；那一轮里混上下文的回复/计划丢掉，在新线程重跑。否则归档整条、开空白。
 - **Keep going**（x）：关掉提示，记下 `suppressedDriftOfferTaskID`，本线程不再问。
 
 检测必须保守（宁可不问）：
@@ -83,18 +83,26 @@ commit 用户事件并开跑
 | `Sage/Task/TopicDrift.swift` | `TopicDriftDetector` + `TopicDriftOffer` |
 | `Sage/Agent/AgentTaskStore.swift` | `splitOffTurn`：原子剥离最后一轮 |
 | `Sage/Panel/TranscriptNoticeBar.swift` | 漂移提示 + 既有 context hint |
-| `Sage/Panel/WorkspaceChromeView.swift` | 当前线程标题 + Start Fresh |
+| `Sage/Panel/WorkspaceChromeView.swift` | 当前线程标题（有其它 recents 时变成弹出菜单）+ Start Fresh |
 
 - 剥离 / Start Fresh 后新 task **不**继承旧线程的 `relatedTaskIDs` 或已激活 skill，避免「新开」后模型仍吃到上一件工作
+- 点选 Recents 是显式切线程：`activateTask`，不写 context hint（不是静默 resume）
+
+## Recents
+
+对照 Apple **Open Recent / 当前选择弹出**（Xcode scheme、titlebar 分支菜单），不是会话管理器：
+
+- 有其它带标题的 task 时，当前标题变成 borderless 菜单；当前项打勾
+- 当前还没标题（刚 Start Fresh）时，菜单标签为 **New Task**
+- 最多 10 条，按 `updatedAt`，跟当前窗口同一 scope（Project / General）
+- 无其它 recents 时保持静态标题，不单独加时钟按钮（避免和 General 的 Recent Projects 抢语义）
 
 ## 明确不做
 
 - 云端/模型分类每轮路由
 - 发送前 Continue / New 弹窗
 - 为了对齐标题自动改 topic
-- 本轮不做 Recent 列表（见未来方向）
 
 ## 未来方向
 
-- **Task 历史搜索 / Recent**：当前 Project 内轻量点选旧线程（`activateTask`）
 - **动态 context budget**：按模型窗口压缩旧轮次（脏上下文靠截断，不靠拆 task）

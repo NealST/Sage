@@ -437,12 +437,24 @@ actor GRDBTaskRepository: TaskRepository {
                 )
             }
 
+            let keepIDs = Set(closingTask.events.map(\.id.uuidString))
             if closingTask.events.isEmpty {
                 try db.execute(
                     sql: "DELETE FROM tasks WHERE id = ?",
                     arguments: [closingTask.id.uuidString]
                 )
             } else {
+                let leftover = try String.fetchAll(
+                    db,
+                    sql: "SELECT id FROM events WHERE task_id = ?",
+                    arguments: [closingTask.id.uuidString]
+                ).filter { !keepIDs.contains($0) }
+                for eventID in leftover {
+                    try db.execute(
+                        sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
+                        arguments: [eventID, closingTask.id.uuidString]
+                    )
+                }
                 try upsertTask(closingTask, database: db)
                 try replaceRelations(closingTask.relatedTaskIDs, taskID: closingTask.id, database: db)
                 try syncPendingPlan(nil, taskID: closingTask.id, database: db)

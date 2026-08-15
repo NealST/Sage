@@ -13,6 +13,11 @@ nonisolated struct TaskSummary: Identifiable, Sendable, Equatable {
     var topic: String?
     var abstract: String?
     var updatedAt: Date
+
+    /// Title for Recents / chrome — nil means the row is not worth listing.
+    var displayTitle: String? {
+        TopicDriftDetector.threadLabel(topic: topic, abstract: abstract, summary: summary)
+    }
 }
 
 /// Workspace payload: focused project + active task + scoped summaries.

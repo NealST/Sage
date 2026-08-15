@@ -32,15 +32,18 @@ nonisolated enum AgentEventHelpers {
         }
     }
 
-    /// Splits a transcript at a user turn so that turn can move to a new task.
-    static func splitTurn(
+    /// Fork at a user message: that input starts a new task; later replies stay off both threads.
+    static func forkLastUserInput(
         events: [AgentEvent],
-        fromUserEventID: UUID
-    ) -> (kept: [AgentEvent], moved: [AgentEvent])? {
+        userEventID: UUID
+    ) -> (kept: [AgentEvent], moved: AgentEvent, discarded: [AgentEvent])? {
         guard let index = events.firstIndex(where: {
-            $0.id == fromUserEventID && $0.kind == .userInput
+            $0.id == userEventID && $0.kind == .userInput
         }) else { return nil }
-        return (Array(events[..<index]), Array(events[index...]))
+        let userEvent = events[index]
+        let kept = Array(events[..<index])
+        let discarded = Array(events[(index + 1)...])
+        return (kept, userEvent, discarded)
     }
 }
 

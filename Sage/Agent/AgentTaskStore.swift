@@ -191,7 +191,7 @@ final class AgentTaskStore {
             state.clearTopicDriftOffer()
             state.suppressedDriftOfferTaskID = nil
             state.forceFreshOnNextSubmit = false
-            state.contextHint = ContextHint.forTask(task)
+            state.contextHint = nil
         } catch {
             state.phase = .failed(
                 message: "Could not restore task context: \(error.localizedDescription)"
@@ -205,21 +205,20 @@ final class AgentTaskStore {
         var userQuery: String
     }
 
-    /// Peels events from `userEventID` onward onto a new task. Old thread stays put.
+    /// Peels the forked user message onto a new task. Replies after that line are dropped.
     func splitOffTurn(from userEventID: UUID) async -> SplitOffTurnResult? {
         guard !state.isTornDown else { return nil }
         guard var closing = state.activeTask else { return nil }
-        guard let split = AgentEventHelpers.splitTurn(
+        guard let fork = AgentEventHelpers.forkLastUserInput(
             events: closing.events,
-            fromUserEventID: userEventID
+            userEventID: userEventID
         ) else { return nil }
-        guard !split.moved.isEmpty else { return nil }
 
-        let movedPlan = closing.pendingPlan
         let oldID = closing.id
-        let userQuery = split.moved.first(where: { $0.kind == .userInput })?.content ?? ""
+        let userQuery = fork.moved.content
+        let userEvent = fork.moved
 
-        closing.events = split.kept
+        closing.events = fork.kept
         closing.pendingPlan = nil
         closing.updatedAt = .now
         if !closing.events.isEmpty,
@@ -227,25 +226,20 @@ final class AgentTaskStore {
             closing.status = .completed
         }
 
-        var opening = TaskRecord(
+        let opening = TaskRecord(
             projectID: closing.projectID ?? state.focusedProject?.id,
             summary: userQuery.isEmpty ? nil : String(userQuery.prefix(160)),
-            events: split.moved,
-            pendingPlan: movedPlan,
+            events: [userEvent],
+            pendingPlan: nil,
             relatedTaskIDs: [],
             activatedSkillNames: []
         )
-        if movedPlan != nil {
-            opening.status = .awaitingApproval
-        } else if split.moved.last?.kind == .assistantResponse {
-            opening.status = .completed
-        }
 
         do {
             try await taskRepository.splitOffTurn(
                 closingTask: closing,
                 openingTask: opening,
-                movedEventIDs: split.moved.map(\.id)
+                movedEventIDs: [userEvent.id]
             )
         } catch {
             state.phase = .failed(
@@ -266,20 +260,17 @@ final class AgentTaskStore {
         state.activeTaskID = opening.id
         state.refreshSummary(for: opening)
         state.clearTokenUsage()
-        state.activatedSkillNames = opening.activatedSkillNames
-        state.lastAssistantText = opening.events.last(where: {
-            $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
-        })?.content
+        state.activatedSkillNames = []
+        state.lastAssistantText = nil
         skillRecall?.clearTurnCache()
         planProgress.clear()
         state.clearThreadRoutingNotices()
         await restorePhaseFromActiveTask()
         topicCoordinator?.scheduleTopicGeneration(for: opening)
 
-        let needsModel = movedPlan == nil && split.moved.last?.kind == .userInput
         return SplitOffTurnResult(
             newTaskID: opening.id,
-            needsModelTurn: needsModel,
+            needsModelTurn: true,
             userQuery: userQuery
         )
     }

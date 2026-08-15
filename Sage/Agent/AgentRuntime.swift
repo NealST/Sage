@@ -66,6 +66,8 @@ final class AgentRuntime {
     }
 
     var canStartFresh: Bool {
+        if state.isAcceptingTopicDrift { return false }
+        if state.topicDriftOffer != nil { return true }
         guard !state.isBusy else { return false }
         switch state.phase {
         case .thinking, .executing:
@@ -273,6 +275,11 @@ final class AgentRuntime {
 
     @discardableResult
     func startFresh() async -> UUID? {
+        if state.topicDriftOffer != nil {
+            await acceptTopicDriftOffer()
+            return state.activeTaskID
+        }
+
         guard operations.begin() else { return nil }
         defer { operations.end() }
 

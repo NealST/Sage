@@ -80,22 +80,23 @@ final class TaskRouteTests: XCTestCase {
         XCTAssertEqual(route.action, .beginNew)
     }
 
-    func testSplitTurnPeelsFromUserEvent() {
+    func testForkTakesOnlyTheUserInput() {
         let first = AgentEvent(kind: .userInput, content: "old")
         let second = AgentEvent(kind: .assistantResponse, content: "ok")
         let third = AgentEvent(kind: .userInput, content: "new topic")
         let fourth = AgentEvent(kind: .assistantResponse, content: "sure")
-        let split = AgentEventHelpers.splitTurn(
+        let fork = AgentEventHelpers.forkLastUserInput(
             events: [first, second, third, fourth],
-            fromUserEventID: third.id
+            userEventID: third.id
         )
-        XCTAssertEqual(split?.kept.map(\.id), [first.id, second.id])
-        XCTAssertEqual(split?.moved.map(\.id), [third.id, fourth.id])
+        XCTAssertEqual(fork?.kept.map(\.id), [first.id, second.id])
+        XCTAssertEqual(fork?.moved.id, third.id)
+        XCTAssertEqual(fork?.discarded.map(\.id), [fourth.id])
     }
 
-    func testSplitTurnRequiresUserEvent() {
+    func testForkRequiresUserEvent() {
         let assistant = AgentEvent(kind: .assistantResponse, content: "ok")
-        XCTAssertNil(AgentEventHelpers.splitTurn(events: [assistant], fromUserEventID: assistant.id))
+        XCTAssertNil(AgentEventHelpers.forkLastUserInput(events: [assistant], userEventID: assistant.id))
     }
 
     private static func seededTask(topic: String) -> TaskRecord {

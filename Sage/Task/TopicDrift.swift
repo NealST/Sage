@@ -16,7 +16,7 @@ nonisolated struct TopicDriftOffer: Equatable, Sendable {
     let topicLabel: String
 
     var message: String {
-        "This doesn’t look like \u{201C}\(topicLabel)\u{201D}. Start a new task?"
+        "This doesn’t look like \u{201C}\(topicLabel)\u{201D}."
     }
 }
 

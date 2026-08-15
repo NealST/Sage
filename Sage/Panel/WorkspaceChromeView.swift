@@ -189,15 +189,9 @@ struct WorkspaceChromeView: View {
 
         if let title = session.agent.state.threadTitle,
            session.agent.state.activeTask?.events.isEmpty == false {
-            Text(title)
-                .font(.system(size: type.micro, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: 160, alignment: .leading)
-                .layoutPriority(0)
-                .help("Current task")
-                .accessibilityLabel("Current task \(title)")
+            recentTasksControl(currentTitle: title)
+        } else if hasOtherRecentTasks {
+            recentTasksControl(currentTitle: nil)
         }
 
         if session.agent.canStartFresh {
@@ -206,13 +200,75 @@ struct WorkspaceChromeView: View {
                 Task { await session.agent.startFresh() }
             }
             .controlSize(.small)
-            .disabled(session.agent.state.isBusy)
-            .help(
-                session.agent.state.hasPendingPlan
-                    ? "Cancel the pending plan and start a clean task here"
-                    : "Start a clean task in this window"
-            )
+            .disabled(session.agent.state.isBusy && session.agent.state.topicDriftOffer == nil)
+            .help("Start a clean task in this window")
         }
+    }
+
+    private var recentTaskEntries: [TaskSummary] {
+        Array(
+            session.agent.state.recentSummaries
+                .filter { $0.displayTitle != nil }
+                .prefix(10)
+        )
+    }
+
+    private var hasOtherRecentTasks: Bool {
+        recentTaskEntries.contains { $0.id != session.agent.state.activeTaskID }
+    }
+
+    @ViewBuilder
+    private func recentTasksControl(currentTitle: String?) -> some View {
+        if hasOtherRecentTasks {
+            Menu {
+                ForEach(recentTaskEntries) { item in
+                    Button {
+                        selectRecentTask(item.id)
+                    } label: {
+                        let title = item.displayTitle ?? "Task"
+                        if item.id == session.agent.state.activeTaskID {
+                            Label(title, systemImage: "checkmark")
+                        } else {
+                            Text(title)
+                        }
+                    }
+                }
+            } label: {
+                Text(currentTitle ?? "New Task")
+                    .font(.system(size: type.micro, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 160, alignment: .leading)
+            }
+            .menuStyle(.borderlessButton)
+            .controlSize(.small)
+            .fixedSize()
+            .layoutPriority(0)
+            .disabled(session.agent.state.isBusy)
+            .help("Switch to a recent task")
+            .accessibilityLabel(
+                currentTitle.map { "Current task \($0)" } ?? "Recent tasks"
+            )
+            .accessibilityHint("Shows recent tasks in this window")
+        } else if let currentTitle {
+            Text(currentTitle)
+                .font(.system(size: type.micro, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: 160, alignment: .leading)
+                .layoutPriority(0)
+                .help("Current task")
+                .accessibilityLabel("Current task \(currentTitle)")
+        }
+    }
+
+    private func selectRecentTask(_ id: UUID) {
+        guard id != session.agent.state.activeTaskID else { return }
+        projectTab = .task
+        session.draft = ""
+        Task { await session.agent.activateTask(id) }
     }
 
     // MARK: - Actions

@@ -43,16 +43,16 @@ struct TranscriptNoticeBar: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button("New Task") {
-                Task { await session.agent.acceptTopicDriftOffer() }
+            Button("Start Fresh") {
+                Task { await session.agent.startFresh() }
             }
             .controlSize(.mini)
             .buttonStyle(.plain)
             .font(.system(size: type.micro, weight: .semibold))
             .disabled(session.agent.state.isAcceptingTopicDrift)
-            .help("Move this latest exchange into a new task")
-            .accessibilityLabel("New Task")
-            .accessibilityHint("Moves the latest exchange into a new task")
+            .help("Start a clean task in this window")
+            .accessibilityLabel("Start Fresh")
+            .accessibilityHint("Starts a new task with your last message")
 
             Button {
                 session.agent.dismissTopicDriftOffer()
