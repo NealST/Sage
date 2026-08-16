@@ -27,6 +27,7 @@ final class AgentModelGateway {
     private let taskRepository: any TaskRepository
     private let projectPromptAppendix: () -> String
     private let streaming: StreamingTextPump
+    private var relatedContextCache: (taskID: UUID, relatedIDs: [UUID], text: String)?
 
     init(
         state: AgentSessionState,
@@ -84,11 +85,7 @@ final class AgentModelGateway {
     }
 
     func prepareRequest(includeTools: Bool) async -> PreparedModelRequest {
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: settings.baseURL,
-            model: settings.model,
-            apiKey: settings.apiKey
-        )
+        let snapshot = settings.snapshot(for: .execute)
 
         let skillResult: SkillCatalog.SkillAppendixResult?
         if let cached = skillRecall.cachedResult {
@@ -109,6 +106,8 @@ final class AgentModelGateway {
                 kind: .systemInstruction,
                 content: systemPrompt
                     + projectPromptAppendix()
+                    + (state.activeTask?.workPlan?.promptAppendix ?? "")
+                    + reviewFeedbackAppendix()
                     + skillsAppendix
                     + relatedAppendix
             )
@@ -129,6 +128,34 @@ final class AgentModelGateway {
         )
     }
 
+    /// Non-streaming completion for plan / review sub-agents. Does not publish tokens.
+    func completeUnstreamed(system: String, user: String, role: ModelRole) async throws -> String {
+        let snapshot = settings.snapshot(for: role)
+        let turn = try await modelClient.complete(
+            events: [
+                AgentEvent(kind: .systemInstruction, content: system),
+                AgentEvent(kind: .userInput, content: user),
+            ],
+            tools: [],
+            settings: snapshot
+        )
+        state.addTokenUsage(turn.usage)
+        return turn.content ?? ""
+    }
+
+    private func reviewFeedbackAppendix() -> String {
+        guard let feedback = state.reviewFeedback?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !feedback.isEmpty
+        else { return "" }
+        return """
+
+
+        ## Reviewer feedback
+        The previous execute pass was not accepted. Address this, then finish:
+        \(feedback)
+        """
+    }
+
     func streamComplete(includeTools: Bool = true) async throws -> ModelTurn {
         let req = await prepareRequest(includeTools: includeTools)
         let stream = try await modelClient.streamComplete(
@@ -143,15 +170,13 @@ final class AgentModelGateway {
         var toolCallBuilders: [Int: ToolCallBuilder] = [:]
         var usage = TokenUsage()
 
-        streaming.clear()
-
         for try await delta in stream {
             try Task.checkCancellation()
 
             switch delta {
             case .text(let chunk):
                 contentChunks.append(chunk)
-                streaming.publish(contentChunks.joined())
+                streaming.publish(TextToolCallParser.visibleText(in: contentChunks.joined()))
 
             case .toolCallDelta(let index, let id, let name, let arguments):
                 var builder = toolCallBuilders[index] ?? ToolCallBuilder()
@@ -170,19 +195,18 @@ final class AgentModelGateway {
         }
 
         let contentBuffer = contentChunks.joined()
-        streaming.flush(contentBuffer)
         state.addTokenUsage(usage)
 
-        let toolCalls = toolCallBuilders.keys.sorted().compactMap { index -> ToolCallProposal? in
+        let structuredCalls = toolCallBuilders.keys.sorted().compactMap { index -> ToolCallProposal? in
             guard let builder = toolCallBuilders[index],
                   let id = builder.id,
                   let name = builder.name
             else { return nil }
             return ToolCallProposal(id: id, name: name, argumentsJSON: builder.arguments)
         }
-
-        let content = contentBuffer.isEmpty ? nil : contentBuffer
-        return ModelTurn(content: content, toolCalls: toolCalls, usage: usage)
+        let recovered = TextToolCallParser.recover(from: contentBuffer, existing: structuredCalls)
+        streaming.flush(recovered.content ?? "")
+        return ModelTurn(content: recovered.content, toolCalls: recovered.calls, usage: usage)
     }
 
     // MARK: - Related context
@@ -195,6 +219,11 @@ final class AgentModelGateway {
                 .prefix(3)
         )
         guard !relatedIDs.isEmpty else { return "" }
+        if let cached = relatedContextCache,
+           cached.taskID == task.id,
+           cached.relatedIDs == relatedIDs {
+            return cached.text
+        }
 
         let snippets: [RelatedTaskContextSnippet]
         do {
@@ -230,7 +259,9 @@ final class AgentModelGateway {
                 }
             }
         }
-        return lines.count > 3 ? lines.joined(separator: "\n") : ""
+        let text = lines.count > 3 ? lines.joined(separator: "\n") : ""
+        relatedContextCache = (task.id, relatedIDs, text)
+        return text
     }
 }
 

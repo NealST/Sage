@@ -1,24 +1,26 @@
 //
-//  PlanServices.swift
+//  ExecuteServices.swift
 //  Sage
 //
-//  Dependency bag for PlanExecutor — no Host protocol.
+//  Dependency bag for ToolBatchExecutor.
 //
 
 import Foundation
 
 @MainActor
-struct PlanServices {
+struct ExecuteServices {
     let state: AgentSessionState
     let planProgress: PlanProgress
     let taskStore: AgentTaskStore
-    let skillRecall: SkillRecallCoordinator
     let modelGateway: AgentModelGateway
     let tools: ToolRegistry
     let mcp: CapabilityStore?
     let skillHost: SkillToolHost
     let topicCoordinator: TopicCoordinator
     let clearStream: () -> Void
+    /// After a batch finishes, offer tools again (ReAct) unless the loop cap is hit.
+    let allowToolsAfterExecute: () -> Bool
+    let continueTurn: (ModelTurn) async -> Void
 
     var events: [AgentEvent] { state.events }
 
@@ -43,19 +45,19 @@ struct PlanServices {
     }
 
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
-        try await ToolInvocationDispatcher.execute(
+        let policy = state.pathGuardPolicy
+        let activated = skillHost.activatedSkillNames
+        let enabled = skillHost.enabledSkills
+        return try await ToolInvocationDispatcher.execute(
             name: name,
             argumentsJSON: argumentsJSON,
             tools: tools,
             mcp: mcp,
-            pathGuardPolicy: state.pathGuardPolicy,
+            pathGuardPolicy: policy,
+            activatedSkillNames: activated,
+            enabledSkills: enabled,
             skillHost: skillHost
         )
-    }
-
-    @discardableResult
-    func prepareSkillsForTurn(query: String) async -> Bool {
-        await skillRecall.prepareSkillsForTurn(query: query)
     }
 
     func loadSkillName(from argumentsJSON: String) -> String? {

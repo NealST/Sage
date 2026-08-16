@@ -8,7 +8,7 @@ import Foundation
 
 // MARK: - Reminders
 
-struct CreateReminderTool: AgentTool {
+nonisolated struct CreateReminderTool: AgentTool {
     let definition = ToolDefinition(
         name: "create_reminder",
         description: """

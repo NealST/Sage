@@ -49,8 +49,12 @@ struct TranscriptNoticeBar: View {
             .controlSize(.mini)
             .buttonStyle(.plain)
             .font(.system(size: type.micro, weight: .semibold))
-            .disabled(session.agent.state.isAcceptingTopicDrift)
-            .help("Start a clean task in this window")
+            .disabled(!session.agent.canStartFresh)
+            .help(
+                session.agent.state.isBusy
+                    ? "Wait until this turn finishes before starting a new task"
+                    : "Start a clean task in this window"
+            )
             .accessibilityLabel("Start Fresh")
             .accessibilityHint("Starts a new task with your last message")
 

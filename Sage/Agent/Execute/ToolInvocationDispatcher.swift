@@ -1,8 +1,9 @@
 import Foundation
 
 /// Single dispatch surface for built-in, skill, and MCP tools.
-@MainActor
-enum ToolInvocationDispatcher {
+/// Built-in file/shell tools run off the main actor. Skill and MCP hop back
+/// because their hosts are main-actor isolated.
+nonisolated enum ToolInvocationDispatcher {
     private static let interactiveTools: Set<String> = [
         "run_shell_command",
         "take_screenshot",
@@ -16,12 +17,14 @@ enum ToolInvocationDispatcher {
         tools: ToolRegistry,
         mcp: CapabilityStore?,
         pathGuardPolicy: PathGuard.Policy,
+        activatedSkillNames: Set<String>,
+        enabledSkills: [SkillRecord],
         skillHost: SkillToolHost
     ) async throws -> String {
         try SkillToolPolicy.assertToolAllowed(
             name,
-            activatedSkillNames: skillHost.activatedSkillNames,
-            enabledSkills: skillHost.enabledSkills
+            activatedSkillNames: activatedSkillNames,
+            enabledSkills: enabledSkills
         )
 
         if name.hasPrefix("mcp__") {
@@ -47,8 +50,8 @@ enum ToolInvocationDispatcher {
             ? .seconds(130)
             : toolExecutionTimeout
         let allowlist = SkillToolExecutor.readAllowlist(
-            activatedSkillNames: skillHost.activatedSkillNames,
-            enabledSkills: skillHost.enabledSkills
+            activatedSkillNames: activatedSkillNames,
+            enabledSkills: enabledSkills
         )
 
         return try await withThrowingTaskGroup(of: String.self) { group in

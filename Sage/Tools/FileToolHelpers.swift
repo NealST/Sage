@@ -10,7 +10,7 @@ import Foundation
 
 /// Resolves copy/move destination: if `destination` is an existing directory, appends
 /// `source.lastPathComponent`; refuses an existing final path; creates parent directories.
-enum FileTransferDestination {
+nonisolated enum FileTransferDestination {
     static func prepare(source: URL, destination: URL) throws -> URL {
         var destination = destination
         var isDir: ObjCBool = false
@@ -32,7 +32,7 @@ enum FileTransferDestination {
 
 /// Streams UTF-8 text lines from a `FileHandle`, retaining leftover bytes across chunks
 /// so multi-byte characters are never split at chunk boundaries (split on `0x0A`).
-enum UTF8LineStreamer {
+nonisolated enum UTF8LineStreamer {
     static let defaultChunkSize = 64 * 1024
 
     /// Invokes `body` once per line (no trailing newline). Return `false` from `body` to stop.

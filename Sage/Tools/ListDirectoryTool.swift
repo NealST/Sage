@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct ListDirectoryTool: AgentTool {
+nonisolated struct ListDirectoryTool: AgentTool {
     let definition = ToolDefinition(
         name: "list_directory",
         description: """

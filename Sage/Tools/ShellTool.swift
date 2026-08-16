@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct RunShellCommandTool: AgentTool {
+nonisolated struct RunShellCommandTool: AgentTool {
     let definition = ToolDefinition(
         name: "run_shell_command",
         description: """

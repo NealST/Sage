@@ -113,6 +113,42 @@ struct SettingsView: View {
                 sectionDivider
 
                 settingsField(
+                    title: "Plan model",
+                    error: nil
+                ) {
+                    TextField("same as Model", text: $settings.planModel)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                }
+
+                sectionDivider
+
+                settingsField(
+                    title: "Execute model",
+                    error: nil
+                ) {
+                    TextField("same as Model", text: $settings.executeModel)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                }
+
+                sectionDivider
+
+                settingsField(
+                    title: "Review model",
+                    error: nil
+                ) {
+                    TextField("same as Model", text: $settings.reviewModel)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.primary)
+                }
+
+                sectionDivider
+
+                settingsField(
                     title: "API Key",
                     error: apiKeyValidationError,
                     isLast: true

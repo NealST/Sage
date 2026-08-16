@@ -188,24 +188,46 @@ struct AgentTranscriptPane: View {
             )
 
         case .awaitingConfirmation, .executing:
-            if let plan = session.agent.planProgress.plan
-                ?? session.agent.state.activeTask?.pendingPlan {
-                PlanCardView(
-                    plan: plan,
-                    isExecuting: {
-                        if case .executing = session.agent.state.phase { return true }
-                        return false
-                    }(),
-                    onConfirm: {
-                        Task { await session.agent.confirmPendingPlan() }
-                    },
-                    onCancel: {
-                        Task { await session.agent.cancelPendingPlan() }
-                    },
-                    onStop: {
-                        session.agent.stop()
-                    }
-                )
+            let isExecuting: Bool = {
+                if case .executing = session.agent.state.phase { return true }
+                return false
+            }()
+            switch session.agent.turnChrome {
+            case .workPlan:
+                if let workPlan = session.agent.state.activeTask?.workPlan {
+                    WorkPlanCard(
+                        plan: workPlan,
+                        isExecuting: isExecuting,
+                        onConfirm: {
+                            Task { await session.agent.confirmWorkPlan() }
+                        },
+                        onCancel: {
+                            Task { await session.agent.cancelPendingPlan() }
+                        },
+                        onStop: {
+                            session.agent.stop()
+                        }
+                    )
+                }
+            case .toolBatch:
+                if let plan = session.agent.planProgress.plan
+                    ?? session.agent.state.activeTask?.pendingPlan {
+                    PlanCardView(
+                        plan: plan,
+                        isExecuting: isExecuting,
+                        onConfirm: {
+                            Task { await session.agent.confirmToolBatch() }
+                        },
+                        onCancel: {
+                            Task { await session.agent.cancelPendingPlan() }
+                        },
+                        onStop: {
+                            session.agent.stop()
+                        }
+                    )
+                }
+            case .none:
+                EmptyView()
             }
 
         case .failed(let message):
@@ -243,9 +265,6 @@ struct AgentTranscriptPane: View {
                 }
             }
             .onAppear(perform: onFailureAppear)
-
-        case .awaitingSkillChoice:
-            EmptyView()
 
         case .idle, .completed:
             EmptyView()

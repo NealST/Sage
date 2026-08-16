@@ -2,8 +2,8 @@
 //  PlanProgress.swift
 //  Sage
 //
-//  Lightweight @Observable slice for plan UI. Step updates do not rewrite
-//  AgentPhase associated values, so transcript chrome stays stable.
+//  In-flight tool-batch progress for the execute agent — not WorkPlan.
+//  Step updates do not rewrite AgentPhase, so transcript chrome stays stable.
 //
 
 import Foundation

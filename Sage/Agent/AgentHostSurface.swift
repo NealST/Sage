@@ -70,6 +70,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
             tools: tools,
             mcp: mcpHub,
             pathGuardPolicy: state.pathGuardPolicy,
+            activatedSkillNames: activatedSkillNames,
+            enabledSkills: enabledSkills,
             skillHost: self
         )
     }

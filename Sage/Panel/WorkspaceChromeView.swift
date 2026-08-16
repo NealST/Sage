@@ -6,7 +6,8 @@
 import AppKit
 import SwiftUI
 
-/// Unified titlebar strip: one row with the traffic lights, not a second stacked toolbar.
+/// Unified titlebar: identity · document · actions / view mode.
+/// One row with the traffic lights, not a second stacked toolbar.
 struct WorkspaceChromeView: View {
     @Environment(AppState.self) private var appState
     @Environment(AgentSession.self) private var session
@@ -21,20 +22,20 @@ struct WorkspaceChromeView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
-            if isProject {
-                projectLeading
-            } else {
-                generalLeading
-            }
+            identityCluster
+                .font(.system(size: type.caption, weight: .medium))
+                .foregroundStyle(.secondary)
 
-            trailingActions
+            if showsDocumentCluster {
+                chromeSeparator
+                documentCluster
+                    .font(.system(size: type.caption, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer(minLength: SageDesign.Spacing.md)
 
-            // Flush trailing edge with the composer field (same `.lg` inset).
-            if isProject {
-                projectTabPicker
-            }
+            trailingCluster
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: SageDesign.Panel.titlebarContentHeight)
@@ -42,25 +43,28 @@ struct WorkspaceChromeView: View {
         .padding(.trailing, SageDesign.Spacing.lg)
     }
 
-    // MARK: - General
+    // MARK: - Zones
 
-    private var generalLeading: some View {
+    @ViewBuilder
+    private var identityCluster: some View {
+        if isProject {
+            projectIdentity
+        } else {
+            generalIdentity
+        }
+    }
+
+    private var generalIdentity: some View {
         HStack(spacing: 6) {
             Button(action: openProject) {
                 Label("Open Project", systemImage: "folder")
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .labelStyle(.titleAndIcon)
             .help("Open an existing project folder")
             .accessibilityLabel("Open Project")
 
             Button(action: createProject) {
                 Label("New Project", systemImage: "folder.badge.plus")
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .labelStyle(.titleAndIcon)
             .help("Create a new project folder")
             .accessibilityLabel("New Project")
 
@@ -77,48 +81,111 @@ struct WorkspaceChromeView: View {
                     Label("Recent Projects", systemImage: "clock")
                 }
                 .menuStyle(.borderlessButton)
-                .controlSize(.small)
-                .labelStyle(.titleAndIcon)
                 .help("Recent projects")
                 .accessibilityLabel("Recent Projects")
             }
         }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .labelStyle(.titleAndIcon)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
-    // MARK: - Project
-
-    private var projectLeading: some View {
-        HStack(alignment: .center, spacing: 4) {
+    private var projectIdentity: some View {
+        HStack(alignment: .center, spacing: 6) {
             if let focused {
-                projectPathLabel(focused)
+                projectNameButton(focused)
             } else {
                 Text("Opening…")
-                    .font(.system(size: type.caption, weight: .medium))
-                    .foregroundStyle(.secondary)
             }
 
             if gitBranch != nil {
                 branchMenu
             }
         }
-        // Keep path + branch as one compact cluster; don’t let the menu stretch.
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private func projectPathLabel(_ project: ProjectRecord) -> some View {
+    @ViewBuilder
+    private var documentCluster: some View {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+            if case .awaitingConfirmation = session.agent.state.phase {
+                Text("Awaiting confirmation")
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.orange.opacity(0.14))
+                    )
+            }
+
+            if let title = session.agent.state.threadTitle,
+               session.agent.state.activeTask?.events.isEmpty == false {
+                recentTasksControl(currentTitle: title)
+            } else if hasOtherRecentTasks {
+                recentTasksControl(currentTitle: nil)
+            }
+        }
+        .layoutPriority(0)
+    }
+
+    @ViewBuilder
+    private var trailingCluster: some View {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+            if session.agent.canStartFresh {
+                Button {
+                    session.draft = ""
+                    Task { await session.agent.startFresh() }
+                } label: {
+                    Label("Start Fresh", systemImage: "plus")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: type.caption, weight: .medium))
+                .foregroundStyle(.secondary)
+                .disabled(!session.agent.canStartFresh)
+                .help("Start a clean task in this window")
+            }
+
+            if isProject {
+                projectTabPicker
+            }
+        }
+        .layoutPriority(1)
+    }
+
+    private var showsDocumentCluster: Bool {
+        if case .awaitingConfirmation = session.agent.state.phase { return true }
+        if session.agent.state.threadTitle != nil,
+           session.agent.state.activeTask?.events.isEmpty == false {
+            return true
+        }
+        return hasOtherRecentTasks
+    }
+
+    private var chromeSeparator: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(SageDesign.Chrome.dividerOpacity))
+            .frame(width: 1, height: 12)
+            .accessibilityHidden(true)
+    }
+
+    // MARK: - Project identity
+
+    private func projectNameButton(_ project: ProjectRecord) -> some View {
         Button {
             NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
         } label: {
-            Text(ProjectPanelActions.displayPath(project.rootPath))
-                .font(.system(size: type.caption, weight: .medium))
-                .foregroundStyle(.secondary)
+            Label(project.name, systemImage: "folder")
+                .labelStyle(.titleAndIcon)
                 .lineLimit(1)
-                .truncationMode(.middle)
         }
         .buttonStyle(.plain)
-        .help("Show in Finder")
-        .accessibilityLabel("Project path \(ProjectPanelActions.displayPath(project.rootPath))")
-        .frame(maxWidth: 280, alignment: .leading)
+        .help(ProjectPanelActions.displayPath(project.rootPath))
+        .accessibilityLabel("Project \(project.name)")
+        .accessibilityHint("Show in Finder")
     }
 
     private var branchMenu: some View {
@@ -141,13 +208,9 @@ struct WorkspaceChromeView: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "arrow.triangle.branch")
-                Text(gitBranch ?? "")
-                    .lineLimit(1)
-            }
-            .font(.system(size: type.caption, weight: .medium))
-            .foregroundStyle(.secondary)
+            Label(gitBranch ?? "", systemImage: "arrow.triangle.branch")
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
@@ -171,39 +234,7 @@ struct WorkspaceChromeView: View {
         .help("Switch between Task, Files, and History")
     }
 
-    // MARK: - Trailing
-
-    @ViewBuilder
-    private var trailingActions: some View {
-        if case .awaitingConfirmation = session.agent.state.phase {
-            Text("Awaiting confirmation")
-                .font(.system(size: type.micro, weight: .medium))
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color.orange.opacity(0.14))
-                )
-        }
-
-        if let title = session.agent.state.threadTitle,
-           session.agent.state.activeTask?.events.isEmpty == false {
-            recentTasksControl(currentTitle: title)
-        } else if hasOtherRecentTasks {
-            recentTasksControl(currentTitle: nil)
-        }
-
-        if session.agent.canStartFresh {
-            Button("Start Fresh") {
-                session.draft = ""
-                Task { await session.agent.startFresh() }
-            }
-            .controlSize(.small)
-            .disabled(session.agent.state.isBusy && session.agent.state.topicDriftOffer == nil)
-            .help("Start a clean task in this window")
-        }
-    }
+    // MARK: - Recents
 
     private var recentTaskEntries: [TaskSummary] {
         Array(
@@ -235,16 +266,13 @@ struct WorkspaceChromeView: View {
                 }
             } label: {
                 Text(currentTitle ?? "New Task")
-                    .font(.system(size: type.micro, weight: .medium))
-                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(maxWidth: 160, alignment: .leading)
+                    .frame(maxWidth: 200, alignment: .leading)
             }
             .menuStyle(.borderlessButton)
             .controlSize(.small)
             .fixedSize()
-            .layoutPriority(0)
             .disabled(session.agent.state.isBusy)
             .help("Switch to a recent task")
             .accessibilityLabel(
@@ -253,12 +281,9 @@ struct WorkspaceChromeView: View {
             .accessibilityHint("Shows recent tasks in this window")
         } else if let currentTitle {
             Text(currentTitle)
-                .font(.system(size: type.micro, weight: .medium))
-                .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 160, alignment: .leading)
-                .layoutPriority(0)
+                .frame(maxWidth: 200, alignment: .leading)
                 .help("Current task")
                 .accessibilityLabel("Current task \(currentTitle)")
         }

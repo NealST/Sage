@@ -27,7 +27,7 @@ nonisolated enum SaveSkillAction: String, Decodable, Sendable {
 /// Skill tool execution (schemas live in `SkillToolDefinitions.swift`).
 @MainActor
 enum SkillToolExecutor {
-    static func isSkillTool(_ name: String) -> Bool {
+    nonisolated static func isSkillTool(_ name: String) -> Bool {
         SkillToolPolicy.skillToolNames.contains(name)
     }
 
@@ -96,7 +96,7 @@ enum SkillToolExecutor {
     }
 
     /// Computes read-allowlisted directories from activated skills.
-    static func readAllowlist(activatedSkillNames: Set<String>, enabledSkills: [SkillRecord]) -> [String] {
+    nonisolated static func readAllowlist(activatedSkillNames: Set<String>, enabledSkills: [SkillRecord]) -> [String] {
         guard !activatedSkillNames.isEmpty else { return [] }
         return activatedSkillNames.compactMap { name in
             guard let skill = enabledSkills.first(where: { $0.name == name }) else { return nil }

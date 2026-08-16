@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct ReadTextFileTool: AgentTool {
+nonisolated struct ReadTextFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "read_text_file",
         description: """
@@ -116,7 +116,7 @@ struct ReadTextFileTool: AgentTool {
     }
 }
 
-struct WriteTextFileTool: AgentTool {
+nonisolated struct WriteTextFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "write_text_file",
         description: """
@@ -164,7 +164,7 @@ struct WriteTextFileTool: AgentTool {
 
 // MARK: - Search
 
-struct SearchFilesTool: AgentTool {
+nonisolated struct SearchFilesTool: AgentTool {
     let definition = ToolDefinition(
         name: "search_files",
         description: """

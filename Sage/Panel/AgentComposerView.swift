@@ -53,7 +53,7 @@ struct AgentComposerView: View {
             .sagePanelBackground(cornerRadius: 12)
 
             HStack(spacing: SageDesign.Spacing.sm) {
-                Text(appState.settings.model)
+                Text(appState.settings.resolvedModel(for: .execute))
                     .font(.system(size: type.micro))
                     .foregroundStyle(.tertiary)
 

@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct CreateDirectoryTool: AgentTool {
+nonisolated struct CreateDirectoryTool: AgentTool {
     let definition = ToolDefinition(
         name: "create_directory",
         description: "Create a directory (and any missing parent directories) inside the active sandbox (home ~/ or the focused project root). Safe to call if the directory already exists.",
@@ -27,7 +27,7 @@ struct CreateDirectoryTool: AgentTool {
     }
 }
 
-struct DeleteFileTool: AgentTool {
+nonisolated struct DeleteFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "delete_file",
         description: """

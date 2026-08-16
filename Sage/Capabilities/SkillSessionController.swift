@@ -17,6 +17,7 @@ final class SkillSessionController {
     private var suggestionGeneration: UInt64 = 0
     private var extractionTaskIDs: Set<UUID> = []
     private var inFlightExtractionTasks: [UUID: Task<Void, Never>] = [:]
+    private var persistJudgmentTasks: [UUID: Task<Void, Never>] = [:]
     private var saveSuccessClearTasks: [UUID: Task<Void, Never>] = [:]
     private var inFlightSaveTasks: [UUID: Task<Void, Never>] = [:]
     private let extractionService = SkillExtractionService()
@@ -36,6 +37,15 @@ final class SkillSessionController {
     func prepareForTeardown() async {
         invalidatePendingSuggestions()
         // Stop background extraction so it cannot enqueue tips or touch a torn-down host.
+        let persistJudgments = Array(persistJudgmentTasks.values)
+        persistJudgmentTasks.removeAll()
+        for task in persistJudgments {
+            task.cancel()
+        }
+        for task in persistJudgments {
+            await task.value
+        }
+
         let extractions = Array(inFlightExtractionTasks.values)
         for task in extractions {
             task.cancel()
@@ -72,6 +82,22 @@ final class SkillSessionController {
 
     // MARK: - Extraction
 
+    /// Plan-model persist gate after Review accept. Once per task; cancelled on teardown.
+    func considerPersistenceAfterReview(
+        for task: TaskRecord,
+        judge: @escaping @MainActor () async -> Bool
+    ) {
+        guard persistJudgmentTasks[task.id] == nil else { return }
+        let taskID = task.id
+        persistJudgmentTasks[taskID] = Task { @MainActor [weak self] in
+            defer { self?.persistJudgmentTasks[taskID] = nil }
+            guard !Task.isCancelled else { return }
+            let persist = await judge()
+            guard persist, !Task.isCancelled else { return }
+            self?.scheduleExtraction(for: task)
+        }
+    }
+
     func scheduleExtraction(
         for task: TaskRecord,
         mode: SkillExtractionMode = .automatic,
@@ -93,11 +119,7 @@ final class SkillSessionController {
         }
         extractionTaskIDs.insert(task.id)
 
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: runtime.settings.baseURL,
-            model: runtime.settings.model,
-            apiKey: runtime.settings.apiKey
-        )
+        let snapshot = runtime.settings.snapshot(for: .plan)
 
         let inProjectContext = runtime.state.focusedProject != nil
         let projectRootPath = runtime.state.focusedProject?.rootURL.path
@@ -295,11 +317,7 @@ final class SkillSessionController {
             throw SkillCompositionError.sourceTaskMissing
         }
 
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: runtime.settings.baseURL,
-            model: runtime.settings.model,
-            apiKey: runtime.settings.apiKey
-        )
+        let snapshot = runtime.settings.snapshot(for: .plan)
 
         switch suggestion.type {
         case .new:
@@ -369,11 +387,7 @@ final class SkillSessionController {
             throw SkillWriter.WriteError.skillNotFound(primary.name)
         }
 
-        let snapshot = ModelSettingsSnapshot(
-            baseURL: runtime.settings.baseURL,
-            model: runtime.settings.model,
-            apiKey: runtime.settings.apiKey
-        )
+        let snapshot = runtime.settings.snapshot(for: .plan)
 
         var inputs: [(name: String, description: String, body: String)] = []
         for candidate in suggestion.candidates {

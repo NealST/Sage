@@ -7,7 +7,7 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-struct GetSelectedTextTool: AgentTool {
+nonisolated struct GetSelectedTextTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_selected_text",
         description: """
@@ -73,7 +73,7 @@ struct GetSelectedTextTool: AgentTool {
     }
 }
 
-struct TypeTextTool: AgentTool {
+nonisolated struct TypeTextTool: AgentTool {
     let definition = ToolDefinition(
         name: "type_text",
         description: """
@@ -218,7 +218,7 @@ struct TypeTextTool: AgentTool {
     }
 }
 
-struct GetScreenInfoTool: AgentTool {
+nonisolated struct GetScreenInfoTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_screen_info",
         description: """
@@ -301,7 +301,7 @@ struct GetScreenInfoTool: AgentTool {
     }
 }
 
-struct GetFrontmostAppTool: AgentTool {
+nonisolated struct GetFrontmostAppTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_frontmost_app",
         description: """

@@ -13,7 +13,6 @@ final class SessionLifecycle {
     private let taskRepository: any TaskRepository
     private let skillCatalog: () -> SkillCatalog?
     private let skills: SkillSessionController
-    private let skillRecall: SkillRecallCoordinator
     private let modelGateway: AgentModelGateway
     private let taskStore: AgentTaskStore
     private let operations: SessionOperationGate
@@ -24,7 +23,6 @@ final class SessionLifecycle {
         taskRepository: any TaskRepository,
         skillCatalog: @escaping () -> SkillCatalog?,
         skills: SkillSessionController,
-        skillRecall: SkillRecallCoordinator,
         modelGateway: AgentModelGateway,
         taskStore: AgentTaskStore,
         operations: SessionOperationGate
@@ -34,7 +32,6 @@ final class SessionLifecycle {
         self.taskRepository = taskRepository
         self.skillCatalog = skillCatalog
         self.skills = skills
-        self.skillRecall = skillRecall
         self.modelGateway = modelGateway
         self.taskStore = taskStore
         self.operations = operations
@@ -96,9 +93,7 @@ final class SessionLifecycle {
         await operations.cancelInFlight()
 
         skills.invalidatePendingSuggestions()
-        await abandonAwaitingSkillChoice(
-            reason: "Cancelled skill choice — window closed."
-        )
+        skills.tips.dismissChoose()
         await skills.prepareForTeardown()
         _ = await persistScopeLastActive()
     }
@@ -187,21 +182,6 @@ final class SessionLifecycle {
         Default shell working directory is the project root.
         """
         return sandbox + ProjectAgentsMarkdown.promptSection(projectRoot: project.rootURL)
-    }
-
-    /// Ends a paused skill-choice turn without running the model.
-    func abandonAwaitingSkillChoice(reason: String) async {
-        guard case .awaitingSkillChoice = state.phase else { return }
-        skills.tips.dismissChoose()
-        skillRecall.clearTurnCache()
-
-        let note = AgentEvent(
-            kind: .assistantResponse,
-            content: reason,
-            protected: false
-        )
-        _ = await taskStore.commit(appendEvents: [note], deleteEventIDs: [], mutate: { _ in })
-        state.phase = .idle
     }
 
     // MARK: - Private

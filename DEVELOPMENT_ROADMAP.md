@@ -6,7 +6,7 @@
 
 **已完成的核心架构：**
 
-- **Agent Runtime**：完整的 agent 循环（submit → think → plan → confirm → execute → summarize）
+- **Agent Runtime**：plan → execute（ReAct）→ review 三子 agent；act 策略确认一次
 - **Task 管理**：基于 GRDB 的 task 持久化、task 生命周期、workspace snapshot
 - **Task 路由**：默认粘住当前线程；显式 Start Fresh /「新任务」才开新 task；主题漂移仅非阻塞提示
 - **主题生成**：从首条用户消息截取 topic + abstract

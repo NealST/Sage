@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Screenshot
 
-struct TakeScreenshotTool: AgentTool {
+nonisolated struct TakeScreenshotTool: AgentTool {
     let definition = ToolDefinition(
         name: "take_screenshot",
         description: """
@@ -33,13 +33,6 @@ struct TakeScreenshotTool: AgentTool {
         let path: String?
     }
 
-    private static let timestampFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        f.locale = Locale(identifier: "en_US_POSIX")
-        return f
-    }()
-
     func call(argumentsJSON: String) async throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let captureMode = (args.mode ?? "screen").lowercased()
@@ -53,7 +46,8 @@ struct TakeScreenshotTool: AgentTool {
         if let customPath = args.path {
             savePath = try PathGuard.resolveAllowed(customPath)
         } else {
-            let timestamp = Self.timestampFormatter.string(from: Date())
+            let timestamp = Date.now.formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))
+                .replacingOccurrences(of: ":", with: "-")
             let desktop = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Desktop")
             savePath = desktop.appendingPathComponent("sage_screenshot_\(timestamp).png")
@@ -69,7 +63,7 @@ struct TakeScreenshotTool: AgentTool {
         // Window mode: resolve a CGWindowID then capture with -l.
         let captureArgs: [String]
         if captureMode == "window" {
-            guard let windowID = Self.frontmostCapturableWindowID() else {
+            guard let windowID = await MainActor.run(body: Self.frontmostCapturableWindowID) else {
                 throw ToolError.operationFailed(
                     "No capturable window found (excluding Sage). Bring another app’s window to the front and retry."
                 )
@@ -93,6 +87,7 @@ struct TakeScreenshotTool: AgentTool {
     }
 
     /// Front-to-back on-screen windows; prefer the frontmost non-Sage app, else any other app.
+    @MainActor
     private static func frontmostCapturableWindowID() -> CGWindowID? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]

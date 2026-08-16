@@ -118,7 +118,7 @@ beginNewTask() closing 旧 task（events ≥ 4 且 API 已配置）
 | `StreamingPlayback.swift` | 独立 `@Observable` 流式缓冲（不打穿 Runtime / Workspace） |
 | `StreamingTextPump.swift` | SSE 文本 ~30Hz 合帧写入 `StreamingPlayback` |
 | `SessionOperationGate.swift` | busy lock + cancellable `workTask`（`SessionOperationHost`） |
-| `PlanExecutor.swift` | plan 确认 / 逐步执行 / Stop / Cancel（`PlanExecutionHost`） |
+| `Execute/ToolBatchExecutor.swift` | 工具批次逐步执行 / Stop / Cancel |
 | `SkillRecallCoordinator.swift` | skill 匹配 / 选择 / 自动加载 / turn 缓存 |
 | `AgentModelGateway.swift` | 拼请求 / 流式 / related-context appendix |
 | `TaskRoutingCoordinator.swift` | 本地路由（continue/new/resume）+ topic 生成 |

@@ -32,22 +32,21 @@ Topic 是标题（首条用户消息截取），允许和后来的内容不完�
 
 ### 主题漂移提示 = 邀请，不是闸门
 
-`TopicDriftDetector` 只决定要不要出条，**不**返回 `TaskRoute`。
+线程判定由 **Plan 模型**在规划同一次调用里给出 `thread: continue | offer_fresh`，**不**返回 `TaskRoute`，也不另开一轮模型。
 
-消息照常进当前 task。Chrome 下方出一条非阻塞提示（与系统 inline banner 同密度，无警告色、无弹窗）：
+消息照常进当前 task，Plan 照常开跑。若 Plan 认为漂移，Chrome 下方出一条非阻塞提示（与系统 inline banner 同密度，无警告色、无弹窗）：
 
 > This doesn’t look like “整理 Downloads”.
 
 - **Start Fresh**：新开一条。若提示条认为刚那句不像当前标题，只带走**最后一条用户输入**（意图分叉），旧线程停在分叉前；那一轮里混上下文的回复/计划丢掉，在新线程重跑。否则归档整条、开空白。
 - **Keep going**（x）：关掉提示，记下 `suppressedDriftOfferTaskID`，本线程不再问。
 
-检测必须保守（宁可不问）：
+Offer 必须保守（宁可不问）：
 
-- 已有 topic/abstract/summary 锚点
+- Plan 明确给出 `offer_fresh`（默认 continue）
 - 当前 task `events.count >= 4`
-- 输入 ≥ 16 字符且有效 token ≥ 4
-- 与锚点 **零重叠**
 - 本线程未被抑制，且本条不是显式「新任务」
+- 不因 offer 推迟 Plan / Execute
 
 ## 整体流程
 
@@ -64,7 +63,10 @@ ContinuityTaskResolver
 commit 用户事件并开跑
             │
             ▼
-若 continue 且检测器认为漂移 → 出 TopicDriftOffer
+Plan（同一次调用：策略 + 线程判定 + skill 召回）
+            │
+            ▼
+若 continue 且 Plan 给出 offer_fresh → 出 TopicDriftOffer
 ```
 
 ## Topic 生成
@@ -80,7 +82,7 @@ commit 用户事件并开跑
 |------|------|
 | `Sage/Task/TaskRoute.swift` | `CompositeTaskRouter`（仅 continuity） |
 | `Sage/Task/TaskContextResolver.swift` | 显式新鲜开始用语 |
-| `Sage/Task/TopicDrift.swift` | `TopicDriftDetector` + `TopicDriftOffer` |
+| `Sage/Task/TopicDrift.swift` | `TopicDriftOffer` + 标题辅助；判定在 Plan 模型 |
 | `Sage/Agent/AgentTaskStore.swift` | `splitOffTurn`：原子剥离最后一轮 |
 | `Sage/Panel/TranscriptNoticeBar.swift` | 漂移提示 + 既有 context hint |
 | `Sage/Panel/WorkspaceChromeView.swift` | 当前线程标题（有其它 recents 时变成弹出菜单）+ Start Fresh |

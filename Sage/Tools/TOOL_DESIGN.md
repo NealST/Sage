@@ -54,7 +54,9 @@
 - **大小限制**：读取操作有明确上限（ReadTextFile 100KB, Clipboard 10K chars）
 - **全局 cap**：所有工具结果在 runtime 层截断到 50K 字符
 - **超时**：所有工具执行有 30s 超时保护
-- **不可逆操作**：description 中标注，依赖 approval 流程保护
+- **Plan 是解题策略**（意图 + 做法），由 plan 子 agent 产出，不是工具步骤
+- **act** 策略需确认一次；确认后执行 agent 按 ReAct 调工具直到任务结束
+- **answer / observe** 不确认，直接进入执行
 
 ### 6. 性能要求
 

@@ -8,7 +8,7 @@ import Foundation
 
 // MARK: - Appearance
 
-struct ToggleAppearanceTool: AgentTool {
+nonisolated struct ToggleAppearanceTool: AgentTool {
     let definition = ToolDefinition(
         name: "toggle_appearance",
         description: """

@@ -9,9 +9,42 @@ nonisolated struct ToolDefinition: Sendable {
     let name: String
     let description: String
     let parameters: JSONValue
+    /// When false, the runtime may run the tool in a ReAct loop without a plan card.
+    let requiresConfirmation: Bool
+
+    init(
+        name: String,
+        description: String,
+        parameters: JSONValue,
+        requiresConfirmation: Bool? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.requiresConfirmation = requiresConfirmation
+            ?? !Self.observationToolNames.contains(name)
+    }
+
+    /// Reads and context loads only — no lasting change to the user's Mac.
+    static let observationToolNames: Set<String> = [
+        "list_directory",
+        "read_text_file",
+        "search_files",
+        "get_clipboard",
+        "get_selected_text",
+        "get_screen_info",
+        "get_frontmost_app",
+        "get_system_volume",
+        "load_skill",
+        "load_skill_resource",
+    ]
+
+    static func requiresConfirmation(forToolNamed name: String) -> Bool {
+        !observationToolNames.contains(name)
+    }
 }
 
-protocol AgentTool: Sendable {
+nonisolated protocol AgentTool: Sendable {
     var definition: ToolDefinition { get }
     func call(argumentsJSON: String) async throws -> String
 }
@@ -235,7 +268,7 @@ nonisolated enum PathGuard: Sendable {
 /// Shared argument decoder for all tools.
 /// Uses `.convertFromSnakeCase` so tool Args structs can use camelCase properties
 /// without manually defining CodingKeys for every snake_case JSON parameter.
-func decodeToolArgs<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
+nonisolated func decodeToolArgs<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
     guard let data = json.data(using: .utf8) else {
         throw ToolError.invalidArguments("Arguments are not UTF-8")
     }
@@ -297,15 +330,15 @@ nonisolated struct FlexibleBool: Decodable, Sendable, Equatable {
 private let toolResultMaxChars = 50_000
 
 /// Truncates a tool result string if it exceeds the global cap.
-func capToolResult(_ result: String) -> String {
+nonisolated func capToolResult(_ result: String) -> String {
     guard result.count > toolResultMaxChars else { return result }
     return String(result.prefix(toolResultMaxChars)) + "\n… (result truncated at \(toolResultMaxChars) characters)"
 }
 
 /// Default timeout for tool execution (30 seconds).
-let toolExecutionTimeout: Duration = .seconds(30)
+nonisolated let toolExecutionTimeout: Duration = .seconds(30)
 
-struct ToolRegistry: Sendable {
+nonisolated struct ToolRegistry: Sendable {
     private let tools: [String: any AgentTool]
 
     init(tools: [any AgentTool]) {

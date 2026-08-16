@@ -7,7 +7,7 @@ import AppKit
 import Foundation
 import UserNotifications
 
-struct GetClipboardTool: AgentTool {
+nonisolated struct GetClipboardTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_clipboard",
         description: "Read the current text content of the system clipboard. Returns \"(clipboard empty)\" if empty. Capped at 10K characters.",
@@ -28,7 +28,7 @@ struct GetClipboardTool: AgentTool {
     }
 }
 
-struct SetClipboardTool: AgentTool {
+nonisolated struct SetClipboardTool: AgentTool {
     let definition = ToolDefinition(
         name: "set_clipboard",
         description: "Replace the entire system clipboard with the given text. Previous clipboard content is lost.",
@@ -52,7 +52,7 @@ struct SetClipboardTool: AgentTool {
     }
 }
 
-struct OpenApplicationTool: AgentTool {
+nonisolated struct OpenApplicationTool: AgentTool {
     let definition = ToolDefinition(
         name: "open_application",
         description: """
@@ -150,7 +150,7 @@ struct OpenApplicationTool: AgentTool {
     }
 }
 
-struct OpenURLTool: AgentTool {
+nonisolated struct OpenURLTool: AgentTool {
     let definition = ToolDefinition(
         name: "open_url",
         description: "Open a URL in the user's default browser (http/https) or mail client (mailto). Other schemes are not allowed.",
@@ -178,7 +178,7 @@ struct OpenURLTool: AgentTool {
     }
 }
 
-struct NotifyTool: AgentTool {
+nonisolated struct NotifyTool: AgentTool {
     let definition = ToolDefinition(
         name: "notify",
         description: """

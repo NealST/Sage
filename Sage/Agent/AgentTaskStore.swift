@@ -118,6 +118,7 @@ final class AgentTaskStore {
                         closing.status = .completed
                     }
                     closing.pendingPlan = nil
+                    closing.workPlan = nil
                     closing.updatedAt = .now
                     try await taskRepository.mutateTask(
                         closing,
@@ -127,7 +128,9 @@ final class AgentTaskStore {
                     )
                     state.refreshSummary(for: closing)
                     topicCoordinator?.scheduleTopicGeneration(for: closing)
-                    skills.scheduleExtraction(for: closing)
+                    if !closing.skillPersistConsidered {
+                        skills.scheduleExtraction(for: closing)
+                    }
                 }
                 state.phase = .idle
                 state.lastAssistantText = nil
@@ -220,6 +223,7 @@ final class AgentTaskStore {
 
         closing.events = fork.kept
         closing.pendingPlan = nil
+        closing.workPlan = nil
         closing.updatedAt = .now
         if !closing.events.isEmpty,
            closing.status == .active || closing.status == .awaitingApproval {
@@ -253,7 +257,9 @@ final class AgentTaskStore {
         } else {
             state.refreshSummary(for: closing)
             topicCoordinator?.scheduleTopicGeneration(for: closing)
-            skills.scheduleExtraction(for: closing)
+            if !closing.skillPersistConsidered {
+                skills.scheduleExtraction(for: closing)
+            }
         }
 
         state.activeTask = opening
@@ -385,6 +391,12 @@ final class AgentTaskStore {
         })?.content
 
         guard var plan = task.pendingPlan else {
+            if task.workPlan?.requiresConfirmation == true,
+               task.status == .awaitingApproval {
+                state.phase = .awaitingConfirmation
+                planProgress.clear()
+                return
+            }
             state.phase = .idle
             planProgress.clear()
             return
@@ -474,15 +486,24 @@ final class AgentTaskStore {
     func failDuringExecution(plan: AgentPlan, message: String) async {
         state.retryState = nil
         planProgress.update(plan)
-        if var task = state.activeTask {
-            task.pendingPlan = plan
-            task.status = .awaitingApproval
-            task.updatedAt = .now
-            state.activeTask = task
-            try? await taskRepository.saveTaskState(task, setActive: true)
-            state.refreshSummary(for: task)
+        guard var task = state.activeTask else {
+            state.phase = .failed(message: message)
+            return
         }
-        state.phase = .failed(message: message)
+        task.pendingPlan = plan
+        task.status = .awaitingApproval
+        task.updatedAt = .now
+        do {
+            try await taskRepository.saveTaskState(task, setActive: true)
+            state.activeTask = task
+            state.refreshSummary(for: task)
+            state.phase = .failed(message: message)
+        } catch {
+            state.activeTask = task
+            state.phase = .failed(
+                message: "Could not save progress. \(error.localizedDescription)"
+            )
+        }
     }
 
     func markFailed(_ message: String) async {

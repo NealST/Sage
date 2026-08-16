@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Volume Control
 
-struct GetSystemVolumeTool: AgentTool {
+nonisolated struct GetSystemVolumeTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_system_volume",
         description: """
@@ -27,7 +27,7 @@ struct GetSystemVolumeTool: AgentTool {
     }
 }
 
-struct SetSystemVolumeTool: AgentTool {
+nonisolated struct SetSystemVolumeTool: AgentTool {
     let definition = ToolDefinition(
         name: "set_system_volume",
         description: """
@@ -76,7 +76,7 @@ struct SetSystemVolumeTool: AgentTool {
 
 // MARK: - CoreAudio Helpers
 
-private func getDefaultOutputDeviceID() throws -> AudioDeviceID {
+nonisolated private func getDefaultOutputDeviceID() throws -> AudioDeviceID {
     var deviceID = AudioDeviceID(0)
     var size = UInt32(MemoryLayout<AudioDeviceID>.size)
     var address = AudioObjectPropertyAddress(
@@ -94,7 +94,7 @@ private func getDefaultOutputDeviceID() throws -> AudioDeviceID {
     return deviceID
 }
 
-private func getOutputVolume() throws -> (Float32, Bool) {
+nonisolated private func getOutputVolume() throws -> (Float32, Bool) {
     let deviceID = try getDefaultOutputDeviceID()
 
     var volume = Float32(0)
@@ -123,7 +123,7 @@ private func getOutputVolume() throws -> (Float32, Bool) {
     return (volume, isMuted)
 }
 
-private func setOutputVolume(_ volume: Float32) throws {
+nonisolated private func setOutputVolume(_ volume: Float32) throws {
     let deviceID = try getDefaultOutputDeviceID()
     var vol = volume
     let size = UInt32(MemoryLayout<Float32>.size)
@@ -138,7 +138,7 @@ private func setOutputVolume(_ volume: Float32) throws {
     }
 }
 
-private func setOutputMute(_ mute: Bool) throws {
+nonisolated private func setOutputMute(_ mute: Bool) throws {
     let deviceID = try getDefaultOutputDeviceID()
     var muted = UInt32(mute ? 1 : 0)
     let size = UInt32(MemoryLayout<UInt32>.size)

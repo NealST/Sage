@@ -37,6 +37,14 @@ extension GRDBTaskRepository {
             activatedSkills = []
         }
 
+        let workPlan: WorkPlan?
+        if let json: String = row["work_plan_json"],
+           let data = json.data(using: .utf8) {
+            workPlan = try? JSONDecoder().decode(WorkPlan.self, from: data)
+        } else {
+            workPlan = nil
+        }
+
         return TaskRecord(
             id: id,
             status: status,
@@ -46,11 +54,17 @@ extension GRDBTaskRepository {
             abstract: row["abstract"],
             topicUpdatedAt: topicUpdatedAt,
             events: includeHistory ? try loadEvents(taskID: id, database: db) : [],
+            workPlan: workPlan,
             pendingPlan: includeHistory ? try loadPlan(taskID: id, database: db) : nil,
             // Entity extraction is not wired; skip the table read on the hot path.
             entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: db),
             activatedSkillNames: activatedSkills,
+            skillPersistConsidered: {
+                if let flag = row["skill_persist_considered"] as Int? { return flag != 0 }
+                if let flag = row["skill_persist_considered"] as Bool? { return flag }
+                return false
+            }(),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )

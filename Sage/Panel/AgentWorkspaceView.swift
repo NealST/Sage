@@ -119,7 +119,7 @@ struct AgentWorkspaceView: View {
         }
         .onChange(of: session.agent.state.phase) { _, phase in
             switch phase {
-            case .awaitingConfirmation, .awaitingSkillChoice, .thinking, .executing:
+            case .awaitingConfirmation, .thinking, .executing:
                 isInputFocused = false
             case .failed:
                 isInputFocused = false
@@ -216,8 +216,8 @@ struct AgentWorkspaceView: View {
         }
     }
 
-    /// Identity lives in the chrome strip (path + branch). Keep the system
-    /// titlebar text hidden so it doesn’t repeat the same information.
+    /// Identity lives in the chrome strip (project name + branch). Keep the
+    /// system titlebar text hidden so it doesn’t repeat the same information.
     private func updateWindowTitle() {
         let autosave = session.windowAutosaveName
         guard let window = NSApp.windows.first(where: {

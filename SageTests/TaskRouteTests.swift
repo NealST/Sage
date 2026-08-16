@@ -101,9 +101,9 @@ final class TaskRouteTests: XCTestCase {
 
     private static func seededTask(topic: String) -> TaskRecord {
         TaskRecord(
+            summary: topic,
             topic: topic,
             abstract: topic,
-            summary: topic,
             events: [
                 AgentEvent(kind: .userInput, content: topic),
                 AgentEvent(kind: .assistantResponse, content: "Working on it."),
@@ -196,9 +196,9 @@ final class TopicDriftTests: XCTestCase {
 
     func testDoesNotOfferWhenFollowUpMatchesRecentTurns() {
         let task = TaskRecord(
+            summary: "整理 Downloads",
             topic: "整理 Downloads",
             abstract: "整理 Downloads",
-            summary: "整理 Downloads",
             events: [
                 AgentEvent(kind: .userInput, content: "整理 Downloads"),
                 AgentEvent(kind: .assistantResponse, content: "Sorted files by type."),
@@ -222,10 +222,12 @@ final class TopicDriftTests: XCTestCase {
             )
         )
     }
+
+    func testDoesNotOfferWhenPriorEventsAreShort() {
         let task = TaskRecord(
+            summary: "整理 Downloads",
             topic: "整理 Downloads",
             abstract: "整理 Downloads",
-            summary: "整理 Downloads",
             events: [
                 AgentEvent(kind: .userInput, content: "整理 Downloads"),
                 AgentEvent(kind: .assistantResponse, content: "OK"),
@@ -250,9 +252,9 @@ final class TopicDriftTests: XCTestCase {
 
     private func seededTask(topic: String) -> TaskRecord {
         TaskRecord(
+            summary: topic,
             topic: topic,
             abstract: topic,
-            summary: topic,
             events: [
                 AgentEvent(kind: .userInput, content: topic),
                 AgentEvent(kind: .assistantResponse, content: "Working on it."),

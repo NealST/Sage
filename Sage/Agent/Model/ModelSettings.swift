@@ -5,6 +5,13 @@
 
 import Foundation
 
+/// Which sub-agent a completion is for. Empty role-specific fields fall back to `model`.
+enum ModelRole: String, Sendable {
+    case plan
+    case execute
+    case review
+}
+
 @Observable
 @MainActor
 final class ModelSettings {
@@ -17,6 +24,9 @@ final class ModelSettings {
     private enum DefaultsKey {
         static let baseURL = "llm.baseURL"
         static let model = "llm.model"
+        static let planModel = "llm.planModel"
+        static let executeModel = "llm.executeModel"
+        static let reviewModel = "llm.reviewModel"
         /// Legacy plaintext storage — migrated out on launch.
         static let apiKeyFallback = "llm.apiKey.fallback"
     }
@@ -27,6 +37,21 @@ final class ModelSettings {
 
     var model: String {
         didSet { UserDefaults.standard.set(model, forKey: DefaultsKey.model) }
+    }
+
+    /// Empty = use `model`. Thread, skill recall, work plan, and persist judgment.
+    var planModel: String {
+        didSet { UserDefaults.standard.set(planModel, forKey: DefaultsKey.planModel) }
+    }
+
+    /// Empty = use `model`. ReAct / tool loop.
+    var executeModel: String {
+        didSet { UserDefaults.standard.set(executeModel, forKey: DefaultsKey.executeModel) }
+    }
+
+    /// Empty = use `model`. Invisible accept / revise pass.
+    var reviewModel: String {
+        didSet { UserDefaults.standard.set(reviewModel, forKey: DefaultsKey.reviewModel) }
     }
 
     var apiKey: String = "" {
@@ -52,6 +77,9 @@ final class ModelSettings {
             ?? "https://api.openai.com/v1"
         model = UserDefaults.standard.string(forKey: DefaultsKey.model)
             ?? "gpt-4.1-mini"
+        planModel = UserDefaults.standard.string(forKey: DefaultsKey.planModel) ?? ""
+        executeModel = UserDefaults.standard.string(forKey: DefaultsKey.executeModel) ?? ""
+        reviewModel = UserDefaults.standard.string(forKey: DefaultsKey.reviewModel) ?? ""
 
         if let key = KeychainStore.get(account: Account.apiKey), !key.isEmpty {
             apiKey = key
@@ -71,6 +99,25 @@ final class ModelSettings {
             apiKey = ""
         }
         isHydrating = false
+    }
+
+    func resolvedModel(for role: ModelRole) -> String {
+        let override: String
+        switch role {
+        case .plan: override = planModel
+        case .execute: override = executeModel
+        case .review: override = reviewModel
+        }
+        let trimmed = override.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? model : trimmed
+    }
+
+    func snapshot(for role: ModelRole) -> ModelSettingsSnapshot {
+        ModelSettingsSnapshot(
+            baseURL: baseURL,
+            model: resolvedModel(for: role),
+            apiKey: apiKey
+        )
     }
 
     private func persistAPIKey(_ key: String) {

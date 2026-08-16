@@ -67,12 +67,14 @@ final class AgentRuntime {
 
     var canStartFresh: Bool {
         if state.isAcceptingTopicDrift { return false }
-        if state.topicDriftOffer != nil { return true }
+        // Never fork or archive while a turn is in flight — tools may already
+        // have mutated the Mac.
         guard !state.isBusy else { return false }
+        if state.topicDriftOffer != nil { return true }
         switch state.phase {
         case .thinking, .executing:
             return false
-        case .awaitingConfirmation, .awaitingSkillChoice:
+        case .awaitingConfirmation:
             return true
         case .idle, .completed, .failed:
             return state.activeTask?.events.isEmpty == false
@@ -81,10 +83,19 @@ final class AgentRuntime {
         }
     }
 
+    /// Strategy card vs in-flight tool batch. Shared by transcript chrome and confirm APIs.
+    var turnChrome: AgentTurnChrome? {
+        AgentTurnChrome.resolve(
+            phase: state.phase,
+            hasWorkPlan: state.activeTask?.workPlan != nil,
+            hasToolBatch: planProgress.plan != nil || state.activeTask?.pendingPlan != nil
+        )
+    }
+
     var blocksNewInput: Bool {
         if state.isBusy { return true }
         switch state.phase {
-        case .thinking, .executing, .awaitingConfirmation, .awaitingSkillChoice:
+        case .thinking, .executing, .awaitingConfirmation:
             return true
         case .failed:
             return state.activeTask?.pendingPlan != nil || planProgress.hasPlan
@@ -100,10 +111,11 @@ final class AgentRuntime {
     let systemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
     Prefer using tools for real actions (files, clipboard, apps, notifications).
-    Keep plans small and concrete. Expand ~ paths when useful.
+    A separate planner already produced the work plan — follow it. Use tools as you go;
+    do not wait for the user to approve each call. Expand ~ paths when useful.
     File and shell paths are sandboxed — stay inside the active sandbox described below.
     When rewriting text for the clipboard, use get_clipboard / set_clipboard.
-    After tools run, you will see their results — then give a short clear summary of what happened.
+    After tools run, you will see their results — then continue or give a short summary.
     Reply in the same language the user uses.
     """
 
@@ -198,7 +210,6 @@ final class AgentRuntime {
             taskRepository: taskRepository,
             skillCatalog: { catalogRef },
             skills: skills,
-            skillRecall: skillRecall,
             modelGateway: modelGateway,
             taskStore: taskStore,
             operations: operations
@@ -216,7 +227,8 @@ final class AgentRuntime {
             skillCatalog: { catalogRef },
             workspaceSnapshot: { lifecycle.currentWorkspaceSnapshot() },
             streaming: streaming,
-            topicCoordinator: topicCoordinator
+            topicCoordinator: topicCoordinator,
+            skills: skills
         )
         self.turns = turns
 
@@ -224,26 +236,31 @@ final class AgentRuntime {
         skillRecall.bind(skillHost: { [weak host] in host })
         turns.bind(
             slashHost: host,
-            confirmPlan: { [weak self] in await self?.confirmPendingPlanUnlocked() },
+            executeToolBatch: { [weak self] in await self?.executeCurrentPlanUnlocked() },
             handleStop: { [weak self] plan in
                 guard let self else { return }
-                await PlanExecutor.handleStop(plan: plan, services: self.makePlanServices())
+                await ToolBatchExecutor.handleStop(plan: plan, services: self.makeExecuteServices())
             }
         )
     }
 
-    private func makePlanServices() -> PlanServices {
-        PlanServices(
+    private func makeExecuteServices() -> ExecuteServices {
+        ExecuteServices(
             state: state,
             planProgress: planProgress,
             taskStore: taskStore,
-            skillRecall: skillRecall,
             modelGateway: modelGateway,
             tools: tools,
             mcp: mcpHub,
             skillHost: host,
             topicCoordinator: topicCoordinator,
-            clearStream: { [weak self] in self?.streaming.clear() }
+            clearStream: { [weak self] in self?.streaming.clear() },
+            allowToolsAfterExecute: { [weak self] in
+                self?.turns.canOfferMoreTools ?? false
+            },
+            continueTurn: { [weak self] turn in
+                await self?.turns.handleTurn(turn)
+            }
         )
     }
 
@@ -275,6 +292,7 @@ final class AgentRuntime {
 
     @discardableResult
     func startFresh() async -> UUID? {
+        guard canStartFresh else { return nil }
         if state.topicDriftOffer != nil {
             await acceptTopicDriftOffer()
             return state.activeTaskID
@@ -285,10 +303,6 @@ final class AgentRuntime {
 
         if case .awaitingConfirmation = state.phase {
             guard await performCancelPendingPlan() else { return nil }
-        } else if case .awaitingSkillChoice = state.phase {
-            await lifecycle.abandonAwaitingSkillChoice(
-                reason: "Cancelled skill choice — started a new task."
-            )
         } else if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
             planProgress.replace(plan)
             state.phase = .awaitingConfirmation
@@ -311,6 +325,7 @@ final class AgentRuntime {
 
     func acceptTopicDriftOffer() async {
         guard !state.isAcceptingTopicDrift else { return }
+        guard !state.isBusy else { return }
         guard let offer = state.topicDriftOffer else { return }
         guard offer.taskID == state.activeTaskID else {
             state.clearTopicDriftOffer()
@@ -320,18 +335,10 @@ final class AgentRuntime {
         state.isAcceptingTopicDrift = true
         defer { state.isAcceptingTopicDrift = false }
 
-        if state.isBusy {
-            operations.requestStop()
-            await operations.cancelInFlight()
-        }
-
         guard operations.begin() else { return }
         defer { operations.end() }
 
-        if case .awaitingSkillChoice = state.phase {
-            skills.tips.dismissChoose()
-            state.phase = .idle
-        }
+        skills.tips.dismissChoose()
 
         streaming.clear()
         guard let result = await taskStore.splitOffTurn(from: offer.triggeringUserEventID) else {
@@ -369,7 +376,21 @@ final class AgentRuntime {
     }
 
     func confirmPendingPlan() async {
-        _ = await operations.run { await self.confirmPendingPlanUnlocked() }
+        switch turnChrome {
+        case .workPlan:
+            await confirmWorkPlan()
+        case .toolBatch, .none:
+            await confirmToolBatch()
+        }
+    }
+
+    func confirmWorkPlan() async {
+        guard turnChrome == .workPlan else { return }
+        _ = await operations.run { await self.turns.startExecution() }
+    }
+
+    func confirmToolBatch() async {
+        _ = await operations.run { await self.executeCurrentPlanUnlocked() }
     }
 
     func cancelPendingPlan() async {
@@ -403,8 +424,9 @@ final class AgentRuntime {
     }
 
     func selectSkillActivation(named name: String) async {
-        guard case .awaitingSkillChoice(let choice) = state.phase else { return }
-        guard choice.candidates.contains(where: { $0.name == name }) else { return }
+        guard let choice = skills.tips.choosePrompt,
+              choice.candidates.contains(where: { $0.name == name })
+        else { return }
 
         _ = await operations.run {
             self.skills.tips.dismissChoose()
@@ -417,7 +439,7 @@ final class AgentRuntime {
     }
 
     func skipSkillActivation() async {
-        guard case .awaitingSkillChoice(let choice) = state.phase else { return }
+        guard let choice = skills.tips.choosePrompt else { return }
 
         _ = await operations.run {
             self.skills.tips.dismissChoose()
@@ -436,17 +458,16 @@ final class AgentRuntime {
         state.activatedSkillNames.formUnion(names)
     }
 
-    func confirmPendingPlanUnlocked() async {
-        guard case .awaitingConfirmation = state.phase else { return }
+    func executeCurrentPlanUnlocked() async {
         let plan = planProgress.plan ?? state.activeTask?.pendingPlan
         guard let initialPlan = plan else { return }
-        await PlanExecutor.execute(initialPlan: initialPlan, services: makePlanServices())
+        await ToolBatchExecutor.execute(initialPlan: initialPlan, services: makeExecuteServices())
     }
 
     @discardableResult
     private func performCancelPendingPlan() async -> Bool {
         guard case .awaitingConfirmation = state.phase else { return false }
-        return await PlanExecutor.cancelPendingPlan(services: makePlanServices())
+        return await ToolBatchExecutor.cancelPendingPlan(services: makeExecuteServices())
     }
 
     // MARK: - Task store façades used by UI / AppState

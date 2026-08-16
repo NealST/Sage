@@ -35,6 +35,8 @@ final class AgentSessionState {
     var isBusy = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
+    /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
+    var reviewFeedback: String?
     /// Skills already loaded via `load_skill` / slash activation in this task.
     var activatedSkillNames: Set<String> = []
     /// Set when the owning window is closing — blocks further DB commits.
@@ -88,6 +90,7 @@ final class AgentSessionState {
         suppressedDriftOfferTaskID = nil
         contextHint = nil
         forceFreshOnNextSubmit = false
+        reviewFeedback = nil
     }
 
     func clearTokenUsage() {

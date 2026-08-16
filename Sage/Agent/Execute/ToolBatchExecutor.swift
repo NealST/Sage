@@ -1,13 +1,15 @@
 //
-//  PlanExecutor.swift
+//  ToolBatchExecutor.swift
 //  Sage
+//
+//  Runs one in-flight tool batch for the execute agent. Not the work plan.
 //
 
 import Foundation
 
-/// Plan confirm / resume / cancel / stop.
-enum PlanExecutor {
-    static func execute(initialPlan: AgentPlan, services: PlanServices) async {
+/// Confirm-resume / step runner / Stop / Cancel for a tool batch.
+enum ToolBatchExecutor {
+    static func execute(initialPlan: AgentPlan, services: ExecuteServices) async {
         // Always normalize before Run/Retry so Dismiss→Run and relaunch can't skip
         // remaining steps or duplicate ERROR tool results.
         guard var plan = await prepareForResume(plan: initialPlan, services: services) else { return }
@@ -32,9 +34,6 @@ enum PlanExecutor {
 
                 plan.steps[index].status = .running
                 services.planProgress.update(plan)
-
-                // Refresh the Available Skills appendix for this step (cloud load_skill).
-                await services.prepareSkillsForTurn(query: plan.steps[index].title)
 
                 // Step status only — avoid rewriting the whole plan graph on every tick.
                 guard await services.persistPlanStepStatus(plan.steps[index], in: plan) else {
@@ -145,34 +144,12 @@ enum PlanExecutor {
             }
             services.planProgress.clear()
             services.state.phase = .thinking
-            services.clearStream()
 
             try Task.checkCancellation()
-            let turn = try await services.requestModelStreaming(includeTools: false)
+            let offerTools = services.allowToolsAfterExecute()
+            let turn = try await services.requestModelStreaming(includeTools: offerTools)
             try Task.checkCancellation()
-            let summary = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let text: String
-            if let summary, !summary.isEmpty {
-                text = summary
-            } else {
-                let fallback = plan.steps.compactMap(\.result).joined(separator: "\n")
-                text = fallback.isEmpty ? "Done." : fallback
-            }
-            guard await services.commit(
-                appendEvents: [AgentEvent(kind: .assistantResponse, content: text)],
-                deleteEventIDs: [],
-                mutate: { task in
-                    task.status = .completed
-                }
-            ) else {
-                services.clearStream()
-                services.state.phase = .failed(message: "Could not save the completion summary.")
-                return
-            }
-            services.clearStream()
-            services.state.lastAssistantText = text
-            services.state.phase = .completed(summary: text)
-            services.generateTopicIfNeeded()
+            await services.continueTurn(turn)
         } catch is CancellationError {
             services.clearStream()
             await handleStop(plan: plan, services: services)
@@ -183,7 +160,7 @@ enum PlanExecutor {
     }
 
     /// Clears ERROR tool results and reopens failed/skipped/running steps before Run/Retry.
-    static func prepareForResume(plan: AgentPlan, services: PlanServices) async -> AgentPlan? {
+    static func prepareForResume(plan: AgentPlan, services: ExecuteServices) async -> AgentPlan? {
         var plan = plan
         let errorEventIDs = services.events.compactMap { event -> UUID? in
             guard event.kind == .toolResult,
@@ -222,7 +199,7 @@ enum PlanExecutor {
     }
 
     @discardableResult
-    static func cancelPendingPlan(services: PlanServices) async -> Bool {
+    static func cancelPendingPlan(services: ExecuteServices) async -> Bool {
         let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: services.events)
         let text = "Cancelled. Nothing was changed."
         let cancelEvent = AgentEvent(kind: .assistantResponse, content: text)
@@ -232,6 +209,7 @@ enum PlanExecutor {
             deleteEventIDs: retractIDs,
             mutate: { task in
                 task.pendingPlan = nil
+                task.workPlan = nil
                 task.status = .active
             }
         ) else { return false }
@@ -242,7 +220,7 @@ enum PlanExecutor {
         return true
     }
 
-    static func handleStop(plan: AgentPlan?, services: PlanServices) async {
+    static func handleStop(plan: AgentPlan?, services: ExecuteServices) async {
         if var plan {
             for index in plan.steps.indices where plan.steps[index].status == .running {
                 plan.steps[index].status = .pending

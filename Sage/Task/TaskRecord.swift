@@ -39,11 +39,15 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var abstract: String?
     var topicUpdatedAt: Date?
     var events: [AgentEvent]
+    /// Strategy from the plan sub-agent (intent + approach). Not tool steps.
+    var workPlan: WorkPlan?
     var pendingPlan: AgentPlan?
     var entities: [TaskEntity]
     var relatedTaskIDs: [UUID]
     /// Skills activated in this task (persisted so they survive task switches).
     var activatedSkillNames: Set<String>
+    /// Plan already judged persist (or the turn finished without needing a backfill).
+    var skillPersistConsidered: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -56,10 +60,12 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         abstract: String? = nil,
         topicUpdatedAt: Date? = nil,
         events: [AgentEvent] = [],
+        workPlan: WorkPlan? = nil,
         pendingPlan: AgentPlan? = nil,
         entities: [TaskEntity] = [],
         relatedTaskIDs: [UUID] = [],
         activatedSkillNames: Set<String> = [],
+        skillPersistConsidered: Bool = false,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -71,10 +77,12 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.abstract = abstract
         self.topicUpdatedAt = topicUpdatedAt
         self.events = events
+        self.workPlan = workPlan
         self.pendingPlan = pendingPlan
         self.entities = entities
         self.relatedTaskIDs = relatedTaskIDs
         self.activatedSkillNames = activatedSkillNames
+        self.skillPersistConsidered = skillPersistConsidered
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -89,17 +97,40 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         abstract = try container.decodeIfPresent(String.self, forKey: .abstract)
         topicUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .topicUpdatedAt)
         events = try container.decode([AgentEvent].self, forKey: .events)
+        workPlan = try container.decodeIfPresent(WorkPlan.self, forKey: .workPlan)
         pendingPlan = try container.decodeIfPresent(AgentPlan.self, forKey: .pendingPlan)
         entities = try container.decodeIfPresent([TaskEntity].self, forKey: .entities) ?? []
         relatedTaskIDs = try container.decodeIfPresent([UUID].self, forKey: .relatedTaskIDs) ?? []
         activatedSkillNames = try container.decodeIfPresent(Set<String>.self, forKey: .activatedSkillNames) ?? []
+        skillPersistConsidered = try container.decodeIfPresent(Bool.self, forKey: .skillPersistConsidered) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(projectID, forKey: .projectID)
+        try container.encodeIfPresent(summary, forKey: .summary)
+        try container.encodeIfPresent(topic, forKey: .topic)
+        try container.encodeIfPresent(abstract, forKey: .abstract)
+        try container.encodeIfPresent(topicUpdatedAt, forKey: .topicUpdatedAt)
+        try container.encode(events, forKey: .events)
+        try container.encodeIfPresent(workPlan, forKey: .workPlan)
+        try container.encodeIfPresent(pendingPlan, forKey: .pendingPlan)
+        try container.encode(entities, forKey: .entities)
+        try container.encode(relatedTaskIDs, forKey: .relatedTaskIDs)
+        try container.encode(activatedSkillNames, forKey: .activatedSkillNames)
+        try container.encode(skillPersistConsidered, forKey: .skillPersistConsidered)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, status, projectID, summary, topic, abstract, topicUpdatedAt
-        case events, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
+        case events, workPlan, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
+        case skillPersistConsidered
         case createdAt, updatedAt
     }
 }

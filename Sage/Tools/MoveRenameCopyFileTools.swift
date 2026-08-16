@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct MoveFileTool: AgentTool {
+nonisolated struct MoveFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "move_file",
         description: """
@@ -44,7 +44,7 @@ struct MoveFileTool: AgentTool {
     }
 }
 
-struct RenameFileTool: AgentTool {
+nonisolated struct RenameFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "rename_file",
         description: """
@@ -85,7 +85,7 @@ struct RenameFileTool: AgentTool {
     }
 }
 
-struct CopyFileTool: AgentTool {
+nonisolated struct CopyFileTool: AgentTool {
     let definition = ToolDefinition(
         name: "copy_file",
         description: """

@@ -52,8 +52,6 @@ final class AppState {
             return "Thinking…"
         case .awaitingConfirmation:
             return "Plan waiting for confirmation"
-        case .awaitingSkillChoice:
-            return "Choose a skill"
         case .executing:
             return "Working…"
         case .completed:

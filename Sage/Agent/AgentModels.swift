@@ -124,15 +124,41 @@ nonisolated struct AgentPlan: Identifiable, Codable, Sendable, Equatable {
         self.summary = summary
         self.steps = steps
     }
+
+    /// True when any step can change the user's world (files, apps, clipboard, …).
+    var requiresConfirmation: Bool {
+        steps.contains { ToolDefinition.requiresConfirmation(forToolNamed: $0.toolName) }
+    }
+}
+
+/// Which confirm chrome to show. Work plan and tool batch must not share a card.
+enum AgentTurnChrome: Equatable, Sendable {
+    case workPlan
+    case toolBatch
+
+    static func resolve(
+        phase: AgentPhase,
+        hasWorkPlan: Bool,
+        hasToolBatch: Bool
+    ) -> AgentTurnChrome? {
+        switch phase {
+        case .executing:
+            return hasToolBatch ? .toolBatch : nil
+        case .awaitingConfirmation:
+            if hasToolBatch { return .toolBatch }
+            if hasWorkPlan { return .workPlan }
+            return nil
+        default:
+            return nil
+        }
+    }
 }
 
 enum AgentPhase: Equatable {
     case idle
     case thinking
-    /// Plan lives on `PlanProgress` / `TaskRecord.pendingPlan` — not embedded here.
+    /// Work plan lives on `TaskRecord.workPlan`. Tool batch on `PlanProgress` / `pendingPlan`.
     case awaitingConfirmation
-    /// Local matcher found multiple overlapping skills — wait for user pick / skip.
-    case awaitingSkillChoice(SkillActivationChoice)
     /// Step detail lives on `PlanProgress`.
     case executing
     case completed(summary: String)

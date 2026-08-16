@@ -145,6 +145,22 @@ nonisolated enum GRDBTaskSchema {
                 ALTER TABLE tasks ADD COLUMN activated_skills TEXT;
             """)
         }
+        migrator.registerMigration("addWorkPlan") { db in
+            let hasWorkPlan = try db.columns(in: "tasks").contains { $0.name == "work_plan_json" }
+            if !hasWorkPlan {
+                try db.execute(sql: """
+                    ALTER TABLE tasks ADD COLUMN work_plan_json TEXT;
+                """)
+            }
+        }
+        migrator.registerMigration("addSkillPersistConsidered") { db in
+            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "skill_persist_considered" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks ADD COLUMN skill_persist_considered INTEGER NOT NULL DEFAULT 0;
+                """)
+            }
+        }
         migrator.registerMigration("addEventProtected") { db in
             // Idempotent: base `schemaSQL` may already include the column on fresh installs.
             let hasProtected = try db.columns(in: "events").contains { $0.name == "protected" }
