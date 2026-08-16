@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dashboardController: DashboardWindowController?
 
     let appState = AppState()
+    private var isQuitting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -35,7 +36,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if isQuitting { return .terminateLater }
+        isQuitting = true
+        Task { @MainActor in
+            await appState.prepareForQuit()
+            finishTerminate()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        finishTerminate()
+    }
+
+    private func finishTerminate() {
         HotkeyManager.shared.stop()
         NotificationCenter.default.removeObserver(self)
     }

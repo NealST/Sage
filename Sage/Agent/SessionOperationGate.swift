@@ -10,6 +10,8 @@ import Foundation
 final class SessionOperationGate {
     private let state: AgentSessionState
     private var workTask: Task<Void, Never>?
+    /// Balanced App Nap / automatic-termination token for user-initiated work.
+    private var activityToken: NSObjectProtocol?
 
     init(state: AgentSessionState) {
         self.state = state
@@ -19,11 +21,13 @@ final class SessionOperationGate {
     func begin() -> Bool {
         guard !state.isTornDown, !state.isBusy else { return false }
         state.isBusy = true
+        beginActivity()
         return true
     }
 
     func end() {
         state.isBusy = false
+        endActivity()
     }
 
     /// Cancels the current work task and waits for it to finish.
@@ -34,6 +38,7 @@ final class SessionOperationGate {
         }
         workTask = nil
         state.isBusy = false
+        endActivity()
     }
 
     /// Soft-stop: terminate child processes and cancel the in-flight task.
@@ -68,5 +73,21 @@ final class SessionOperationGate {
         workTask = work
         await work.value
         return result
+    }
+
+    // MARK: - App Nap
+
+    private func beginActivity() {
+        guard activityToken == nil else { return }
+        activityToken = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .automaticTerminationDisabled, .suddenTerminationDisabled],
+            reason: "Sage agent turn"
+        )
+    }
+
+    private func endActivity() {
+        guard let token = activityToken else { return }
+        activityToken = nil
+        ProcessInfo.processInfo.endActivity(token)
     }
 }

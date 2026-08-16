@@ -227,6 +227,17 @@ final class AppState {
         await disposeProjectSession(projectID: projectID, revealGeneralIfKey: true)
     }
 
+    /// Menu Quit / Cmd+Q: same drain as closing every window, then the process can exit.
+    func prepareForQuit() async {
+        focusPointerSyncTask?.cancel()
+        focusPointerSyncTask = nil
+        let projectIDs = Array(projectSessions.keys)
+        for id in projectIDs {
+            await disposeProjectSession(projectID: id, revealGeneralIfKey: false)
+        }
+        await generalSession.agent.prepareForWindowClose()
+    }
+
     func noteSessionBecameKey(_ session: AgentSession) {
         keySession = session
         isAgentWindowVisible = true
