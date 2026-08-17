@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var eraseMessage: String?
     /// Skills catalog session captured when Settings appears / manage opens.
     @State private var pinnedSkillsSession: AgentSession?
+    @State private var openAtLogin = SageLoginItem.isEnabled
+    @State private var loginItemHint: String?
 
     private enum TestState: Equatable {
         case idle
@@ -32,6 +34,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
                     connectionSection
                     capabilitiesSection
+                    schedulesSettingsSection
                     privacySection
                 }
                 .padding(.horizontal, SageDesign.Spacing.xl)
@@ -49,6 +52,7 @@ struct SettingsView: View {
         .textSelection(.enabled)
         .onAppear {
             pinnedSkillsSession = appState.keySession
+            refreshLoginItem()
         }
         .onDisappear {
             testTask?.cancel()
@@ -230,6 +234,60 @@ struct SettingsView: View {
                 }
             }
             .sagePanelBackground(cornerRadius: 10)
+        }
+    }
+
+    // MARK: - Schedules
+
+    private var schedulesSettingsSection: some View {
+        settingsSection("Schedules") {
+            VStack(spacing: 0) {
+                quickToggleRow(
+                    title: "Open Sage at login",
+                    detail: loginItemHint ?? "So timed jobs can run after a restart.",
+                    isLast: !SageLoginItem.needsApproval,
+                    isOn: Binding(
+                        get: { openAtLogin },
+                        set: { setOpenAtLogin($0) }
+                    )
+                )
+                if SageLoginItem.needsApproval {
+                    sectionDivider
+                    Button {
+                        SageLoginItem.openLoginItemsSettings()
+                    } label: {
+                        HStack {
+                            Text("Allow in Login Items…")
+                                .font(.system(size: SageDesign.Typography.bodySize))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .sagePanelBackground(cornerRadius: 10)
+        }
+    }
+
+    private func setOpenAtLogin(_ enabled: Bool) {
+        do {
+            try SageLoginItem.setEnabled(enabled)
+            refreshLoginItem()
+        } catch {
+            refreshLoginItem()
+            loginItemHint = error.localizedDescription
+        }
+    }
+
+    private func refreshLoginItem() {
+        openAtLogin = SageLoginItem.isEnabled
+        if SageLoginItem.needsApproval {
+            loginItemHint = "Allow Sage in System Settings → Login Items."
+        } else {
+            loginItemHint = nil
         }
     }
 

@@ -65,6 +65,8 @@ extension GRDBTaskRepository {
                 if let flag = row["skill_persist_considered"] as Bool? { return flag }
                 return false
             }(),
+            originScheduleID: (row["origin_schedule_id"] as String?)
+                .flatMap(UUID.init(uuidString:)),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )
@@ -153,7 +155,9 @@ extension GRDBTaskRepository {
             summary: row["summary"],
             topic: row["topic"],
             abstract: row["abstract"],
-            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+            originScheduleID: (row["origin_schedule_id"] as String?)
+                .flatMap(UUID.init(uuidString:))
         )
     }
 

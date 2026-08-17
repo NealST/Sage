@@ -256,7 +256,7 @@ struct WorkspaceChromeView: View {
                     Button {
                         selectRecentTask(item.id)
                     } label: {
-                        let title = item.displayTitle ?? "Task"
+                        let title = item.recentsMenuTitle
                         if item.id == session.agent.state.activeTaskID {
                             Label(title, systemImage: "checkmark")
                         } else {

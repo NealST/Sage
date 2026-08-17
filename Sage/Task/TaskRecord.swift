@@ -48,6 +48,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var activatedSkillNames: Set<String>
     /// Plan already judged persist (or the turn finished without needing a backfill).
     var skillPersistConsidered: Bool
+    /// Set when this task was spawned by a schedule runner (not a window thread).
+    var originScheduleID: UUID?
     var createdAt: Date
     var updatedAt: Date
 
@@ -66,6 +68,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         relatedTaskIDs: [UUID] = [],
         activatedSkillNames: Set<String> = [],
         skillPersistConsidered: Bool = false,
+        originScheduleID: UUID? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -83,6 +86,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.relatedTaskIDs = relatedTaskIDs
         self.activatedSkillNames = activatedSkillNames
         self.skillPersistConsidered = skillPersistConsidered
+        self.originScheduleID = originScheduleID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -103,6 +107,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         relatedTaskIDs = try container.decodeIfPresent([UUID].self, forKey: .relatedTaskIDs) ?? []
         activatedSkillNames = try container.decodeIfPresent(Set<String>.self, forKey: .activatedSkillNames) ?? []
         skillPersistConsidered = try container.decodeIfPresent(Bool.self, forKey: .skillPersistConsidered) ?? false
+        originScheduleID = try container.decodeIfPresent(UUID.self, forKey: .originScheduleID)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -123,6 +128,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encode(relatedTaskIDs, forKey: .relatedTaskIDs)
         try container.encode(activatedSkillNames, forKey: .activatedSkillNames)
         try container.encode(skillPersistConsidered, forKey: .skillPersistConsidered)
+        try container.encodeIfPresent(originScheduleID, forKey: .originScheduleID)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
@@ -131,6 +137,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         case id, status, projectID, summary, topic, abstract, topicUpdatedAt
         case events, workPlan, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
         case skillPersistConsidered
+        case originScheduleID
         case createdAt, updatedAt
     }
 }

@@ -71,12 +71,14 @@ nonisolated enum SkillTipItem: Identifiable, Equatable, Sendable {
     case save(SkillSuggestion)
     case choose(SkillActivationChoice)
     case consolidate(SkillConsolidateSuggestion)
+    case schedule(ScheduleDraft)
 
     var id: UUID {
         switch self {
         case .save(let suggestion): return suggestion.id
         case .choose(let choice): return choice.id
         case .consolidate(let suggestion): return suggestion.id
+        case .schedule(let draft): return draft.id
         }
     }
 
@@ -84,7 +86,7 @@ nonisolated enum SkillTipItem: Identifiable, Equatable, Sendable {
     var allowsAutoDismiss: Bool {
         switch self {
         case .choose: return false
-        case .save, .consolidate: return true
+        case .save, .consolidate, .schedule: return true
         }
     }
 }
@@ -154,6 +156,37 @@ final class SkillTipStore {
         guard case .save(let suggestion) = items.remove(at: index) else { return nil }
         noteMutation()
         return suggestion
+    }
+
+    func enqueueSchedule(_ draft: ScheduleDraft) {
+        items.removeAll {
+            if case .schedule = $0 { return true }
+            return false
+        }
+        items.append(.schedule(draft))
+        noteMutation()
+    }
+
+    func updateSchedule(_ id: UUID, mutate: (inout ScheduleDraft) -> Void) {
+        guard let index = items.firstIndex(where: {
+            if case .schedule(let draft) = $0 { return draft.id == id }
+            return false
+        }) else { return }
+        guard case .schedule(var draft) = items[index] else { return }
+        mutate(&draft)
+        items[index] = .schedule(draft)
+        noteMutation()
+    }
+
+    @discardableResult
+    func confirmSchedule(_ id: UUID) -> ScheduleDraft? {
+        guard let index = items.firstIndex(where: {
+            if case .schedule(let draft) = $0 { return draft.id == id }
+            return false
+        }) else { return nil }
+        guard case .schedule(let draft) = items.remove(at: index) else { return nil }
+        noteMutation()
+        return draft
     }
 
     // MARK: - Recall tips

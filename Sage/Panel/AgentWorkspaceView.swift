@@ -161,11 +161,17 @@ struct AgentWorkspaceView: View {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
             SkillTipsBanner()
                 .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)
+            if let draft = session.skills.scriptScheduleDraft {
+                ScheduleScriptPanel(initial: draft)
+                    .id(draft.openedAt)
+                    .transition(SkillTipChrome.bannerTransition)
+            }
             AgentComposerView(
                 isInputFocused: $isInputFocused,
                 stickToBottom: $stickToBottom
             )
         }
+        .animation(SageDesign.Motion.expandAnimation, value: session.skills.scriptScheduleDraft != nil)
     }
 
     private var bootstrapPlaceholder: some View {

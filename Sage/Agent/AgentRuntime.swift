@@ -42,6 +42,9 @@ final class AgentRuntime {
         set { host.onSkillsCatalogChanged = newValue }
     }
 
+    /// Window sessions use this so a first-run schedule can freeze after the user confirms.
+    var onTaskSettled: ((UUID, WorkPlan?, AgentTaskSettlement) async -> Void)?
+
     // MARK: - Composite UI capabilities (state + plan + streaming)
 
     var isStreaming: Bool {
@@ -234,6 +237,12 @@ final class AgentRuntime {
 
         skills.attach(runtime: self)
         skillRecall.bind(skillHost: { [weak host] in host })
+        turns.onTaskSettled = { [weak self] id, plan, outcome in
+            await self?.onTaskSettled?(id, plan, outcome)
+        }
+        taskStore.onTaskFailed = { [weak self] id, message in
+            await self?.onTaskSettled?(id, self?.state.activeTask?.workPlan, .failed(message))
+        }
         turns.bind(
             slashHost: host,
             executeToolBatch: { [weak self] in await self?.executeCurrentPlanUnlocked() },
@@ -375,6 +384,21 @@ final class AgentRuntime {
         await operations.runAccepted { await self.turns.performSubmit(userText) }
     }
 
+    func performScheduledRun(prompt: String, frozenPlan: WorkPlan?) async {
+        _ = await operations.run {
+            await self.turns.performScheduledRun(prompt: prompt, frozenPlan: frozenPlan)
+        }
+    }
+
+    @discardableResult
+    func spawnScheduledTask(projectID: UUID?, summary: String?, originScheduleID: UUID?) async -> UUID? {
+        await taskStore.spawnScheduledTask(
+            projectID: projectID,
+            summary: summary,
+            originScheduleID: originScheduleID
+        )
+    }
+
     func confirmPendingPlan() async {
         switch turnChrome {
         case .workPlan:
@@ -396,7 +420,11 @@ final class AgentRuntime {
     func cancelPendingPlan() async {
         guard operations.begin() else { return }
         defer { operations.end() }
-        _ = await performCancelPendingPlan()
+        let taskID = state.activeTaskID
+        let cancelled = await performCancelPendingPlan()
+        if cancelled, let taskID {
+            await onTaskSettled?(taskID, nil, .cancelled)
+        }
     }
 
     func resetPhaseToIdle() {
@@ -413,7 +441,10 @@ final class AgentRuntime {
             defer { operations.end() }
             planProgress.replace(plan)
             state.phase = .awaitingConfirmation
-            _ = await performCancelPendingPlan()
+            let taskID = state.activeTaskID
+            if await performCancelPendingPlan(), let taskID {
+                await onTaskSettled?(taskID, nil, .cancelled)
+            }
             return
         }
         state.phase = .idle

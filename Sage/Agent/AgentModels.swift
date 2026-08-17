@@ -165,6 +165,13 @@ enum AgentPhase: Equatable {
     case failed(message: String)
 }
 
+/// How a turn ended. Schedules use this to freeze or fail a first-run `act` confirmation.
+enum AgentTaskSettlement: Sendable, Equatable {
+    case completed
+    case cancelled
+    case failed(String)
+}
+
 /// State for retry countdown display — embedded in the @Observable AgentRuntime.
 struct RetryDisplayState: Equatable {
     var attempt: Int

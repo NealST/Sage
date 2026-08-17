@@ -13,10 +13,31 @@ nonisolated struct TaskSummary: Identifiable, Sendable, Equatable {
     var topic: String?
     var abstract: String?
     var updatedAt: Date
+    /// Set when this row was spawned by a schedule (not a window thread).
+    var originScheduleID: UUID? = nil
+
+    /// Whether Recents should treat this as a scheduled run rather than a user thread.
+    var isScheduled: Bool { originScheduleID != nil }
 
     /// Title for Recents / chrome — nil means the row is not worth listing.
     var displayTitle: String? {
         TopicDriftDetector.threadLabel(topic: topic, abstract: abstract, summary: summary)
+    }
+
+    /// Recents menu label; scheduled runs are marked so they do not look like user threads.
+    var recentsMenuTitle: String {
+        guard let title = displayTitle else { return isScheduled ? "Scheduled" : "Task" }
+        return isScheduled ? "Scheduled · \(title)" : title
+    }
+
+    /// User threads first, then scheduled runs; each group newest-first.
+    static func sortedForRecents(_ summaries: [TaskSummary]) -> [TaskSummary] {
+        summaries.sorted { lhs, rhs in
+            if lhs.isScheduled != rhs.isScheduled {
+                return !lhs.isScheduled && rhs.isScheduled
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
     }
 }
 
@@ -117,4 +138,20 @@ nonisolated protocol TaskRepository: Sendable {
     /// Update per-scope last-active pointers without stomping another window's global focus.
     func rememberScopeActiveTask(projectID: UUID?, taskID: UUID) async throws
     func eraseAllData() async throws
+
+    func listSchedules() async throws -> [ScheduleRecord]
+    func loadSchedule(id: UUID) async throws -> ScheduleRecord?
+    func upsertSchedule(_ schedule: ScheduleRecord) async throws
+    func deleteSchedule(id: UUID) async throws
+    func dueSchedules(at date: Date) async throws -> [ScheduleRecord]
+    func insertScheduleRun(
+        id: UUID,
+        scheduleID: UUID,
+        startedAt: Date,
+        endedAt: Date?,
+        exitCode: Int32?,
+        outputExcerpt: String?
+    ) async throws
+    /// Most recent run log for a schedule, if any.
+    func latestScheduleRun(scheduleID: UUID) async throws -> ScheduleRunRecord?
 }

@@ -50,6 +50,15 @@ protocol SlashCommandHost: AnyObject {
 
     /// Loads skill content, appends a protected event, then marks activated (rolls back on failure).
     func activateSkill(_ skill: SkillRecord) async -> Bool
+
+    func presentScheduleDraft(_ draft: ScheduleDraft)
+    func presentScriptSchedule(prefill command: String?)
+    var scheduleScopeProjectID: UUID? { get }
+    var scheduleScopeLabel: String { get }
+    /// Most recent user request in this chat, excluding slash commands and protected lines.
+    var latestUserRequestText: String? { get }
+    /// Active task to store as `origin_task_id` when the user explicitly schedules this conversation.
+    var scheduleOriginTaskID: UUID? { get }
 }
 
 /// Built-in slash command registered in `SlashCommandRegistry.builtins`.

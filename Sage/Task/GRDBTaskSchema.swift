@@ -170,5 +170,77 @@ nonisolated enum GRDBTaskSchema {
                 """)
             }
         }
+        migrator.registerMigration("addSchedules") { db in
+            try db.execute(sql: """
+                CREATE TABLE schedules (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+                    prompt TEXT,
+                    command TEXT,
+                    cadence_kind TEXT NOT NULL,
+                    cadence_json TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    status TEXT NOT NULL,
+                    next_fire_at REAL,
+                    last_fire_at REAL,
+                    last_status TEXT,
+                    frozen_work_plan_json TEXT,
+                    frozen_skill_names TEXT,
+                    origin_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
+                CREATE INDEX schedules_due
+                ON schedules(enabled, next_fire_at);
+
+                CREATE INDEX schedules_project
+                ON schedules(project_id);
+
+                CREATE TABLE schedule_runs (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+                    started_at REAL NOT NULL,
+                    ended_at REAL,
+                    exit_code INTEGER,
+                    output_excerpt TEXT
+                );
+            """)
+        }
+        migrator.registerMigration("addScheduleLastRunTask") { db in
+            let hasColumn = try db.columns(in: "schedules").contains { $0.name == "last_run_task_id" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE schedules
+                    ADD COLUMN last_run_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
+                """)
+            }
+        }
+        migrator.registerMigration("addScheduleWorkingDirectory") { db in
+            let hasColumn = try db.columns(in: "schedules").contains { $0.name == "working_directory" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE schedules
+                    ADD COLUMN working_directory TEXT;
+                """)
+            }
+        }
+        migrator.registerMigration("addTaskScheduleOrigin") { db in
+            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "origin_schedule_id" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks
+                    ADD COLUMN origin_schedule_id TEXT REFERENCES schedules(id) ON DELETE SET NULL;
+                """)
+            }
+        }
+        migrator.registerMigration("indexScheduleRunsByScheduleStarted") { db in
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS schedule_runs_schedule_started
+                ON schedule_runs(schedule_id, started_at);
+            """)
+        }
     }
 }

@@ -9,12 +9,14 @@ import Foundation
 @MainActor
 final class SessionOperationGate {
     private let state: AgentSessionState
+    private let processOwnerID: UUID
     private var workTask: Task<Void, Never>?
     /// Balanced App Nap / automatic-termination token for user-initiated work.
     private var activityToken: NSObjectProtocol?
 
-    init(state: AgentSessionState) {
+    init(state: AgentSessionState, processOwnerID: UUID = UUID()) {
         self.state = state
+        self.processOwnerID = processOwnerID
     }
 
     @discardableResult
@@ -41,9 +43,9 @@ final class SessionOperationGate {
         endActivity()
     }
 
-    /// Soft-stop: terminate child processes and cancel the in-flight task.
+    /// Soft-stop: terminate this session’s child processes and cancel the in-flight task.
     func requestStop() {
-        ProcessRunner.terminateAll()
+        ProcessRunner.terminateProcesses(ownedBy: processOwnerID)
         workTask?.cancel()
     }
 
@@ -53,8 +55,11 @@ final class SessionOperationGate {
         guard begin() else { return false }
         defer { end(); workTask = nil }
 
+        let owner: UUID? = processOwnerID
         let work = Task { @MainActor in
-            await body()
+            await ProcessRunner.$ownerID.withValue(owner) {
+                await body()
+            }
         }
         workTask = work
         await work.value
@@ -67,8 +72,11 @@ final class SessionOperationGate {
         defer { end(); workTask = nil }
 
         var result = false
+        let owner: UUID? = processOwnerID
         let work = Task { @MainActor in
-            result = await body()
+            await ProcessRunner.$ownerID.withValue(owner) {
+                result = await body()
+            }
         }
         workTask = work
         await work.value

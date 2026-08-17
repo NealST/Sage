@@ -15,14 +15,14 @@ struct AgentComposerView: View {
     @FocusState.Binding var isInputFocused: Bool
     @Binding var stickToBottom: Bool
 
-    @State private var skillSuggestions: [SlashCommandDefinition] = []
+    @State private var slashSuggestions: [ComposerSlashSuggestion] = []
     @State private var selectedSuggestionIndex: Int = 0
 
     var body: some View {
         @Bindable var session = session
 
         VStack(alignment: .leading, spacing: 6) {
-            if !skillSuggestions.isEmpty {
+            if !slashSuggestions.isEmpty {
                 suggestionList
             }
 
@@ -43,7 +43,7 @@ struct AgentComposerView: View {
                     .accessibilityHint(composerAccessibilityHint)
 
                 if !session.draft.isEmpty && !blocksSubmit {
-                    Text(skillSuggestions.isEmpty ? "Submit ⏎" : "Select ⏎")
+                    Text(slashSuggestions.isEmpty ? "Submit ⏎" : "Select ⏎")
                         .font(.system(size: type.micro, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
@@ -86,20 +86,18 @@ struct AgentComposerView: View {
 
     private var suggestionList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(skillSuggestions.enumerated()), id: \.element.id) { index, command in
+            ForEach(Array(slashSuggestions.enumerated()), id: \.element.id) { index, suggestion in
                 Button {
-                    session.draft = "/\(command.name)"
-                    skillSuggestions = []
-                    submit()
+                    applySuggestion(suggestion)
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: command.kind == .builtin ? "bookmark" : "sparkles")
+                        Image(systemName: suggestion.systemImage)
                             .font(.system(size: type.icon))
                             .foregroundStyle(.secondary)
-                        Text("/\(command.name)")
+                        Text(suggestion.title)
                             .font(.system(size: type.body, weight: .medium))
-                        if !command.description.isEmpty {
-                            Text("— \(command.description)")
+                        if !suggestion.description.isEmpty {
+                            Text("— \(suggestion.description)")
                                 .font(.system(size: type.micro))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
@@ -144,7 +142,7 @@ struct AgentComposerView: View {
             return "Run, cancel, or retry the pending plan before sending"
         }
         if blocksTyping { return "Unavailable while Sage is working" }
-        if !skillSuggestions.isEmpty {
+        if !slashSuggestions.isEmpty {
             return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
         }
         return "Press Return to send"
@@ -161,26 +159,31 @@ struct AgentComposerView: View {
 
     @discardableResult
     private func applySelectedSuggestion() -> Bool {
-        guard !skillSuggestions.isEmpty,
-              skillSuggestions.indices.contains(selectedSuggestionIndex)
+        guard !slashSuggestions.isEmpty,
+              slashSuggestions.indices.contains(selectedSuggestionIndex)
         else { return false }
-        let command = skillSuggestions[selectedSuggestionIndex]
-        session.draft = "/\(command.name)"
-        skillSuggestions = []
-        submit()
+        applySuggestion(slashSuggestions[selectedSuggestionIndex])
         return true
     }
 
+    private func applySuggestion(_ suggestion: ComposerSlashSuggestion) {
+        session.draft = suggestion.insertDraft
+        slashSuggestions = []
+        if suggestion.submitOnSelect {
+            submit()
+        }
+    }
+
     private func moveSuggestionSelection(by delta: Int) -> KeyPress.Result {
-        guard !skillSuggestions.isEmpty else { return .ignored }
-        let count = skillSuggestions.count
+        guard !slashSuggestions.isEmpty else { return .ignored }
+        let count = slashSuggestions.count
         selectedSuggestionIndex = (selectedSuggestionIndex + delta + count) % count
         return .handled
     }
 
     private func dismissSuggestionsIfNeeded() -> KeyPress.Result {
-        guard !skillSuggestions.isEmpty else { return .ignored }
-        withAnimation(.easeOut(duration: 0.15)) { skillSuggestions = [] }
+        guard !slashSuggestions.isEmpty else { return .ignored }
+        withAnimation(.easeOut(duration: 0.15)) { slashSuggestions = [] }
         return .handled
     }
 
@@ -189,7 +192,7 @@ struct AgentComposerView: View {
         guard !trimmed.isEmpty else { return }
         guard !blocksSubmit else { return }
         stickToBottom = true
-        skillSuggestions = []
+        slashSuggestions = []
         Task {
             let accepted = await session.agent.submit(trimmed)
             if accepted {
@@ -199,24 +202,54 @@ struct AgentComposerView: View {
     }
 
     private func updateSkillSuggestions(_ draft: String) {
-        guard draft.hasPrefix("/"), !draft.contains(" ") else {
-            if !skillSuggestions.isEmpty {
-                withAnimation(.easeOut(duration: 0.15)) { skillSuggestions = [] }
+        let lowered = draft.lowercased()
+        let next: [ComposerSlashSuggestion]
+        if lowered.hasPrefix("/schedule"), !lowered.hasPrefix("/schedule-") {
+            next = ScheduleCadenceParser.autocompleteInserts(forDraft: draft).map {
+                ComposerSlashSuggestion(
+                    id: $0.id,
+                    title: "/schedule \($0.insert)",
+                    description: $0.description,
+                    insertDraft: "/schedule \($0.insert) ",
+                    submitOnSelect: false,
+                    systemImage: "clock"
+                )
             }
-            return
+        } else if draft.hasPrefix("/"), !draft.contains(" ") {
+            let prefix = String(draft.dropFirst()).lowercased()
+            let available = session.agent.availableSlashCommandDefinitions
+            let filtered = prefix.isEmpty
+                ? available
+                : available.filter { $0.name.lowercased().hasPrefix(prefix) }
+            next = Array(filtered.prefix(6)).map { command in
+                let isSchedule = command.name == "schedule"
+                return ComposerSlashSuggestion(
+                    id: command.name,
+                    title: "/\(command.name)",
+                    description: command.description,
+                    insertDraft: isSchedule ? "/schedule " : "/\(command.name)",
+                    submitOnSelect: !isSchedule,
+                    systemImage: command.kind == .builtin ? "bookmark" : "sparkles"
+                )
+            }
+        } else {
+            next = []
         }
-        let prefix = String(draft.dropFirst()).lowercased()
-        let available = session.agent.availableSlashCommandDefinitions
-        let filtered = prefix.isEmpty
-            ? available
-            : available.filter { $0.name.lowercased().hasPrefix(prefix) }
-        let capped = Array(filtered.prefix(6))
         withAnimation(.easeOut(duration: 0.15)) {
-            let resetIndex = skillSuggestions.isEmpty
-            skillSuggestions = capped
-            if resetIndex || !capped.indices.contains(selectedSuggestionIndex) {
+            let resetIndex = slashSuggestions.isEmpty
+            slashSuggestions = next
+            if resetIndex || !next.indices.contains(selectedSuggestionIndex) {
                 selectedSuggestionIndex = 0
             }
         }
     }
+}
+
+private struct ComposerSlashSuggestion: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String
+    let insertDraft: String
+    let submitOnSelect: Bool
+    let systemImage: String
 }

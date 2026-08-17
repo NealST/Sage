@@ -153,6 +153,27 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         return ok
     }
 
+    func presentScheduleDraft(_ draft: ScheduleDraft) {
+        skills.tips.enqueueSchedule(draft)
+    }
+
+    func presentScriptSchedule(prefill command: String?) {
+        var draft = ScheduleScriptDraft.blank()
+        if let command, !command.isEmpty {
+            draft.command = command
+        }
+        skills.scriptScheduleDraft = draft
+    }
+
+    var scheduleScopeProjectID: UUID? { state.focusedProject?.id }
+    var scheduleScopeLabel: String {
+        state.focusedProject.map { "This Project · \($0.name)" } ?? "General"
+    }
+    var latestUserRequestText: String? {
+        ScheduleRecord.latestUserRequest(in: state.activeTask?.events ?? [])
+    }
+    var scheduleOriginTaskID: UUID? { state.activeTaskID }
+
     /// Slash autocomplete: builtins + not-yet-activated skills.
     var availableSlashCommandDefinitions: [SlashCommandDefinition] {
         let skills = (skillCatalog?.enabledSkills ?? [])

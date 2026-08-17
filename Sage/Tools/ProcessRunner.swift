@@ -14,10 +14,14 @@ nonisolated struct ProcessRunResult: Sendable {
 }
 
 /// Shared process lifecycle for shell / skill scripts.
-/// Registered processes are terminated when the calling Task is cancelled or via `terminateAll()`.
+/// Registered processes are terminated when the calling Task is cancelled
+/// or via `terminateProcesses(ownedBy:)` / `terminateAll()`.
 nonisolated enum ProcessRunner {
+    /// Isolates Stop so one window does not kill another session’s (or a schedule’s) processes.
+    @TaskLocal static var ownerID: UUID?
+
     private static let lock = NSLock()
-    private static var liveProcesses: [ObjectIdentifier: Process] = [:]
+    private static var liveProcesses: [ObjectIdentifier: (process: Process, ownerID: UUID?)] = [:]
 
     /// Runs a process, collecting combined stdout/stderr.
     /// Honors Task cancellation (SIGTERM → brief grace → SIGKILL) and optional timeout.
@@ -84,10 +88,22 @@ nonisolated enum ProcessRunner {
         )
     }
 
-    /// Kill every process still registered (Stop / teardown).
+    /// Kills processes started under `ownerID`.
+    static func terminateProcesses(ownedBy ownerID: UUID) {
+        lock.lock()
+        let processes = liveProcesses.values.compactMap { entry in
+            entry.ownerID == ownerID ? entry.process : nil
+        }
+        lock.unlock()
+        for process in processes {
+            terminate(process)
+        }
+    }
+
+    /// Kill every process still registered (teardown).
     static func terminateAll() {
         lock.lock()
-        let processes = Array(liveProcesses.values)
+        let processes = liveProcesses.values.map(\.process)
         lock.unlock()
         for process in processes {
             terminate(process)
@@ -127,7 +143,7 @@ nonisolated enum ProcessRunner {
 
     private static func register(_ process: Process) {
         lock.lock()
-        liveProcesses[ObjectIdentifier(process)] = process
+        liveProcesses[ObjectIdentifier(process)] = (process, ownerID)
         lock.unlock()
     }
 

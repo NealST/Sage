@@ -35,6 +35,9 @@ final class TurnCoordinator {
     private var reviewRounds = 0
     private var latestUserEventID: UUID?
     private var allowDriftOffer = true
+    /// Scheduled runs keep WorkPlan on the task so the recipe can be frozen.
+    private var keepWorkPlanAfterComplete = false
+    var onTaskSettled: ((UUID, WorkPlan?, AgentTaskSettlement) async -> Void)?
 
     init(
         state: AgentSessionState,
@@ -186,12 +189,52 @@ final class TurnCoordinator {
         let readyForModel = await skillRecall.prepareSkillsForTurn(query: trimmed)
         guard readyForModel else { return true }
 
-        await presentWorkPlan(for: trimmed)
+        await presentWorkPlan(for: trimmed, autoConfirm: false)
         return true
     }
 
+    /// Timed recipe: skip routing. First-run `act` waits on the spawned task.
+    func performScheduledRun(prompt: String, frozenPlan: WorkPlan?) async {
+        resetTurn()
+        keepWorkPlanAfterComplete = true
+        allowDriftOffer = false
+        defer { keepWorkPlanAfterComplete = false }
+
+        let userEvent = AgentEvent(kind: .userInput, content: prompt, protected: true)
+        guard await taskStore.commit(
+            appendEvents: [userEvent],
+            deleteEventIDs: [],
+            mutate: { task in
+                task.status = .active
+                task.pendingPlan = nil
+                if task.summary == nil {
+                    task.summary = String(prompt.prefix(160))
+                }
+                if let frozenPlan {
+                    task.workPlan = frozenPlan
+                }
+            }
+        ) else { return }
+
+        latestUserEventID = userEvent.id
+        state.phase = .thinking
+        state.lastAssistantText = nil
+        streaming.clear()
+        skillRecall.clearTurnCache()
+
+        if let frozenPlan {
+            planApproved = true
+            await activateRecalledSkills(from: frozenPlan)
+            await execute.start()
+            return
+        }
+
+        _ = await skillRecall.prepareSkillsForTurn(query: prompt)
+        await presentWorkPlan(for: prompt, autoConfirm: false)
+    }
+
     /// Plan sub-agent. Confirm only when the strategy will change the Mac.
-    private func presentWorkPlan(for userText: String) async {
+    private func presentWorkPlan(for userText: String, autoConfirm: Bool) async {
         do {
             try Task.checkCancellation()
             let catalogNames = (skillCatalog()?.enabledSkills ?? []).map(\.name)
@@ -212,7 +255,7 @@ final class TurnCoordinator {
 
             applyThreadOffer(from: workPlan)
 
-            if workPlan.requiresConfirmation {
+            if workPlan.requiresConfirmation, !autoConfirm {
                 state.phase = .awaitingConfirmation
                 return
             }
@@ -251,7 +294,7 @@ final class TurnCoordinator {
     func runModelTurn() async {
         if state.activeTask?.workPlan == nil,
            let userText = state.events.last(where: { $0.kind == .userInput })?.content {
-            await presentWorkPlan(for: userText)
+            await presentWorkPlan(for: userText, autoConfirm: false)
             return
         }
         await execute.start()
@@ -319,12 +362,16 @@ final class TurnCoordinator {
     ) async {
         let reply = text.isEmpty ? emptyFallback : text
         let alreadyConsidered = state.activeTask?.skillPersistConsidered == true
+        let settledID = state.activeTaskID
+        let settledPlan = state.activeTask?.workPlan
         guard await taskStore.commit(
             appendEvents: [AgentEvent(kind: .assistantResponse, content: reply)],
             deleteEventIDs: [],
             mutate: { task in
                 task.status = .completed
-                task.workPlan = nil
+                if !keepWorkPlanAfterComplete {
+                    task.workPlan = nil
+                }
                 task.pendingPlan = nil
                 task.skillPersistConsidered = true
             }
@@ -337,7 +384,11 @@ final class TurnCoordinator {
         planProgress.clear()
         topicCoordinator.generateTopicIfNeeded(for: state.activeTask)
 
-        if considerPersist, !alreadyConsidered, let task = state.activeTask {
+        if let settledID {
+            await onTaskSettled?(settledID, settledPlan, .completed)
+        }
+
+        if considerPersist, !alreadyConsidered, !keepWorkPlanAfterComplete, let task = state.activeTask {
             skills.considerPersistenceAfterReview(for: task) { [planner] in
                 await planner.judgePersistence(task: task)
             }

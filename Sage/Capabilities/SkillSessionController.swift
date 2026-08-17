@@ -13,6 +13,8 @@ import Foundation
 final class SkillSessionController {
     let tips = SkillTipStore()
     private(set) var saveJobs: [SkillSaveJob] = []
+    /// `/schedule-script` panel for this window.
+    var scriptScheduleDraft: ScheduleScriptDraft?
 
     private var suggestionGeneration: UInt64 = 0
     private var extractionTaskIDs: Set<UUID> = []
@@ -31,6 +33,7 @@ final class SkillSessionController {
     func invalidatePendingSuggestions() {
         suggestionGeneration &+= 1
         tips.dismissAll()
+        scriptScheduleDraft = nil
     }
 
     /// Await confirmed skill writes before the owning window/session is released.

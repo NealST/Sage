@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 
 struct SkillTipsBanner: View {
+    @Environment(AppState.self) private var appState
     @Environment(AgentSession.self) private var session
     @Environment(AccessibilitySettings.self) private var accessibility
     @Environment(\.sageTypography) private var type
@@ -34,6 +35,8 @@ struct SkillTipsBanner: View {
                         chooseRow(choice)
                     case .consolidate(let suggestion):
                         consolidateRow(suggestion)
+                    case .schedule(let draft):
+                        scheduleRow(draft)
                     }
                 }
             }
@@ -289,6 +292,100 @@ struct SkillTipsBanner: View {
         .accessibilityElement(children: .contain)
     }
 
+    // MARK: - Schedule
+
+    @ViewBuilder
+    private func scheduleRow(_ draft: ScheduleDraft) -> some View {
+        SkillTipChrome.row {
+            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                SkillTipChrome.icon("clock")
+
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Schedule this?")
+                                .font(.system(size: type.caption, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+
+                            Text("\(draft.cadence.shortLabel) · \(draft.scopeLabel)")
+                                .font(.system(size: type.micro))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            Text(draft.prompt.isEmpty
+                                 ? "Write what Sage should do, or use this conversation."
+                                 : draft.prompt)
+                                .font(.system(size: type.micro))
+                                .foregroundStyle(draft.prompt.isEmpty ? .tertiary : .secondary)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityLabel(
+                                    draft.prompt.isEmpty
+                                        ? "No task yet. \(draft.cadence.shortLabel), \(draft.scopeLabel)"
+                                        : "\(draft.prompt), \(draft.cadence.shortLabel), \(draft.scopeLabel)"
+                                )
+                        }
+
+                        Spacer(minLength: SageDesign.Spacing.sm)
+
+                        Button(draft.runOnceNow ? "Save and run" : "Save") {
+                            confirmSchedule(draft)
+                        }
+                        .font(.system(size: type.micro, weight: .semibold))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .help(
+                            draft.runOnceNow
+                                ? "Save this timetable and run it once now."
+                                : "Save this timetable. Sage will run it without opening this chat."
+                        )
+                        .accessibilityLabel(
+                            draft.runOnceNow
+                                ? "Save schedule and run once now"
+                                : "Save schedule"
+                        )
+
+                        SkillTipChrome.dismissButton {
+                            withAnimation(SageDesign.Motion.expandAnimation) {
+                                tips.dismiss(draft.id)
+                            }
+                        }
+                    }
+
+                    if let wording = conversationWording, wording != draft.prompt {
+                        Button("Use this conversation") {
+                            tips.updateSchedule(draft.id) {
+                                $0.prompt = wording
+                                $0.originTaskID = session.agent.state.activeTaskID
+                            }
+                        }
+                        .font(.system(size: type.micro, weight: .medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.accentColor)
+                        .help("Use your latest request in this chat as the scheduled task.")
+                        .accessibilityLabel("Use this conversation as the schedule")
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { draft.runOnceNow },
+                        set: { value in
+                            tips.updateSchedule(draft.id) { $0.runOnceNow = value }
+                        }
+                    )) {
+                        Text("Run once now")
+                    }
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: type.micro))
+                    .help("Run immediately after save. The timetable still fires at the scheduled time.")
+                    .accessibilityLabel("Run once now")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
     // MARK: - Actions / helpers
 
     private func scopeBinding(for suggestion: SkillSuggestion) -> Binding<SkillScope> {
@@ -372,6 +469,26 @@ struct SkillTipsBanner: View {
             scopeByID[suggestion.id] = nil
         }
         session.skills.startSuggestionSave(resolved)
+    }
+
+    private func confirmSchedule(_ draft: ScheduleDraft) {
+        let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        guard tips.confirmSchedule(draft.id) != nil else { return }
+        var saved = draft
+        saved.prompt = prompt
+        let record = ScheduleRecord.agent(from: saved)
+        let trial = saved.runOnceNow
+        Task {
+            let ok = await appState.schedules.save(record, runOnceNow: trial)
+            if !ok, let message = appState.schedules.lastError {
+                session.agent.reportFailure(message)
+            }
+        }
+    }
+
+    private var conversationWording: String? {
+        ScheduleRecord.latestUserRequest(in: session.agent.state.events)
     }
 
     private func seedPrimaryDefaults() {

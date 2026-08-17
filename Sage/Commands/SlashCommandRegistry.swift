@@ -7,6 +7,8 @@ enum SlashCommandRegistry {
     /// Single source of truth for built-in commands. Add new builtins here only.
     static let builtins: [any BuiltinSlashCommand] = [
         RememberSlashCommand(),
+        ScheduleSlashCommand(),
+        ScheduleScriptSlashCommand(),
     ]
 
     /// Autocomplete / help entries: builtins first, then skills.

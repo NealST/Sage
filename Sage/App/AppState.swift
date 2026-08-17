@@ -17,6 +17,7 @@ final class AppState {
     /// Shared persistence for skill enablement flags.
     let skillStateStore: SkillStateStore
     let taskRepository: any TaskRepository
+    let schedules: ScheduleService
 
     private(set) var generalSession: AgentSession
     private(set) var projectSessions: [UUID: AgentSession] = [:]
@@ -26,9 +27,16 @@ final class AppState {
     private var focusPointerSyncTask: Task<Void, Never>?
     /// Hotkey/menu asked to show General before app bootstrap finished.
     private var revealGeneralWhenReady = false
+    /// Notification tap arrived before bootstrap finished.
+    private var pendingScheduleReveal: (projectID: UUID?, taskID: UUID)?
 
     /// Session whose window is key (menu bar / hotkey target).
     private(set) var keySession: AgentSession
+
+    /// Dashboard row to highlight after a script-notification tap.
+    private(set) var focusedScheduleID: UUID?
+    /// Latest `schedule_runs` excerpt for the focused script row.
+    private(set) var focusedScheduleRunLog: String?
 
     /// Back-compat for menu bar and settings that still read `appState.agent`.
     var agent: AgentRuntime { keySession.agent }
@@ -44,6 +52,9 @@ final class AppState {
         }
         if !settings.isConfigured {
             return "Set API key in Settings"
+        }
+        if let title = schedules.runningTitle {
+            return "Scheduled: \(Self.compactStatus(title))"
         }
         switch keySession.agent.state.phase {
         case .idle:
@@ -90,6 +101,12 @@ final class AppState {
         )
         self.generalSession = general
         self.keySession = general
+        self.schedules = ScheduleService(
+            taskRepository: repository,
+            settings: settings,
+            mcpHub: mcpHub,
+            skillStateStore: skillStateStore
+        )
         wireSkillsBroadcast(general)
     }
 
@@ -106,6 +123,7 @@ final class AppState {
 
         generalSession.draft = ""
         let ok = await generalSession.agent.eraseAllData()
+        await schedules.reload()
         keySession = generalSession
         makeKeyAndShow(generalSession)
         return ok
@@ -117,8 +135,13 @@ final class AppState {
         await mcpHub.bootstrap()
         await generalSession.skillCatalog.reloadSkills(projectRoot: nil)
         await generalSession.agent.bootstrap(project: nil, reloadCatalog: false)
+        await schedules.start()
         makeKeyAndShow(generalSession)
         revealGeneralWhenReady = false
+        if let pending = pendingScheduleReveal {
+            pendingScheduleReveal = nil
+            await revealScheduledTask(projectID: pending.projectID, taskID: pending.taskID)
+        }
     }
 
     func toggleKeyAgentWindow() {
@@ -142,6 +165,44 @@ final class AppState {
     func activateForExternalPanels() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Opens the matching window and restores that scheduled task after a notification tap.
+    func revealScheduledTask(projectID: UUID?, taskID: UUID) async {
+        clearFocusedSchedule()
+        if !generalSession.agent.state.didBootstrap {
+            pendingScheduleReveal = (projectID, taskID)
+            return
+        }
+        activateForExternalPanels()
+        if let projectID {
+            do {
+                guard let project = try await taskRepository.loadProject(id: projectID) else {
+                    reportNavigationFailure("Could not find that project.")
+                    return
+                }
+                _ = await openOrFocusProject(project)
+            } catch {
+                reportNavigationFailure("Could not open project: \(error.localizedDescription)")
+                return
+            }
+        } else {
+            showGeneralWindow()
+        }
+        await keySession.agent.activateTask(taskID)
+    }
+
+    /// Highlights a schedule in Dashboard (script notification tap).
+    func revealSchedule(_ id: UUID) async {
+        focusedScheduleID = id
+        activateForExternalPanels()
+        focusedScheduleRunLog = (try? await taskRepository.latestScheduleRun(scheduleID: id))?.outputExcerpt
+    }
+
+    /// Clears Dashboard highlight from a script-notification tap.
+    func clearFocusedSchedule() {
+        focusedScheduleID = nil
+        focusedScheduleRunLog = nil
     }
 
     func showGeneralWindow() {
@@ -334,6 +395,23 @@ final class AppState {
         session.agent.onSkillsCatalogChanged = { [weak self] in
             await self?.reloadSkillsAcrossSessions()
         }
+        session.agent.onTaskSettled = { [weak self] taskID, plan, outcome in
+            guard let self else { return }
+            let watching = self.isWatchingTask(taskID)
+            let postNotification: Bool
+            switch outcome {
+            case .completed:
+                postNotification = !watching
+            case .cancelled, .failed:
+                postNotification = true
+            }
+            await self.schedules.noteSpawnedTaskSettled(
+                taskID: taskID,
+                plan: plan,
+                outcome: outcome,
+                postNotification: postNotification
+            )
+        }
     }
 
     /// Navigation failures should not dirty an unrelated busy project transcript.
@@ -345,6 +423,11 @@ final class AppState {
             keySession.agent.reportFailure(message)
             revealKeySession()
         }
+    }
+
+    private func isWatchingTask(_ taskID: UUID) -> Bool {
+        if generalSession.agent.state.activeTaskID == taskID { return true }
+        return projectSessions.values.contains { $0.agent.state.activeTaskID == taskID }
     }
 
     private func disposeProjectSession(projectID: UUID, revealGeneralIfKey: Bool) async {

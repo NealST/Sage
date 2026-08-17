@@ -15,6 +15,11 @@ final class AgentTaskStore {
     private let skills: SkillSessionController
     private weak var topicCoordinator: TopicCoordinator?
     private weak var skillRecall: SkillRecallCoordinator?
+    /// Scheduled runner: persist the spawned task without moving last-active.
+    private var suppressScopeActivePointer = false
+    var onTaskFailed: ((UUID, String) async -> Void)?
+
+    private var setsScopeActive: Bool { !suppressScopeActivePointer }
 
     static let maxRelatedTaskIDs = 8
 
@@ -59,7 +64,7 @@ final class AgentTaskStore {
                 task,
                 appendEvents: appendEvents,
                 deleteEventIDs: deleteEventIDs,
-                setActive: true
+                setActive: setsScopeActive
             )
             adoptTaskInMemory(task)
             return true
@@ -72,6 +77,7 @@ final class AgentTaskStore {
     @discardableResult
     func createAndActivateTask(relatedTo relatedTaskIDs: [UUID]) async -> UUID? {
         guard !state.isTornDown else { return nil }
+        suppressScopeActivePointer = false
         let scopedRelated = await filterRelatedIDsToScope(relatedTaskIDs)
         let task = TaskRecord(
             projectID: state.focusedProject?.id,
@@ -155,8 +161,38 @@ final class AgentTaskStore {
         )
     }
 
+    /// Creates a task for a schedule runner without closing or activating the window thread.
+    /// `originScheduleID` is persisted so Recents can label the row as scheduled.
+    @discardableResult
+    func spawnScheduledTask(projectID: UUID?, summary: String?, originScheduleID: UUID?) async -> UUID? {
+        guard !state.isTornDown else { return nil }
+        suppressScopeActivePointer = true
+        let task = TaskRecord(
+            projectID: projectID,
+            summary: summary,
+            skillPersistConsidered: true,
+            originScheduleID: originScheduleID
+        )
+        do {
+            try await taskRepository.saveTaskState(task, setActive: false)
+            state.activeTask = task
+            state.activeTaskID = task.id
+            state.phase = .idle
+            state.lastAssistantText = nil
+            planProgress.clear()
+            state.clearTokenUsage()
+            state.activatedSkillNames = []
+            skillRecall?.clearTurnCache()
+            return task.id
+        } catch {
+            state.phase = .failed(message: "Could not create scheduled task: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     func activateTask(_ id: UUID) async {
         guard id != state.activeTaskID else { return }
+        suppressScopeActivePointer = false
 
         if var current = state.activeTask {
             if case .awaitingConfirmation = state.phase, let plan = planProgress.plan ?? current.pendingPlan {
@@ -429,7 +465,7 @@ final class AgentTaskStore {
             updated.pendingPlan = nil
             state.activeTask = updated
             planProgress.clear()
-            try? await taskRepository.saveTaskState(updated, setActive: true)
+            try? await taskRepository.saveTaskState(updated, setActive: setsScopeActive)
             state.refreshSummary(for: updated)
             if updated.events.last?.kind == .toolResult {
                 state.phase = .failed(
@@ -494,7 +530,7 @@ final class AgentTaskStore {
         task.status = .awaitingApproval
         task.updatedAt = .now
         do {
-            try await taskRepository.saveTaskState(task, setActive: true)
+            try await taskRepository.saveTaskState(task, setActive: setsScopeActive)
             state.activeTask = task
             state.refreshSummary(for: task)
             state.phase = .failed(message: message)
@@ -504,6 +540,7 @@ final class AgentTaskStore {
                 message: "Could not save progress. \(error.localizedDescription)"
             )
         }
+        await onTaskFailed?(task.id, message)
     }
 
     func markFailed(_ message: String) async {
@@ -513,12 +550,13 @@ final class AgentTaskStore {
         task.status = .failed
         task.updatedAt = .now
         do {
-            try await taskRepository.saveTaskState(task, setActive: true)
+            try await taskRepository.saveTaskState(task, setActive: setsScopeActive)
             state.activeTask = task
             state.refreshSummary(for: task)
         } catch {
             state.activeTask = task
         }
+        await onTaskFailed?(task.id, message)
     }
 
     // MARK: - Helpers

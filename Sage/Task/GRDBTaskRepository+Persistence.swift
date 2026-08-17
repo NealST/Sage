@@ -26,9 +26,9 @@ extension GRDBTaskRepository {
             INSERT INTO tasks (
                 id, status, project_id, summary, topic, abstract,
                 topic_updated_at, activated_skills, work_plan_json,
-                skill_persist_considered, created_at, updated_at
+                skill_persist_considered, origin_schedule_id, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 project_id = excluded.project_id,
@@ -39,6 +39,7 @@ extension GRDBTaskRepository {
                 activated_skills = excluded.activated_skills,
                 work_plan_json = excluded.work_plan_json,
                 skill_persist_considered = excluded.skill_persist_considered,
+                origin_schedule_id = COALESCE(excluded.origin_schedule_id, tasks.origin_schedule_id),
                 updated_at = excluded.updated_at
             """,
             arguments: [
@@ -52,6 +53,7 @@ extension GRDBTaskRepository {
                 activatedSkillsJSON,
                 workPlanJSON,
                 task.skillPersistConsidered ? 1 : 0,
+                task.originScheduleID?.uuidString,
                 task.createdAt.timeIntervalSince1970,
                 task.updatedAt.timeIntervalSince1970,
             ]

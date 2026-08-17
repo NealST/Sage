@@ -152,6 +152,8 @@ extension GRDBTaskRepository {
             try db.execute(sql: "DELETE FROM task_entities")
             try db.execute(sql: "DELETE FROM events")
             try db.execute(sql: "DELETE FROM app_state")
+            try db.execute(sql: "DELETE FROM schedule_runs")
+            try db.execute(sql: "DELETE FROM schedules")
             try db.execute(sql: "DELETE FROM tasks")
             try db.execute(sql: "DELETE FROM projects")
         }

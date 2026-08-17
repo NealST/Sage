@@ -67,11 +67,15 @@ final class AgentSessionState {
 
     /// Short label for the current thread (chrome wayfinding).
     var threadTitle: String? {
-        TopicDriftDetector.threadLabel(
+        guard let label = TopicDriftDetector.threadLabel(
             topic: activeTask?.topic,
             abstract: activeTask?.abstract,
             summary: activeTask?.summary
-        )
+        ) else { return nil }
+        if activeTask?.originScheduleID != nil {
+            return "Scheduled · \(label)"
+        }
+        return label
     }
 
     func clearTopicDriftOffer() {
@@ -112,14 +116,15 @@ final class AgentSessionState {
             summary: task.summary,
             topic: task.topic,
             abstract: task.abstract,
-            updatedAt: task.updatedAt
+            updatedAt: task.updatedAt,
+            originScheduleID: task.originScheduleID
         )
         if let index = recentSummaries.firstIndex(where: { $0.id == task.id }) {
             recentSummaries[index] = summary
         } else {
             recentSummaries.insert(summary, at: 0)
         }
-        recentSummaries.sort { $0.updatedAt > $1.updatedAt }
+        recentSummaries = TaskSummary.sortedForRecents(recentSummaries)
     }
 
     func removeSummary(id: UUID) {
@@ -146,9 +151,10 @@ final class AgentSessionState {
             summary: prior.summary,
             topic: result.topic,
             abstract: result.abstract,
-            updatedAt: stampedAt
+            updatedAt: stampedAt,
+            originScheduleID: prior.originScheduleID
         )
-        recentSummaries.sort { $0.updatedAt > $1.updatedAt }
+        recentSummaries = TaskSummary.sortedForRecents(recentSummaries)
     }
 
     /// Sync phase with an in-memory plan without embedding the plan graph in `phase`.
