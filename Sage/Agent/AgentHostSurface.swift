@@ -72,7 +72,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
             pathGuardPolicy: state.pathGuardPolicy,
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills,
-            skillHost: self
+            skillHost: self,
+            workPlanKind: state.activeTask?.workPlan?.kind
         )
     }
 

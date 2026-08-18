@@ -41,8 +41,11 @@ final class SkillToolPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             allowed,
-            Set(["read_text_file", "run_shell_command"]).union(SkillToolPolicy.skillToolNames)
+            Set(["read_text_file", "run_shell_command"])
+                .union(SkillToolPolicy.progressiveDisclosureToolNames)
         )
+        XCTAssertFalse(allowed?.contains("run_skill_script") == true)
+        XCTAssertFalse(allowed?.contains("save_skill") == true)
     }
 
     func testAssertAndFilterDefinitions() throws {
@@ -60,16 +63,34 @@ final class SkillToolPolicyTests: XCTestCase {
             )
         )
 
+        XCTAssertThrowsError(
+            try SkillToolPolicy.assertToolAllowed(
+                "run_skill_script",
+                activatedSkillNames: ["demo"],
+                enabledSkills: skills
+            )
+        )
+
         let defs = [
             ToolDefinition(name: "read_text_file", description: "r", parameters: .schemaObject(properties: [:])),
             ToolDefinition(name: "run_shell_command", description: "s", parameters: .schemaObject(properties: [:])),
             ToolDefinition(name: "save_skill", description: "k", parameters: .schemaObject(properties: [:])),
+            ToolDefinition(name: "run_skill_script", description: "x", parameters: .schemaObject(properties: [:])),
         ]
         let filtered = SkillToolPolicy.filterDefinitions(
             defs,
             activatedSkillNames: ["demo"],
             enabledSkills: skills
         )
-        XCTAssertEqual(filtered.map(\.name), ["read_text_file", "save_skill"])
+        XCTAssertEqual(filtered.map(\.name), ["read_text_file"])
+    }
+
+    func testExplicitAllowedToolsCanIncludeSkillScript() throws {
+        let skills = [skill(name: "demo", allowedTools: "read run_skill_script")]
+        try SkillToolPolicy.assertToolAllowed(
+            "run_skill_script",
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
     }
 }

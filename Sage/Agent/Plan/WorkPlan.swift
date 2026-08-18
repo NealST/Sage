@@ -85,9 +85,15 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         var lines = [
             "",
             "## Confirmed work plan",
-            "Follow this plan. Use tools as needed. Do not ask the user to re-approve individual tools.",
-            "Intent: \(intent)",
         ]
+        if kind == .act {
+            lines.append("Follow this plan. Use tools as needed. Do not ask the user to re-approve individual tools.")
+        } else {
+            lines.append(
+                "Follow this plan. This is a \(kind.rawValue) plan — do not change the Mac. Mutating tools are rejected at runtime."
+            )
+        }
+        lines.append("Intent: \(intent)")
         if !approach.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lines.append("Plan:")
             lines.append(approach)

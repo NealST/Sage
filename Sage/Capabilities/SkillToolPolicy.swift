@@ -8,14 +8,18 @@
 import Foundation
 
 nonisolated enum SkillToolPolicy {
-    /// Built-in skill tools — always callable, and always kept in the model tool list
-    /// when restrictions apply.
-    static let skillToolNames: Set<String> = [
+    /// Progressive-disclosure skill tools — always callable when a restriction applies.
+    /// `run_skill_script` and `save_skill` must be listed explicitly in `allowed-tools`.
+    static let progressiveDisclosureToolNames: Set<String> = [
         "load_skill",
         "load_skill_resource",
+    ]
+
+    /// Built-in skill tools (for tests and catalog copy).
+    static let skillToolNames: Set<String> = progressiveDisclosureToolNames.union([
         "run_skill_script",
         "save_skill",
-    ]
+    ])
 
     /// Common frontmatter shorthand → registry tool names.
     private static let aliases: [String: String] = [
@@ -56,7 +60,7 @@ nonisolated enum SkillToolPolicy {
         let activated = enabledSkills.filter { activatedSkillNames.contains($0.name) }
         let declared = activated.flatMap(\.allowedToolNames)
         guard !declared.isEmpty else { return nil }
-        return Set(declared).union(skillToolNames)
+        return Set(declared).union(progressiveDisclosureToolNames)
     }
 
     static func assertToolAllowed(

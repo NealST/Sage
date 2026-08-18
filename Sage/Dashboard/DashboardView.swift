@@ -73,20 +73,26 @@ struct DashboardView: View {
     private var mcpServersSection: some View {
         dashboardSection("MCP Servers") {
             let servers = appState.mcpHub.mcpServers
-            if servers.isEmpty {
-                Text("No servers configured")
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+                Text("MCP tools are full-trust: they are not limited to the project sandbox.")
                     .font(.system(size: SageDesign.Typography.captionSize))
-                    .foregroundStyle(.tertiary)
-                    .padding(SageDesign.Spacing.md)
-            } else {
-                VStack(spacing: SageDesign.Spacing.sm) {
-                    ForEach(servers, id: \.id) { server in
-                        MCPServerRow(server: server) {
-                            appState.mcpHub.retryServer(server.id)
+                    .foregroundStyle(.secondary)
+                if servers.isEmpty {
+                    Text("No servers configured")
+                        .font(.system(size: SageDesign.Typography.captionSize))
+                        .foregroundStyle(.tertiary)
+                        .padding(.vertical, SageDesign.Spacing.sm)
+                } else {
+                    VStack(spacing: SageDesign.Spacing.sm) {
+                        ForEach(servers, id: \.id) { server in
+                            MCPServerRow(server: server) {
+                                appState.mcpHub.retryServer(server.id)
+                            }
                         }
                     }
                 }
             }
+            .padding(SageDesign.Spacing.md)
         }
     }
 

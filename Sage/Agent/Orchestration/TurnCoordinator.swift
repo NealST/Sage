@@ -348,6 +348,7 @@ final class TurnCoordinator {
             await execute.start()
         } catch is CancellationError {
             streaming.clear()
+            await handleStop?(nil)
         } catch {
             // A reviewer failure should not hide a finished execute pass.
             state.reviewFeedback = nil

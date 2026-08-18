@@ -171,6 +171,7 @@ nonisolated struct SearchFilesTool: AgentTool {
             Search for files by name pattern and optionally grep their contents. \
             Paths must stay inside the active sandbox (home ~/ in General, or the focused project root). \
             In a project, omit `path` (or pass ".") to search from the project root. \
+            Symlinks that resolve outside the sandbox are skipped. \
             Returns up to 50 matches. Each result is one line: the file path, optionally followed by \
             ":line_number:matched_line" when content_pattern is used. \
             Use this instead of listing directories manually when looking for specific files.
@@ -240,20 +241,25 @@ nonisolated struct SearchFilesTool: AgentTool {
             try Task.checkCancellation()
             if results.count >= Self.maxResults { break }
 
-            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
+            guard let allowed = PathGuard.resolveEnumeratedURL(fileURL, access: .read) else {
+                enumerator.skipDescendants()
+                continue
+            }
+
+            let values = try? allowed.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
 
             // Skip directories for matching (but enumerator still recurses into them)
             guard values?.isRegularFile == true else { continue }
 
             // Match file name against glob pattern
-            let fileName = fileURL.lastPathComponent
+            let fileName = allowed.lastPathComponent
             guard globMatch(fileName, pattern: namePattern) else { continue }
 
             if let regex = contentRegex {
                 // Content search — skip large or binary files
                 let fileSize = values?.fileSize ?? 0
                 guard fileSize <= Self.maxFileSize else { continue }
-                guard let handle = FileHandle(forReadingAtPath: fileURL.path) else { continue }
+                guard let handle = FileHandle(forReadingAtPath: allowed.path) else { continue }
                 defer { handle.closeFile() }
 
                 // Stream lines to avoid loading entire file into memory
@@ -263,13 +269,13 @@ nonisolated struct SearchFilesTool: AgentTool {
                     if results.count >= Self.maxResults { return false }
                     let range = NSRange(line.startIndex..., in: line)
                     if regex.firstMatch(in: line, range: range) != nil {
-                        results.append("\(PathGuard.displayPath(fileURL.path)):\(lineNumber):\(line)")
+                        results.append("\(PathGuard.displayPath(allowed.path)):\(lineNumber):\(line)")
                     }
                     return results.count < Self.maxResults
                 }
             } else {
                 // Name-only search
-                results.append(PathGuard.displayPath(fileURL.path))
+                results.append(PathGuard.displayPath(allowed.path))
             }
         }
 

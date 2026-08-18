@@ -56,7 +56,8 @@ struct ExecuteServices {
             pathGuardPolicy: policy,
             activatedSkillNames: activated,
             enabledSkills: enabled,
-            skillHost: skillHost
+            skillHost: skillHost,
+            workPlanKind: state.activeTask?.workPlan?.kind
         )
     }
 

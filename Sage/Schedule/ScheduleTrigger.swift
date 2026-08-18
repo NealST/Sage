@@ -51,4 +51,12 @@ final class ScheduleTrigger {
         source.resume()
         timer = source
     }
+
+    /// Drops the wall timer and wake observer so Quit does not fire a new beat.
+    func disarm() {
+        timer?.cancel()
+        timer = nil
+        wakeTask?.cancel()
+        wakeTask = nil
+    }
 }

@@ -62,6 +62,17 @@ final class ScheduleClockTests: XCTestCase {
         XCTAssertNil(ScheduleClock.nextFireDateAfterRun(for: .delay(seconds: 3600)))
     }
 
+    func testIntervalAfterRunUsesCompletionInstant() {
+        let started = Date(timeIntervalSince1970: 1_000)
+        let completed = started.addingTimeInterval(180)
+        let next = ScheduleClock.nextFireDateAfterRun(
+            for: .interval(seconds: 60),
+            from: completed
+        )
+        XCTAssertEqual(next, completed.addingTimeInterval(60))
+        XCTAssertGreaterThan(next ?? .distantPast, started.addingTimeInterval(60))
+    }
+
     func testParserWeekdaysWithPrompt() {
         let parsed = ScheduleCadenceParser.parseAgentArgument("weekdays 9:00 write the standup")
         XCTAssertEqual(parsed?.cadence, .weekdays(hour: 9, minute: 0))

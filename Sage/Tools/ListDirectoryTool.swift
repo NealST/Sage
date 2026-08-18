@@ -12,6 +12,7 @@ nonisolated struct ListDirectoryTool: AgentTool {
             List files and folders in a directory. Paths must stay inside the active sandbox \
             (home ~/ in General, or the focused project root). Relative paths resolve against the project root when focused. \
             In a project, omit `path` (or pass ".") to list the project root. \
+            Symlinks that resolve outside the sandbox are skipped. \
             Output format: one entry per line as "kind\\tsize\\tpath" (kind is "dir" or "file", size in bytes or "-" for dirs). \
             Recursive listing indents child entries with spaces. Capped at 500 entries. \
             Use depth=1 (default) for a quick overview, increase up to 5 for deeper exploration.
@@ -88,15 +89,18 @@ nonisolated struct ListDirectoryTool: AgentTool {
                 truncated = true
                 return
             }
-            let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            guard let allowed = PathGuard.resolveEnumeratedURL(item, access: .read) else {
+                continue
+            }
+            let values = try? allowed.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
             let isDirectory = values?.isDirectory == true
             let kind = isDirectory ? "dir" : "file"
             let size = isDirectory ? "-" : "\(values?.fileSize ?? 0)"
             let indent = String(repeating: "  ", count: currentDepth)
-            lines.append("\(indent)\(kind)\t\(size)\t\(PathGuard.displayPath(item.path))")
+            lines.append("\(indent)\(kind)\t\(size)\t\(PathGuard.displayPath(allowed.path))")
             if isDirectory {
                 listRecursive(
-                    url: item,
+                    url: allowed,
                     depth: depth,
                     currentDepth: currentDepth + 1,
                     skipHidden: skipHidden,

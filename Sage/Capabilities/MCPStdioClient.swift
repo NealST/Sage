@@ -37,6 +37,14 @@ actor MCPStdioClient {
     /// True while a graceful disconnect is in progress — suppresses exit callback.
     private var isDisconnecting = false
 
+    /// Parent-process keys MCP children may inherit. API keys and other secrets stay out.
+    nonisolated private static let inheritedEnvironmentKeys: Set<String> = [
+        "PATH", "HOME", "USER", "LOGNAME", "SHELL",
+        "TMPDIR", "TMP", "TEMP",
+        "LANG", "LC_ALL", "LC_CTYPE",
+        "SSH_AUTH_SOCK",
+    ]
+
     enum ClientError: LocalizedError {
         case notRunning
         case invalidResponse(String)
@@ -186,7 +194,13 @@ actor MCPStdioClient {
         process.standardOutput = stdout
         process.standardError = stderr
 
-        var environment = ProcessInfo.processInfo.environment
+        var environment: [String: String] = [:]
+        let parent = ProcessInfo.processInfo.environment
+        for key in Self.inheritedEnvironmentKeys {
+            if let value = parent[key] {
+                environment[key] = value
+            }
+        }
         for (key, value) in config.env {
             environment[key] = value
         }

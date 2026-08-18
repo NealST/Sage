@@ -85,7 +85,7 @@ final class PlanAgent {
 
     kind:
     - answer: you can reply from conversation context; no need to touch the Mac
-    - observe: need to read, list, or inspect; no lasting change
+    - observe: need to read, list, or inspect; no lasting change. Mutating tools are rejected at runtime.
     - act: will create, edit, delete, run a command, change the clipboard, notify, or otherwise mutate
 
     approach is the written plan for solving this task — not a checklist of tool calls.

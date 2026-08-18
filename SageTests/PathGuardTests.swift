@@ -114,4 +114,31 @@ final class PathGuardTests: XCTestCase {
             nested.resolvingSymlinksInPath().path
         )
     }
+
+    func testEnumeratedSymlinkOutsideProjectIsSkipped() throws {
+        let leak = projectRoot.appendingPathComponent("leak")
+        try FileManager.default.createSymbolicLink(
+            at: leak,
+            withDestinationURL: skillDir
+        )
+        let inside = projectRoot.appendingPathComponent("ok.txt")
+        try "ok".write(to: inside, atomically: true, encoding: .utf8)
+
+        try PathGuard.$policy.withValue(.project(root: projectRoot)) {
+            XCTAssertNil(PathGuard.resolveEnumeratedURL(leak, access: .read))
+            XCTAssertNotNil(PathGuard.resolveEnumeratedURL(inside, access: .read))
+        }
+    }
+
+    func testEnumeratedInProjectFileResolves() throws {
+        let inside = projectRoot.appendingPathComponent("notes.txt")
+        try "hi".write(to: inside, atomically: true, encoding: .utf8)
+        try PathGuard.$policy.withValue(.project(root: projectRoot)) {
+            let resolved = try XCTUnwrap(PathGuard.resolveEnumeratedURL(inside, access: .read))
+            XCTAssertEqual(
+                resolved.resolvingSymlinksInPath().path,
+                inside.resolvingSymlinksInPath().path
+            )
+        }
+    }
 }

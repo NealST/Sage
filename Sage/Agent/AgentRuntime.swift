@@ -116,7 +116,8 @@ final class AgentRuntime {
     Prefer using tools for real actions (files, clipboard, apps, notifications).
     A separate planner already produced the work plan — follow it. Use tools as you go;
     do not wait for the user to approve each call. Expand ~ paths when useful.
-    File and shell paths are sandboxed — stay inside the active sandbox described below.
+    File tools stay inside the active sandbox described below.
+    Shell working directory is sandboxed; the command string itself can still cd or touch other paths. Prefer file tools for reads and writes.
     When rewriting text for the clipboard, use get_clipboard / set_clipboard.
     After tools run, you will see their results — then continue or give a short summary.
     Reply in the same language the user uses.
@@ -241,7 +242,9 @@ final class AgentRuntime {
             await self?.onTaskSettled?(id, plan, outcome)
         }
         taskStore.onTaskFailed = { [weak self] id, message in
-            await self?.onTaskSettled?(id, self?.state.activeTask?.workPlan, .failed(message))
+            guard let self else { return }
+            let plan = self.state.activeTask?.id == id ? self.state.activeTask?.workPlan : nil
+            await self.onTaskSettled?(id, plan, .failed(message))
         }
         turns.bind(
             slashHost: host,
@@ -344,21 +347,19 @@ final class AgentRuntime {
         state.isAcceptingTopicDrift = true
         defer { state.isAcceptingTopicDrift = false }
 
-        guard operations.begin() else { return }
-        defer { operations.end() }
+        _ = await operations.run {
+            self.skills.tips.dismissChoose()
+            self.streaming.clear()
+            guard let result = await self.taskStore.splitOffTurn(from: offer.triggeringUserEventID) else {
+                return
+            }
 
-        skills.tips.dismissChoose()
-
-        streaming.clear()
-        guard let result = await taskStore.splitOffTurn(from: offer.triggeringUserEventID) else {
-            return
+            guard result.needsModelTurn else { return }
+            self.state.phase = .thinking
+            let ready = await self.skillRecall.prepareSkillsForTurn(query: result.userQuery)
+            guard ready else { return }
+            await self.turns.runModelTurn()
         }
-
-        guard result.needsModelTurn else { return }
-        state.phase = .thinking
-        let ready = await skillRecall.prepareSkillsForTurn(query: result.userQuery)
-        guard ready else { return }
-        await turns.runModelTurn()
     }
 
     func stop() {
@@ -509,6 +510,10 @@ final class AgentRuntime {
     }
 
     func activateTask(_ id: UUID) async {
+        guard id != state.activeTaskID else { return }
+        if state.isBusy {
+            await operations.cancelInFlight()
+        }
         await taskStore.activateTask(id)
     }
 

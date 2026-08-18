@@ -12,7 +12,9 @@ nonisolated struct RunShellCommandTool: AgentTool {
             Execute a shell command via /bin/zsh -c and return its output (stdout + stderr combined). \
             Working directory must stay inside the active sandbox \
             (home ~/ in General; the project root when a Project is focused). \
-            Defaults to the sandbox root. Default timeout is 30s (max 120s). \
+            Defaults to the sandbox root. The command string is not sandboxed — `cd`, redirects, and \
+            other paths can leave the working directory. Prefer file tools for reads and writes. \
+            Default timeout is 30s (max 120s). \
             Output is capped at 50KB. Result format: "[exit N]\\n<output>". \
             Dangerous commands (rm -rf /, sudo, etc.) are blocked. \
             Use for: git, grep, find, python, node, brew, make, and other CLI tools.

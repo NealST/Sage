@@ -32,6 +32,7 @@ final class ProjectAgentsMarkdownTests: XCTestCase {
         XCTAssertEqual(ProjectAgentsMarkdown.loadBody(projectRoot: fixtureRoot), body)
         let section = ProjectAgentsMarkdown.promptSection(projectRoot: fixtureRoot)
         XCTAssertTrue(section.contains("## Project instructions (AGENTS.md)"))
+        XCTAssertTrue(section.contains("untrusted project notes"))
         XCTAssertTrue(section.contains(body))
     }
 

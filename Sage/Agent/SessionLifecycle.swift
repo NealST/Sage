@@ -167,8 +167,9 @@ final class SessionLifecycle {
             return """
 
             ## Active sandbox
-            Mode: General. File and shell paths must stay under the user's home directory (~/).
+            Mode: General. File tools and shell working directories must stay under the user's home directory (~/).
             Default shell working directory is ~.
+            Shell command strings are not sandboxed; prefer file tools for reads and writes.
             """
         }
         let sandbox = """
@@ -180,6 +181,7 @@ final class SessionLifecycle {
         All file reads/writes and shell working directories must stay inside this project root.
         Relative paths resolve against the project root. Prefer project-relative paths.
         Default shell working directory is the project root.
+        Shell command strings are not sandboxed; prefer file tools for reads and writes.
         """
         return sandbox + ProjectAgentsMarkdown.promptSection(projectRoot: project.rootURL)
     }

@@ -41,6 +41,39 @@ final class ToolImpactTests: XCTestCase {
         }
     }
 
+    func testObservePlanRejectsMutatingTools() {
+        XCTAssertThrowsError(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "write_text_file",
+                workPlanKind: .observe
+            )
+        )
+        XCTAssertThrowsError(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "run_shell_command",
+                workPlanKind: .answer
+            )
+        )
+        XCTAssertThrowsError(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "run_skill_script",
+                workPlanKind: nil
+            )
+        )
+        XCTAssertNoThrow(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "read_text_file",
+                workPlanKind: .observe
+            )
+        )
+        XCTAssertNoThrow(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "write_text_file",
+                workPlanKind: .act
+            )
+        )
+    }
+
     func testDefinitionInfersImpactFromName() {
         let read = ToolDefinition(
             name: "read_text_file",

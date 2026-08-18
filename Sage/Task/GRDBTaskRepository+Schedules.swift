@@ -33,82 +33,13 @@ extension GRDBTaskRepository {
         }
     }
 
-    func upsertSchedule(_ schedule: ScheduleRecord) throws {
+    func upsertSchedule(_ schedule: ScheduleRecord, scriptRun: ScheduleRunRecord? = nil) throws {
         let pool = try database()
-        let cadenceKind: String
-        let cadenceJSON: String
-        switch schedule.cadence {
-        case .once(let date):
-            cadenceKind = "once"
-            cadenceJSON = Self.jsonObject(["date": date.timeIntervalSince1970])
-        case .interval(let seconds):
-            cadenceKind = "interval"
-            cadenceJSON = Self.jsonObject(["seconds": seconds])
-        case .weekdays(let hour, let minute):
-            cadenceKind = "weekdays"
-            cadenceJSON = Self.jsonObject(["hour": hour, "minute": minute])
-        case .daily(let hour, let minute):
-            cadenceKind = "daily"
-            cadenceJSON = Self.jsonObject(["hour": hour, "minute": minute])
-        case .delay(let seconds):
-            cadenceKind = "delay"
-            cadenceJSON = Self.jsonObject(["seconds": seconds])
-        }
-        let skillsJSON = Self.encodeJSON(schedule.frozenSkillNames)
         try pool.write { db in
-            try db.execute(
-                sql: """
-                INSERT INTO schedules (
-                    id, title, kind, project_id, prompt, command, working_directory,
-                    cadence_kind, cadence_json, enabled, status,
-                    next_fire_at, last_fire_at, last_status,
-                    frozen_work_plan_json, frozen_skill_names, origin_task_id,
-                    last_run_task_id, created_at, updated_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    title = excluded.title,
-                    kind = excluded.kind,
-                    project_id = excluded.project_id,
-                    prompt = excluded.prompt,
-                    command = excluded.command,
-                    working_directory = excluded.working_directory,
-                    cadence_kind = excluded.cadence_kind,
-                    cadence_json = excluded.cadence_json,
-                    enabled = excluded.enabled,
-                    status = excluded.status,
-                    next_fire_at = excluded.next_fire_at,
-                    last_fire_at = excluded.last_fire_at,
-                    last_status = excluded.last_status,
-                    frozen_work_plan_json = excluded.frozen_work_plan_json,
-                    frozen_skill_names = excluded.frozen_skill_names,
-                    origin_task_id = excluded.origin_task_id,
-                    last_run_task_id = excluded.last_run_task_id,
-                    updated_at = excluded.updated_at
-                """,
-                arguments: [
-                    schedule.id.uuidString,
-                    schedule.title,
-                    schedule.kind.rawValue,
-                    schedule.projectID?.uuidString,
-                    schedule.prompt,
-                    schedule.command,
-                    schedule.workingDirectory,
-                    cadenceKind,
-                    cadenceJSON,
-                    schedule.enabled ? 1 : 0,
-                    schedule.status.rawValue,
-                    schedule.nextFireAt?.timeIntervalSince1970,
-                    schedule.lastFireAt?.timeIntervalSince1970,
-                    schedule.lastStatus,
-                    schedule.frozenWorkPlanJSON,
-                    skillsJSON,
-                    schedule.originTaskID?.uuidString,
-                    schedule.lastRunTaskID?.uuidString,
-                    schedule.createdAt.timeIntervalSince1970,
-                    schedule.updatedAt.timeIntervalSince1970,
-                ]
-            )
+            try Self.writeSchedule(schedule, database: db)
+            if let scriptRun {
+                try Self.writeScheduleRun(scriptRun, database: db)
+            }
         }
     }
 
@@ -155,21 +86,16 @@ extension GRDBTaskRepository {
     ) throws {
         let pool = try database()
         try pool.write { db in
-            try db.execute(
-                sql: """
-                INSERT INTO schedule_runs (
-                    id, schedule_id, started_at, ended_at, exit_code, output_excerpt
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                arguments: [
-                    id.uuidString,
-                    scheduleID.uuidString,
-                    startedAt.timeIntervalSince1970,
-                    endedAt?.timeIntervalSince1970,
-                    exitCode.map { Int($0) },
-                    outputExcerpt,
-                ]
+            try Self.writeScheduleRun(
+                ScheduleRunRecord(
+                    id: id,
+                    scheduleID: scheduleID,
+                    startedAt: startedAt,
+                    endedAt: endedAt,
+                    exitCode: exitCode,
+                    outputExcerpt: outputExcerpt
+                ),
+                database: db
             )
         }
     }
@@ -208,6 +134,101 @@ extension GRDBTaskRepository {
             endedAt: (row["ended_at"] as Double?).map { Date(timeIntervalSince1970: $0) },
             exitCode: exit,
             outputExcerpt: row["output_excerpt"]
+        )
+    }
+
+    private static func writeSchedule(_ schedule: ScheduleRecord, database db: Database) throws {
+        let cadenceKind: String
+        let cadenceJSON: String
+        switch schedule.cadence {
+        case .once(let date):
+            cadenceKind = "once"
+            cadenceJSON = jsonObject(["date": date.timeIntervalSince1970])
+        case .interval(let seconds):
+            cadenceKind = "interval"
+            cadenceJSON = jsonObject(["seconds": seconds])
+        case .weekdays(let hour, let minute):
+            cadenceKind = "weekdays"
+            cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+        case .daily(let hour, let minute):
+            cadenceKind = "daily"
+            cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+        case .delay(let seconds):
+            cadenceKind = "delay"
+            cadenceJSON = jsonObject(["seconds": seconds])
+        }
+        let skillsJSON = encodeJSON(schedule.frozenSkillNames)
+        try db.execute(
+            sql: """
+            INSERT INTO schedules (
+                id, title, kind, project_id, prompt, command, working_directory,
+                cadence_kind, cadence_json, enabled, status,
+                next_fire_at, last_fire_at, last_status,
+                frozen_work_plan_json, frozen_skill_names, origin_task_id,
+                last_run_task_id, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                kind = excluded.kind,
+                project_id = excluded.project_id,
+                prompt = excluded.prompt,
+                command = excluded.command,
+                working_directory = excluded.working_directory,
+                cadence_kind = excluded.cadence_kind,
+                cadence_json = excluded.cadence_json,
+                enabled = excluded.enabled,
+                status = excluded.status,
+                next_fire_at = excluded.next_fire_at,
+                last_fire_at = excluded.last_fire_at,
+                last_status = excluded.last_status,
+                frozen_work_plan_json = excluded.frozen_work_plan_json,
+                frozen_skill_names = excluded.frozen_skill_names,
+                origin_task_id = excluded.origin_task_id,
+                last_run_task_id = excluded.last_run_task_id,
+                updated_at = excluded.updated_at
+            """,
+            arguments: [
+                schedule.id.uuidString,
+                schedule.title,
+                schedule.kind.rawValue,
+                schedule.projectID?.uuidString,
+                schedule.prompt,
+                schedule.command,
+                schedule.workingDirectory,
+                cadenceKind,
+                cadenceJSON,
+                schedule.enabled ? 1 : 0,
+                schedule.status.rawValue,
+                schedule.nextFireAt?.timeIntervalSince1970,
+                schedule.lastFireAt?.timeIntervalSince1970,
+                schedule.lastStatus,
+                schedule.frozenWorkPlanJSON,
+                skillsJSON,
+                schedule.originTaskID?.uuidString,
+                schedule.lastRunTaskID?.uuidString,
+                schedule.createdAt.timeIntervalSince1970,
+                schedule.updatedAt.timeIntervalSince1970,
+            ]
+        )
+    }
+
+    private static func writeScheduleRun(_ run: ScheduleRunRecord, database db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO schedule_runs (
+                id, schedule_id, started_at, ended_at, exit_code, output_excerpt
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                run.id.uuidString,
+                run.scheduleID.uuidString,
+                run.startedAt.timeIntervalSince1970,
+                run.endedAt?.timeIntervalSince1970,
+                run.exitCode.map { Int($0) },
+                run.outputExcerpt,
+            ]
         )
     }
 

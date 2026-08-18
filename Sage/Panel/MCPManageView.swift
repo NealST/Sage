@@ -86,13 +86,16 @@ struct MCPManageView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Text("stdio MCP servers (command + args). Tools appear after a successful connect.")
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            Text("stdio MCP servers run with Sage’s full user privileges and are not limited by the project sandbox.")
                 .font(.system(size: type.micro))
                 .foregroundStyle(.secondary)
-            Spacer()
-            Button("Done") { dismiss() }
-                .keyboardShortcut(.defaultAction)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(.horizontal, SageDesign.Spacing.lg)
         .padding(.vertical, SageDesign.Spacing.md)
@@ -167,6 +170,9 @@ struct MCPManageView: View {
                 .textFieldStyle(.roundedBorder)
             TextField("Arguments (space-separated)", text: $draftArgs)
                 .textFieldStyle(.roundedBorder)
+            Text("The command runs as you, with no PathGuard. Only add servers you trust.")
+                .font(.system(size: type.micro))
+                .foregroundStyle(.secondary)
             Text("Example: npx  ·  -y @modelcontextprotocol/server-filesystem /Users/you")
                 .font(.system(size: type.micro))
                 .foregroundStyle(.secondary)

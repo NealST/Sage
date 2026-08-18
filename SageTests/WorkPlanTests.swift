@@ -19,6 +19,7 @@ final class WorkPlanTests: XCTestCase {
         XCTAssertEqual(plan?.sideEffects, "会改 README.md")
         XCTAssertTrue(plan?.requiresConfirmation == true)
         XCTAssertTrue(plan?.promptAppendix.contains("Confirmed work plan") == true)
+        XCTAssertTrue(plan?.promptAppendix.contains("Do not ask the user to re-approve") == true)
     }
 
     func testAcceptsLegacyApproachArray() {
@@ -39,6 +40,8 @@ final class WorkPlanTests: XCTestCase {
         """)
         XCTAssertEqual(plan?.kind, .observe)
         XCTAssertTrue(plan?.approach.contains("根目录") == true)
+        XCTAssertTrue(plan?.promptAppendix.contains("observe plan") == true)
+        XCTAssertTrue(plan?.promptAppendix.contains("Mutating tools are rejected") == true)
     }
 
     func testFallbackIsActMarkdown() {

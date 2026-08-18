@@ -212,7 +212,7 @@ struct SettingsView: View {
                 capabilityRow(
                     symbol: SageDesign.Symbol.mcp,
                     title: "MCP Servers",
-                    detail: "\(connectedMCPCount) connected",
+                    detail: "Full-trust extensions · \(connectedMCPCount) connected",
                     isLast: appState.mcpHub.mcpServers.isEmpty,
                     action: { showMCPManage = true }
                 )
@@ -244,7 +244,7 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 quickToggleRow(
                     title: "Open Sage at login",
-                    detail: loginItemHint ?? "So timed jobs can run after a restart.",
+                    detail: loginItemHint ?? "Schedules only run while Sage is open. Turn this on so Sage launches at login.",
                     isLast: !SageLoginItem.needsApproval,
                     isOn: Binding(
                         get: { openAtLogin },

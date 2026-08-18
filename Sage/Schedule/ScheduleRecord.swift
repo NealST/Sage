@@ -154,6 +154,8 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
     }
 
     /// Advances or clears `nextFireAt` after a successful non-trial run.
+    /// Pass the completion instant so an interval beat longer than the cadence
+    /// cannot immediately re-queue.
     mutating func finishTiming(at now: Date) {
         switch cadence {
         case .once, .delay:
@@ -186,7 +188,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
         switch result {
         case .stopped:
             lastStatus = Self.statusText("Stopped", afterWake: afterWake)
-            completeSuccessfully(isTrial: isTrial, at: started)
+            parkAfterStop(isTrial: isTrial)
             return lastStatus ?? "Stopped"
 
         case .script(let outcome):
@@ -195,7 +197,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
                 markFailed(at: started)
             } else {
                 status = .armed
-                completeSuccessfully(isTrial: isTrial, at: started)
+                completeSuccessfully(isTrial: isTrial)
             }
             return lastStatus ?? outcome.excerpt
 
@@ -208,7 +210,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
                 setFrozenWorkPlan(nil)
                 status = .needsFirstRun
                 lastStatus = Self.statusText(reason, afterWake: afterWake)
-                completeSuccessfully(isTrial: isTrial, at: started)
+                completeSuccessfully(isTrial: isTrial)
                 return "Needs setup. \(reason)"
 
             case .needsConfirmation(let taskID, _):
@@ -226,10 +228,10 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
                 if ok, let plan {
                     setFrozenWorkPlan(plan)
                     status = .armed
-                    completeSuccessfully(isTrial: isTrial, at: started)
+                    completeSuccessfully(isTrial: isTrial)
                 } else if ok {
                     status = frozenWorkPlan == nil ? .needsFirstRun : .armed
-                    completeSuccessfully(isTrial: isTrial, at: started)
+                    completeSuccessfully(isTrial: isTrial)
                 } else {
                     markFailed(at: started)
                 }
@@ -244,11 +246,26 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
         updatedAt = now
     }
 
-    private mutating func completeSuccessfully(isTrial: Bool, at started: Date) {
+    private mutating func completeSuccessfully(isTrial: Bool) {
         if isTrial {
             updatedAt = .now
         } else {
-            finishTiming(at: started)
+            finishTiming(at: .now)
+        }
+    }
+
+    /// Stop does not consume a one-shot, and does not skip the next interval from a stale start time.
+    private mutating func parkAfterStop(isTrial: Bool) {
+        if isTrial {
+            updatedAt = .now
+            return
+        }
+        switch cadence {
+        case .once, .delay:
+            nextFireAt = nil
+            updatedAt = .now
+        case .interval, .weekdays, .daily:
+            finishTiming(at: .now)
         }
     }
 

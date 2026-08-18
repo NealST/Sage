@@ -19,6 +19,8 @@ nonisolated struct ProcessRunResult: Sendable {
 nonisolated enum ProcessRunner {
     /// Isolates Stop so one window does not kill another session’s (or a schedule’s) processes.
     @TaskLocal static var ownerID: UUID?
+    /// Hard stop for combined stdout/stderr so a noisy child cannot balloon memory.
+    static let maxCapturedBytes = 1_048_576
 
     private static let lock = NSLock()
     private static var liveProcesses: [ObjectIdentifier: (process: Process, ownerID: UUID?)] = [:]
@@ -40,7 +42,7 @@ nonisolated enum ProcessRunner {
         process.standardOutput = pipe
         process.standardError = pipe
 
-        let buffer = LockedDataBuffer()
+        let buffer = LockedDataBuffer(maxBytes: maxCapturedBytes)
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             if !chunk.isEmpty {
@@ -77,9 +79,12 @@ nonisolated enum ProcessRunner {
         try Task.checkCancellation()
 
         let data = buffer.data
-        let output = String(data: data, encoding: .utf8)
+        var output = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .ascii)
             ?? "(binary output, \(data.count) bytes)"
+        if buffer.didTruncate {
+            output += "\n… (process output capped at \(maxCapturedBytes) bytes)"
+        }
 
         return ProcessRunResult(
             exitCode: process.terminationStatus,
@@ -130,7 +135,9 @@ nonisolated enum ProcessRunner {
                 }
             }
 
-            let first = try await group.next()!
+            guard let first = try await group.next() else {
+                return false
+            }
             group.cancelAll()
             if first {
                 terminate(process)
@@ -167,12 +174,35 @@ nonisolated enum ProcessRunner {
 /// Thread-safe mutable data buffer for collecting pipe output.
 nonisolated final class LockedDataBuffer: @unchecked Sendable {
     private var _data = Data()
+    private var _didTruncate = false
     private let lock = NSLock()
+    private let maxBytes: Int
+
+    init(maxBytes: Int) {
+        self.maxBytes = max(0, maxBytes)
+    }
 
     nonisolated func append(_ chunk: Data) {
         lock.lock()
-        _data.append(chunk)
-        lock.unlock()
+        defer { lock.unlock() }
+        guard !_didTruncate else { return }
+        let room = maxBytes - _data.count
+        if room <= 0 {
+            _didTruncate = true
+            return
+        }
+        if chunk.count > room {
+            _data.append(chunk.prefix(room))
+            _didTruncate = true
+        } else {
+            _data.append(chunk)
+        }
+    }
+
+    nonisolated var didTruncate: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _didTruncate
     }
 
     nonisolated var data: Data {

@@ -202,6 +202,19 @@ final class ScheduleService {
         runner.stopAgent(forScheduleID: id)
     }
 
+    /// Cancels in-flight beats and the wall timer so Quit does not leave half-written runs.
+    func prepareForQuit() async {
+        trigger.disarm()
+        let ids = Array(runTasks.keys)
+        for id in ids {
+            cancelRun(id)
+        }
+        let tasks = Array(runTasks.values)
+        for task in tasks {
+            await task.value
+        }
+    }
+
     /// First-run `act` confirmation finished on a window session (not the ephemeral runner).
     func noteSpawnedTaskSettled(
         taskID: UUID,
@@ -383,22 +396,12 @@ final class ScheduleService {
             afterWake: job.afterWake,
             isTrial: job.isTrial
         )
-        let persisted = await commitAfterRun(record, snapshotUpdatedAt: snapshotUpdatedAt)
+        let persisted = await commitAfterRun(
+            record,
+            snapshotUpdatedAt: snapshotUpdatedAt,
+            scriptRun: scriptRunRecord(for: record, outcome: scriptOutcome, started: started)
+        )
         guard persisted else { return .performed }
-        if record.kind == .script {
-            do {
-                try await taskRepository.insertScheduleRun(
-                    id: UUID(),
-                    scheduleID: record.id,
-                    startedAt: started,
-                    endedAt: .now,
-                    exitCode: scriptOutcome?.exitCode,
-                    outputExcerpt: record.lastStatus
-                )
-            } catch {
-                lastError = "Couldn’t update that schedule."
-            }
-        }
         postRunNotification(
             for: record,
             body: body,
@@ -438,30 +441,50 @@ final class ScheduleService {
 
     /// Persists run results. Deleted rows are left alone; Pause / Re-plan during the run is kept.
     @discardableResult
-    private func commitAfterRun(_ result: ScheduleRecord, snapshotUpdatedAt: Date) async -> Bool {
+    private func commitAfterRun(
+        _ result: ScheduleRecord,
+        snapshotUpdatedAt: Date,
+        scriptRun: ScheduleRunRecord? = nil
+    ) async -> Bool {
         guard let live = try? await taskRepository.loadSchedule(id: result.id) else {
             forget(result.id)
             return false
         }
         do {
             if live.updatedAt > snapshotUpdatedAt {
-                return try await persist(live.adoptingRunMetadata(from: result))
+                return try await persist(live.adoptingRunMetadata(from: result), scriptRun: scriptRun)
             }
-            return try await persist(result)
+            return try await persist(result, scriptRun: scriptRun)
         } catch {
             lastError = "Couldn’t update that schedule."
             return false
         }
     }
 
+    private func scriptRunRecord(
+        for record: ScheduleRecord,
+        outcome: ScheduleScriptOutcome?,
+        started: Date
+    ) -> ScheduleRunRecord? {
+        guard record.kind == .script else { return nil }
+        return ScheduleRunRecord(
+            id: UUID(),
+            scheduleID: record.id,
+            startedAt: started,
+            endedAt: .now,
+            exitCode: outcome?.exitCode,
+            outputExcerpt: record.lastStatus
+        )
+    }
+
     /// Returns `false` when the row was deleted while this write was in flight.
     @discardableResult
-    private func persist(_ record: ScheduleRecord) async throws -> Bool {
+    private func persist(_ record: ScheduleRecord, scriptRun: ScheduleRunRecord? = nil) async throws -> Bool {
         if deletedIDs.contains(record.id) {
             forget(record.id)
             return false
         }
-        try await taskRepository.upsertSchedule(record)
+        try await taskRepository.upsertSchedule(record, scriptRun: scriptRun)
         if deletedIDs.contains(record.id) {
             try? await taskRepository.deleteSchedule(id: record.id)
             forget(record.id)

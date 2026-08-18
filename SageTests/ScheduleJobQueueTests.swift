@@ -202,7 +202,7 @@ final class ScheduleJobQueueTests: XCTestCase {
         XCTAssertTrue(record.enabled)
     }
 
-    func testApplyRunStoppedSkipsThisBeat() {
+    func testApplyRunStoppedSkipsThisBeat() throws {
         let started = Date(timeIntervalSince1970: 1_000)
         var record = ScheduleRecord(
             title: "script",
@@ -220,8 +220,53 @@ final class ScheduleJobQueueTests: XCTestCase {
         )
         XCTAssertEqual(body, "Ran after wake. Stopped")
         XCTAssertEqual(record.status, .armed)
-        XCTAssertEqual(record.nextFireAt, started.addingTimeInterval(60))
+        let next = try XCTUnwrap(record.nextFireAt)
+        XCTAssertGreaterThan(next.timeIntervalSinceNow, 50)
+        XCTAssertLessThan(next.timeIntervalSinceNow, 70)
         XCTAssertFalse(record.lastStatus?.contains("Failed") == true)
+    }
+
+    func testApplyRunIntervalAdvancesFromCompletionNotStart() throws {
+        let started = Date.now.addingTimeInterval(-180)
+        var record = ScheduleRecord(
+            title: "script",
+            kind: .script,
+            cadence: .interval(seconds: 60),
+            enabled: true,
+            status: .armed,
+            nextFireAt: started
+        )
+        _ = record.applyRun(
+            .script(ScheduleScriptOutcome(excerpt: "ok", exitCode: 0, failed: false)),
+            started: started,
+            afterWake: false,
+            isTrial: false
+        )
+        let next = try XCTUnwrap(record.nextFireAt)
+        XCTAssertGreaterThan(next.timeIntervalSinceNow, 50)
+        XCTAssertLessThan(next.timeIntervalSinceNow, 70)
+        XCTAssertGreaterThan(next, started.addingTimeInterval(60))
+    }
+
+    func testApplyRunStoppedDoesNotConsumeOnce() {
+        let fire = Date(timeIntervalSince1970: 2_000)
+        var record = ScheduleRecord(
+            title: "once",
+            kind: .script,
+            cadence: .once(date: fire),
+            enabled: true,
+            status: .armed,
+            nextFireAt: fire
+        )
+        _ = record.applyRun(
+            .stopped,
+            started: fire,
+            afterWake: false,
+            isTrial: false
+        )
+        XCTAssertTrue(record.enabled)
+        XCTAssertNil(record.nextFireAt)
+        XCTAssertEqual(record.status, .armed)
     }
 
     func testApplyRunAgentNeedsConfirmation() {

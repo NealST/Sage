@@ -153,6 +153,12 @@ nonisolated enum PathGuard: Sendable {
         }
     }
 
+    /// Resolved URL when `url` stays inside the current sandbox for `access`.
+    /// Directory walks use this so symlink targets outside the project or home are skipped.
+    nonisolated static func resolveEnumeratedURL(_ url: URL, access: Access = .read) -> URL? {
+        try? resolveAllowed(url.path, access: access)
+    }
+
     /// Check if a resolved path falls under any read-allowlisted directory.
     nonisolated private static func isInReadAllowlist(_ resolvedPath: String) -> Bool {
         for allowed in readAllowlist {

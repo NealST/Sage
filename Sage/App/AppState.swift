@@ -292,6 +292,7 @@ final class AppState {
     func prepareForQuit() async {
         focusPointerSyncTask?.cancel()
         focusPointerSyncTask = nil
+        await schedules.prepareForQuit()
         let projectIDs = Array(projectSessions.keys)
         for id in projectIDs {
             await disposeProjectSession(projectID: id, revealGeneralIfKey: false)
