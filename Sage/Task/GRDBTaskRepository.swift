@@ -580,6 +580,32 @@ actor GRDBTaskRepository: TaskRepository {
         }
     }
 
+    func updateWorkingMemory(taskID: UUID, memory: TaskWorkingMemory?) throws {
+        let pool = try database()
+        let json: String?
+        if let memory, memory.hasContent {
+            json = (try? JSONEncoder().encode(memory))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        } else {
+            json = nil
+        }
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                UPDATE tasks
+                SET working_memory_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    json,
+                    Date.now.timeIntervalSince1970,
+                    taskID.uuidString,
+                ]
+            )
+        }
+    }
+
     func deleteTask(id: UUID) throws {
         let pool = try database()
         try pool.write { db in

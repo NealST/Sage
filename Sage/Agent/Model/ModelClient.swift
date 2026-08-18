@@ -214,15 +214,24 @@ actor ModelClient {
         events: [AgentEvent],
         tools: [ToolDefinition],
         settings: ModelSettingsSnapshot,
+        toolChoice: String? = nil,
+        temperature: Double? = nil,
         retryPolicy: RetryPolicy = .default
     ) async throws -> ModelTurn {
         let url = try chatCompletionsURL(settings: settings)
+        let resolvedChoice: String?
+        if let toolChoice {
+            resolvedChoice = tools.isEmpty ? nil : toolChoice
+        } else {
+            resolvedChoice = tools.isEmpty ? nil : "auto"
+        }
         let encodedBody = try JSONEncoder().encode(
             ChatCompletionRequest(
                 model: settings.model,
                 messages: events.map(APIMessage.init),
                 tools: tools.isEmpty ? nil : tools.map(APITool.init),
-                toolChoice: tools.isEmpty ? nil : "auto"
+                toolChoice: resolvedChoice,
+                temperature: temperature
             )
         )
 

@@ -277,6 +277,7 @@ struct ToolCallView: View {
         case "load_skill_resource": return "doc.text.magnifyingglass"
         case "run_skill_script": return "applescript"
         case "save_skill": return "square.and.arrow.down.on.square"
+        case "recall_task_transcript": return "clock.arrow.circlepath"
         default: return SageDesign.Symbol.tools
         }
     }

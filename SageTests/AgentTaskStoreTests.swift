@@ -69,7 +69,32 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(state.phase, .awaitingConfirmation)
     }
 
-    func testApplyBeginNewOpensAFreshTask() async throws {
+    func testBeginNewTaskDoesNotInheritWorkingMemory() async throws {
+        let (repository, store, state) = try makeStore()
+        let first = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
+        let foldedFrom = AgentEvent(kind: .userInput, content: "clean downloads")
+        let foldedThrough = AgentEvent(kind: .assistantResponse, content: "listed files")
+        XCTAssertTrue(
+            await store.commit(
+                appendEvents: [foldedFrom, foldedThrough],
+                deleteEventIDs: []
+            ) { task in
+                task.workingMemory = .makeStructured(
+                    foldedFromEventID: foldedFrom.id,
+                    foldedThroughEventID: foldedThrough.id,
+                    overview: "Clean Downloads"
+                )
+            }
+        )
+
+        let second = try XCTUnwrap(await store.beginNewTask(relatedTo: []))
+        XCTAssertNotEqual(second, first)
+        XCTAssertNil(state.activeTask?.workingMemory)
+
+        let archived = try await repository.loadTask(id: first)
+        XCTAssertEqual(archived?.workingMemory?.overview, "Clean Downloads")
+    }
+
         let (_, store, state) = try makeStore()
         let first = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
         _ = await store.commit(

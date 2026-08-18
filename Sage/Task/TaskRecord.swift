@@ -41,6 +41,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var events: [AgentEvent]
     /// Strategy from the plan sub-agent (intent + approach). Not tool steps.
     var workPlan: WorkPlan?
+    /// Model-only fold of older turns. Nil means the prompt still uses raw events.
+    /// Never shown in the transcript, Recents, or chrome.
+    var workingMemory: TaskWorkingMemory?
     var pendingPlan: AgentPlan?
     var entities: [TaskEntity]
     var relatedTaskIDs: [UUID]
@@ -63,6 +66,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         topicUpdatedAt: Date? = nil,
         events: [AgentEvent] = [],
         workPlan: WorkPlan? = nil,
+        workingMemory: TaskWorkingMemory? = nil,
         pendingPlan: AgentPlan? = nil,
         entities: [TaskEntity] = [],
         relatedTaskIDs: [UUID] = [],
@@ -81,6 +85,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.topicUpdatedAt = topicUpdatedAt
         self.events = events
         self.workPlan = workPlan
+        self.workingMemory = workingMemory
         self.pendingPlan = pendingPlan
         self.entities = entities
         self.relatedTaskIDs = relatedTaskIDs
@@ -102,6 +107,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         topicUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .topicUpdatedAt)
         events = try container.decode([AgentEvent].self, forKey: .events)
         workPlan = try container.decodeIfPresent(WorkPlan.self, forKey: .workPlan)
+        workingMemory = try container.decodeIfPresent(TaskWorkingMemory.self, forKey: .workingMemory)
         pendingPlan = try container.decodeIfPresent(AgentPlan.self, forKey: .pendingPlan)
         entities = try container.decodeIfPresent([TaskEntity].self, forKey: .entities) ?? []
         relatedTaskIDs = try container.decodeIfPresent([UUID].self, forKey: .relatedTaskIDs) ?? []
@@ -123,6 +129,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(topicUpdatedAt, forKey: .topicUpdatedAt)
         try container.encode(events, forKey: .events)
         try container.encodeIfPresent(workPlan, forKey: .workPlan)
+        try container.encodeIfPresent(workingMemory, forKey: .workingMemory)
         try container.encodeIfPresent(pendingPlan, forKey: .pendingPlan)
         try container.encode(entities, forKey: .entities)
         try container.encode(relatedTaskIDs, forKey: .relatedTaskIDs)
@@ -135,7 +142,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, status, projectID, summary, topic, abstract, topicUpdatedAt
-        case events, workPlan, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
+        case events, workPlan, workingMemory, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
         case skillPersistConsidered
         case originScheduleID
         case createdAt, updatedAt

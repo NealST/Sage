@@ -118,6 +118,8 @@ nonisolated protocol TaskRepository: Sendable {
         abstract: String,
         topicUpdatedAt: Date
     ) async throws
+    /// Updates only the working-memory blob — safe against concurrent event writes.
+    func updateWorkingMemory(taskID: UUID, memory: TaskWorkingMemory?) async throws
     /// Deletes a task and cascaded rows (events, plans, relations).
     func deleteTask(id: UUID) async throws
     /// Sets focus + active task together (enforces project/task scope invariant).

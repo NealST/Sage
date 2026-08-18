@@ -242,5 +242,14 @@ nonisolated enum GRDBTaskSchema {
                 ON schedule_runs(schedule_id, started_at);
             """)
         }
+        migrator.registerMigration("addTaskWorkingMemory") { db in
+            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "working_memory_json" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks
+                    ADD COLUMN working_memory_json TEXT;
+                """)
+            }
+        }
     }
 }

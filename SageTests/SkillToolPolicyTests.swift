@@ -93,4 +93,32 @@ final class SkillToolPolicyTests: XCTestCase {
             enabledSkills: skills
         )
     }
+
+    func testRecallStaysAvailableUnderSkillRestriction() throws {
+        let skills = [skill(name: "demo", allowedTools: "read_text_file")]
+        try SkillToolPolicy.assertToolAllowed(
+            RecallTaskTranscriptTool.name,
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
+        let defs = [
+            ToolDefinition(
+                name: "read_text_file",
+                description: "r",
+                parameters: .schemaObject(properties: [:])
+            ),
+            ToolDefinition(
+                name: "run_shell_command",
+                description: "s",
+                parameters: .schemaObject(properties: [:])
+            ),
+            RecallTaskTranscriptTool.definition,
+        ]
+        let filtered = SkillToolPolicy.filterDefinitions(
+            defs,
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
+        XCTAssertEqual(filtered.map(\.name), ["read_text_file", RecallTaskTranscriptTool.name])
+    }
 }

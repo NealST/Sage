@@ -37,6 +37,7 @@ nonisolated struct ToolDefinition: Sendable {
         "get_system_volume",
         "load_skill",
         "load_skill_resource",
+        "recall_task_transcript",
     ]
 
     static func requiresConfirmation(forToolNamed name: String) -> Bool {

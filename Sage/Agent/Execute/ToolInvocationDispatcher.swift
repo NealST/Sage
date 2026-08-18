@@ -29,6 +29,10 @@ nonisolated enum ToolInvocationDispatcher {
             enabledSkills: enabledSkills
         )
 
+        if name == RecallTaskTranscriptTool.name {
+            return try await RecallTaskTranscriptTool.execute(argumentsJSON: argumentsJSON)
+        }
+
         if name.hasPrefix("mcp__") {
             guard let mcp else {
                 throw ToolError.operationFailed("MCP tools are unavailable.")

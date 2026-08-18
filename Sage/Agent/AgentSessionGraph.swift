@@ -21,6 +21,7 @@ struct AgentSessionGraph {
     let operations: SessionOperationGate
     let lifecycle: SessionLifecycle
     let turns: TurnCoordinator
+    let contextCompactor: ContextCompactor
 
     static func assemble(
         settings: ModelSettings,
@@ -82,7 +83,18 @@ struct AgentSessionGraph {
             state: state,
             taskRepository: taskRepository
         )
-        taskStore.bind(topicCoordinator: topicCoordinator, skillRecall: skillRecall)
+        let contextCompactor = ContextCompactor(
+            state: state,
+            taskStore: taskStore,
+            modelGateway: modelGateway,
+            settings: settings
+        )
+        modelGateway.bind(compact: contextCompactor)
+        taskStore.bind(
+            topicCoordinator: topicCoordinator,
+            skillRecall: skillRecall,
+            contextCompactor: contextCompactor
+        )
 
         let operations = SessionOperationGate(state: state)
         let lifecycle = SessionLifecycle(
@@ -122,7 +134,8 @@ struct AgentSessionGraph {
             topicCoordinator: topicCoordinator,
             operations: operations,
             lifecycle: lifecycle,
-            turns: turns
+            turns: turns,
+            contextCompactor: contextCompactor
         )
     }
 }

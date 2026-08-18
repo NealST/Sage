@@ -139,6 +139,8 @@ nonisolated enum ToolCallPresentation {
             let action = display(args["action"]) ?? "save"
             let name = display(args["name"]) ?? "skill"
             return action == "enhance" ? "Enhance skill: \(name)" : "Save skill: \(name)"
+        case "recall_task_transcript":
+            return "Recall earlier turns"
         default:
             if name.hasPrefix("mcp__") {
                 return name.split(separator: "__").last.map(String.init)?

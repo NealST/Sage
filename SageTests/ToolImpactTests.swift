@@ -14,6 +14,7 @@ final class ToolImpactTests: XCTestCase {
             "get_system_volume",
             "load_skill",
             "load_skill_resource",
+            "recall_task_transcript",
         ] {
             XCTAssertFalse(
                 ToolDefinition.requiresConfirmation(forToolNamed: name),
@@ -63,6 +64,12 @@ final class ToolImpactTests: XCTestCase {
         XCTAssertNoThrow(
             try ToolInvocationDispatcher.assertMutatingToolsAllowed(
                 for: "read_text_file",
+                workPlanKind: .observe
+            )
+        )
+        XCTAssertNoThrow(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "recall_task_transcript",
                 workPlanKind: .observe
             )
         )

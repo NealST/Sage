@@ -27,6 +27,7 @@ final class AgentRuntime {
     @ObservationIgnored let operations: SessionOperationGate
     @ObservationIgnored let lifecycle: SessionLifecycle
     @ObservationIgnored let router: CompositeTaskRouter
+    @ObservationIgnored let contextCompactor: ContextCompactor
 
     @ObservationIgnored let tools: ToolRegistry
     @ObservationIgnored let taskRepository: any TaskRepository
@@ -167,6 +168,7 @@ final class AgentRuntime {
         self.operations = graph.operations
         self.lifecycle = graph.lifecycle
         self.turns = graph.turns
+        self.contextCompactor = graph.contextCompactor
 
         skills.attach(runtime: self)
         turns.onTaskSettled = { [weak self] id, plan, outcome in
@@ -214,6 +216,7 @@ final class AgentRuntime {
     }
 
     func prepareForWindowClose() async {
+        contextCompactor.cancel()
         await lifecycle.prepareForWindowClose()
     }
 

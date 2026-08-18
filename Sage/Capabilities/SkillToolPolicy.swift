@@ -72,7 +72,7 @@ nonisolated enum SkillToolPolicy {
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills
         ) else { return }
-        guard allowed.contains(name) else {
+        guard allowed.contains(name) || name == RecallTaskTranscriptTool.name else {
             throw ToolError.operationFailed(
                 "Tool '\(name)' is not permitted by the activated skill allowed-tools list."
             )
@@ -88,6 +88,8 @@ nonisolated enum SkillToolPolicy {
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills
         ) else { return definitions }
-        return definitions.filter { allowed.contains($0.name) }
+        return definitions.filter {
+            allowed.contains($0.name) || $0.name == RecallTaskTranscriptTool.name
+        }
     }
 }

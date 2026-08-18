@@ -20,15 +20,21 @@ extension GRDBTaskRepository {
             (try? JSONEncoder().encode(plan))
                 .flatMap { String(data: $0, encoding: .utf8) }
         }
+        let workingMemoryJSON: String? = task.workingMemory.flatMap { memory in
+            guard memory.hasContent else { return nil }
+            return (try? JSONEncoder().encode(memory))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        }
 
         try db.execute(
             sql: """
             INSERT INTO tasks (
                 id, status, project_id, summary, topic, abstract,
                 topic_updated_at, activated_skills, work_plan_json,
+                working_memory_json,
                 skill_persist_considered, origin_schedule_id, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 project_id = excluded.project_id,
@@ -38,6 +44,7 @@ extension GRDBTaskRepository {
                 topic_updated_at = COALESCE(excluded.topic_updated_at, tasks.topic_updated_at),
                 activated_skills = excluded.activated_skills,
                 work_plan_json = excluded.work_plan_json,
+                working_memory_json = excluded.working_memory_json,
                 skill_persist_considered = excluded.skill_persist_considered,
                 origin_schedule_id = COALESCE(excluded.origin_schedule_id, tasks.origin_schedule_id),
                 updated_at = excluded.updated_at
@@ -52,6 +59,7 @@ extension GRDBTaskRepository {
                 task.topicUpdatedAt?.timeIntervalSince1970,
                 activatedSkillsJSON,
                 workPlanJSON,
+                workingMemoryJSON,
                 task.skillPersistConsidered ? 1 : 0,
                 task.originScheduleID?.uuidString,
                 task.createdAt.timeIntervalSince1970,

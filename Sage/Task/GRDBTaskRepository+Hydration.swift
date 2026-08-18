@@ -45,6 +45,14 @@ extension GRDBTaskRepository {
             workPlan = nil
         }
 
+        let workingMemory: TaskWorkingMemory?
+        if let json: String = row["working_memory_json"],
+           let data = json.data(using: .utf8) {
+            workingMemory = try? JSONDecoder().decode(TaskWorkingMemory.self, from: data)
+        } else {
+            workingMemory = nil
+        }
+
         return TaskRecord(
             id: id,
             status: status,
@@ -55,6 +63,7 @@ extension GRDBTaskRepository {
             topicUpdatedAt: topicUpdatedAt,
             events: includeHistory ? try loadEvents(taskID: id, database: db) : [],
             workPlan: workPlan,
+            workingMemory: workingMemory,
             pendingPlan: includeHistory ? try loadPlan(taskID: id, database: db) : nil,
             // Entity extraction is not wired; skip the table read on the hot path.
             entities: [],

@@ -11,6 +11,7 @@ struct PreparedModelRequest: Sendable {
     let events: [AgentEvent]
     let tools: [ToolDefinition]
     let settings: ModelSettingsSnapshot
+    let occupancy: Double
 }
 
 /// Owns the remote `ModelClient` and builds/streams chat completions.
@@ -27,7 +28,8 @@ final class AgentModelGateway {
     private let taskRepository: any TaskRepository
     private let projectPromptAppendix: () -> String
     private let streaming: StreamingTextPump
-    private var relatedContextCache: (taskID: UUID, relatedIDs: [UUID], text: String)?
+    private var relatedContextCache: (taskID: UUID, relatedIDs: [UUID], snippets: [RelatedTaskContextSnippet])?
+    private weak var compact: ContextCompactor?
 
     init(
         state: AgentSessionState,
@@ -53,6 +55,10 @@ final class AgentModelGateway {
         self.streaming = streaming
     }
 
+    func bind(compact: ContextCompactor) {
+        self.compact = compact
+    }
+
     func setRetryStatusHandler(_ handler: @escaping @MainActor (RetryStatus) -> Void) async {
         await modelClient.setRetryStatusHandler(handler)
     }
@@ -60,6 +66,9 @@ final class AgentModelGateway {
     /// Single source of truth for tools exposed to the model (and UI).
     func availableToolDefinitions(includeSkills: Bool = true) async -> [ToolDefinition] {
         var defs = tools.definitions + mcpToolDefinitions()
+        if state.activeTask?.workingMemory?.hasContent == true {
+            defs.append(RecallTaskTranscriptTool.definition)
+        }
         guard includeSkills else { return defs }
 
         let skillResult: SkillCatalog.SkillAppendixResult?
@@ -99,21 +108,6 @@ final class AgentModelGateway {
             skillResult = computed
         }
 
-        let skillsAppendix = skillResult?.text ?? ""
-        let relatedAppendix = await relatedContextAppendix()
-        var modelEvents = [
-            AgentEvent(
-                kind: .systemInstruction,
-                content: systemPrompt
-                    + projectPromptAppendix()
-                    + (state.activeTask?.workPlan?.promptAppendix ?? "")
-                    + reviewFeedbackAppendix()
-                    + skillsAppendix
-                    + relatedAppendix
-            )
-        ]
-        modelEvents.append(contentsOf: ContextBudget.select(from: state.events))
-
         let toolDefinitions: [ToolDefinition]
         if includeTools {
             toolDefinitions = await availableToolDefinitions(includeSkills: true)
@@ -121,11 +115,60 @@ final class AgentModelGateway {
             toolDefinitions = []
         }
 
-        return PreparedModelRequest(
-            events: modelEvents,
-            tools: toolDefinitions,
-            settings: snapshot
+        var resolvedTools = toolDefinitions
+        var assembly = await assemblePrompt(
+            tools: resolvedTools,
+            workingMemory: state.activeTask?.workingMemory,
+            skillResult: skillResult
         )
+        if assembly.didExceedBudget {
+            _ = await compact?.handleOverflow(tools: resolvedTools)
+            if includeTools {
+                resolvedTools = await availableToolDefinitions(includeSkills: true)
+            }
+            assembly = await assemblePrompt(
+                tools: resolvedTools,
+                workingMemory: state.activeTask?.workingMemory,
+                skillResult: skillResult
+            )
+        }
+
+        return PreparedModelRequest(
+            events: assembly.events,
+            tools: resolvedTools,
+            settings: snapshot,
+            occupancy: assembly.occupancy
+        )
+    }
+
+    /// Occupancy as if the fold were expanded. Used to discard a snapshot when
+    /// the window grew enough that raw history already fits.
+    func occupancyIgnoringWorkingMemory() async -> Double {
+        let toolDefinitions = await availableToolDefinitions(includeSkills: true)
+        let skillResult = skillRecall.cachedResult
+        let assembly = await assemblePrompt(
+            tools: toolDefinitions,
+            workingMemory: nil,
+            skillResult: skillResult
+        )
+        return assembly.occupancy
+    }
+
+    /// Non-streaming compact pass. Same execute model; no tool calls.
+    func completeForCompaction(
+        events: [AgentEvent],
+        tools: [ToolDefinition]
+    ) async throws -> String {
+        let snapshot = settings.snapshot(for: .execute)
+        let turn = try await modelClient.complete(
+            events: events,
+            tools: tools,
+            settings: snapshot,
+            toolChoice: "none",
+            temperature: 0
+        )
+        state.addTokenUsage(turn.usage)
+        return turn.content ?? ""
     }
 
     /// Non-streaming completion for plan / review sub-agents. Does not publish tokens.
@@ -206,23 +249,47 @@ final class AgentModelGateway {
         }
         let recovered = TextToolCallParser.recover(from: contentBuffer, existing: structuredCalls)
         streaming.flush(recovered.content ?? "")
+        compact?.considerBackground(occupancy: req.occupancy, tools: req.tools)
         return ModelTurn(content: recovered.content, toolCalls: recovered.calls, usage: usage)
+    }
+
+    private func assemblePrompt(
+        tools: [ToolDefinition],
+        workingMemory: TaskWorkingMemory?,
+        skillResult: SkillCatalog.SkillAppendixResult?
+    ) async -> PromptAssembly {
+        let snapshot = settings.snapshot(for: .execute)
+        let budget = PromptBudget.forModel(snapshot.model)
+            .deductingToolDefinitions(tools)
+        return ContextBudget.assemble(
+            PromptLayout(
+                budget: budget,
+                baseInstructions: systemPrompt,
+                projectAppendix: projectPromptAppendix(),
+                workPlanAppendix: state.activeTask?.workPlan?.promptAppendix ?? "",
+                workingMemory: workingMemory,
+                reviewFeedback: reviewFeedbackAppendix(),
+                skillsCatalog: skillResult?.text ?? "",
+                relatedSnippets: await relatedContextSnippets(),
+                events: state.events
+            )
+        )
     }
 
     // MARK: - Related context
 
-    private func relatedContextAppendix() async -> String {
-        guard let task = state.activeTask else { return "" }
+    private func relatedContextSnippets() async -> [RelatedTaskContextSnippet] {
+        guard let task = state.activeTask else { return [] }
         let relatedIDs = Array(
             task.relatedTaskIDs
                 .filter { $0 != task.id }
                 .prefix(3)
         )
-        guard !relatedIDs.isEmpty else { return "" }
+        guard !relatedIDs.isEmpty else { return [] }
         if let cached = relatedContextCache,
            cached.taskID == task.id,
            cached.relatedIDs == relatedIDs {
-            return cached.text
+            return cached.snippets
         }
 
         let snippets: [RelatedTaskContextSnippet]
@@ -232,36 +299,10 @@ final class AgentModelGateway {
                 projectID: state.focusedProject?.id
             )
         } catch {
-            return ""
+            return []
         }
-        guard !snippets.isEmpty else { return "" }
-
-        var lines = ["", "## Related prior work", "Use only if relevant to the current request:"]
-        for related in snippets {
-            let topic = related.topic?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            let summary = related.summary?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            let title = topic ?? summary ?? "Prior task"
-            lines.append("- \(title)")
-            if let abstract = related.abstract?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !abstract.isEmpty {
-                lines.append("  Intent: \(abstract)")
-            }
-            for turn in related.recentDialogue {
-                let clipped = String(
-                    turn.content.trimmingCharacters(in: .whitespacesAndNewlines).prefix(220)
-                )
-                guard !clipped.isEmpty else { continue }
-                switch turn.kind {
-                case .user:
-                    lines.append("  User: \(clipped)")
-                case .assistant:
-                    lines.append("  Assistant: \(clipped)")
-                }
-            }
-        }
-        let text = lines.count > 3 ? lines.joined(separator: "\n") : ""
-        relatedContextCache = (task.id, relatedIDs, text)
-        return text
+        relatedContextCache = (task.id, relatedIDs, snippets)
+        return snippets
     }
 }
 

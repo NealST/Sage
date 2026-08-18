@@ -64,17 +64,19 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
     }
 
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
-        try await ToolInvocationDispatcher.execute(
-            name: name,
-            argumentsJSON: argumentsJSON,
-            tools: tools,
-            mcp: mcpHub,
-            pathGuardPolicy: state.pathGuardPolicy,
-            activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills,
-            skillHost: self,
-            workPlanKind: state.activeTask?.workPlan?.kind
-        )
+        try await taskStore.withActiveTaskContext {
+            try await ToolInvocationDispatcher.execute(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                tools: tools,
+                mcp: mcpHub,
+                pathGuardPolicy: state.pathGuardPolicy,
+                activatedSkillNames: activatedSkillNames,
+                enabledSkills: enabledSkills,
+                skillHost: self,
+                workPlanKind: state.activeTask?.workPlan?.kind
+            )
+        }
     }
 
     // MARK: - SlashCommandHost

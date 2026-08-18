@@ -48,17 +48,19 @@ struct ExecuteServices {
         let policy = state.pathGuardPolicy
         let activated = skillHost.activatedSkillNames
         let enabled = skillHost.enabledSkills
-        return try await ToolInvocationDispatcher.execute(
-            name: name,
-            argumentsJSON: argumentsJSON,
-            tools: tools,
-            mcp: mcp,
-            pathGuardPolicy: policy,
-            activatedSkillNames: activated,
-            enabledSkills: enabled,
-            skillHost: skillHost,
-            workPlanKind: state.activeTask?.workPlan?.kind
-        )
+        return try await taskStore.withActiveTaskContext {
+            try await ToolInvocationDispatcher.execute(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                tools: tools,
+                mcp: mcp,
+                pathGuardPolicy: policy,
+                activatedSkillNames: activated,
+                enabledSkills: enabled,
+                skillHost: skillHost,
+                workPlanKind: state.activeTask?.workPlan?.kind
+            )
+        }
     }
 
     func loadSkillName(from argumentsJSON: String) -> String? {

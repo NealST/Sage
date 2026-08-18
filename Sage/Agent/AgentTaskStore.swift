@@ -15,6 +15,7 @@ final class AgentTaskStore {
     private let skills: SkillSessionController
     private weak var topicCoordinator: TopicCoordinator?
     private weak var skillRecall: SkillRecallCoordinator?
+    private weak var contextCompactor: ContextCompactor?
     /// Scheduled runner: persist the spawned task without moving last-active.
     private var suppressScopeActivePointer = false
     var onTaskFailed: ((UUID, String) async -> Void)?
@@ -35,9 +36,14 @@ final class AgentTaskStore {
         self.skills = skills
     }
 
-    func bind(topicCoordinator: TopicCoordinator, skillRecall: SkillRecallCoordinator) {
+    func bind(
+        topicCoordinator: TopicCoordinator,
+        skillRecall: SkillRecallCoordinator,
+        contextCompactor: ContextCompactor? = nil
+    ) {
         self.topicCoordinator = topicCoordinator
         self.skillRecall = skillRecall
+        self.contextCompactor = contextCompactor
     }
 
     // MARK: - Commit / create
@@ -77,6 +83,7 @@ final class AgentTaskStore {
     @discardableResult
     func createAndActivateTask(relatedTo relatedTaskIDs: [UUID]) async -> UUID? {
         guard !state.isTornDown else { return nil }
+        contextCompactor?.cancel()
         suppressScopeActivePointer = false
         let scopedRelated = await filterRelatedIDsToScope(relatedTaskIDs)
         let task = TaskRecord(
@@ -106,6 +113,7 @@ final class AgentTaskStore {
 
     @discardableResult
     func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
+        contextCompactor?.cancel()
         var inheritedRelated = relatedTaskIDs
 
         if var closing = state.activeTask {
@@ -125,6 +133,7 @@ final class AgentTaskStore {
                     }
                     closing.pendingPlan = nil
                     closing.workPlan = nil
+                    closing.workingMemory = closing.workingMemory?.validated(against: closing.events)
                     closing.updatedAt = .now
                     try await taskRepository.mutateTask(
                         closing,
@@ -166,6 +175,7 @@ final class AgentTaskStore {
     @discardableResult
     func spawnScheduledTask(projectID: UUID?, summary: String?, originScheduleID: UUID?) async -> UUID? {
         guard !state.isTornDown else { return nil }
+        contextCompactor?.cancel()
         suppressScopeActivePointer = true
         let task = TaskRecord(
             projectID: projectID,
@@ -192,6 +202,7 @@ final class AgentTaskStore {
 
     func activateTask(_ id: UUID) async {
         guard id != state.activeTaskID else { return }
+        contextCompactor?.cancel()
         suppressScopeActivePointer = false
 
         if var current = state.activeTask {
@@ -248,6 +259,7 @@ final class AgentTaskStore {
     func splitOffTurn(from userEventID: UUID) async -> SplitOffTurnResult? {
         guard !state.isTornDown else { return nil }
         guard var closing = state.activeTask else { return nil }
+        contextCompactor?.cancel()
         guard let fork = AgentEventHelpers.forkLastUserInput(
             events: closing.events,
             userEventID: userEventID
@@ -260,6 +272,7 @@ final class AgentTaskStore {
         closing.events = fork.kept
         closing.pendingPlan = nil
         closing.workPlan = nil
+        closing.workingMemory = closing.workingMemory?.validated(against: fork.kept)
         closing.updatedAt = .now
         if !closing.events.isEmpty,
            closing.status == .active || closing.status == .awaitingApproval {
@@ -270,6 +283,7 @@ final class AgentTaskStore {
             projectID: closing.projectID ?? state.focusedProject?.id,
             summary: userQuery.isEmpty ? nil : String(userQuery.prefix(160)),
             events: [userEvent],
+            workingMemory: nil,
             pendingPlan: nil,
             relatedTaskIDs: [],
             activatedSkillNames: []
@@ -407,11 +421,31 @@ final class AgentTaskStore {
             merged.abstract = current.abstract
             merged.topicUpdatedAt = current.topicUpdatedAt
         }
+        if merged.workingMemory == nil,
+           let current = state.activeTask,
+           current.id == merged.id {
+            merged.workingMemory = current.workingMemory
+        }
         state.activeTask = merged
         state.refreshSummary(for: merged)
         if let plan = merged.pendingPlan {
             planProgress.replace(plan)
         }
+    }
+
+    /// Writes working memory without replacing events or the plan.
+    @discardableResult
+    func applyWorkingMemory(_ memory: TaskWorkingMemory, to taskID: UUID) async -> Bool {
+        guard memory.hasContent else { return false }
+        guard state.activeTaskID == taskID else { return false }
+        do {
+            try await taskRepository.updateWorkingMemory(taskID: taskID, memory: memory)
+        } catch {
+            return false
+        }
+        guard state.activeTaskID == taskID else { return false }
+        state.activeTask?.workingMemory = memory
+        return true
     }
 
     /// Persist a single step status/result and keep in-memory plan in sync.
@@ -494,5 +528,16 @@ final class AgentTaskStore {
             if !result.contains(id) { result.append(id) }
         }
         return Array(result.prefix(Self.maxRelatedTaskIDs))
+    }
+
+    /// Sets recall TaskLocals for the active task around a tool dispatch.
+    func withActiveTaskContext<T>(
+        _ operation: () async throws -> T
+    ) async rethrows -> T {
+        try await ActiveTaskContext.$repository.withValue(taskRepository) {
+            try await ActiveTaskContext.$taskID.withValue(state.activeTaskID) {
+                try await operation()
+            }
+        }
     }
 }

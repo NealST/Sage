@@ -12,11 +12,12 @@ nonisolated struct ChatCompletionRequest: Encodable {
     let messages: [APIMessage]
     let tools: [APITool]?
     let toolChoice: String?
+    let temperature: Double?
     let stream: Bool?
     let streamOptions: StreamOptions?
 
     enum CodingKeys: String, CodingKey {
-        case model, messages, tools, stream
+        case model, messages, tools, stream, temperature
         case toolChoice = "tool_choice"
         case streamOptions = "stream_options"
     }
@@ -34,6 +35,7 @@ nonisolated struct ChatCompletionRequest: Encodable {
         messages: [APIMessage],
         tools: [APITool]?,
         toolChoice: String?,
+        temperature: Double? = nil,
         stream: Bool? = nil,
         streamOptions: StreamOptions? = nil
     ) {
@@ -41,6 +43,7 @@ nonisolated struct ChatCompletionRequest: Encodable {
         self.messages = messages
         self.tools = tools
         self.toolChoice = toolChoice
+        self.temperature = temperature
         self.stream = stream
         self.streamOptions = streamOptions
     }
@@ -51,6 +54,7 @@ nonisolated struct ChatCompletionRequest: Encodable {
         try container.encode(messages, forKey: .messages)
         try container.encodeIfPresent(tools, forKey: .tools)
         try container.encodeIfPresent(toolChoice, forKey: .toolChoice)
+        try container.encodeIfPresent(temperature, forKey: .temperature)
         try container.encodeIfPresent(stream, forKey: .stream)
         try container.encodeIfPresent(streamOptions, forKey: .streamOptions)
     }
