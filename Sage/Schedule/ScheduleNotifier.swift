@@ -71,7 +71,8 @@ enum ScheduleNotifier {
     }
 
     /// Posts a completion or failure notification. Taps are handled by `AppDelegate`.
-    static func post(_ payload: ScheduleNotificationPayload) {
+    /// Replaces any previous banner for this schedule so interval runs do not stack.
+    static func post(_ payload: ScheduleNotificationPayload, playsSound: Bool) {
         Task {
             let center = UNUserNotificationCenter.current()
             let settings = await center.notificationSettings()
@@ -86,10 +87,10 @@ enum ScheduleNotifier {
             let content = UNMutableNotificationContent()
             content.title = payload.title
             content.body = payload.body
-            content.sound = .default
+            content.sound = playsSound ? .default : nil
             content.userInfo = payload.userInfo as [AnyHashable: Any]
             let request = UNNotificationRequest(
-                identifier: "sage.schedule.\(payload.scheduleID.uuidString).\(UUID().uuidString)",
+                identifier: "sage.schedule.\(payload.scheduleID.uuidString)",
                 content: content,
                 trigger: nil
             )

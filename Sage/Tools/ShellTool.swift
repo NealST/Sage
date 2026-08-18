@@ -43,30 +43,6 @@ nonisolated struct RunShellCommandTool: AgentTool {
 
     private static let maxOutputBytes = 50_000
 
-    /// Commands that are too dangerous to execute.
-    private static let blockedPatterns: [String] = [
-        "rm -rf /",
-        "rm -rf /*",
-        "rm -rf ~/",
-        "rm -rf ~/*",
-        "mkfs",
-        "dd if=",
-        ":(){:|:&};:",
-        "chmod -R 777 /",
-        "chown -R",
-        "> /dev/sda",
-        "shutdown",
-        "reboot",
-        "halt",
-    ]
-
-    /// Keywords that require elevated privileges — block if they appear as a command token.
-    private static let blockedCommands: [String] = [
-        "sudo",
-        "su",
-        "doas",
-    ]
-
     func call(argumentsJSON: String) async throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let command = args.command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -75,8 +51,7 @@ nonisolated struct RunShellCommandTool: AgentTool {
             throw ToolError.invalidArguments("Command cannot be empty.")
         }
 
-        // Safety checks
-        try validateCommand(command)
+        try ShellCommandPolicy.validate(command)
 
         // Resolve working directory (sandbox root when omitted)
         let workDir: URL
@@ -122,35 +97,6 @@ nonisolated struct RunShellCommandTool: AgentTool {
         }
     }
 
-    private func validateCommand(_ command: String) throws {
-        let lowered = command.lowercased()
-
-        // Check for privilege escalation commands anywhere in the pipeline
-        // Split on shell operators to find individual commands
-        let shellTokens = lowered.components(separatedBy: CharacterSet(charactersIn: ";|&\n"))
-        for token in shellTokens {
-            let trimmed = token.trimmingCharacters(in: .whitespaces)
-            for blocked in Self.blockedCommands {
-                if trimmed == blocked
-                    || trimmed.hasPrefix(blocked + " ")
-                    || trimmed.hasPrefix(blocked + "\t")
-                {
-                    throw ToolError.operationFailed(
-                        "Command blocked: '\(blocked)' is not allowed. Run commands as the current user only."
-                    )
-                }
-            }
-        }
-
-        for pattern in Self.blockedPatterns {
-            if lowered.contains(pattern) {
-                throw ToolError.operationFailed(
-                    "Command blocked: contains dangerous pattern '\(pattern)'. This operation is not allowed."
-                )
-            }
-        }
-    }
-
     private func executeCommand(
         command: String,
         workingDirectory: URL,
@@ -169,5 +115,57 @@ nonisolated struct RunShellCommandTool: AgentTool {
             )
         }
         return (result.exitCode, result.output)
+    }
+}
+
+/// Shared denylist for `run_shell_command` and scheduled scripts.
+nonisolated enum ShellCommandPolicy {
+    private static let blockedPatterns: [String] = [
+        "rm -rf /",
+        "rm -rf /*",
+        "rm -rf ~/",
+        "rm -rf ~/*",
+        "mkfs",
+        "dd if=",
+        ":(){:|:&};:",
+        "chmod -R 777 /",
+        "chown -R",
+        "> /dev/sda",
+        "shutdown",
+        "reboot",
+        "halt",
+    ]
+
+    private static let blockedCommands: [String] = [
+        "sudo",
+        "su",
+        "doas",
+    ]
+
+    /// Throws when `command` uses a blocked token or dangerous pattern.
+    static func validate(_ command: String) throws {
+        let lowered = command.lowercased()
+        let shellTokens = lowered.components(separatedBy: CharacterSet(charactersIn: ";|&\n"))
+        for token in shellTokens {
+            let trimmed = token.trimmingCharacters(in: .whitespaces)
+            for blocked in blockedCommands {
+                if trimmed == blocked
+                    || trimmed.hasPrefix(blocked + " ")
+                    || trimmed.hasPrefix(blocked + "\t")
+                {
+                    throw ToolError.operationFailed(
+                        "Command blocked: '\(blocked)' is not allowed. Run commands as the current user only."
+                    )
+                }
+            }
+        }
+
+        for pattern in blockedPatterns {
+            if lowered.contains(pattern) {
+                throw ToolError.operationFailed(
+                    "Command blocked: contains dangerous pattern '\(pattern)'. This operation is not allowed."
+                )
+            }
+        }
     }
 }

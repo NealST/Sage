@@ -146,6 +146,7 @@ final class ScheduleService {
     @discardableResult
     func delete(_ id: UUID) async -> Bool {
         deletedIDs.insert(id)
+        cancelRun(id)
         queue.dequeue(id)
         publishQueue()
         do {
@@ -268,7 +269,8 @@ final class ScheduleService {
                 kind: .agent,
                 projectID: record.projectID,
                 taskID: taskID
-            )
+            ),
+            playsSound: true
         )
     }
 
@@ -381,22 +383,46 @@ final class ScheduleService {
             afterWake: job.afterWake,
             isTrial: job.isTrial
         )
-        await commitAfterRun(record, snapshotUpdatedAt: snapshotUpdatedAt)
+        let persisted = await commitAfterRun(record, snapshotUpdatedAt: snapshotUpdatedAt)
+        guard persisted else { return .performed }
         if record.kind == .script {
-            try? await taskRepository.insertScheduleRun(
-                id: UUID(),
-                scheduleID: record.id,
-                startedAt: started,
-                endedAt: .now,
-                exitCode: scriptOutcome?.exitCode,
-                outputExcerpt: record.lastStatus
-            )
+            do {
+                try await taskRepository.insertScheduleRun(
+                    id: UUID(),
+                    scheduleID: record.id,
+                    startedAt: started,
+                    endedAt: .now,
+                    exitCode: scriptOutcome?.exitCode,
+                    outputExcerpt: record.lastStatus
+                )
+            } catch {
+                lastError = "Couldn’t update that schedule."
+            }
         }
-        postRunNotification(for: record, body: body, taskID: record.lastRunTaskID)
+        postRunNotification(
+            for: record,
+            body: body,
+            taskID: record.lastRunTaskID,
+            notify: beat.notification(isTrial: job.isTrial, cadence: record.cadence)
+        )
         return .performed
     }
 
-    private func postRunNotification(for record: ScheduleRecord, body: String, taskID: UUID?) {
+    private func postRunNotification(
+        for record: ScheduleRecord,
+        body: String,
+        taskID: UUID?,
+        notify: ScheduleNotify
+    ) {
+        let playsSound: Bool
+        switch notify {
+        case .none:
+            return
+        case .silent:
+            playsSound = false
+        case .sound:
+            playsSound = true
+        }
         ScheduleNotifier.post(
             ScheduleNotificationPayload(
                 scheduleID: record.id,
@@ -405,24 +431,26 @@ final class ScheduleService {
                 kind: record.kind,
                 projectID: record.projectID,
                 taskID: taskID
-            )
+            ),
+            playsSound: playsSound
         )
     }
 
     /// Persists run results. Deleted rows are left alone; Pause / Re-plan during the run is kept.
-    private func commitAfterRun(_ result: ScheduleRecord, snapshotUpdatedAt: Date) async {
+    @discardableResult
+    private func commitAfterRun(_ result: ScheduleRecord, snapshotUpdatedAt: Date) async -> Bool {
         guard let live = try? await taskRepository.loadSchedule(id: result.id) else {
             forget(result.id)
-            return
+            return false
         }
         do {
             if live.updatedAt > snapshotUpdatedAt {
-                _ = try await persist(live.adoptingRunMetadata(from: result))
-            } else {
-                _ = try await persist(result)
+                return try await persist(live.adoptingRunMetadata(from: result))
             }
+            return try await persist(result)
         } catch {
             lastError = "Couldn’t update that schedule."
+            return false
         }
     }
 

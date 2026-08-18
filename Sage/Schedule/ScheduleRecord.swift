@@ -63,6 +63,16 @@ nonisolated enum ScheduleCadence: Codable, Sendable, Equatable {
         }
     }
 
+    /// Interval success is expected often; once/daily/weekdays keep a sound.
+    var playsSuccessSound: Bool {
+        switch self {
+        case .interval:
+            return false
+        case .once, .delay, .weekdays, .daily:
+            return true
+        }
+    }
+
     private static func clockLabel(hour: Int, minute: Int) -> String {
         String(format: "%d:%02d", hour, minute)
     }
@@ -422,6 +432,32 @@ nonisolated enum ScheduleBeatResult: Sendable, Equatable {
     case script(ScheduleScriptOutcome)
     case agent(ScheduleAgentOutcome)
     case stopped
+
+    /// Whether to post a system notification, and whether it should play a sound.
+    func notification(isTrial: Bool, cadence: ScheduleCadence) -> ScheduleNotify {
+        switch self {
+        case .stopped:
+            return .none
+        case .script(let outcome):
+            if outcome.failed { return .sound }
+            return (isTrial || cadence.playsSuccessSound) ? .sound : .silent
+        case .agent(let outcome):
+            switch outcome {
+            case .degraded, .needsConfirmation:
+                return .sound
+            case .finished(let ok, _, _, _):
+                if !ok { return .sound }
+                return (isTrial || cadence.playsSuccessSound) ? .sound : .silent
+            }
+        }
+    }
+}
+
+/// How loudly a finished beat should announce itself.
+nonisolated enum ScheduleNotify: Sendable, Equatable {
+    case none
+    case silent
+    case sound
 }
 
 /// One script execution stored in `schedule_runs`.

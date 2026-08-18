@@ -42,9 +42,14 @@ final class ScheduleRunner {
         guard !command.isEmpty else {
             return ScheduleScriptOutcome(excerpt: "Failed: empty command.", exitCode: 1, failed: true)
         }
-        let lowered = command.lowercased()
-        if lowered.contains("sudo") || lowered.contains("rm -rf /") {
-            return ScheduleScriptOutcome(excerpt: "Failed: command is not allowed.", exitCode: 1, failed: true)
+        do {
+            try ShellCommandPolicy.validate(command)
+        } catch {
+            return ScheduleScriptOutcome(
+                excerpt: "Failed: \(error.localizedDescription)",
+                exitCode: 1,
+                failed: true
+            )
         }
         let policy: PathGuard.Policy
         if let projectID = record.projectID,

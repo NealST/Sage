@@ -271,4 +271,66 @@ final class ScheduleJobQueueTests: XCTestCase {
         XCTAssertEqual(scheduled.recentsMenuTitle, "Scheduled · Scheduled run")
         XCTAssertEqual(user.recentsMenuTitle, "User thread")
     }
+
+    func testStoppedBeatDoesNotNotify() {
+        XCTAssertEqual(
+            ScheduleBeatResult.stopped.notification(
+                isTrial: false,
+                cadence: .interval(seconds: 60)
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            ScheduleBeatResult.stopped.notification(
+                isTrial: true,
+                cadence: .daily(hour: 9, minute: 0)
+            ),
+            .none
+        )
+    }
+
+    func testIntervalSuccessIsSilentUnlessTrial() {
+        let ok = ScheduleBeatResult.script(
+            ScheduleScriptOutcome(excerpt: "ok", exitCode: 0, failed: false)
+        )
+        XCTAssertEqual(
+            ok.notification(isTrial: false, cadence: .interval(seconds: 60)),
+            .silent
+        )
+        XCTAssertEqual(
+            ok.notification(isTrial: true, cadence: .interval(seconds: 60)),
+            .sound
+        )
+        XCTAssertEqual(
+            ok.notification(isTrial: false, cadence: .daily(hour: 9, minute: 0)),
+            .sound
+        )
+    }
+
+    func testFailureAndConfirmationAlwaysSound() {
+        let failed = ScheduleBeatResult.script(
+            ScheduleScriptOutcome(excerpt: "Failed", exitCode: 1, failed: true)
+        )
+        XCTAssertEqual(
+            failed.notification(isTrial: false, cadence: .interval(seconds: 60)),
+            .sound
+        )
+        XCTAssertEqual(
+            ScheduleBeatResult.agent(.needsConfirmation(taskID: UUID(), plan: nil))
+                .notification(isTrial: false, cadence: .interval(seconds: 60)),
+            .sound
+        )
+        XCTAssertEqual(
+            ScheduleBeatResult.agent(.degraded(reason: "gone"))
+                .notification(isTrial: false, cadence: .interval(seconds: 60)),
+            .sound
+        )
+    }
+
+    func testShellCommandPolicyBlocksSudoAndForkBomb() {
+        XCTAssertThrowsError(try ShellCommandPolicy.validate("sudo ls"))
+        XCTAssertThrowsError(try ShellCommandPolicy.validate("echo hi; sudo -s"))
+        XCTAssertThrowsError(try ShellCommandPolicy.validate(":(){:|:&};:"))
+        XCTAssertNoThrow(try ShellCommandPolicy.validate("git status"))
+    }
 }

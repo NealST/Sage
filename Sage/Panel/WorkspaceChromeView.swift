@@ -239,7 +239,7 @@ struct WorkspaceChromeView: View {
     private var recentTaskEntries: [TaskSummary] {
         Array(
             session.agent.state.recentSummaries
-                .filter { $0.displayTitle != nil }
+                .filter { $0.displayTitle != nil && !$0.isScheduled }
                 .prefix(10)
         )
     }

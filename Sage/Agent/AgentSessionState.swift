@@ -109,6 +109,10 @@ final class AgentSessionState {
 
     func refreshSummary(for task: TaskRecord) {
         guard task.projectID == focusedProject?.id else { return }
+        if task.originScheduleID != nil {
+            recentSummaries.removeAll { $0.id == task.id }
+            return
+        }
         let summary = TaskSummary(
             id: task.id,
             status: task.status,
@@ -144,6 +148,10 @@ final class AgentSessionState {
     func updateRecentSummaryTopic(taskID: UUID, result: TopicResult, stampedAt: Date) {
         guard let index = recentSummaries.firstIndex(where: { $0.id == taskID }) else { return }
         let prior = recentSummaries[index]
+        if prior.originScheduleID != nil {
+            recentSummaries.remove(at: index)
+            return
+        }
         recentSummaries[index] = TaskSummary(
             id: prior.id,
             status: prior.status,

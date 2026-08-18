@@ -40,7 +40,8 @@ actor GRDBTaskRepository: TaskRepository {
                 SELECT id, status, project_id, summary, topic, abstract, updated_at, origin_schedule_id
                 FROM tasks
                 WHERE project_id = ?
-                ORDER BY CASE WHEN origin_schedule_id IS NULL THEN 0 ELSE 1 END, updated_at DESC
+                  AND origin_schedule_id IS NULL
+                ORDER BY updated_at DESC
                 LIMIT 40
                 """,
                 arguments: [projectID.uuidString]
@@ -52,17 +53,16 @@ actor GRDBTaskRepository: TaskRepository {
                 SELECT id, status, project_id, summary, topic, abstract, updated_at, origin_schedule_id
                 FROM tasks
                 WHERE project_id IS NULL
-                ORDER BY CASE WHEN origin_schedule_id IS NULL THEN 0 ELSE 1 END, updated_at DESC
+                  AND origin_schedule_id IS NULL
+                ORDER BY updated_at DESC
                 LIMIT 40
                 """
             )
         }
 
-        let recentSummaries = TaskSummary.sortedForRecents(
-            summaryRows.compactMap { row -> TaskSummary? in
-                Self.taskSummary(from: row)
-            }
-        )
+        let recentSummaries = summaryRows.compactMap { row -> TaskSummary? in
+            Self.taskSummary(from: row)
+        }
 
         let recentProjects = try loadRecentProjects(limit: 12, database: db)
 
@@ -87,7 +87,7 @@ actor GRDBTaskRepository: TaskRepository {
            let loaded = try loadTask(from: row, database: db),
            loaded.projectID == projectID {
             activeTask = loaded
-        } else if let first = recentSummaries.first(where: { !$0.isScheduled }),
+        } else if let first = recentSummaries.first,
                   let row = try Row.fetchOne(
                     db,
                     sql: "SELECT * FROM tasks WHERE id = ?",
