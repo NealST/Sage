@@ -2,8 +2,9 @@
 //  AgentSessionState.swift
 //  Sage
 //
-//  Mutable session fields observed by SwiftUI. Collaborators mutate this
-//  directly instead of poking AgentRuntime through a Host protocol mesh.
+//  Observable session fields. Task identity is switched through AgentTaskStore;
+//  phase through the enter*/fail/complete methods below; busy through
+//  SessionOperationGate.
 //
 
 import Foundation
@@ -18,7 +19,7 @@ final class AgentSessionState {
     /// Focused code project (`nil` = General).
     var focusedProject: ProjectRecord?
     var recentProjects: [ProjectRecord] = []
-    var phase: AgentPhase = .idle
+    private(set) var phase: AgentPhase = .idle
     var lastAssistantText: String?
     /// Retry countdown — non-nil while waiting to retry a transient error.
     var retryState: RetryDisplayState?
@@ -32,7 +33,7 @@ final class AgentSessionState {
     var suppressedDriftOfferTaskID: UUID?
     /// True while peeling the latest turn into a new task (blocks double-taps).
     var isAcceptingTopicDrift = false
-    var isBusy = false
+    private(set) var isBusy = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
     /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
@@ -172,5 +173,39 @@ final class AgentSessionState {
 
     func enterExecuting() {
         phase = .executing
+    }
+
+    func enterIdle() {
+        phase = .idle
+    }
+
+    func enterThinking() {
+        phase = .thinking
+    }
+
+    func enterCompleted(summary: String) {
+        phase = .completed(summary: summary)
+    }
+
+    func enterFailed(message: String) {
+        phase = .failed(message: message)
+    }
+
+    /// Skill extraction and other host-driven overlays that already have an `AgentPhase`.
+    func applyHostPhase(_ phase: AgentPhase) {
+        self.phase = phase
+    }
+
+    func clearCompletedPhase() {
+        if case .completed = phase { phase = .idle }
+    }
+
+    func clearFailedPhase() {
+        if case .failed = phase { phase = .idle }
+    }
+
+    /// Busy is owned by `SessionOperationGate`.
+    func setBusy(_ busy: Bool) {
+        isBusy = busy
     }
 }

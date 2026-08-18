@@ -147,7 +147,9 @@ final class CapabilityStore {
                     try await Task.sleep(for: .seconds(20))
                     throw MCPStdioClient.ClientError.remote("Connection timed out")
                 }
-                let result = try await group.next()!
+                guard let result = try await group.next() else {
+                    throw CancellationError()
+                }
                 group.cancelAll()
                 return result
             }

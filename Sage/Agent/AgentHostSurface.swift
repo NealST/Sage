@@ -89,15 +89,15 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
     }
 
     func reportCommandFailure(_ message: String) {
-        state.phase = .failed(message: message)
+        state.enterFailed(message: message)
     }
 
     func reportCommandThinking() {
-        state.phase = .thinking
+        state.enterThinking()
     }
 
     func reportCommandCompleted(summary: String) {
-        state.phase = .completed(summary: summary)
+        state.enterCompleted(summary: summary)
     }
 
     @discardableResult

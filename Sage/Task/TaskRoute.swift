@@ -10,7 +10,6 @@ import Foundation
 nonisolated enum TaskRouteAction: Sendable, Equatable {
     case continueActive
     case beginNew
-    case resumeTask(UUID)
 }
 
 /// Unified routing decision for submit.
@@ -52,22 +51,6 @@ nonisolated struct TaskRoute: Sendable, Equatable {
         TaskRoute(
             action: .beginNew,
             relatedTaskIDs: [],
-            confidence: confidence,
-            reason: reason,
-            userVisibleHint: userVisibleHint
-        )
-    }
-
-    static func resume(
-        _ id: UUID,
-        relatedTaskIDs: [UUID] = [],
-        confidence: Double,
-        reason: String,
-        userVisibleHint: String?
-    ) -> TaskRoute {
-        TaskRoute(
-            action: .resumeTask(id),
-            relatedTaskIDs: relatedTaskIDs,
             confidence: confidence,
             reason: reason,
             userVisibleHint: userVisibleHint

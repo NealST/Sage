@@ -143,7 +143,7 @@ enum ToolBatchExecutor {
                 return
             }
             services.planProgress.clear()
-            services.state.phase = .thinking
+            services.state.enterThinking()
 
             try Task.checkCancellation()
             let offerTools = services.allowToolsAfterExecute()
@@ -216,7 +216,7 @@ enum ToolBatchExecutor {
 
         services.planProgress.clear()
         services.state.lastAssistantText = text
-        services.state.phase = .idle
+        services.state.enterIdle()
         return true
     }
 
@@ -235,11 +235,11 @@ enum ToolBatchExecutor {
         // Keep a Retry path when work was already committed (user turn / tool results).
         switch services.events.last?.kind {
         case .toolResult:
-            services.state.phase = .failed(message: "Stopped. Retry to summarize.")
+            services.state.enterFailed(message: "Stopped. Retry to summarize.")
         case .userInput:
-            services.state.phase = .failed(message: "Stopped. Retry to continue.")
+            services.state.enterFailed(message: "Stopped. Retry to continue.")
         default:
-            services.state.phase = .idle
+            services.state.enterIdle()
         }
     }
 

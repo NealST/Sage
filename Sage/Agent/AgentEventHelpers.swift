@@ -47,21 +47,3 @@ nonisolated enum AgentEventHelpers {
     }
 }
 
-nonisolated enum ContextHint {
-    static func forResumedTask(topic: String?, summary: String?) -> String {
-        if let topic = topic?.trimmingCharacters(in: .whitespacesAndNewlines), !topic.isEmpty {
-            return "Using context from \u{201C}\(topic)\u{201D}"
-        }
-        if let summary = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-            let clipped = summary.count > 48
-                ? String(summary.prefix(45)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
-                : summary
-            return "Using context from \u{201C}\(clipped)\u{201D}"
-        }
-        return "Using context from a related task"
-    }
-
-    static func forTask(_ task: TaskRecord) -> String {
-        forResumedTask(topic: task.topic, summary: task.summary)
-    }
-}

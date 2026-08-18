@@ -22,13 +22,13 @@ final class SessionOperationGate {
     @discardableResult
     func begin() -> Bool {
         guard !state.isTornDown, !state.isBusy else { return false }
-        state.isBusy = true
+        state.setBusy(true)
         beginActivity()
         return true
     }
 
     func end() {
-        state.isBusy = false
+        state.setBusy(false)
         endActivity()
     }
 
@@ -39,7 +39,7 @@ final class SessionOperationGate {
             await work.value
         }
         workTask = nil
-        state.isBusy = false
+        state.setBusy(false)
         endActivity()
     }
 

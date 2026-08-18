@@ -69,7 +69,7 @@ final class AgentTaskStore {
             adoptTaskInMemory(task)
             return true
         } catch {
-            state.phase = .failed(message: "Could not save task history: \(error.localizedDescription)")
+            state.enterFailed(message: "Could not save task history: \(error.localizedDescription)")
             return false
         }
     }
@@ -88,12 +88,12 @@ final class AgentTaskStore {
             state.activeTask = task
             state.activeTaskID = task.id
             state.refreshSummary(for: task)
-            state.phase = .idle
+            state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
             return task.id
         } catch {
-            state.phase = .failed(message: "Could not create task storage: \(error.localizedDescription)")
+            state.enterFailed(message: "Could not create task storage: \(error.localizedDescription)")
             return nil
         }
     }
@@ -138,11 +138,11 @@ final class AgentTaskStore {
                         skills.scheduleExtraction(for: closing)
                     }
                 }
-                state.phase = .idle
+                state.enterIdle()
                 state.lastAssistantText = nil
                 planProgress.clear()
             } catch {
-                state.phase = .failed(
+                state.enterFailed(
                     message: "Could not close the previous task: \(error.localizedDescription)"
                 )
                 return nil
@@ -177,7 +177,7 @@ final class AgentTaskStore {
             try await taskRepository.saveTaskState(task, setActive: false)
             state.activeTask = task
             state.activeTaskID = task.id
-            state.phase = .idle
+            state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
             state.clearTokenUsage()
@@ -185,7 +185,7 @@ final class AgentTaskStore {
             skillRecall?.clearTurnCache()
             return task.id
         } catch {
-            state.phase = .failed(message: "Could not create scheduled task: \(error.localizedDescription)")
+            state.enterFailed(message: "Could not create scheduled task: \(error.localizedDescription)")
             return nil
         }
     }
@@ -203,7 +203,7 @@ final class AgentTaskStore {
             do {
                 try await taskRepository.saveTaskState(current, setActive: false)
             } catch {
-                state.phase = .failed(
+                state.enterFailed(
                     message: "Could not save task context: \(error.localizedDescription)"
                 )
                 return
@@ -212,11 +212,11 @@ final class AgentTaskStore {
 
         do {
             guard let task = try await taskRepository.loadTask(id: id) else {
-                state.phase = .failed(message: "Could not find that task context.")
+                state.enterFailed(message: "Could not find that task context.")
                 return
             }
             guard task.projectID == state.focusedProject?.id else {
-                state.phase = .failed(message: "That task belongs to a different project.")
+                state.enterFailed(message: "That task belongs to a different project.")
                 return
             }
             try await taskRepository.rememberScopeActiveTask(
@@ -232,7 +232,7 @@ final class AgentTaskStore {
             state.forceFreshOnNextSubmit = false
             state.contextHint = nil
         } catch {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not restore task context: \(error.localizedDescription)"
             )
         }
@@ -282,7 +282,7 @@ final class AgentTaskStore {
                 movedEventIDs: [userEvent.id]
             )
         } catch {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not start a new task: \(error.localizedDescription)"
             )
             return nil
@@ -317,78 +317,6 @@ final class AgentTaskStore {
         )
     }
 
-    /// Shared resume path for heuristic + local-model routing.
-    func resumeTask(
-        _ id: UUID,
-        extraRelatedIDs: [UUID],
-        inputForTopicUpdate: String?,
-        confidence: Double,
-        reason: String,
-        userVisibleHint: String?
-    ) async -> TaskRoute? {
-        if await taskHasPendingPlan(id) {
-            return .continueActive(
-                confidence: confidence,
-                reason: "Resume skipped: target has pending plan"
-            )
-        }
-
-        let previousID = state.activeTaskID
-        await activateTask(id)
-        guard state.activeTaskID == id else { return nil }
-
-        if var task = state.activeTask {
-            var changed = false
-            if let previousID,
-               previousID != task.id,
-               !task.relatedTaskIDs.contains(previousID) {
-                task.relatedTaskIDs.insert(previousID, at: 0)
-                changed = true
-            }
-            for relatedID in extraRelatedIDs
-                where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {
-                task.relatedTaskIDs.append(relatedID)
-                changed = true
-            }
-            if task.relatedTaskIDs.count > Self.maxRelatedTaskIDs {
-                task.relatedTaskIDs = Array(task.relatedTaskIDs.prefix(Self.maxRelatedTaskIDs))
-                changed = true
-            }
-            if changed {
-                task.updatedAt = .now
-                do {
-                    try await taskRepository.saveTaskState(task, setActive: true)
-                    adoptTaskInMemory(task)
-                } catch {
-                    state.phase = .failed(
-                        message: "Could not update related context: \(error.localizedDescription)"
-                    )
-                    return nil
-                }
-            }
-
-            if let inputForTopicUpdate,
-               let existingTopic = task.topic,
-               let existingAbstract = task.abstract {
-                topicCoordinator?.scheduleTopicRefreshOnResume(
-                    taskID: id,
-                    existingTopic: existingTopic,
-                    existingAbstract: existingAbstract,
-                    newInput: inputForTopicUpdate
-                )
-            }
-        }
-
-        let hint = userVisibleHint ?? state.activeTask.map(ContextHint.forTask)
-        if let hint { state.contextHint = hint }
-        return .resume(
-            id,
-            confidence: confidence,
-            reason: reason,
-            userVisibleHint: hint
-        )
-    }
-
     /// Applies a routing decision. Returns the effective route, or nil on hard failure.
     func apply(_ route: TaskRoute) async -> TaskRoute? {
         switch route.action {
@@ -401,21 +329,12 @@ final class AgentTaskStore {
                 return nil
             }
             return route
-        case .resumeTask(let id):
-            return await resumeTask(
-                id,
-                extraRelatedIDs: route.relatedTaskIDs,
-                inputForTopicUpdate: nil,
-                confidence: route.confidence,
-                reason: route.reason,
-                userVisibleHint: route.userVisibleHint
-            )
         }
     }
 
     func restorePhaseFromActiveTask() async {
         guard let task = state.activeTask else {
-            state.phase = .idle
+            state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
             return
@@ -429,11 +348,11 @@ final class AgentTaskStore {
         guard var plan = task.pendingPlan else {
             if task.workPlan?.requiresConfirmation == true,
                task.status == .awaitingApproval {
-                state.phase = .awaitingConfirmation
+                state.enterAwaitingConfirmation()
                 planProgress.clear()
                 return
             }
-            state.phase = .idle
+            state.enterIdle()
             planProgress.clear()
             return
         }
@@ -460,7 +379,7 @@ final class AgentTaskStore {
             updated.pendingPlan = plan
             state.activeTask = updated
             planProgress.replace(plan)
-            state.phase = .awaitingConfirmation
+            state.enterAwaitingConfirmation()
         } else {
             updated.pendingPlan = nil
             state.activeTask = updated
@@ -468,11 +387,11 @@ final class AgentTaskStore {
             try? await taskRepository.saveTaskState(updated, setActive: setsScopeActive)
             state.refreshSummary(for: updated)
             if updated.events.last?.kind == .toolResult {
-                state.phase = .failed(
+                state.enterFailed(
                     message: "Interrupted after tools finished. Retry to summarize."
                 )
             } else {
-                state.phase = .idle
+                state.enterIdle()
             }
         }
     }
@@ -523,7 +442,7 @@ final class AgentTaskStore {
         state.retryState = nil
         planProgress.update(plan)
         guard var task = state.activeTask else {
-            state.phase = .failed(message: message)
+            state.enterFailed(message: message)
             return
         }
         task.pendingPlan = plan
@@ -533,10 +452,10 @@ final class AgentTaskStore {
             try await taskRepository.saveTaskState(task, setActive: setsScopeActive)
             state.activeTask = task
             state.refreshSummary(for: task)
-            state.phase = .failed(message: message)
+            state.enterFailed(message: message)
         } catch {
             state.activeTask = task
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not save progress. \(error.localizedDescription)"
             )
         }
@@ -545,7 +464,7 @@ final class AgentTaskStore {
 
     func markFailed(_ message: String) async {
         state.retryState = nil
-        state.phase = .failed(message: message)
+        state.enterFailed(message: message)
         guard var task = state.activeTask else { return }
         task.status = .failed
         task.updatedAt = .now
@@ -575,10 +494,5 @@ final class AgentTaskStore {
             if !result.contains(id) { result.append(id) }
         }
         return Array(result.prefix(Self.maxRelatedTaskIDs))
-    }
-
-    func taskHasPendingPlan(_ id: UUID) async -> Bool {
-        if state.activeTaskID == id { return state.activeTask?.pendingPlan != nil }
-        return (try? await taskRepository.hasPendingPlan(taskID: id)) ?? false
     }
 }

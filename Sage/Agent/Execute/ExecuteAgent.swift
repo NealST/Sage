@@ -104,7 +104,7 @@ final class ExecuteAgent {
     }
 
     private func runModelTurn(includeTools: Bool) async {
-        state.phase = .thinking
+        state.enterThinking()
         do {
             try Task.checkCancellation()
             let turn = try await modelGateway.streamComplete(includeTools: includeTools)

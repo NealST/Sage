@@ -4,29 +4,33 @@
 
 ## 当前状态
 
-**已完成的核心架构：**
+代码已经超过这份文档最初写下时的范围。下面按「已落地 / 仍未做」对齐仓库，避免把已完成工作当成待办。
 
-- **Agent Runtime**：plan → execute（ReAct）→ review 三子 agent；act 策略确认一次
-- **Task 管理**：基于 GRDB 的 task 持久化、task 生命周期、workspace snapshot
-- **Task 路由**：默认粘住当前线程；显式 Start Fresh /「新任务」才开新 task；主题漂移仅非阻塞提示
-- **主题生成**：从首条用户消息截取 topic + abstract
-- **MCP 协议**：stdio 方式的 MCP client，支持 tools/list + tools/call
-- **Skill 系统**：SkillRegistry 基础框架
-- **HUD 窗口**：原生 NSWindow，⌘⇧Space 全局热键唤起
-- **Settings**：API Key 配置、模型参数、MCP 服务器管理
-- **内置工具**：list_directory、read_file、write_file、get/set_clipboard、send_notification、open_url
+**已落地：**
 
-**待提交的修复（6 个文件 + 1 个新文件）：**
+- **Agent Runtime**：Plan → Execute（ReAct）→ Review；`act` 策略确认一次；observe/answer 不能走副作用工具
+- **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是非阻塞提示，不是静默 resume
+- **主题**：从首条用户消息确定性截取 topic + abstract（无本地模型）
+- **流式**：SSE + transcript 增量渲染 + Stop
+- **多窗口**：General / Project 各一扇独立 session；共享 settings / MCP hub / skill 状态
+- **Schedules**：间隔 / 日历式定时；agent 与 script；从完成时刻算下次间隔；退出时 disarm
+- **MCP**：stdio client、重连/心跳、Settings 启用开关、full-trust 文案（无 PathGuard）
+- **Skills**：目录附录 + `load_skill` 渐进披露；`allowed-tools` 需显式声明 `run_skill_script` / `save_skill`；不是 embedding 语义匹配器
+- **Settings**：API Key（Keychain fail-closed）、分角色模型、MCP / Skills / Login Item
+- **工具**：文件、shell（cwd 沙盒、命令字符串可 `cd`）、剪贴板、AX、截图、提醒等
 
-- `AgentRuntime.swift`：修复 beginNewTask 过期引用、topic 生成重入、updateTaskTopic 竞态
-- `TopicGenerator.swift`：确定性截取 topic / abstract（不再走本地模型）
-- `GRDBTaskRepository.swift`：修复 sequence 计算排序
-- `TaskContextResolver.swift`：修复中文分词阈值
+**明确未做（不要从上面推断已经有）：**
+
+- `mcp.json` / Claude Desktop 导入
+- tiktoken 级 token 计数
+- 项目级 `.sage` 配置
+- 完整 VoiceOver / 键盘导航验收
+- 事件触发（文件变化、剪贴板、应用切换）
+- 窗口间拖拽 task
+
 ---
 
 ## Phase 0 — 收尾（立即）
-
-当前修复的收尾工作，确保项目可以正常构建。
 
 ### 0.1 提交当前修复
 
@@ -142,17 +146,17 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 2.2 MCP 服务器发现与管理
 
-- [ ] Settings 中的 MCP 服务器浏览/安装 UI
-- [ ] 支持 `mcp.json` 配置格式
+- [ ] Settings 中的 MCP 服务器浏览/安装 UI（商店式发现；现有列表 + 启用开关不算）
+- [ ] 支持 `mcp.json` 配置格式导入
 - [ ] 自动检测已安装的 MCP 服务器（如从 Claude Desktop 配置导入）
-- [ ] 服务器启用/禁用开关
+- [x] 服务器启用/禁用开关
 
 ### 2.3 Skill 系统完善
 
-`SkillRegistry` 已有基础框架，需要补齐功能。长期记忆（踩坑经历、最佳实践）通过 Skill 系统实现——自动沉淀为 `.md` 文件，按需激活注入。
+长期记忆（踩坑经历、最佳实践）通过 Skill 文件实现，按需注入。当前按需路径是 **catalog 附录 + `load_skill`**，不是 embedding / 语义匹配器。
 
-- [ ] **Skill 按需激活**（核心）— 不再全量注入，根据用户输入语义匹配 skill description，只激活相关 skill
-- [ ] 踩坑/最佳实践自动沉淀 — agent 解决问题后自动（或用户触发）生成 skill 文件
+- [x] **Skill 按需加载（渐进披露）**— 系统提示只带 catalog；正文经 `load_skill` / 用户选择注入。不是按输入 embedding 自动激活
+- [x] 踩坑/最佳实践沉淀 — 任务结束后可生成 skill 建议并写入 `.md`
 - [ ] Skill 编辑器 UI（prompt 模板 + 参数定义）
 - [ ] 参数化 prompt 模板（变量插值）
 - [ ] Skill 链式调用
@@ -160,11 +164,11 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 3.1 长期记忆 / 知识库
 
-> **设计决策**：长期记忆复用 Skill 系统实现。踩坑经历和最佳实践沉淀为 Skill 文件，通过按需激活机制做语义召回。不引入独立的向量存储层。
+> **设计决策**：长期记忆复用 Skill 系统。不引入独立的向量存储层。
 
-- [ ] Skill 按需激活机制（见 2.3，是基础）
-- [ ] 经验沉淀触发机制（用户显式 "记住这个" + agent 自动识别）
-- [ ] 跨项目 skill 共享（`~/Library/Application Support/Sage/Skills/` 已支持）
+- [x] Skill 按需加载（见 2.3；不是向量召回）
+- [x] 经验沉淀触发（任务结束建议 + 用户确认保存）
+- [x] 跨项目 skill 共享（`~/Library/Application Support/Sage/Skills/`）
 - [ ] 记忆/skill 管理 UI（查看、删除、编辑）
 
 ### 3.2 上下文窗口优化
@@ -197,20 +201,20 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 4.2 多窗口支持
 
-- [ ] 支持打开多个 agent 窗口
-- [ ] 每个窗口独立的 task 上下文
-- [ ] 共享 model client 和 tool registry
+- [x] 支持打开多个 agent 窗口（General + 每个 Project）
+- [x] 每个窗口独立的 task 上下文
+- [x] 共享 model settings、tool registry、MCP hub
 - [ ] 窗口间 task 拖拽/转移
 
 ### 4.3 无障碍支持
 
-`AccessibilityPreferences.swift` 已有基础。
+`AccessibilitySettings.swift` 已有 Reduce Motion / Increase Contrast / Dynamic Type 观察。
 
 - [ ] 完整 VoiceOver 支持
 - [ ] 全键盘导航
-- [ ] 减少动效模式
-- [ ] 高对比度模式
-- [ ] 动态字体缩放
+- [x] 减少动效模式
+- [x] 高对比度模式（部分控件）
+- [x] 动态字体缩放（`sageScaledTypography`）
 
 ### 4.4 新手引导
 
@@ -226,14 +230,14 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 5.1 多模型支持
 
-- [ ] 模型选择器（按 task 类型选择不同模型）
+- [x] 分角色模型（Plan / Execute / Review，空则回退 `model`）
 - [ ] 模型 fallback 链（主模型失败时切换备用）
 - [ ] 用量/成本追踪
-- [ ] 云端 API 不可用时的明确降级提示（不再回落到本地模型）
+- [x] 云端 API 不可用时的明确错误（不再回落到本地模型）
 
 ### 5.2 高级 Agent 规划
 
-当前 plan 是扁平的步骤列表，缺少复杂任务处理能力。
+当前 work plan 是策略卡片，工具批是扁平步骤列表。
 
 - [ ] 条件分支（if tool result contains X, then...）
 - [ ] 循环检测与终止
@@ -243,28 +247,13 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 5.3 自动化 / 定时任务
 
-- [ ] Cron 式定时 agent 运行
+- [x] 间隔 / 日历式定时 agent 与 script（`ScheduleService`；间隔从完成时刻起算）
 - [ ] 事件触发任务（文件变化、剪贴板内容、应用切换）
-- [ ] 后台监控 + 通知推送结果
-- [ ] 自动化工作流编辑器
+- [x] 运行结束通知（成功/失败）
+- [ ] 可视化工作流编辑器（当前是自然语言草稿 + 表单）
 
 ---
 
 ## 建议推进顺序
 
-```
-Phase 0 (收尾)
-    │
-    ▼
-Phase 1.1 (流式响应) ← 用户体感提升最大
-    │
-    ├─→ Phase 1.2 (Markdown)
-    ├─→ Phase 1.3 (工具扩展) ─→ Phase 2 (MCP) ─→ Phase 5.2 (规划)
-    ├─→ Phase 1.4 (错误恢复)
-    └─→ Phase 1.5 (内存管理)
-         │
-         ▼
-    Phase 3 (上下文) ─→ Phase 4 (UI) ─→ Phase 5 (高级)
-```
-
-Phase 1 内部可以并行推进，**流式响应是最高优先级**。
+未做项优先：`mcp.json` 导入、token 计数、`.sage`、无障碍补齐、事件触发。流式、Schedules、多窗口已经在主路径上。

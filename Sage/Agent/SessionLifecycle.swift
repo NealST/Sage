@@ -79,7 +79,7 @@ final class SessionLifecycle {
                 _ = await taskStore.createAndActivateTask(relatedTo: [])
             }
         } catch {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not open Sage's local database: \(error.localizedDescription)"
             )
         }
@@ -113,14 +113,14 @@ final class SessionLifecycle {
             state.activatedSkillNames = []
             planProgress.clear()
             skills.invalidatePendingSuggestions()
-            state.phase = .idle
+            state.enterIdle()
             state.isTornDown = false
             guard await taskStore.createAndActivateTask(relatedTo: []) != nil else {
                 return false
             }
             return true
         } catch {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not erase local data: \(error.localizedDescription)"
             )
             return false
@@ -201,7 +201,7 @@ final class SessionLifecycle {
                 try await taskRepository.saveTaskState(current, setActive: false)
                 state.activeTask = current
             } catch {
-                state.phase = .failed(
+                state.enterFailed(
                     message: "Could not save task before closing window: \(error.localizedDescription)"
                 )
                 return false
@@ -216,7 +216,7 @@ final class SessionLifecycle {
             )
             return true
         } catch {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Could not remember last-active task: \(error.localizedDescription)"
             )
             return false

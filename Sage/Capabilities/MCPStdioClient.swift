@@ -127,7 +127,9 @@ actor MCPStdioClient {
                         try await Task.sleep(for: .seconds(3))
                         throw ClientError.pingTimeout
                     }
-                    let result = try await group.next()!
+                    guard let result = try await group.next() else {
+                        throw CancellationError()
+                    }
                     group.cancelAll()
                     return result
                 }
@@ -333,7 +335,9 @@ actor MCPStdioClient {
                             try await Task.sleep(for: .seconds(5))
                             throw ClientError.pingTimeout
                         }
-                        let result = try await group.next()!
+                        guard let result = try await group.next() else {
+                            throw CancellationError()
+                        }
                         group.cancelAll()
                         return result
                     }

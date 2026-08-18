@@ -26,14 +26,6 @@ nonisolated struct ContinuityTaskResolver: TaskRouting {
         )
     }
 
-    /// Legacy name used by older call sites / tests.
-    func resolve(
-        input: String,
-        workspace: TaskWorkspaceSnapshot
-    ) async -> TaskRoute {
-        await route(input: input, workspace: workspace)
-    }
-
     private static func requestsFreshStart(_ input: String) -> Bool {
         let normalized = input
             .trimmingCharacters(in: .whitespacesAndNewlines)

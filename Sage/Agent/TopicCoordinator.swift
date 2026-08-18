@@ -45,26 +45,6 @@ final class TopicCoordinator {
         }
     }
 
-    /// Refresh topic/abstract when resuming a prior task with new input.
-    func scheduleTopicRefreshOnResume(
-        taskID: UUID,
-        existingTopic: String,
-        existingAbstract: String,
-        newInput: String
-    ) {
-        Task(priority: .utility) { [weak self] in
-            if let updated = TopicGenerator.update(
-                existingTopic: existingTopic,
-                existingAbstract: existingAbstract,
-                newInput: newInput
-            ) {
-                await MainActor.run { [weak self] in
-                    self?.applyTopicResult(updated, for: taskID)
-                }
-            }
-        }
-    }
-
     private func applyTopicResult(_ result: TopicResult, for taskID: UUID) {
         guard !state.isTornDown else { return }
         let stampedAt = Date.now

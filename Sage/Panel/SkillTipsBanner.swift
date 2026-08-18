@@ -12,7 +12,6 @@ struct SkillTipsBanner: View {
     @Environment(AppState.self) private var appState
     @Environment(AgentSession.self) private var session
     @Environment(AccessibilitySettings.self) private var accessibility
-    @Environment(\.sageTypography) private var type
     @State private var autoDismissTask: Task<Void, Never>?
     @State private var scopeByID: [UUID: SkillScope] = [:]
     @State private var primaryPathByID: [UUID: String] = [:]
@@ -30,13 +29,49 @@ struct SkillTipsBanner: View {
                 ForEach(tips.items) { item in
                     switch item {
                     case .save(let suggestion):
-                        suggestionRow(suggestion)
+                        SkillSaveTipRow(
+                            suggestion: suggestion,
+                            projectDisplayName: projectDisplayName,
+                            selectedScope: scopeBinding(for: suggestion),
+                            onSave: confirmSuggestion,
+                            onDismiss: {
+                                withAnimation(SageDesign.Motion.expandAnimation) {
+                                    scopeByID[suggestion.id] = nil
+                                    tips.dismiss(suggestion.id)
+                                }
+                            }
+                        )
                     case .choose(let choice):
-                        chooseRow(choice)
+                        SkillChooseTipRow(choice: choice)
                     case .consolidate(let suggestion):
-                        consolidateRow(suggestion)
+                        SkillConsolidateTipRow(
+                            suggestion: suggestion,
+                            primaryPath: primaryBinding(for: suggestion),
+                            onMerge: confirmConsolidate,
+                            onDismiss: {
+                                withAnimation(SageDesign.Motion.expandAnimation) {
+                                    primaryPathByID[suggestion.id] = nil
+                                    tips.dismiss(suggestion.id)
+                                }
+                            }
+                        )
                     case .schedule(let draft):
-                        scheduleRow(draft)
+                        SkillScheduleTipRow(
+                            draft: draft,
+                            conversationWording: conversationWording,
+                            onSave: confirmSchedule,
+                            onDismiss: {
+                                withAnimation(SageDesign.Motion.expandAnimation) {
+                                    tips.dismiss(draft.id)
+                                }
+                            },
+                            onUpdate: { mutate in
+                                tips.updateSchedule(draft.id) {
+                                    mutate(&$0)
+                                    $0.originTaskID = session.agent.state.activeTaskID
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -57,418 +92,34 @@ struct SkillTipsBanner: View {
         }
     }
 
-    // MARK: - Save
-
-    @ViewBuilder
-    private func suggestionRow(_ suggestion: SkillSuggestion) -> some View {
-        SkillTipChrome.row {
-            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                SkillTipChrome.icon(SageDesign.Symbol.skills)
-
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(bannerTitle(for: suggestion))
-                                .font(.system(size: type.caption, weight: .medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-
-                            Text(suggestion.skillDescription)
-                                .font(.system(size: type.micro))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-
-                        Spacer(minLength: SageDesign.Spacing.sm)
-
-                        Button(saveButtonTitle(for: suggestion)) {
-                            confirmSuggestion(suggestion)
-                        }
-                        .font(.system(size: type.micro, weight: .semibold))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .help(saveHelp(for: suggestion))
-                        .accessibilityLabel(saveButtonTitle(for: suggestion))
-
-                        SkillTipChrome.dismissButton {
-                            withAnimation(SageDesign.Motion.expandAnimation) {
-                                scopeByID[suggestion.id] = nil
-                                tips.dismiss(suggestion.id)
-                            }
-                        }
-                    }
-
-                    if suggestion.allowsScopeChoice {
-                        scopeChooser(for: suggestion)
-                    } else if suggestion.type == .enhance {
-                        Text(enhanceScopeCaption(for: suggestion.scope))
-                            .font(.system(size: SageDesign.Typography.microSize))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func scopeChooser(for suggestion: SkillSuggestion) -> some View {
-        let selected = selectedScope(for: suggestion)
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Save location")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            Picker("Save location", selection: scopeBinding(for: suggestion)) {
-                Text("This Project").tag(SkillScope.project)
-                Text("Everywhere").tag(SkillScope.global)
-            }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
-            .labelsHidden()
-            .frame(maxWidth: 260)
-
-            Text(scopeConsequence(for: selected))
-                .font(.system(size: SageDesign.Typography.microSize))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .animation(SageDesign.Motion.expandAnimation, value: selected)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    // MARK: - Choose
-
-    @ViewBuilder
-    private func chooseRow(_ choice: SkillActivationChoice) -> some View {
-        SkillTipChrome.row {
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                    SkillTipChrome.icon(SageDesign.Symbol.skills)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Which skill should Sage use?")
-                            .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
-                        Text("Several skills match this request. Choose one to load now.")
-                            .font(.system(size: SageDesign.Typography.microSize))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(choice.candidates) { candidate in
-                        Button {
-                            Task { await session.agent.selectSkillActivation(named: candidate.name) }
-                        } label: {
-                            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(candidate.name)
-                                        .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                                        .lineLimit(1)
-                                    Text(candidate.description)
-                                        .font(.system(size: SageDesign.Typography.microSize))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.top, 3)
-                                    .accessibilityHidden(true)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(TipCandidateButtonStyle())
-                        .accessibilityLabel("Use skill \(candidate.name)")
-                    }
-                }
-
-                Button {
-                    Task { await session.agent.skipSkillActivation() }
-                } label: {
-                    Text("Continue without a skill")
-                        .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 2)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Don’t auto-load any skill. Sage continues with the catalog only.")
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    // MARK: - Consolidate
-
-    @ViewBuilder
-    private func consolidateRow(_ suggestion: SkillConsolidateSuggestion) -> some View {
-        let primaryPath = selectedPrimaryPath(for: suggestion)
-        let primary = suggestion.candidates.first { $0.path == primaryPath } ?? suggestion.primary
-        let removed = suggestion.candidates.filter { $0.path != primaryPath }
-
-        SkillTipChrome.row {
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                    SkillTipChrome.icon("arrow.triangle.merge")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("These skills look overlapping")
-                            .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
-                        Text("Merge into one skill to keep the catalog clear.")
-                            .font(.system(size: SageDesign.Typography.microSize))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: SageDesign.Spacing.sm)
-                    SkillTipChrome.dismissButton {
-                        withAnimation(SageDesign.Motion.expandAnimation) {
-                            primaryPathByID[suggestion.id] = nil
-                            tips.dismiss(suggestion.id)
-                        }
-                    }
-                }
-
-                if suggestion.candidates.count >= 2 {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Keep")
-                            .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                            .foregroundStyle(.secondary)
-
-                        if suggestion.candidates.count <= 3 {
-                            Picker("Keep skill", selection: primaryBinding(for: suggestion)) {
-                                ForEach(suggestion.candidates) { candidate in
-                                    Text(candidate.name).tag(candidate.path)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .controlSize(.small)
-                            .labelsHidden()
-                            .frame(maxWidth: 280)
-                        } else {
-                            Picker("Keep skill", selection: primaryBinding(for: suggestion)) {
-                                ForEach(suggestion.candidates) { candidate in
-                                    Text(candidate.name).tag(candidate.path)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .controlSize(.small)
-                        }
-
-                        if let primary {
-                            Text(mergeConsequence(keeping: primary, removing: removed))
-                                .font(.system(size: SageDesign.Typography.microSize))
-                                .foregroundStyle(.tertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .animation(SageDesign.Motion.expandAnimation, value: primaryPath)
-                        }
-                    }
-                }
-
-                HStack(spacing: SageDesign.Spacing.sm) {
-                    Button("Merge") {
-                        let resolved = suggestion.resolved(primaryPath: primaryPath)
-                        withAnimation(SageDesign.Motion.expandAnimation) {
-                            primaryPathByID[suggestion.id] = nil
-                            tips.dismiss(suggestion.id)
-                        }
-                        session.skills.startConsolidate(resolved)
-                    }
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    .disabled(primary == nil)
-                    .help(primary.map { "Merge into “\($0.name)” and move the others to Trash" } ?? "Merge")
-
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    // MARK: - Schedule
-
-    @ViewBuilder
-    private func scheduleRow(_ draft: ScheduleDraft) -> some View {
-        SkillTipChrome.row {
-            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                SkillTipChrome.icon("clock")
-
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Schedule this?")
-                                .font(.system(size: type.caption, weight: .medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-
-                            Text("\(draft.cadence.shortLabel) · \(draft.scopeLabel)")
-                                .font(.system(size: type.micro))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-
-                            Text(draft.prompt.isEmpty
-                                 ? "Write what Sage should do, or use this conversation."
-                                 : draft.prompt)
-                                .font(.system(size: type.micro))
-                                .foregroundStyle(draft.prompt.isEmpty ? .tertiary : .secondary)
-                                .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityLabel(
-                                    draft.prompt.isEmpty
-                                        ? "No task yet. \(draft.cadence.shortLabel), \(draft.scopeLabel)"
-                                        : "\(draft.prompt), \(draft.cadence.shortLabel), \(draft.scopeLabel)"
-                                )
-                        }
-
-                        Spacer(minLength: SageDesign.Spacing.sm)
-
-                        Button(draft.runOnceNow ? "Save and run" : "Save") {
-                            confirmSchedule(draft)
-                        }
-                        .font(.system(size: type.micro, weight: .semibold))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .help(
-                            draft.runOnceNow
-                                ? "Save this timetable and run it once now."
-                                : "Save this timetable. Sage will run it without opening this chat."
-                        )
-                        .accessibilityLabel(
-                            draft.runOnceNow
-                                ? "Save schedule and run once now"
-                                : "Save schedule"
-                        )
-
-                        SkillTipChrome.dismissButton {
-                            withAnimation(SageDesign.Motion.expandAnimation) {
-                                tips.dismiss(draft.id)
-                            }
-                        }
-                    }
-
-                    if let wording = conversationWording, wording != draft.prompt {
-                        Button("Use this conversation") {
-                            tips.updateSchedule(draft.id) {
-                                $0.prompt = wording
-                                $0.originTaskID = session.agent.state.activeTaskID
-                            }
-                        }
-                        .font(.system(size: type.micro, weight: .medium))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                        .help("Use your latest request in this chat as the scheduled task.")
-                        .accessibilityLabel("Use this conversation as the schedule")
-                    }
-
-                    Toggle(isOn: Binding(
-                        get: { draft.runOnceNow },
-                        set: { value in
-                            tips.updateSchedule(draft.id) { $0.runOnceNow = value }
-                        }
-                    )) {
-                        Text("Run once now")
-                    }
-                    .toggleStyle(.checkbox)
-                    .font(.system(size: type.micro))
-                    .help("Run immediately after save. The timetable still fires at the scheduled time.")
-                    .accessibilityLabel("Run once now")
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    // MARK: - Actions / helpers
-
-    private func scopeBinding(for suggestion: SkillSuggestion) -> Binding<SkillScope> {
+    private func scopeBinding(for suggestion: SkillSuggestion) -> Binding<SkillScope?> {
         Binding(
-            get: { selectedScope(for: suggestion) },
+            get: { scopeByID[suggestion.id] },
             set: { scopeByID[suggestion.id] = $0 }
         )
     }
 
-    private func selectedScope(for suggestion: SkillSuggestion) -> SkillScope {
-        scopeByID[suggestion.id] ?? .project
-    }
-
     private func primaryBinding(for suggestion: SkillConsolidateSuggestion) -> Binding<String> {
         Binding(
-            get: { selectedPrimaryPath(for: suggestion) },
+            get: { primaryPathByID[suggestion.id] ?? suggestion.primaryPath },
             set: { primaryPathByID[suggestion.id] = $0 }
         )
     }
 
-    private func selectedPrimaryPath(for suggestion: SkillConsolidateSuggestion) -> String {
-        primaryPathByID[suggestion.id] ?? suggestion.primaryPath
-    }
-
-    private func bannerTitle(for suggestion: SkillSuggestion) -> String {
-        switch suggestion.type {
-        case .new: return "Save experience “\(suggestion.skillName)”?"
-        case .enhance: return "Update existing experience “\(suggestion.skillName)”?"
-        case .merge: return "Merge into “\(suggestion.skillName)”?"
-        }
-    }
-
-    private func saveButtonTitle(for suggestion: SkillSuggestion) -> String {
-        switch suggestion.type {
-        case .new: return "Save"
-        case .enhance: return "Update"
-        case .merge: return "Merge"
-        }
-    }
-
-    private func enhanceScopeCaption(for scope: SkillScope) -> String {
-        switch scope {
-        case .global: return "Folds this task into the global experience — available in every workspace."
-        case .project: return "Folds this task into the project experience — only used in “\(projectDisplayName)”."
-        }
-    }
-
-    private func scopeConsequence(for scope: SkillScope) -> String {
-        switch scope {
-        case .project: return "Saved in “\(projectDisplayName)” and used only while working there."
-        case .global: return "Saved globally and available in every workspace."
-        }
-    }
-
-    private func saveHelp(for suggestion: SkillSuggestion) -> String {
-        switch suggestion.type {
-        case .new:
-            return suggestion.allowsScopeChoice
-                ? scopeConsequence(for: selectedScope(for: suggestion))
-                : "Create a skill from this task"
-        case .enhance: return "Update existing experience with knowledge from this task"
-        case .merge: return "Merge overlapping skills into one"
-        }
-    }
-
-    private func mergeConsequence(
-        keeping primary: SkillRecallCandidate,
-        removing others: [SkillRecallCandidate]
-    ) -> String {
-        if others.isEmpty { return "Keeps “\(primary.name)”." }
-        let names = others.map { "“\($0.name)”" }.joined(separator: ", ")
-        return "Keeps “\(primary.name)”. Moves \(names) to Trash."
-    }
-
-    private func confirmSuggestion(_ suggestion: SkillSuggestion) {
-        let resolved = suggestion.allowsScopeChoice
-            ? suggestion.resolved(scope: selectedScope(for: suggestion))
-            : suggestion
-        guard tips.confirmSave(suggestion.id) != nil else { return }
+    private func confirmSuggestion(_ resolved: SkillSuggestion) {
+        guard tips.confirmSave(resolved.id) != nil else { return }
         withAnimation(SageDesign.Motion.expandAnimation) {
-            scopeByID[suggestion.id] = nil
+            scopeByID[resolved.id] = nil
         }
         session.skills.startSuggestionSave(resolved)
+    }
+
+    private func confirmConsolidate(_ resolved: SkillConsolidateSuggestion) {
+        withAnimation(SageDesign.Motion.expandAnimation) {
+            primaryPathByID[resolved.id] = nil
+            tips.dismiss(resolved.id)
+        }
+        session.skills.startConsolidate(resolved)
     }
 
     private func confirmSchedule(_ draft: ScheduleDraft) {
@@ -510,7 +161,6 @@ struct SkillTipsBanner: View {
         autoDismissTask?.cancel()
         guard tips.choosePrompt == nil else { return }
         autoDismissTask = Task {
-            // Accumulate 20s of “idle” time; pause while hovered or VoiceOver is on.
             var waited: TimeInterval = 0
             while waited < 20 {
                 try? await Task.sleep(for: .seconds(1))
@@ -535,19 +185,5 @@ struct SkillTipsBanner: View {
                 tips.dismissAutoDismissable()
             }
         }
-    }
-}
-
-private struct TipCandidateButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0.04))
-            )
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

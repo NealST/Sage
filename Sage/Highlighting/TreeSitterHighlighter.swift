@@ -37,14 +37,14 @@ struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
 
     func highlightCode(_ code: String, language: String?) -> Text {
         guard let language, let config = Self.languageConfig(for: language) else {
-            return Text(code).foregroundColor(SageCodeTheme.plain)
+            return Text(code).foregroundStyle(SageCodeTheme.plain)
         }
 
         do {
             let highlights = try Self.highlight(code: code, config: config)
             return Self.buildText(from: code, highlights: highlights)
         } catch {
-            return Text(code).foregroundColor(SageCodeTheme.plain)
+            return Text(code).foregroundStyle(SageCodeTheme.plain)
         }
     }
 }
@@ -74,7 +74,7 @@ private extension TreeSitterCodeHighlighter {
     /// Builds a composed SwiftUI `Text` from source code and highlight ranges.
     static func buildText(from code: String, highlights: [NamedRange]) -> Text {
         guard !highlights.isEmpty else {
-            return Text(code).foregroundColor(SageCodeTheme.plain)
+            return Text(code).foregroundStyle(SageCodeTheme.plain)
         }
 
         let nsString = code as NSString
@@ -88,13 +88,13 @@ private extension TreeSitterCodeHighlighter {
             if range.location > lastEnd {
                 let gapRange = NSRange(location: lastEnd, length: range.location - lastEnd)
                 let gap = nsString.substring(with: gapRange)
-                result = Text("\(result)\(Text(gap).foregroundColor(SageCodeTheme.plain))")
+                result = Text("\(result)\(Text(gap).foregroundStyle(SageCodeTheme.plain))")
             }
 
             // Add the highlighted token
             let token = nsString.substring(with: range)
             let color = SageCodeTheme.color(for: namedRange.name)
-            result = Text("\(result)\(Text(token).foregroundColor(color))")
+            result = Text("\(result)\(Text(token).foregroundStyle(color))")
 
             lastEnd = range.location + range.length
         }
@@ -103,7 +103,7 @@ private extension TreeSitterCodeHighlighter {
         if lastEnd < nsString.length {
             let trailingRange = NSRange(location: lastEnd, length: nsString.length - lastEnd)
             let trailing = nsString.substring(with: trailingRange)
-            result = Text("\(result)\(Text(trailing).foregroundColor(SageCodeTheme.plain))")
+            result = Text("\(result)\(Text(trailing).foregroundStyle(SageCodeTheme.plain))")
         }
 
         return result

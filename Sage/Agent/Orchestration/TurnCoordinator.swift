@@ -109,20 +109,20 @@ final class TurnCoordinator {
             }
         }
 
-        guard settings.isConfigured else {
-            state.phase = .failed(message: ModelClientError.notConfigured.localizedDescription)
-            return false
-        }
-
         if state.activeTask?.pendingPlan != nil || state.hasPendingPlan {
-            state.phase = .failed(
+            state.enterFailed(
                 message: "Finish, cancel, or retry the pending plan before sending a new request."
             )
             return false
         }
 
-        if case .completed = state.phase { state.phase = .idle }
-        if case .failed = state.phase { state.phase = .idle }
+        guard settings.isConfigured else {
+            state.enterFailed(message: ModelClientError.notConfigured.localizedDescription)
+            return false
+        }
+
+        state.clearCompletedPhase()
+        state.clearFailedPhase()
         resetTurn()
 
         let snapshot = workspaceSnapshot()
@@ -149,7 +149,7 @@ final class TurnCoordinator {
 
         if let plan = state.activeTask?.pendingPlan {
             planProgress.replace(plan)
-            state.phase = .awaitingConfirmation
+            state.enterAwaitingConfirmation()
             return false
         }
 
@@ -181,7 +181,7 @@ final class TurnCoordinator {
         latestUserEventID = userEvent.id
         allowDriftOffer = !beganNewThread
 
-        state.phase = .thinking
+        state.enterThinking()
         state.lastAssistantText = nil
         streaming.clear()
         skillRecall.clearTurnCache()
@@ -217,7 +217,7 @@ final class TurnCoordinator {
         ) else { return }
 
         latestUserEventID = userEvent.id
-        state.phase = .thinking
+        state.enterThinking()
         state.lastAssistantText = nil
         streaming.clear()
         skillRecall.clearTurnCache()
@@ -256,7 +256,7 @@ final class TurnCoordinator {
             applyThreadOffer(from: workPlan)
 
             if workPlan.requiresConfirmation, !autoConfirm {
-                state.phase = .awaitingConfirmation
+                state.enterAwaitingConfirmation()
                 return
             }
             planApproved = true
@@ -278,12 +278,12 @@ final class TurnCoordinator {
             return
         }
         if state.activeTask?.workPlan?.requiresConfirmation == true, !planApproved {
-            state.phase = .awaitingConfirmation
+            state.enterAwaitingConfirmation()
             return
         }
 
         guard settings.isConfigured else {
-            state.phase = .failed(message: ModelClientError.notConfigured.localizedDescription)
+            state.enterFailed(message: ModelClientError.notConfigured.localizedDescription)
             return
         }
         guard !state.events.isEmpty else { return }
@@ -381,7 +381,7 @@ final class TurnCoordinator {
         streaming.clear()
         state.reviewFeedback = nil
         state.lastAssistantText = reply
-        state.phase = .completed(summary: reply)
+        state.enterCompleted(summary: reply)
         planProgress.clear()
         topicCoordinator.generateTopicIfNeeded(for: state.activeTask)
 

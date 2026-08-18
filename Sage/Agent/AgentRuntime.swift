@@ -15,7 +15,7 @@ final class AgentRuntime {
     let planProgress: PlanProgress
     /// Streaming tokens live here — not on session state — so workspace chrome
     /// / composer do not rebuild on every SSE chunk.
-    let streamingPlayback = StreamingPlayback()
+    let streamingPlayback: StreamingPlayback
 
     @ObservationIgnored let host: AgentHostSurface
     @ObservationIgnored let skillRecall: SkillRecallCoordinator
@@ -23,7 +23,7 @@ final class AgentRuntime {
     @ObservationIgnored let topicCoordinator: TopicCoordinator
     @ObservationIgnored let taskStore: AgentTaskStore
     @ObservationIgnored let turns: TurnCoordinator
-    @ObservationIgnored let streaming = StreamingTextPump()
+    @ObservationIgnored let streaming: StreamingTextPump
     @ObservationIgnored let operations: SessionOperationGate
     @ObservationIgnored let lifecycle: SessionLifecycle
     @ObservationIgnored let router: CompositeTaskRouter
@@ -111,7 +111,7 @@ final class AgentRuntime {
         host.availableSlashCommandDefinitions
     }
 
-    let systemPrompt = """
+    static let defaultSystemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
     Prefer using tools for real actions (files, clipboard, apps, notifications).
     A separate planner already produced the work plan — follow it. Use tools as you go;
@@ -123,6 +123,8 @@ final class AgentRuntime {
     Reply in the same language the user uses.
     """
 
+    let systemPrompt = AgentRuntime.defaultSystemPrompt
+
     init(
         settings: ModelSettings,
         tools: ToolRegistry,
@@ -132,112 +134,41 @@ final class AgentRuntime {
         mcpHub: CapabilityStore? = nil,
         skills: SkillSessionController
     ) {
-        let state = AgentSessionState()
-        let planProgress = PlanProgress()
-        self.state = state
-        self.planProgress = planProgress
+        let streaming = StreamingTextPump()
+        let streamingPlayback = StreamingPlayback()
+        let graph = AgentSessionGraph.assemble(
+            settings: settings,
+            tools: tools,
+            taskRepository: taskRepository,
+            contextResolver: contextResolver,
+            skillCatalog: skillCatalog,
+            mcpHub: mcpHub,
+            skills: skills,
+            systemPrompt: AgentRuntime.defaultSystemPrompt,
+            streaming: streaming,
+            streamingPlayback: streamingPlayback
+        )
+        self.state = graph.state
+        self.planProgress = graph.planProgress
+        self.streamingPlayback = streamingPlayback
+        self.streaming = streaming
         self.settings = settings
         self.tools = tools
         self.taskRepository = taskRepository
         self.skillCatalog = skillCatalog
         self.mcpHub = mcpHub
         self.skills = skills
-
-        weak let catalogRef = skillCatalog
-        weak let mcpRef = mcpHub
-
-        let continuity: ContinuityTaskResolver
-        if let continuityResolver = contextResolver as? ContinuityTaskResolver {
-            continuity = continuityResolver
-        } else {
-            continuity = ContinuityTaskResolver()
-        }
-        self.router = CompositeTaskRouter(continuity: continuity)
-
-        let taskStore = AgentTaskStore(
-            state: state,
-            planProgress: planProgress,
-            taskRepository: taskRepository,
-            skills: skills
-        )
-        self.taskStore = taskStore
-
-        let host = AgentHostSurface(
-            state: state,
-            taskStore: taskStore,
-            skills: skills,
-            settings: settings,
-            tools: tools,
-            skillCatalog: skillCatalog,
-            mcpHub: mcpHub
-        )
-        self.host = host
-
-        let skillRecall = SkillRecallCoordinator(
-            state: state,
-            skills: skills,
-            skillCatalog: { catalogRef },
-            taskStore: taskStore
-        )
-        self.skillRecall = skillRecall
-        self.streaming.attach(playback: streamingPlayback)
-
-        let modelGateway = AgentModelGateway(
-            state: state,
-            settings: settings,
-            tools: tools,
-            systemPrompt: systemPrompt,
-            skillRecall: skillRecall,
-            skillCatalog: { catalogRef },
-            mcpToolDefinitions: { mcpRef?.mcpToolDefinitions() ?? [] },
-            taskRepository: taskRepository,
-            projectPromptAppendix: {
-                SessionLifecycle.projectPromptAppendix(for: state.focusedProject)
-            },
-            streaming: streaming
-        )
-        self.modelGateway = modelGateway
-
-        let topicCoordinator = TopicCoordinator(
-            state: state,
-            taskRepository: taskRepository
-        )
-        self.topicCoordinator = topicCoordinator
-        taskStore.bind(topicCoordinator: topicCoordinator, skillRecall: skillRecall)
-
-        let operations = SessionOperationGate(state: state)
-        self.operations = operations
-
-        let lifecycle = SessionLifecycle(
-            state: state,
-            planProgress: planProgress,
-            taskRepository: taskRepository,
-            skillCatalog: { catalogRef },
-            skills: skills,
-            modelGateway: modelGateway,
-            taskStore: taskStore,
-            operations: operations
-        )
-        self.lifecycle = lifecycle
-
-        let turns = TurnCoordinator(
-            state: state,
-            planProgress: planProgress,
-            taskStore: taskStore,
-            router: router,
-            skillRecall: skillRecall,
-            modelGateway: modelGateway,
-            settings: settings,
-            skillCatalog: { catalogRef },
-            workspaceSnapshot: { lifecycle.currentWorkspaceSnapshot() },
-            streaming: streaming,
-            topicCoordinator: topicCoordinator,
-            skills: skills
-        )
-        self.turns = turns
+        self.router = graph.router
+        self.taskStore = graph.taskStore
+        self.host = graph.host
+        self.skillRecall = graph.skillRecall
+        self.modelGateway = graph.modelGateway
+        self.topicCoordinator = graph.topicCoordinator
+        self.operations = graph.operations
+        self.lifecycle = graph.lifecycle
+        self.turns = graph.turns
 
         skills.attach(runtime: self)
-        skillRecall.bind(skillHost: { [weak host] in host })
         turns.onTaskSettled = { [weak self] id, plan, outcome in
             await self?.onTaskSettled?(id, plan, outcome)
         }
@@ -291,11 +222,11 @@ final class AgentRuntime {
     }
 
     func applySkillExtractionPhase(_ phase: AgentPhase) {
-        state.phase = phase
+        state.applyHostPhase(phase)
     }
 
     func reportFailure(_ message: String) {
-        state.phase = .failed(message: message)
+        state.enterFailed(message: message)
     }
 
     func applyRecentProjects(_ projects: [ProjectRecord]) {
@@ -317,7 +248,7 @@ final class AgentRuntime {
             guard await performCancelPendingPlan() else { return nil }
         } else if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
             planProgress.replace(plan)
-            state.phase = .awaitingConfirmation
+            state.enterAwaitingConfirmation()
             guard await performCancelPendingPlan() else { return nil }
         }
 
@@ -355,7 +286,7 @@ final class AgentRuntime {
             }
 
             guard result.needsModelTurn else { return }
-            self.state.phase = .thinking
+            self.state.enterThinking()
             let ready = await self.skillRecall.prepareSkillsForTurn(query: result.userQuery)
             guard ready else { return }
             await self.turns.runModelTurn()
@@ -429,9 +360,9 @@ final class AgentRuntime {
     }
 
     func resetPhaseToIdle() {
-        if case .completed = state.phase { state.phase = .idle }
+        state.clearCompletedPhase()
         if case .failed = state.phase, state.activeTask?.pendingPlan == nil, !planProgress.hasPlan {
-            state.phase = .idle
+            state.enterIdle()
         }
     }
 
@@ -441,14 +372,14 @@ final class AgentRuntime {
             guard operations.begin() else { return }
             defer { operations.end() }
             planProgress.replace(plan)
-            state.phase = .awaitingConfirmation
+            state.enterAwaitingConfirmation()
             let taskID = state.activeTaskID
             if await performCancelPendingPlan(), let taskID {
                 await onTaskSettled?(taskID, nil, .cancelled)
             }
             return
         }
-        state.phase = .idle
+        state.enterIdle()
     }
 
     func runModelTurn() async {
@@ -463,7 +394,7 @@ final class AgentRuntime {
         _ = await operations.run {
             self.skills.tips.dismissChoose()
             self.skills.enqueueConsolidateIfNeeded(candidates: choice.candidates)
-            self.state.phase = .thinking
+            self.state.enterThinking()
             await self.skillRecall.loadSkillsByName([name])
             await self.skillRecall.refreshCatalogWithoutRematch(query: choice.queryText)
             await self.runModelTurn()
@@ -476,7 +407,7 @@ final class AgentRuntime {
         _ = await operations.run {
             self.skills.tips.dismissChoose()
             self.skills.enqueueConsolidateIfNeeded(candidates: choice.candidates)
-            self.state.phase = .thinking
+            self.state.enterThinking()
             await self.runModelTurn()
         }
     }

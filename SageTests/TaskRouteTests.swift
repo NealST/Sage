@@ -17,20 +17,44 @@ final class TaskRouteTests: XCTestCase {
         XCTAssertEqual(route.eventContext.relatedTaskIDs, [id])
     }
 
-    func testBeginNewAndResumeFactories() {
-        let id = UUID()
+    func testBeginNewFactory() {
         let begin = TaskRoute.beginNew(reason: "new topic")
         XCTAssertEqual(begin.action, .beginNew)
         XCTAssertTrue(begin.relatedTaskIDs.isEmpty)
+    }
 
-        let resume = TaskRoute.resume(
-            id,
-            relatedTaskIDs: [id],
-            confidence: 0.8,
-            reason: "prior task",
-            userVisibleHint: nil
+    func testContinuityNeverResumesAPriorTask() async {
+        let prior = Self.seededTask(topic: "整理 Downloads")
+        let current = Self.seededTask(topic: "写 pre-commit hook")
+        let workspace = TaskWorkspaceSnapshot(
+            focusedProject: nil,
+            activeTask: current,
+            recentSummaries: [
+                TaskSummary(
+                    id: prior.id,
+                    status: prior.status,
+                    projectID: prior.projectID,
+                    summary: prior.summary,
+                    topic: prior.topic,
+                    abstract: prior.abstract,
+                    updatedAt: prior.updatedAt
+                )
+            ],
+            recentProjects: [],
+            activeTaskID: current.id
         )
-        XCTAssertEqual(resume.action, .resumeTask(id))
+        let related = await ContinuityTaskResolver().route(
+            input: "继续整理 Downloads 里的 PDF",
+            workspace: workspace
+        )
+        XCTAssertEqual(related.action, .continueActive)
+        XCTAssertEqual(related.relatedTaskIDs, current.relatedTaskIDs)
+
+        let fresh = await ContinuityTaskResolver().route(
+            input: "新任务：帮我写一个脚本",
+            workspace: workspace
+        )
+        XCTAssertEqual(fresh.action, .beginNew)
     }
 
     func testRouterKeepsCurrentTaskWhenTopicsDiverge() async {

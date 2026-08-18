@@ -11,10 +11,18 @@ actor GRDBTaskRepository: TaskRepository {
     let legacyJSONURL: URL
     var databasePool: DatabasePool?
 
-    init() {
+    convenience init() {
         _ = AppSupportPaths.sageDirectory(createIfNeeded: true)
-        databaseURL = AppSupportPaths.sqliteDatabaseURL()
-        legacyJSONURL = AppSupportPaths.legacyTasksJSONURL()
+        self.init(
+            databaseURL: AppSupportPaths.sqliteDatabaseURL(),
+            legacyJSONURL: AppSupportPaths.legacyTasksJSONURL()
+        )
+    }
+
+    /// Isolated database for tests. Does not touch Application Support.
+    init(databaseURL: URL, legacyJSONURL: URL) {
+        self.databaseURL = databaseURL
+        self.legacyJSONURL = legacyJSONURL
     }
 
     func loadScopedWorkspace(projectID: UUID?) throws -> TaskWorkspaceSnapshot {
