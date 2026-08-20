@@ -13,6 +13,7 @@ enum SkillFinderActions {
         switch scope {
         case .global:
             NSWorkspace.shared.open(SkillPaths.userSkillsDirectory(createIfNeeded: true))
+
         case .project:
             guard let root = projectRoot else { return }
             NSWorkspace.shared.open(SkillPaths.projectSageSkillsDirectory(root: root, createIfNeeded: true))

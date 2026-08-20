@@ -123,12 +123,16 @@ nonisolated enum ToolInvocationPipeline {
         switch name {
         case SkillToolExecutor.loadSkillDefinition.name:
             return SkillToolExecutor.loadSkillDefinition
+
         case SkillToolExecutor.loadSkillResourceDefinition.name:
             return SkillToolExecutor.loadSkillResourceDefinition
+
         case SkillToolExecutor.runSkillScriptDefinition.name:
             return SkillToolExecutor.runSkillScriptDefinition
+
         case SkillToolExecutor.saveSkillDefinition.name:
             return SkillToolExecutor.saveSkillDefinition
+
         default:
             return nil
         }

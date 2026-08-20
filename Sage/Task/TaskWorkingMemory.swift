@@ -63,7 +63,7 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
     /// Creates a model-only snapshot covering `foldedFromEventID`...`foldedThroughEventID`.
     init(
         id: UUID = UUID(),
-        schemaVersion: Int = TaskWorkingMemory.currentSchemaVersion,
+        schemaVersion: Int = Self.currentSchemaVersion,
         foldedFromEventID: UUID,
         foldedThroughEventID: UUID,
         mode: Mode,
@@ -101,7 +101,7 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
-            ?? TaskWorkingMemory.currentSchemaVersion
+            ?? Self.currentSchemaVersion
         foldedFromEventID = try container.decode(UUID.self, forKey: .foldedFromEventID)
         foldedThroughEventID = try container.decode(UUID.self, forKey: .foldedThroughEventID)
         mode = try container.decode(Mode.self, forKey: .mode)
@@ -132,8 +132,8 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
         recentActions: String? = nil,
         nextSteps: String? = nil,
         narrative: String? = nil
-    ) -> TaskWorkingMemory {
-        TaskWorkingMemory(
+    ) -> Self {
+        Self(
             foldedFromEventID: foldedFromEventID,
             foldedThroughEventID: foldedThroughEventID,
             mode: .structured,
@@ -156,8 +156,8 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
         foldedThroughEventID: UUID,
         narrative: String,
         sourceModel: String? = nil
-    ) -> TaskWorkingMemory {
-        TaskWorkingMemory(
+    ) -> Self {
+        Self(
             foldedFromEventID: foldedFromEventID,
             foldedThroughEventID: foldedThroughEventID,
             mode: .simple,
@@ -201,6 +201,7 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
             if let narrative {
                 lines.append(narrative)
             }
+
         case .structured:
             appendSection(heading: "Overview", body: overview, to: &lines)
             appendSection(heading: "Architecture", body: architecture, to: &lines)
@@ -222,7 +223,7 @@ nonisolated struct TaskWorkingMemory: Identifiable, Codable, Sendable, Equatable
     ///
     /// An empty `events` array is treated as unknown history and returns `self`
     /// unchanged — metadata-only loads must not wipe the fold.
-    func validated(against events: [AgentEvent]) -> TaskWorkingMemory? {
+    func validated(against events: [AgentEvent]) -> Self? {
         guard !events.isEmpty else { return self }
         guard let fromIndex = events.firstIndex(where: { $0.id == foldedFromEventID }),
               let throughIndex = events.firstIndex(where: { $0.id == foldedThroughEventID }),

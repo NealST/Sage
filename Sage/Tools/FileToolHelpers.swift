@@ -5,7 +5,6 @@
 
 import Foundation
 
-
 // MARK: - Shared file-tool helpers
 
 /// Resolves copy/move destination: if `destination` is an existing directory, appends
@@ -33,7 +32,7 @@ nonisolated enum FileTransferDestination {
 /// Streams UTF-8 text lines from a `FileHandle`, retaining leftover bytes across chunks
 /// so multi-byte characters are never split at chunk boundaries (split on `0x0A`).
 nonisolated enum UTF8LineStreamer {
-    static let defaultChunkSize = 64 * 1024
+    static let defaultChunkSize = 64 * 1_024
 
     /// Invokes `body` once per line (no trailing newline). Return `false` from `body` to stop.
     /// When `strict` is true, invalid UTF-8 throws; otherwise streaming stops quietly.
@@ -81,4 +80,3 @@ nonisolated enum UTF8LineStreamer {
         }
     }
 }
-

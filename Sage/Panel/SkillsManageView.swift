@@ -13,9 +13,9 @@ struct SkillsManageView: View {
     @Environment(\.sageTypography) private var type
 
     /// Pinned when opened from Settings so mid-edit key-window changes don't swap catalogs.
-    var pinnedSession: AgentSession? = nil
+    var pinnedSession: AgentSession?
     /// Optional close handler for window presentation (falls back to `dismiss` in sheets).
-    var onDone: (() -> Void)? = nil
+    var onDone: (() -> Void)?
 
     private var session: AgentSession { pinnedSession ?? appState.keySession }
     @Environment(\.dismiss) private var dismiss
@@ -365,6 +365,7 @@ struct SkillsManageView: View {
         switch skill.scope {
         case .global:
             location = "Everywhere — available in every workspace"
+
         case .project:
             location = "This Project — only used in “\(projectName)”"
         }

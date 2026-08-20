@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class ContextBudgetTests: XCTestCase {
     func testCapSkillContentLeavesShortPayloadAlone() {
@@ -25,7 +25,7 @@ final class ContextBudgetTests: XCTestCase {
         let user = AgentEvent(kind: .userInput, content: "hi")
         let selected = ContextBudget.select(from: [protected, user])
         XCTAssertTrue(selected.contains(where: \.protected))
-        XCTAssertTrue(selected.contains(where: { !$0.protected && $0.content == "hi" }))
+        XCTAssertTrue(selected.contains { !$0.protected && $0.content == "hi" })
     }
 
     func testMiddleOutKeepsHeadAndTail() {
@@ -54,8 +54,8 @@ final class ContextBudgetTests: XCTestCase {
         events.append(current)
 
         let selected = ContextBudget.select(from: events, budget: budget)
-        XCTAssertTrue(selected.contains(where: { $0.id == current.id }))
-        XCTAssertTrue(selected.contains(where: { $0.content.contains("CURRENT-TURN") }))
+        XCTAssertTrue(selected.contains { $0.id == current.id })
+        XCTAssertTrue(selected.contains { $0.content.contains("CURRENT-TURN") })
         XCTAssertLessThan(selected.count, events.count)
     }
 
@@ -75,7 +75,7 @@ final class ContextBudgetTests: XCTestCase {
         XCTAssertNotNil(result)
         XCTAssertTrue(result?.content.contains("tool result compacted") == true)
         XCTAssertLessThan(result?.content.utf8.count ?? .max, huge.utf8.count)
-        XCTAssertTrue(selected.contains(where: { $0.id == user.id }))
+        XCTAssertTrue(selected.contains { $0.id == user.id })
     }
 
     func testRelatedDialogueDropsBeforeCurrentUser() {
@@ -92,7 +92,7 @@ final class ContextBudgetTests: XCTestCase {
                     RelatedDialogueLine(kind: .user, content: String(repeating: "related-user ", count: 80)),
                     RelatedDialogueLine(kind: .assistant, content: String(repeating: "related-asst ", count: 80)),
                 ]
-            )
+            ),
         ]
         let assembly = ContextBudget.assemble(
             PromptLayout(
@@ -103,7 +103,7 @@ final class ContextBudgetTests: XCTestCase {
             )
         )
         let system = assembly.events.first { $0.kind == .systemInstruction }?.content ?? ""
-        XCTAssertTrue(assembly.events.contains(where: { $0.id == current.id }))
+        XCTAssertTrue(assembly.events.contains { $0.id == current.id })
         XCTAssertFalse(system.contains("related-user"))
     }
 
@@ -158,7 +158,7 @@ final class ContextBudgetTests: XCTestCase {
         XCTAssertTrue(system.contains("You are Sage."))
         XCTAssertTrue(system.contains("Confirmed work plan") || system.contains("Intent: keep going"))
         XCTAssertFalse(system.contains("**alpha**"))
-        XCTAssertTrue(assembly.events.contains(where: { $0.id == current.id }))
+        XCTAssertTrue(assembly.events.contains { $0.id == current.id })
     }
 
     func testCapabilityReminderAndTodosStayInSystem() {

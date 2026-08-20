@@ -121,8 +121,10 @@ struct AgentWorkspaceView: View {
             switch phase {
             case .awaitingConfirmation, .thinking, .executing:
                 isInputFocused = false
+
             case .failed:
                 isInputFocused = false
+
             case .idle, .completed:
                 if projectTab == .task || !isProjectWindow {
                     focusInputSoon()
@@ -138,11 +140,13 @@ struct AgentWorkspaceView: View {
         switch projectTab {
         case .task:
             taskPane
+
         case .files:
             if let root = session.agent.state.focusedProject?.rootURL {
                 ProjectFilesBrowserView(rootURL: root)
                     .id("\(root.path)-\(gitBranch ?? "none")")
             }
+
         case .history:
             if let root = session.agent.state.focusedProject?.rootURL {
                 ProjectHistoryBrowserView(rootURL: root)
@@ -155,9 +159,8 @@ struct AgentWorkspaceView: View {
     private var taskPane: some View {
         VStack(spacing: 0) {
             AgentTranscriptPane(
-                stickToBottom: $stickToBottom,
-                onFailureAppear: { isInputFocused = false }
-            )
+                stickToBottom: $stickToBottom
+            ) { isInputFocused = false }
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
             SkillTipsBanner()
                 .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)

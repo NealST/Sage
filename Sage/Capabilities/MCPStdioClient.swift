@@ -373,9 +373,7 @@ actor MCPStdioClient {
 
         if let idValue = map["id"] {
             let id: Int?
-            if case .number(let n) = idValue { id = Int(n) }
-            else if case .string(let s) = idValue { id = Int(s) }
-            else { id = nil }
+            if case .number(let n) = idValue { id = Int(n) } else if case .string(let s) = idValue { id = Int(s) } else { id = nil }
             guard let id, let cont = pending.removeValue(forKey: id) else { return }
             if let error = map["error"] {
                 cont.resume(throwing: ClientError.remote(stringify(error)))

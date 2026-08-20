@@ -14,7 +14,7 @@ nonisolated struct TaskSummary: Identifiable, Sendable, Equatable {
     var abstract: String?
     var updatedAt: Date
     /// Set when this row was spawned by a schedule (not a window thread).
-    var originScheduleID: UUID? = nil
+    var originScheduleID: UUID?
 
     /// Whether Recents should treat this as a scheduled run rather than a user thread.
     var isScheduled: Bool { originScheduleID != nil }
@@ -31,7 +31,7 @@ nonisolated struct TaskSummary: Identifiable, Sendable, Equatable {
     }
 
     /// User threads first, then scheduled runs; each group newest-first.
-    static func sortedForRecents(_ summaries: [TaskSummary]) -> [TaskSummary] {
+    static func sortedForRecents(_ summaries: [Self]) -> [Self] {
         summaries.sorted { lhs, rhs in
             if lhs.isScheduled != rhs.isScheduled {
                 return !lhs.isScheduled && rhs.isScheduled

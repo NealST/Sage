@@ -134,6 +134,7 @@ enum PathTextSupport {
             guard let fileURL = fileURL(fromAction: url) else { return .discarded }
             NSWorkspace.shared.activateFileViewerSelecting([fileURL])
             return .handled
+
         case quickLookScheme:
             guard let fileURL = fileURL(fromAction: url) else { return .discarded }
             // ⌘-click reveals in Finder (macOS familiarity); plain click = Quick Look.
@@ -143,8 +144,10 @@ enum PathTextSupport {
                 QuickLookPresenter.shared.preview(url: fileURL)
             }
             return .handled
+
         case "http", "https", "mailto":
             return .systemAction
+
         default:
             return .discarded
         }

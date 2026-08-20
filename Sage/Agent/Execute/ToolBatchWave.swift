@@ -21,8 +21,8 @@ nonisolated enum ToolBatchWave: Equatable, Sendable {
             && toolName != ExploreSubagentTool.name
     }
 
-    static func partition(_ steps: [AgentStep]) -> [ToolBatchWave] {
-        var waves: [ToolBatchWave] = []
+    static func partition(_ steps: [AgentStep]) -> [Self] {
+        var waves: [Self] = []
         var pending: [Int] = []
 
         func flushPending() {

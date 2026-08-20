@@ -20,10 +20,13 @@ nonisolated enum ExecuteCapabilityReminder {
         switch planKind {
         case .act:
             lines.append("Work plan kind: act.")
+
         case .observe:
             lines.append("Work plan kind: observe (read/list/search only).")
+
         case .answer:
             lines.append("Work plan kind: answer (no Mac changes).")
+
         case nil:
             lines.append("Work plan kind: none yet. Do not change the Mac.")
         }

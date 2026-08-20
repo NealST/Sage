@@ -267,8 +267,10 @@ actor GRDBTaskRepository: TaskRepository {
                 switch kindRaw {
                 case AgentEventKind.userInput.rawValue:
                     kind = .user
+
                 case AgentEventKind.assistantResponse.rawValue:
                     kind = .assistant
+
                 default:
                     continue
                 }
@@ -659,5 +661,4 @@ actor GRDBTaskRepository: TaskRepository {
             )
         }
     }
-
 }

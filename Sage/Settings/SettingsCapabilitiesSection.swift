@@ -18,13 +18,12 @@ struct SettingsCapabilitiesSection: View {
                     symbol: SageDesign.Symbol.skills,
                     title: "Skills",
                     detail: "\(enabledSkillCount) of \(skillsCatalog.skills.count) enabled",
-                    isFirst: true,
-                    action: {
+                    isFirst: true
+                ) {
                         let session = pinnedSkillsSession ?? appState.keySession
                         pinnedSkillsSession = session
                         onOpenSkills?(session)
-                    }
-                )
+                }
 
                 ForEach(Array(skillsCatalog.skills.prefix(4).enumerated()), id: \.element.id) { _, skill in
                     SettingsFormChrome.divider
@@ -32,7 +31,7 @@ struct SettingsCapabilitiesSection: View {
                         title: skill.name,
                         isOn: Binding(
                             get: {
-                                skillsCatalog.skills.first(where: { $0.name == skill.name })?.enabled
+                                skillsCatalog.skills.first { $0.name == skill.name }?.enabled
                                     ?? skill.enabled
                             },
                             set: { enabled in
@@ -50,9 +49,8 @@ struct SettingsCapabilitiesSection: View {
                     symbol: SageDesign.Symbol.mcp,
                     title: "MCP Servers",
                     detail: "Full-trust extensions · \(connectedMCPCount) connected",
-                    isLast: appState.mcpHub.mcpServers.isEmpty,
-                    action: { showMCPManage = true }
-                )
+                    isLast: appState.mcpHub.mcpServers.isEmpty
+                ) { showMCPManage = true }
 
                 ForEach(Array(appState.mcpHub.mcpServers.prefix(3).enumerated()), id: \.element.id) { index, server in
                     SettingsFormChrome.divider
@@ -62,7 +60,7 @@ struct SettingsCapabilitiesSection: View {
                         isLast: index == min(2, appState.mcpHub.mcpServers.count - 1),
                         isOn: Binding(
                             get: {
-                                appState.mcpHub.mcpServers.first(where: { $0.id == server.id })?.enabled
+                                appState.mcpHub.mcpServers.first { $0.id == server.id }?.enabled
                                     ?? server.enabled
                             },
                             set: { appState.mcpHub.setMCPEnabled(server.id, enabled: $0) }
@@ -83,7 +81,7 @@ struct SettingsCapabilitiesSection: View {
     }
 
     private var connectedMCPCount: Int {
-        appState.mcpHub.mcpServers.count(where: { $0.status == .connected })
+        appState.mcpHub.mcpServers.count { $0.status == .connected }
     }
 
     private func mcpStatusDetail(_ server: MCPServerConfig) -> String? {

@@ -130,6 +130,7 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         switch session.kind {
         case .general:
             offset = 0
+
         case .project:
             offset = CGFloat(appState.projectSessions.count) * 22
         }
@@ -153,6 +154,7 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         case .general:
             hide()
             return false
+
         case .project(let id):
             Task { @MainActor in
                 await appState.closeProjectWindow(projectID: id)

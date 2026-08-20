@@ -11,9 +11,9 @@ struct UnifiedDiffView: View {
     let after: String
     var created: Bool = false
     var truncated: Bool = false
-    var path: String? = nil
+    var path: String?
     /// Prefer payload stats when before/after were clipped for storage.
-    var statsOverride: LineDiff.Stats? = nil
+    var statsOverride: LineDiff.Stats?
     /// Collapsed height budget (line count) before “Show more”.
     var collapsedLineLimit: Int = 24
 
@@ -118,6 +118,7 @@ struct UnifiedDiffView: View {
         switch op {
         case let .equal(line):
             textRow(prefix: " ", text: line, color: .primary.opacity(0.55), fill: Color.clear)
+
         case let .insert(line):
             textRow(
                 prefix: "+",
@@ -125,6 +126,7 @@ struct UnifiedDiffView: View {
                 color: Color(nsColor: .systemGreen),
                 fill: Color(nsColor: .systemGreen).opacity(SageDesign.Chrome.fillOpacity)
             )
+
         case let .delete(line):
             textRow(
                 prefix: "−",

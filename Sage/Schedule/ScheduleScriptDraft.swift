@@ -11,8 +11,8 @@ nonisolated struct ScheduleScriptDraft: Equatable {
     var cadencePresetInsert: String
     let openedAt: Date
 
-    static func blank() -> ScheduleScriptDraft {
-        ScheduleScriptDraft(
+    static func blank() -> Self {
+        Self(
             command: "",
             cadence: .weekdays(hour: 9, minute: 0),
             cadencePresetInsert: "weekdays 9:00",

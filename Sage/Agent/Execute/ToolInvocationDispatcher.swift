@@ -115,8 +115,10 @@ nonisolated enum ToolInvocationDispatcher {
         let planLabel = switch workPlanKind {
         case .observe:
             "an observe plan (read/list/search only)"
+
         case .answer:
             "an answer plan (no Mac changes)"
+
         case .act, nil:
             "not an act plan"
         }
@@ -154,14 +156,13 @@ nonisolated enum ToolInvocationDispatcher {
                     try await tool.call(argumentsJSON: argumentsJSON)
                 }
             }
-        } else {
-            return try await Task.detached(priority: .userInitiated) {
-                try await PathGuard.$policy.withValue(pathGuardPolicy) {
-                    try await PathGuard.$readAllowlist.withValue(allowlist) {
-                        try await tool.call(argumentsJSON: argumentsJSON)
-                    }
-                }
-            }.value
         }
+        return try await Task.detached(priority: .userInitiated) {
+            try await PathGuard.$policy.withValue(pathGuardPolicy) {
+                try await PathGuard.$readAllowlist.withValue(allowlist) {
+                    try await tool.call(argumentsJSON: argumentsJSON)
+                }
+            }
+        }.value
     }
 }

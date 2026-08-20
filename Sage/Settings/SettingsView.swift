@@ -42,12 +42,11 @@ struct SettingsView: View {
                     )
                     SettingsPrivacySection(
                         eraseMessage: eraseMessage,
-                        isBusy: appState.agent.state.isBusy,
-                        onErase: {
+                        isBusy: appState.agent.state.isBusy
+                    ) {
                             eraseMessage = nil
                             showEraseConfirm = true
-                        }
-                    )
+                    }
                 }
                 .padding(.horizontal, SageDesign.Spacing.xl)
                 .padding(.top, 20)

@@ -8,7 +8,6 @@
 import Foundation
 
 nonisolated enum SkillExtractionParsing {
-
     // MARK: - Response Parsing
 
     /// Normalizes a model-generated skill name to valid kebab-case.
@@ -48,7 +47,7 @@ nonisolated enum SkillExtractionParsing {
         guard !trimmedDescription.isEmpty, !trimmedBody.isEmpty else {
             throw SkillCompositionError.invalidResponse
         }
-        guard trimmedDescription.count <= 1024 else {
+        guard trimmedDescription.count <= 1_024 else {
             throw SkillCompositionError.invalidResponse
         }
 

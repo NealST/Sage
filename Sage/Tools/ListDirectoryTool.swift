@@ -37,7 +37,7 @@ nonisolated struct ListDirectoryTool: AgentTool {
 
     private static let maxEntries = 500
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let effectivePath = try PathGuard.defaultExplorationPath(args.path)
         let url = try PathGuard.resolveAllowed(effectivePath, access: .read)

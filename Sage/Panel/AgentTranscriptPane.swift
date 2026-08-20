@@ -15,7 +15,7 @@ struct ToolResultIndex: Equatable {
     /// Call ids that already have any tool result (including errors).
     let completedCallIDs: Set<String>
 
-    static let empty = ToolResultIndex(successContentByCallID: [:], completedCallIDs: [])
+    static let empty = Self(successContentByCallID: [:], completedCallIDs: [])
 
     init(successContentByCallID: [String: String], completedCallIDs: Set<String>) {
         self.successContentByCallID = successContentByCallID
@@ -74,12 +74,10 @@ struct AgentTranscriptPane: View {
                                 .id(event.id)
                         }
 
-                        phaseAccessory(
-                            onStreamScroll: {
+                        phaseAccessory {
                                 guard stickToBottom else { return }
                                 scrollToLatestStreaming(using: proxy)
-                            }
-                        )
+                        }
                         .id("phase-accessory")
                     }
                     .padding(SageDesign.Spacing.lg)
@@ -218,6 +216,7 @@ struct AgentTranscriptPane: View {
                             }
                         )
                     }
+
                 case .toolBatch:
                     if let plan = session.agent.planProgress.plan
                         ?? session.agent.state.activeTask?.pendingPlan {
@@ -235,6 +234,7 @@ struct AgentTranscriptPane: View {
                             }
                         )
                     }
+
                 case .toolRoundLimit:
                     if case .toolRoundLimit(let current, let next) = session.agent.state.pendingPrompt {
                         ToolRoundLimitCard(
@@ -248,6 +248,7 @@ struct AgentTranscriptPane: View {
                             }
                         )
                     }
+
                 case .toolApproval:
                     if case .toolApproval(_, let name, let args, let title) = session.agent.state.pendingPrompt {
                         ToolApprovalCard(
@@ -268,6 +269,7 @@ struct AgentTranscriptPane: View {
                             }
                         )
                     }
+
                 case .none:
                     EmptyView()
                 }
@@ -429,4 +431,3 @@ private struct ThinkingStreamAccessory: View {
 }
 
 // MARK: - Streaming scroll throttle (legacy helper removed — key lives on StreamingPlayback)
-

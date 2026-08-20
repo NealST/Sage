@@ -11,7 +11,7 @@ struct WorkPlanCard: View {
     var isExecuting: Bool
     var onConfirm: () -> Void
     var onCancel: () -> Void
-    var onStop: (() -> Void)? = nil
+    var onStop: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {

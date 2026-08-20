@@ -13,6 +13,7 @@ final class AgentSession: Identifiable {
             switch self {
             case .general:
                 return "SageAgentWindow.General"
+
             case .project(let id):
                 return "SageAgentWindow.Project.\(id.uuidString)"
             }

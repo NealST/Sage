@@ -67,10 +67,12 @@ struct SkillSaveStatusIndicator: View {
         case .running:
             ProgressView()
                 .controlSize(.mini)
+
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
                 .font(.system(size: 10, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
+
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
                 .font(.system(size: 10, weight: .semibold))
@@ -83,8 +85,10 @@ struct SkillSaveStatusIndicator: View {
         case .running:
             let count = jobs.filter { if case .running = $0.status { return true }; return false }.count
             return count > 1 ? "Saving \(count)…" : "Saving…"
+
         case .succeeded:
             return "Saved"
+
         case .failed:
             let count = jobs.filter { if case .failed = $0.status { return true }; return false }.count
             return count > 1 ? "\(count) failed" : "Save failed"
@@ -95,6 +99,7 @@ struct SkillSaveStatusIndicator: View {
         switch aggregate {
         case .running, .succeeded:
             return .secondary
+
         case .failed:
             return .orange
         }
@@ -104,6 +109,7 @@ struct SkillSaveStatusIndicator: View {
         switch aggregate {
         case .running, .succeeded:
             return Color.primary.opacity(SageDesign.Chrome.pillFillOpacity)
+
         case .failed:
             return Color.orange.opacity(0.14)
         }
@@ -114,9 +120,11 @@ struct SkillSaveStatusIndicator: View {
         case .running:
             let count = jobs.filter { if case .running = $0.status { return true }; return false }.count
             return "Skill save in progress, \(count) running. Click for details."
+
         case .failed:
             let count = jobs.filter { if case .failed = $0.status { return true }; return false }.count
             return "Skill save failed, \(count) need attention. Click for details."
+
         case .succeeded:
             return "Skill saved. Click for details."
         }
@@ -202,12 +210,14 @@ struct SkillSaveStatusIndicator: View {
             case .enhance: return "Updating experience…"
             case .merge: return "Merging skills…"
             }
+
         case .succeeded:
             switch job.type {
             case .new: return "Created"
             case .enhance: return "Updated"
             case .merge: return "Merged"
             }
+
         case .failed(let message):
             return message
         }
@@ -219,11 +229,13 @@ struct SkillSaveStatusIndicator: View {
         case .running:
             ProgressView()
                 .controlSize(.mini)
+
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .symbolRenderingMode(.hierarchical)
+
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
                 .font(.system(size: 12, weight: .semibold))
@@ -236,6 +248,7 @@ struct SkillSaveStatusIndicator: View {
         switch status {
         case .running, .succeeded:
             return .secondary
+
         case .failed:
             return .orange
         }

@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 @MainActor
 final class AgentTaskStoreTests: XCTestCase {
@@ -81,7 +81,7 @@ final class AgentTaskStoreTests: XCTestCase {
                     toolName: "write_text_file",
                     argumentsJSON: "{}",
                     title: "Write"
-                )
+                ),
             ]
         )
         let savedPending = await store.commit(appendEvents: [], deleteEventIDs: []) { task in
@@ -236,7 +236,7 @@ final class TurnCoordinatorRoutingTests: XCTestCase {
                     toolName: "write_text_file",
                     argumentsJSON: "{}",
                     title: "Write"
-                )
+                ),
             ]
         )
         _ = await runtime.taskStore.commit(appendEvents: [], deleteEventIDs: []) {
@@ -247,7 +247,8 @@ final class TurnCoordinatorRoutingTests: XCTestCase {
         let accepted = await runtime.turns.performSubmit("follow up")
         XCTAssertFalse(accepted)
         guard case .failed(let message) = runtime.state.phase else {
-            return XCTFail("expected failed phase while a plan is pending")
+            XCTFail("expected failed phase while a plan is pending")
+            return
         }
         XCTAssertTrue(message.contains("pending plan"))
     }

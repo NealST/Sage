@@ -189,11 +189,10 @@ final class ExecuteAgent {
         }
         return await taskStore.commit(
             appendEvents: [],
-            deleteEventIDs: [],
-            mutate: { task in
+            deleteEventIDs: []
+        ) { task in
                 task.pendingPrompt = nil
-            }
-        )
+        }
     }
 
     private func runModelTurn(includeTools: Bool) async {

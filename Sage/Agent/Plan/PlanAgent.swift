@@ -203,8 +203,10 @@ final class PlanAgent {
             switch persist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "true", "yes", "1":
                 return SkillPersistAdvice(persist: true)
+
             case "false", "no", "0":
                 return SkillPersistAdvice(persist: false)
+
             default:
                 return nil
             }
@@ -236,8 +238,10 @@ final class PlanAgent {
                 switch event.kind {
                 case .userInput:
                     lines.append("User: \(clipped)")
+
                 case .assistantResponse:
                     lines.append("Assistant: \(clipped)")
+
                 default:
                     break
                 }

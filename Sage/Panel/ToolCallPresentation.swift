@@ -16,16 +16,20 @@ nonisolated enum ToolCallPresentation {
         case fields([(key: String, value: String)])
         case empty
 
-        static func == (lhs: Body, rhs: Body) -> Bool {
+        static func == (lhs: Self, rhs: Self) -> Bool {
             switch (lhs, rhs) {
             case let (.fileEdit(p1, c1, l1), .fileEdit(p2, c2, l2)):
                 return p1 == p2 && c1 == c2 && l1 == l2
+
             case let (.text(a1, v1), .text(a2, v2)):
                 return a1 == a2 && v1 == v2
+
             case let (.fields(f1), .fields(f2)):
                 return f1.map(\.key) == f2.map(\.key) && f1.map(\.value) == f2.map(\.value)
+
             case (.empty, .empty):
                 return true
+
             default:
                 return false
             }
@@ -74,75 +78,105 @@ nonisolated enum ToolCallPresentation {
         switch name {
         case "list_directory":
             return "List \(shortPath(display(args["path"]), policy: policy) ?? "folder")"
+
         case "move_file":
             return "Move \(shortPath(display(args["source"]), policy: policy) ?? "file")"
+
         case "rename_file":
             return "Rename to \(display(args["new_name"]) ?? "…")"
+
         case "create_directory":
             return "Create \(shortPath(display(args["path"]), policy: policy) ?? "folder")"
+
         case "search_files":
             return "Search \(shortPath(display(args["path"]), policy: policy) ?? "files")"
+
         case "read_text_file":
             return "Read \(shortPath(display(args["path"]), policy: policy) ?? "file")"
+
         case "write_text_file":
             return "Write \(shortPath(display(args["path"]), policy: policy) ?? "file")"
+
         case "copy_file":
             return "Copy \(shortPath(display(args["source"]), policy: policy) ?? "file")"
+
         case "delete_file":
             return "Delete \(shortPath(display(args["path"]), policy: policy) ?? "file")"
+
         case "run_shell_command":
             let cmd = display(args["command"]) ?? "command"
             let short = cmd.count > 30 ? String(cmd.prefix(27)) + "…" : cmd
             return "Run: \(short)"
+
         case "get_clipboard":
             return "Read clipboard"
+
         case "set_clipboard":
             return "Update clipboard"
+
         case "get_selected_text":
             return "Get selection"
+
         case "type_text":
             let text = display(args["text"]) ?? ""
             let preview = text.count > 20 ? String(text.prefix(17)) + "…" : text
             return preview.isEmpty ? "Type text" : "Type: \(preview)"
+
         case "get_screen_info":
             return "Get screen info"
+
         case "get_frontmost_app":
             return "Check active app"
+
         case "open_application":
             return "Open \(display(args["name"]) ?? "app")"
+
         case "open_url":
             return "Open URL"
+
         case "notify":
             return "Notify: \(display(args["title"]) ?? "…")"
+
         case "get_system_volume":
             return "Get volume"
+
         case "set_system_volume":
             return "Set volume to \(display(args["volume"]) ?? "…")%"
+
         case "toggle_appearance":
             return "Toggle appearance"
+
         case "create_reminder":
             let title = display(args["title"]) ?? "reminder"
             let short = title.count > 20 ? String(title.prefix(17)) + "…" : title
             return "Remind: \(short)"
+
         case "take_screenshot":
             return "Take screenshot"
+
         case "load_skill":
             return "Load skill: \(display(args["name"]) ?? "…")"
+
         case "load_skill_resource":
             let skill = display(args["skill_name"]) ?? ""
             let path = display(args["path"]) ?? "resource"
             return skill.isEmpty ? "Load resource: \(path)" : "[\(skill)] \(path)"
+
         case "run_skill_script":
             let script = display(args["script_path"]) ?? "script"
             return "Run: \(script)"
+
         case "save_skill":
             let action = display(args["action"]) ?? "save"
             let name = display(args["name"]) ?? "skill"
             return action == "enhance" ? "Enhance skill: \(name)" : "Save skill: \(name)"
+
         case "recall_task_transcript":
             return "Recall earlier turns"
+
         case "manage_todo_list":
             return "Update todo list"
+
         default:
             if name.hasPrefix("mcp__") {
                 return name.split(separator: "__").last.map(String.init)?
@@ -287,15 +321,19 @@ nonisolated enum ToolCallPresentation {
         switch value {
         case .string(let s):
             return s
+
         case .number(let n):
             if n.rounded() == n, n >= Double(Int.min), n <= Double(Int.max) {
                 return String(Int(n))
             }
             return String(n)
+
         case .bool(let b):
             return b ? "true" : "false"
+
         case .null:
             return nil
+
         case .object, .array:
             guard let data = try? JSONEncoder().encode(value),
                   let s = String(data: data, encoding: .utf8)

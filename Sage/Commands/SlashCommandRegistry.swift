@@ -3,7 +3,6 @@ import Foundation
 /// Central catalog: builtin registration, autocomplete definitions, and dispatch.
 @MainActor
 enum SlashCommandRegistry {
-
     /// Single source of truth for built-in commands. Add new builtins here only.
     static let builtins: [any BuiltinSlashCommand] = [
         RememberSlashCommand(),
@@ -53,7 +52,7 @@ enum SlashCommandRegistry {
     static func parse(_ input: String) -> SlashCommandInvocation? {
         guard input.hasPrefix("/") else { return nil }
         let afterSlash = input.dropFirst()
-        let name = String(afterSlash.prefix(while: { !$0.isWhitespace }))
+        let name = String(afterSlash.prefix { !$0.isWhitespace })
         guard !name.isEmpty else { return nil }
 
         let nameEnd = input.index(input.startIndex, offsetBy: 1 + name.count)

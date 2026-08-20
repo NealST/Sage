@@ -108,7 +108,7 @@ final class AgentModelGateway {
         if let cached = skillRecall.cachedResult {
             skillResult = cached
         } else {
-            let latestUserMessage = state.events.last(where: { $0.kind == .userInput })?.content ?? ""
+            let latestUserMessage = state.events.last { $0.kind == .userInput }?.content ?? ""
             let computed = await skillCatalog()?.skillsPromptAppendix()
             if let computed {
                 skillRecall.rememberCache(computed, query: latestUserMessage)

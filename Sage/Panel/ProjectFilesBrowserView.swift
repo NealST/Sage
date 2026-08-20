@@ -55,9 +55,9 @@ private nonisolated struct FileNode: Identifiable, Sendable {
     let name: String
     let url: URL
     let isDirectory: Bool
-    var children: [FileNode]?
+    var children: [Self]?
 
-    static func loadChildren(of directory: URL, depth: Int) -> [FileNode] {
+    static func loadChildren(of directory: URL, depth: Int) -> [Self] {
         guard depth > 0 else { return [] }
         let skip: Set<String> = [
             ".git", "node_modules", "DerivedData", ".build", "Pods", "xcuserdata",
@@ -73,19 +73,19 @@ private nonisolated struct FileNode: Identifiable, Sendable {
                 $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent)
                     == .orderedAscending
             }
-            .compactMap { url -> FileNode? in
+            .compactMap { url -> Self? in
                 let name = url.lastPathComponent
                 if skip.contains(name) { return nil }
                 let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
                 let isDir = values?.isDirectory == true
-                let kids: [FileNode]?
+                let kids: [Self]?
                 if isDir {
                     let loaded = loadChildren(of: url, depth: depth - 1)
                     kids = loaded.isEmpty ? nil : loaded
                 } else {
                     kids = nil
                 }
-                return FileNode(
+                return Self(
                     id: url.path,
                     name: name,
                     url: url,

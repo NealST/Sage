@@ -59,21 +59,28 @@ final class AppState {
         switch keySession.agent.state.phase {
         case .idle:
             return "Ask Sage to work on your Mac"
+
         case .thinking:
             return "Thinking…"
+
         case .awaitingConfirmation:
             switch keySession.agent.turnChrome {
             case .toolRoundLimit:
                 return "Tool round limit — continue or finish"
+
             case .toolApproval:
                 return "Tool waiting for approval"
+
             default:
                 return "Plan waiting for confirmation"
             }
+
         case .executing:
             return "Working…"
+
         case .completed:
             return "Done"
+
         case .failed(let message):
             return Self.compactStatus(message)
         }
@@ -410,6 +417,7 @@ final class AppState {
             switch outcome {
             case .completed:
                 postNotification = !watching
+
             case .cancelled, .failed:
                 postNotification = true
             }

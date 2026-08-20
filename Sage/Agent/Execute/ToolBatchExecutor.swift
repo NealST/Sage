@@ -46,10 +46,13 @@ enum ToolBatchExecutor {
                 case .ok:
                     try Task.checkCancellation()
                     continue
+
                 case .paused:
                     return
+
                 case .persistFailed:
                     return
+
                 case .cancelled:
                     throw CancellationError()
                 }
@@ -124,13 +127,12 @@ enum ToolBatchExecutor {
 
         let ok = await services.commit(
             appendEvents: [],
-            deleteEventIDs: errorEventIDs,
-            mutate: { task in
+            deleteEventIDs: errorEventIDs
+        ) { task in
                 task.pendingPlan = plan
                 task.pendingPrompt = nil
                 task.status = .active
-            }
-        )
+        }
         guard ok else { return nil }
         services.planProgress.replace(plan)
         return plan
@@ -176,8 +178,10 @@ enum ToolBatchExecutor {
         switch services.events.last?.kind {
         case .toolResult:
             services.state.enterFailed(message: "Stopped. Retry to summarize.")
+
         case .userInput:
             services.state.enterFailed(message: "Stopped. Retry to continue.")
+
         default:
             services.state.enterIdle()
         }
@@ -228,6 +232,7 @@ enum ToolBatchExecutor {
         switch wave {
         case .serial(let index):
             return await runSerialStep(index, plan: &plan, services: services)
+
         case .parallel(let indices):
             return await runParallelSteps(indices, plan: &plan, services: services)
         }
@@ -387,10 +392,13 @@ enum ToolBatchExecutor {
             switch await applyOutcome(item.result, at: item.index, plan: &plan, services: services) {
             case .ok:
                 continue
+
             case .paused:
                 return .paused
+
             case .persistFailed:
                 return .persistFailed
+
             case .cancelled:
                 cancelled = true
             }
@@ -449,9 +457,11 @@ enum ToolBatchExecutor {
                 toolCallID: step.toolCallID,
                 protected: isSkillContext
             )
+
         case .cancelled:
             plan.steps[index].status = .pending
             return .cancelled
+
         case .failure(let message):
             plan.steps[index].status = .failed
             plan.steps[index].result = message

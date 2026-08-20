@@ -405,5 +405,4 @@ extension GRDBTaskRepository {
             try? FileManager.default.removeItem(at: legacyJSONURL)
         }
     }
-
 }

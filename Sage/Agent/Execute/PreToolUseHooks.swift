@@ -73,6 +73,7 @@ actor PreToolUseHookEvaluator {
                         ? (rule, url)
                         : nil
                 })
+
             case .failure(let error):
                 return .deny(error.message)
             }
@@ -189,8 +190,10 @@ private extension PreToolUseHookRule {
         switch value {
         case let string as String:
             return string
+
         case let number as NSNumber:
             return number.stringValue
+
         default:
             return nil
         }

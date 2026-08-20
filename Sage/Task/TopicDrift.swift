@@ -87,8 +87,10 @@ nonisolated enum TopicDriftDetector {
             switch event.kind {
             case .userInput:
                 return event.content
+
             case .assistantResponse where event.toolCalls?.isEmpty ?? true:
                 return event.content
+
             default:
                 return nil
             }
@@ -151,6 +153,7 @@ private extension Character {
                  0x3040...0x30FF,
                  0xAC00...0xD7AF:
                 return true
+
             default:
                 return false
             }

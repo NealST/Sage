@@ -33,8 +33,8 @@ nonisolated struct TaskRoute: Sendable, Equatable {
         confidence: Double = 1,
         reason: String,
         userVisibleHint: String? = nil
-    ) -> TaskRoute {
-        TaskRoute(
+    ) -> Self {
+        Self(
             action: .continueActive,
             relatedTaskIDs: relatedTaskIDs,
             confidence: confidence,
@@ -47,8 +47,8 @@ nonisolated struct TaskRoute: Sendable, Equatable {
         confidence: Double = 1,
         reason: String,
         userVisibleHint: String? = nil
-    ) -> TaskRoute {
-        TaskRoute(
+    ) -> Self {
+        Self(
             action: .beginNew,
             relatedTaskIDs: [],
             confidence: confidence,

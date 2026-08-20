@@ -230,8 +230,7 @@ actor SkillRegistry {
         }
 
         while bodyCache.count > Self.maxBodyCacheEntries
-            || totalCharacters() > Self.maxBodyCacheCharacters
-        {
+            || totalCharacters() > Self.maxBodyCacheCharacters {
             guard let oldest = bodyCache.min(by: { $0.value.lastAccess < $1.value.lastAccess }) else {
                 break
             }

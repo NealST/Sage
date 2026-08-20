@@ -47,18 +47,25 @@ nonisolated enum SkillCompositionError: LocalizedError {
         switch self {
         case .emptyTranscript:
             return "Source task has no usable transcript to compose from."
+
         case .sourceTaskMissing:
             return "Source task is no longer available; cannot save this skill."
+
         case .modelFailed(let message):
             return "Could not compose skill: \(message)"
+
         case .invalidResponse:
             return "Model returned an invalid skill draft."
+
         case .unsupportedMergeViaSuggestion:
             return "Merge suggestions must use the consolidate flow."
+
         case .mergeCleanupFailed(let names):
             return "Merged skill saved, but couldn’t move to Trash: \(names.joined(separator: ", "))."
+
         case .hostUnavailable:
             return "Could not save skill — the workspace is no longer available."
+
         case .sessionTornDown:
             return "Could not save skill — the window was closed."
         }
@@ -94,7 +101,6 @@ actor SkillExtractionService {
         userNote: String? = nil,
         preferredEnhanceTargets: [String] = []
     ) async -> SkillExtractionResult? {
-
         let transcript = buildTranscript(from: task)
         guard !transcript.isEmpty else { return nil }
 
@@ -111,6 +117,7 @@ actor SkillExtractionService {
                 skillsCatalog: skillsCatalog,
                 preferredEnhanceTargets: preferredEnhanceTargets
             )
+
         case .explicitRemember:
             systemPrompt = SkillExtractionPrompts.explicitRememberSystemPrompt(
                 skillsCatalog: skillsCatalog,
@@ -168,7 +175,6 @@ actor SkillExtractionService {
             return nil
         }
     }
-
 
     /// Composes a new skill from task knowledge after the user confirms a banner suggestion.
     func composeNewSkill(
@@ -316,7 +322,6 @@ actor SkillExtractionService {
         return transcript
     }
 
-
     private func completeCompose(
         systemPrompt: String,
         userPrompt: String,
@@ -351,7 +356,7 @@ actor SkillExtractionService {
     private func buildTranscript(from task: TaskRecord) -> String {
         var lines: [String] = []
         var totalLength = 0
-        let maxLength = 6000
+        let maxLength = 6_000
         let separatorLength = 1 // "\n"
 
         for event in task.events {
@@ -359,10 +364,13 @@ actor SkillExtractionService {
             switch event.kind {
             case .userInput:
                 prefix = "User"
+
             case .assistantResponse:
                 prefix = "Assistant"
+
             case .toolResult:
                 prefix = "Tool Result"
+
             case .systemInstruction:
                 continue
             }
@@ -409,5 +417,4 @@ actor SkillExtractionService {
     private func parseComposeResponse(_ content: String) throws -> SkillDraft {
         try SkillExtractionParsing.parseComposeResponse(content)
     }
-
 }

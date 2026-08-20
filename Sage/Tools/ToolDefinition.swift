@@ -62,8 +62,10 @@ nonisolated enum ToolError: LocalizedError {
         switch self {
         case .invalidArguments(let detail):
             return "Invalid arguments: \(detail)"
+
         case .pathNotAllowed(let path, let policy):
             return "Path not allowed: \(path). \(policy.boundaryDescription)"
+
         case .operationFailed(let detail):
             return detail
         }
@@ -97,6 +99,7 @@ nonisolated enum PathGuard: Sendable {
             switch self {
             case .home:
                 return "Only paths under the user's home directory (~/) are accessible."
+
             case .project(let root):
                 return "Only paths under the active project root (\(root.path)) are accessible."
             }
@@ -106,6 +109,7 @@ nonisolated enum PathGuard: Sendable {
             switch self {
             case .home:
                 return FileManager.default.homeDirectoryForCurrentUser
+
             case .project(let root):
                 return root
             }
@@ -144,6 +148,7 @@ nonisolated enum PathGuard: Sendable {
         switch policy {
         case .home:
             return resolved
+
         case .project(let root):
             let rootPath = root.resolvingSymlinksInPath().path
             if path == rootPath || path.hasPrefix(rootPath + "/") {
@@ -205,6 +210,7 @@ nonisolated enum PathGuard: Sendable {
         case .home:
             let expanded = (trimmed as NSString).expandingTildeInPath
             return URL(fileURLWithPath: expanded).standardizedFileURL
+
         case .project(let root):
             if trimmed.hasPrefix("~") || trimmed.hasPrefix("/") {
                 let expanded = (trimmed as NSString).expandingTildeInPath
@@ -228,6 +234,7 @@ nonisolated enum PathGuard: Sendable {
         switch policy {
         case .project(let root) where !trimmed.hasPrefix("~") && !trimmed.hasPrefix("/"):
             expanded = root.appendingPathComponent(trimmed).path
+
         default:
             expanded = (trimmed as NSString).expandingTildeInPath
         }
@@ -244,6 +251,7 @@ nonisolated enum PathGuard: Sendable {
                 return String(resolved.dropFirst(rootPath.count + 1))
             }
             return homeDisplayPath(resolved)
+
         case .home:
             return homeDisplayPath(resolved)
         }
@@ -274,6 +282,7 @@ nonisolated enum PathGuard: Sendable {
         switch policy {
         case .project:
             return "."
+
         case .home:
             throw ToolError.invalidArguments(
                 "path is required in General mode. Pass an absolute or ~/ path."
@@ -331,9 +340,11 @@ nonisolated struct FlexibleBool: Decodable, Sendable, Equatable {
             case "true", "1", "yes", "y":
                 value = true
                 return
+
             case "false", "0", "no", "n":
                 value = false
                 return
+
             default:
                 break
             }
@@ -379,8 +390,8 @@ nonisolated struct ToolRegistry: Sendable {
         tools[name]
     }
 
-    static func makeDefault() -> ToolRegistry {
-        ToolRegistry(tools: [
+    static func makeDefault() -> Self {
+        Self(tools: [
             ListDirectoryTool(),
             MoveFileTool(),
             RenameFileTool(),

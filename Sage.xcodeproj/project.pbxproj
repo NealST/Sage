@@ -128,6 +128,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 30ACE9E03001EBF6006F8C54 /* Build configuration list for PBXNativeTarget "Sage" */;
 			buildPhases = (
+				A10SWIFTLINT000000000001 /* SwiftLint */,
 				30ACE9D13001EBF5006F8C54 /* Sources */,
 				30ACE9D23001EBF5006F8C54 /* Frameworks */,
 				30ACE9D33001EBF5006F8C54 /* Resources */,
@@ -245,6 +246,28 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10SWIFTLINT000000000001 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nif [ -x /opt/homebrew/bin/swiftlint ]; then\n  LINT=/opt/homebrew/bin/swiftlint\nelif [ -x /usr/local/bin/swiftlint ]; then\n  LINT=/usr/local/bin/swiftlint\nelif command -v swiftlint >/dev/null 2>&1; then\n  LINT=$(command -v swiftlint)\nelse\n  echo \"error: SwiftLint is not installed. brew install swiftlint\"\n  exit 1\nfi\n\"$LINT\" lint --strict --config \"${SRCROOT}/.swiftlint.yml\" \"${SRCROOT}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		30ACE9D33001EBF5006F8C54 /* Resources */ = {

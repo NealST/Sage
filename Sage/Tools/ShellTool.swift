@@ -88,9 +88,8 @@ nonisolated struct RunShellCommandTool: AgentTool {
             return displayOutput.isEmpty
                 ? "[exit 0] (no output)"
                 : "[exit 0]\n\(displayOutput)"
-        } else {
-            return "[exit \(exitCode)]\n\(displayOutput)"
         }
+        return "[exit \(exitCode)]\n\(displayOutput)"
     }
 
     private func executeCommand(
@@ -147,8 +146,7 @@ nonisolated enum ShellCommandPolicy {
             for blocked in blockedCommands {
                 if trimmed == blocked
                     || trimmed.hasPrefix(blocked + " ")
-                    || trimmed.hasPrefix(blocked + "\t")
-                {
+                    || trimmed.hasPrefix(blocked + "\t") {
                     throw ToolError.operationFailed(
                         "Command blocked: '\(blocked)' is not allowed. Run commands as the current user only."
                     )

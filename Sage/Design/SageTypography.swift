@@ -15,7 +15,7 @@ struct SageTypographyMetrics: Equatable {
     var micro: CGFloat
     var icon: CGFloat
 
-    static let baseline = SageTypographyMetrics(
+    static let baseline = Self(
         input: SageDesign.Typography.inputSize,
         body: SageDesign.Typography.bodySize,
         caption: SageDesign.Typography.captionSize,

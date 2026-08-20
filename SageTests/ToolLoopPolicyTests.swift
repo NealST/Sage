@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class ToolBatchWaveTests: XCTestCase {
     func testObservationRunsShareAParallelWave() {
@@ -321,7 +321,8 @@ final class PreToolUseHookEvaluatorTests: XCTestCase {
             activatedSkills: []
         )
         guard case .deny(let reason) = decision else {
-            return XCTFail("Malformed hook config must fail closed")
+            XCTFail("Malformed hook config must fail closed")
+            return
         }
         XCTAssertTrue(reason.contains("Invalid PreToolUse hook config"))
     }

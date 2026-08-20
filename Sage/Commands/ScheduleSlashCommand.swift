@@ -8,7 +8,7 @@ struct ScheduleSlashCommand: BuiltinSlashCommand {
         kind: .builtin
     )
 
-    func handle(argument: String, host: any SlashCommandHost) async -> Bool {
+    func handle(argument: String, host: any SlashCommandHost) -> Bool {
         guard let parsed = ScheduleCadenceParser.parseCadenceAndPrompt(argument) else {
             host.reportCommandFailure(
                 "Use /schedule weekdays 9:00 followed by what Sage should do."
@@ -48,7 +48,7 @@ struct ScheduleScriptSlashCommand: BuiltinSlashCommand {
         kind: .builtin
     )
 
-    func handle(argument: String, host: any SlashCommandHost) async -> Bool {
+    func handle(argument: String, host: any SlashCommandHost) -> Bool {
         host.presentScriptSchedule(prefill: argument.isEmpty ? nil : argument)
         return true
     }

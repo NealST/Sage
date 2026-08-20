@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class TaskRouteTests: XCTestCase {
     func testContinueActiveFactory() {
@@ -38,7 +38,7 @@ final class TaskRouteTests: XCTestCase {
                     topic: prior.topic,
                     abstract: prior.abstract,
                     updatedAt: prior.updatedAt
-                )
+                ),
             ],
             recentProjects: [],
             activeTaskID: current.id

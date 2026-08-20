@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class ScheduleClockTests: XCTestCase {
     func testOnceInThePastReturnsNil() {
@@ -20,12 +20,12 @@ final class ScheduleClockTests: XCTestCase {
     }
 
     func testWeekdaysSameMorningFiresToday() throws {
-        let from = try date(year: 2026, month: 8, day: 17, hour: 8, minute: 0) // Monday
+        let from = try date(year: 2_026, month: 8, day: 17, hour: 8, minute: 0) // Monday
         let next = try XCTUnwrap(
             ScheduleClock.nextFireDate(for: .weekdays(hour: 9, minute: 0), after: from)
         )
         let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .weekday], from: next)
-        XCTAssertEqual(parts.year, 2026)
+        XCTAssertEqual(parts.year, 2_026)
         XCTAssertEqual(parts.month, 8)
         XCTAssertEqual(parts.day, 17)
         XCTAssertEqual(parts.hour, 9)
@@ -34,7 +34,7 @@ final class ScheduleClockTests: XCTestCase {
     }
 
     func testWeekdaysAfterNineGoesToNextWeekday() throws {
-        let from = try date(year: 2026, month: 8, day: 17, hour: 9, minute: 0)
+        let from = try date(year: 2_026, month: 8, day: 17, hour: 9, minute: 0)
         let next = try XCTUnwrap(
             ScheduleClock.nextFireDate(for: .weekdays(hour: 9, minute: 0), after: from)
         )
@@ -46,7 +46,7 @@ final class ScheduleClockTests: XCTestCase {
     }
 
     func testFridayEveningGoesToMonday() throws {
-        let from = try date(year: 2026, month: 8, day: 21, hour: 18, minute: 0) // Friday
+        let from = try date(year: 2_026, month: 8, day: 21, hour: 18, minute: 0) // Friday
         let next = try XCTUnwrap(
             ScheduleClock.nextFireDate(for: .weekdays(hour: 9, minute: 0), after: from)
         )
@@ -57,9 +57,9 @@ final class ScheduleClockTests: XCTestCase {
     }
 
     func testOnceCadenceDoesNotRescheduleAfterRun() {
-        let future = Date().addingTimeInterval(3600)
+        let future = Date().addingTimeInterval(3_600)
         XCTAssertNil(ScheduleClock.nextFireDateAfterRun(for: .once(date: future)))
-        XCTAssertNil(ScheduleClock.nextFireDateAfterRun(for: .delay(seconds: 3600)))
+        XCTAssertNil(ScheduleClock.nextFireDateAfterRun(for: .delay(seconds: 3_600)))
     }
 
     func testIntervalAfterRunUsesCompletionInstant() {
@@ -95,30 +95,32 @@ final class ScheduleClockTests: XCTestCase {
         let parsed = ScheduleCadenceParser.parseAgentArgument("in 1 hour ping the server")
         XCTAssertEqual(parsed?.prompt, "ping the server")
         guard case .delay(let seconds) = parsed?.cadence else {
-            return XCTFail("expected delay cadence until Save")
+            XCTFail("expected delay cadence until Save")
+            return
         }
-        XCTAssertEqual(seconds, 3600, accuracy: 0.5)
+        XCTAssertEqual(seconds, 3_600, accuracy: 0.5)
     }
 
     func testDelayResolvesAtSaveTime() {
         let now = Date(timeIntervalSince1970: 2_000_000)
         XCTAssertEqual(
-            ScheduleCadence.delay(seconds: 3600).resolvedForSave(now: now),
-            .once(date: now.addingTimeInterval(3600))
+            ScheduleCadence.delay(seconds: 3_600).resolvedForSave(now: now),
+            .once(date: now.addingTimeInterval(3_600))
         )
         let record = ScheduleRecord.agent(
             from: ScheduleDraft(
-                cadence: .delay(seconds: 3600),
+                cadence: .delay(seconds: 3_600),
                 prompt: "ping",
                 projectID: nil,
                 scopeLabel: "General"
             )
         )
         guard case .once(let date) = record.cadence else {
-            return XCTFail("agent save should persist an absolute once date")
+            XCTFail("agent save should persist an absolute once date")
+            return
         }
-        XCTAssertGreaterThan(date.timeIntervalSinceNow, 3500)
-        XCTAssertLessThan(date.timeIntervalSinceNow, 3700)
+        XCTAssertGreaterThan(date.timeIntervalSinceNow, 3_500)
+        XCTAssertLessThan(date.timeIntervalSinceNow, 3_700)
     }
 
     func testParserRequiresPrompt() {
@@ -135,7 +137,7 @@ final class ScheduleClockTests: XCTestCase {
         let once = ScheduleCadenceParser.parseCadenceAndPrompt("in 1 hour")
         XCTAssertEqual(once?.prompt, "")
         if case .delay(let seconds) = once?.cadence {
-            XCTAssertEqual(seconds, 3600, accuracy: 0.5)
+            XCTAssertEqual(seconds, 3_600, accuracy: 0.5)
         } else {
             XCTFail("expected delay cadence")
         }
@@ -202,7 +204,7 @@ final class ScheduleClockTests: XCTestCase {
         )
         XCTAssertEqual(
             ScheduleCadenceParser.cadence(fromPresetInsert: "in 1 hour", now: now),
-            .once(date: now.addingTimeInterval(3600))
+            .once(date: now.addingTimeInterval(3_600))
         )
     }
 

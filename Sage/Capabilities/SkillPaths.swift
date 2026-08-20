@@ -15,6 +15,7 @@ nonisolated enum SkillPathsError: LocalizedError {
         switch self {
         case .projectRootRequired:
             return "A project folder is required to save a project skill."
+
         case .directoryCreationFailed(let path):
             return "Could not create skill directory at: \(path)"
         }
@@ -70,6 +71,7 @@ nonisolated enum SkillPaths {
         switch scope {
         case .global:
             return userSkillsDirectory(createIfNeeded: true)
+
         case .project:
             guard let projectRoot else {
                 throw SkillPathsError.projectRootRequired

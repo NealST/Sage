@@ -57,4 +57,3 @@ nonisolated enum AgentEventHelpers {
         return (kept, userEvent, discarded)
     }
 }
-

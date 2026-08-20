@@ -131,8 +131,10 @@ struct AgentComposerView: View {
         switch session.agent.turnChrome {
         case .toolRoundLimit:
             return "Continue for more tool rounds, or finish"
+
         case .toolApproval:
             return "Allow, skip, or stop this tool"
+
         default:
             return "Run or Cancel the pending plan"
         }

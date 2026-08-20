@@ -42,12 +42,16 @@ enum SkillToolExecutor {
         switch name {
         case "load_skill":
             return try await executeLoadSkill(argumentsJSON: argumentsJSON, host: host)
+
         case "load_skill_resource":
             return try await executeLoadSkillResource(argumentsJSON: argumentsJSON, host: host)
+
         case "run_skill_script":
             return try await executeRunSkillScript(argumentsJSON: argumentsJSON, host: host)
+
         case "save_skill":
             return try await executeSaveSkill(argumentsJSON: argumentsJSON, host: host)
+
         default:
             throw ToolError.operationFailed("Unknown skill tool: \(name)")
         }
@@ -368,11 +372,13 @@ enum SkillToolExecutor {
             switch char {
             case "\"":
                 inQuotes.toggle()
+
             case " " where !inQuotes:
                 if !current.isEmpty {
                     tokens.append(current)
                     current = ""
                 }
+
             default:
                 current.append(char)
             }
@@ -406,7 +412,7 @@ enum SkillToolExecutor {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
 
         // Validate description length (spec: max 1024 chars).
-        guard args.description.count <= 1024 else {
+        guard args.description.count <= 1_024 else {
             throw ToolError.invalidArguments(
                 "Description exceeds 1024 characters (\(args.description.count)). Shorten it."
             )
@@ -462,6 +468,7 @@ enum SkillToolExecutor {
         switch scope {
         case nil:
             return host.focusedProjectRoot != nil ? .project : .global
+
         case .project:
             guard host.focusedProjectRoot != nil else {
                 throw ToolError.invalidArguments(
@@ -469,6 +476,7 @@ enum SkillToolExecutor {
                 )
             }
             return .project
+
         case .global:
             return .global
         }

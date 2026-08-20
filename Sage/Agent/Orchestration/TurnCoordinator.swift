@@ -339,11 +339,10 @@ final class TurnCoordinator {
         }
         return await taskStore.commit(
             appendEvents: [],
-            deleteEventIDs: [],
-            mutate: { task in
+            deleteEventIDs: []
+        ) { task in
                 task.pendingPrompt = nil
-            }
-        )
+        }
     }
 
     func startExecution() async {

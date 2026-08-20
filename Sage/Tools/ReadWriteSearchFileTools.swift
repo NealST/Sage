@@ -32,7 +32,7 @@ nonisolated struct ReadTextFileTool: AgentTool {
 
     private static let maxBytes = 100_000
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path, access: .read)
 
@@ -133,7 +133,7 @@ nonisolated struct WriteTextFileTool: AgentTool {
         let content: String
     }
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path)
         let existed = FileManager.default.fileExists(atPath: url.path)
@@ -193,7 +193,7 @@ nonisolated struct SearchFilesTool: AgentTool {
     private static let maxResults = 50
     private static let maxFileSize = 512_000 // skip files > 500KB for content search
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let effectivePath = try PathGuard.defaultExplorationPath(args.path)
         let rootURL = try PathGuard.resolveAllowed(effectivePath, access: .read)

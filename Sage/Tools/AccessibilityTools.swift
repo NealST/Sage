@@ -261,8 +261,7 @@ nonisolated struct GetScreenInfoTool: AgentTool {
 
             // Report active window frame if accessibility is available
             if AXIsProcessTrusted(),
-               let app = NSWorkspace.shared.frontmostApplication
-            {
+               let app = NSWorkspace.shared.frontmostApplication {
                 let appElement = AXUIElementCreateApplication(app.processIdentifier)
                 var windowRef: CFTypeRef?
                 let result = AXUIElementCopyAttributeValue(
@@ -272,8 +271,7 @@ nonisolated struct GetScreenInfoTool: AgentTool {
                 )
                 if result == .success,
                    let window = windowRef,
-                   CFGetTypeID(window) == AXUIElementGetTypeID()
-                {
+                   CFGetTypeID(window) == AXUIElementGetTypeID() {
                     let winElement = window as! AXUIElement
                     var posRef: CFTypeRef?
                     var sizeRef: CFTypeRef?
@@ -285,8 +283,7 @@ nonisolated struct GetScreenInfoTool: AgentTool {
                     if let posRef, CFGetTypeID(posRef) == AXValueGetTypeID(),
                        AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
                        let sizeRef, CFGetTypeID(sizeRef) == AXValueGetTypeID(),
-                       AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
-                    {
+                       AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) {
                         lines.append("")
                         lines.append("active_window:")
                         lines.append("  app: \(app.localizedName ?? "(unknown)")")
@@ -334,8 +331,7 @@ nonisolated struct GetFrontmostAppTool: AgentTool {
                 )
                 if result == .success,
                    let window = windowValue,
-                   CFGetTypeID(window) == AXUIElementGetTypeID()
-                {
+                   CFGetTypeID(window) == AXUIElementGetTypeID() {
                     var titleValue: CFTypeRef?
                     let titleResult = AXUIElementCopyAttributeValue(
                         window as! AXUIElement,

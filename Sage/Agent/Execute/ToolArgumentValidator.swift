@@ -103,10 +103,13 @@ nonisolated enum ToolArgumentValidator {
         switch value {
         case .string(let type):
             return [type]
+
         case .array(let values):
             return values.compactMap(\.stringValue)
+
         case nil:
             return nil
+
         default:
             return []
         }
@@ -117,8 +120,10 @@ nonisolated enum ToolArgumentValidator {
         case ("object", .object), ("array", .array), ("string", .string),
              ("number", .number), ("boolean", .bool), ("null", .null):
             return true
+
         case ("integer", .number(let number)):
             return number.isFinite && number.rounded(.towardZero) == number
+
         default:
             return false
         }
@@ -134,6 +139,7 @@ private extension JSONValue {
     nonisolated var typeName: String {
         switch self {
         case .string: return "string"
+
         case .number(let value):
             return value.isFinite && value.rounded(.towardZero) == value ? "integer" : "number"
         case .bool: return "boolean"
@@ -149,6 +155,7 @@ private extension JSONValue {
         case .number(let value): return String(value)
         case .bool(let value): return String(value)
         case .null: return "null"
+
         case .object, .array:
             return (try? JSONEncoder().encode(self))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? typeName

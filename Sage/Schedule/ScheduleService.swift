@@ -106,11 +106,13 @@ final class ScheduleService {
             switch record.status {
             case .awaitingConfirmation:
                 break
+
             case .paused, .failed:
                 record.status = record.kind == .agent && record.frozenWorkPlan == nil
                     ? .needsFirstRun
                     : .armed
                 record.nextFireAt = ScheduleClock.nextFireDate(for: record.cadence)
+
             default:
                 if record.nextFireAt == nil || (record.nextFireAt.map { $0 <= Date.now } ?? false) {
                     record.nextFireAt = ScheduleClock.nextFireDate(for: record.cadence)
@@ -239,9 +241,11 @@ final class ScheduleService {
                 record.status = .needsFirstRun
             }
             record.lastStatus = "Finished"
+
         case .cancelled:
             record.status = .needsFirstRun
             record.lastStatus = "Plan wasn’t confirmed."
+
         case .failed(let message):
             record.status = .failed
             record.lastStatus = String(message.prefix(240))
@@ -269,8 +273,10 @@ final class ScheduleService {
         switch outcome {
         case .completed:
             body = record.lastStatus ?? "Finished"
+
         case .cancelled:
             body = "Plan wasn’t confirmed."
+
         case .failed(let message):
             body = String(message.prefix(240))
         }
@@ -321,7 +327,7 @@ final class ScheduleService {
         afterWake: Bool = false,
         isTrial: Bool = false
     ) {
-        let resolved = kind ?? records.first(where: { $0.id == id })?.kind ?? .agent
+        let resolved = kind ?? records.first { $0.id == id }?.kind ?? .agent
         queue.enqueue(id, kind: resolved, afterWake: afterWake, isTrial: isTrial)
         publishQueue()
         kick()
@@ -348,6 +354,7 @@ final class ScheduleService {
         switch start {
         case .unavailable:
             enqueueOverdue(excluding: job.id)
+
         case .skipped, .performed:
             enqueueOverdue()
         }
@@ -385,6 +392,7 @@ final class ScheduleService {
                 beat = .script(outcome)
                 scriptOutcome = outcome
             }
+
         case .agent:
             let outcome = await runner.runAgent(record)
             beat = Task.isCancelled ? .stopped : .agent(outcome)
@@ -421,8 +429,10 @@ final class ScheduleService {
         switch notify {
         case .none:
             return
+
         case .silent:
             playsSound = false
+
         case .sound:
             playsSound = true
         }

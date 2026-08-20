@@ -34,8 +34,10 @@ enum KeychainStore {
             // Drop any leftover data-protection copy from earlier builds.
             deleteDataProtectionItem(account: account)
             return
+
         case errSecItemNotFound:
             break
+
         default:
             throw KeychainError.unexpectedStatus(updateStatus)
         }

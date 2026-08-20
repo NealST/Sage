@@ -112,6 +112,7 @@ struct SkillSaveTipRow: View {
         switch suggestion.scope {
         case .global:
             return "Folds this task into the global experience — available in every workspace."
+
         case .project:
             return "Folds this task into the project experience — only used in “\(projectDisplayName)”."
         }

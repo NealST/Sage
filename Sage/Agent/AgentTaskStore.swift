@@ -346,6 +346,7 @@ final class AgentTaskStore {
         switch route.action {
         case .continueActive:
             return route
+
         case .beginNew:
             state.clearTopicDriftOffer()
             state.contextHint = nil
@@ -366,9 +367,9 @@ final class AgentTaskStore {
 
         state.activatedSkillNames = task.activatedSkillNames
         state.pendingPrompt = task.pendingPrompt
-        state.lastAssistantText = task.events.last(where: {
+        state.lastAssistantText = task.events.last {
             $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
-        })?.content
+        }?.content
 
         if case .toolRoundLimit = task.pendingPrompt {
             if var plan = task.pendingPlan {
@@ -608,13 +609,13 @@ final class AgentTaskStore {
         }
     }
 
-    func applyTodoList(_ items: [AgentTodoItem]) async {
+    func applyTodoList(_ items: [AgentTodoItem]) {
         guard var task = state.activeTask else { return }
         task.todos = items
         state.activeTask = task
     }
 
-    func applyUnlockedMCPServers(_ names: Set<String>) async {
+    func applyUnlockedMCPServers(_ names: Set<String>) {
         guard var task = state.activeTask else { return }
         task.unlockedMCPServerNames = names
         state.activeTask = task

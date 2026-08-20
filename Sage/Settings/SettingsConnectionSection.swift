@@ -110,12 +110,15 @@ struct SettingsConnectionSection: View {
                 case .idle:
                     Text("Stored in Keychain · saves automatically")
                         .foregroundStyle(.secondary)
+
                 case .testing:
                     Label("Testing connection…", systemImage: "arrow.triangle.2.circlepath")
                         .foregroundStyle(.secondary)
+
                 case .success:
                     Label("Connection succeeded", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+
                 case .failure(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)

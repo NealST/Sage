@@ -33,28 +33,29 @@ struct SkillTipsBanner: View {
                             suggestion: suggestion,
                             projectDisplayName: projectDisplayName,
                             selectedScope: scopeBinding(for: suggestion),
-                            onSave: confirmSuggestion,
-                            onDismiss: {
+                            onSave: confirmSuggestion
+                        ) {
                                 withAnimation(SageDesign.Motion.expandAnimation) {
                                     scopeByID[suggestion.id] = nil
                                     tips.dismiss(suggestion.id)
                                 }
-                            }
-                        )
+                        }
+
                     case .choose(let choice):
                         SkillChooseTipRow(choice: choice)
+
                     case .consolidate(let suggestion):
                         SkillConsolidateTipRow(
                             suggestion: suggestion,
                             primaryPath: primaryBinding(for: suggestion),
-                            onMerge: confirmConsolidate,
-                            onDismiss: {
+                            onMerge: confirmConsolidate
+                        ) {
                                 withAnimation(SageDesign.Motion.expandAnimation) {
                                     primaryPathByID[suggestion.id] = nil
                                     tips.dismiss(suggestion.id)
                                 }
-                            }
-                        )
+                        }
+
                     case .schedule(let draft):
                         SkillScheduleTipRow(
                             draft: draft,

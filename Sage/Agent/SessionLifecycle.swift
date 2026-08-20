@@ -53,6 +53,7 @@ final class SessionLifecycle {
                     totalSeconds: totalSec,
                     secondsRemaining: totalSec
                 )
+
             case .waiting(let seconds):
                 state.retryState?.secondsRemaining = seconds
                 if seconds <= 0 {

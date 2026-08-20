@@ -11,7 +11,6 @@ import SwiftUI
 /// Colors use SwiftUI adaptive `Color` so they automatically respond to
 /// appearance changes (light/dark) and accessibility settings (high contrast).
 enum SageCodeTheme {
-
     // MARK: - Token Colors
 
     /// Keywords: `func`, `let`, `var`, `if`, `return`, `import`, etc.
@@ -89,30 +88,43 @@ enum SageCodeTheme {
         switch base {
         case "keyword", "conditional", "repeat", "include", "exception":
             return keyword
+
         case "type", "storageclass", "structure":
             return type
+
         case "function", "method":
             return function
+
         case "string", "character":
             return string
+
         case "number", "float", "boolean":
             return number
+
         case "comment":
             return comment
+
         case "operator":
             return `operator`
+
         case "preproc", "define", "attribute", "label":
             return preprocessor
+
         case "property", "field", "parameter", "variable":
             return property
+
         case "punctuation":
             return punctuation
+
         case "constant":
             return number
+
         case "tag":
             return keyword
+
         case "namespace", "module":
             return type
+
         default:
             return plain
         }

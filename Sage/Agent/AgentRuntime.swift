@@ -64,6 +64,7 @@ final class AgentRuntime {
         switch state.phase {
         case .thinking, .executing:
             return true
+
         default:
             return false
         }
@@ -78,8 +79,10 @@ final class AgentRuntime {
         switch state.phase {
         case .thinking, .executing:
             return false
+
         case .awaitingConfirmation:
             return true
+
         case .idle, .completed, .failed:
             return state.activeTask?.events.isEmpty == false
                 || state.contextHint != nil
@@ -102,8 +105,10 @@ final class AgentRuntime {
         switch state.phase {
         case .thinking, .executing, .awaitingConfirmation:
             return true
+
         case .failed:
             return state.activeTask?.pendingPlan != nil || planProgress.hasPlan
+
         case .idle, .completed:
             return false
         }
@@ -144,7 +149,7 @@ final class AgentRuntime {
             skillCatalog: skillCatalog,
             mcpHub: mcpHub,
             skills: skills,
-            systemPrompt: AgentRuntime.defaultSystemPrompt,
+            systemPrompt: Self.defaultSystemPrompt,
             streaming: streaming,
             streamingPlayback: streamingPlayback
         )
@@ -373,12 +378,16 @@ final class AgentRuntime {
         switch turnChrome {
         case .workPlan:
             await confirmWorkPlan()
+
         case .toolBatch:
             await confirmToolBatch()
+
         case .toolRoundLimit:
             await confirmToolRoundLimit()
+
         case .toolApproval:
             await confirmToolApproval(scope: .session)
+
         case .none:
             break
         }
@@ -408,8 +417,10 @@ final class AgentRuntime {
         switch scope {
         case .once:
             state.sessionAllowlist.allowOnce(name: name, argumentsJSON: args)
+
         case .session:
             state.sessionAllowlist.allowThisSession(name: name, argumentsJSON: args)
+
         case .tool:
             state.sessionAllowlist.allowToolThisSession(named: name)
         }
@@ -426,11 +437,10 @@ final class AgentRuntime {
             _ = await operations.run {
                 _ = await self.taskStore.commit(
                     appendEvents: [],
-                    deleteEventIDs: [],
-                    mutate: { task in
+                    deleteEventIDs: []
+                ) { task in
                         task.pendingPrompt = nil
-                    }
-                )
+                }
             }
             return
         }

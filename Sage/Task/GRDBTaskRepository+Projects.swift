@@ -182,5 +182,4 @@ extension GRDBTaskRepository {
             arguments: [activeTaskID?.uuidString, projectID?.uuidString, lastGeneral]
         )
     }
-
 }

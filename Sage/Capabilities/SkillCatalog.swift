@@ -129,7 +129,7 @@ final class SkillCatalog {
     }
 
     /// Catalog for the cloud model. Activation is via `load_skill` only.
-    func skillsPromptAppendix() async -> SkillAppendixResult {
+    func skillsPromptAppendix() -> SkillAppendixResult {
         let active = enabledSkills
         guard !active.isEmpty else {
             return SkillAppendixResult(text: "", needsLoadSkillTool: false)

@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class ProjectAgentsMarkdownTests: XCTestCase {
     private var fixtureRoot: URL!

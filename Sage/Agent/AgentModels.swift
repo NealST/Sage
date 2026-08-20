@@ -149,22 +149,26 @@ nonisolated enum AgentTurnChrome: Equatable, Sendable {
         hasWorkPlan: Bool,
         hasToolBatch: Bool,
         pendingPrompt: AgentPendingPrompt? = nil
-    ) -> AgentTurnChrome? {
+    ) -> Self? {
         switch phase {
         case .executing:
             return hasToolBatch ? .toolBatch : nil
+
         case .awaitingConfirmation:
             switch pendingPrompt {
             case .toolApproval:
                 return .toolApproval
+
             case .toolRoundLimit:
                 return .toolRoundLimit
+
             case nil:
                 break
             }
             if hasToolBatch { return .toolBatch }
             if hasWorkPlan { return .workPlan }
             return nil
+
         default:
             return nil
         }

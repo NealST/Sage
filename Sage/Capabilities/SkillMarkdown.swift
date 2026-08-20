@@ -65,7 +65,7 @@ nonisolated enum SkillMarkdown {
 
         let needsQuoting =
             flattened.isEmpty
-            || flattened.contains(where: { ":#{}[]&*!|>'\"%@`,".contains($0) })
+            || flattened.contains { ":#{}[]&*!|>'\"%@`,".contains($0) }
             || flattened.hasPrefix("-")
             || flattened.hasPrefix(" ")
             || flattened.hasSuffix(" ")

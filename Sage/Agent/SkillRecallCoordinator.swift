@@ -113,9 +113,8 @@ final class SkillRecallCoordinator {
         guard !syntheticEvents.isEmpty else { return }
         let ok = await taskStore.commit(
             appendEvents: syntheticEvents,
-            deleteEventIDs: [],
-            mutate: { _ in }
-        )
+            deleteEventIDs: []
+        ) { _ in }
         if ok {
             state.activatedSkillNames.formUnion(newlyActivated)
         }

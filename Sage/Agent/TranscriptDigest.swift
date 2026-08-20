@@ -17,6 +17,7 @@ nonisolated enum TranscriptDigest {
             switch event.kind {
             case .userInput:
                 return "User: \(clip(event.content))"
+
             case .assistantResponse:
                 let tools = (event.toolCalls ?? []).map(\.name).joined(separator: ", ")
                 if tools.isEmpty {
@@ -26,9 +27,11 @@ nonisolated enum TranscriptDigest {
                 return prose.isEmpty
                     ? "Assistant tools: \(tools)"
                     : "Assistant: \(clip(prose)) [tools: \(tools)]"
+
             case .toolResult:
                 let prefix = event.content.hasPrefix("ERROR:") ? "Tool error" : "Tool result"
                 return "\(prefix): \(clip(event.content))"
+
             case .systemInstruction:
                 return ""
             }

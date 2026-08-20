@@ -151,7 +151,7 @@ private final class ThrottledStreamState {
         // Scan for the last block boundary: a `\n\n` sequence outside fenced code.
         // We track whether we're inside a fenced code block by counting fence openers/closers.
         var inFencedCode = false
-        var lastBoundary: String.Index? = nil
+        var lastBoundary: String.Index?
         var i = text.startIndex
         var lineStart = text.startIndex
 
@@ -160,7 +160,7 @@ private final class ThrottledStreamState {
             if i == lineStart {
                 let lineEnd = text[i...].firstIndex(of: "\n") ?? text.endIndex
                 let line = text[i..<lineEnd]
-                let trimmed = line.drop(while: { $0 == " " || $0 == "\t" })
+                let trimmed = line.drop { $0 == " " || $0 == "\t" }
                 if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                     inFencedCode.toggle()
                 }
@@ -170,8 +170,7 @@ private final class ThrottledStreamState {
             if !inFencedCode,
                text[i] == "\n",
                text.index(after: i) < text.endIndex,
-               text[text.index(after: i)] == "\n"
-            {
+               text[text.index(after: i)] == "\n" {
                 // The boundary is at the second \n — the active block starts after it.
                 // But we want committed to include up to (and including) the first \n,
                 // and active to start from the second \n onward.

@@ -27,7 +27,7 @@ nonisolated struct MoveFileTool: AgentTool {
         let destination: String
     }
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let source = try PathGuard.resolveAllowed(args.source)
         guard FileManager.default.fileExists(atPath: source.path) else {
@@ -65,7 +65,7 @@ nonisolated struct RenameFileTool: AgentTool {
         let newName: String
     }
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let source = try PathGuard.resolveAllowed(args.path)
         guard FileManager.default.fileExists(atPath: source.path) else {
@@ -102,7 +102,7 @@ nonisolated struct CopyFileTool: AgentTool {
         let destination: String
     }
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let source = try PathGuard.resolveAllowed(args.source)
         let destination = try PathGuard.resolveAllowed(args.destination)
@@ -121,4 +121,3 @@ nonisolated struct CopyFileTool: AgentTool {
         return "[OK] Copied to \(PathGuard.displayPath(finalDestination.path))"
     }
 }
-

@@ -11,7 +11,7 @@ nonisolated struct ContinuityTaskResolver: TaskRouting {
     func route(
         input: String,
         workspace: TaskWorkspaceSnapshot
-    ) async -> TaskRoute {
+    ) -> TaskRoute {
         if Self.requestsFreshStart(input) {
             return .beginNew(reason: "User requested a fresh start")
         }

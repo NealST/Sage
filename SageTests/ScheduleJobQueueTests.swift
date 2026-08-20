@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 @MainActor
 final class ScheduleJobQueueTests: XCTestCase {

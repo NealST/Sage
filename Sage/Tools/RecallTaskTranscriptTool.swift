@@ -111,9 +111,11 @@ nonisolated enum RecallTaskTranscriptTool {
         switch event.kind {
         case .systemInstruction:
             return ""
+
         case .userInput:
             body = event.content
             return "[\(event.id.uuidString)] user:\n\(clip(body))"
+
         case .assistantResponse:
             var text = event.content
             if let calls = event.toolCalls, !calls.isEmpty {
@@ -122,6 +124,7 @@ nonisolated enum RecallTaskTranscriptTool {
                 text += "tool_calls: \(names)"
             }
             return "[\(event.id.uuidString)] assistant:\n\(clip(text))"
+
         case .toolResult:
             let name = event.toolCallID.map { " tool_call_id=\($0)" } ?? ""
             let content = WriteFileResultCodec.modelFacing(event.content)

@@ -50,8 +50,8 @@ nonisolated struct SkillSuggestion: Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
     }
 
-    func resolved(scope: SkillScope) -> SkillSuggestion {
-        SkillSuggestion(
+    func resolved(scope: SkillScope) -> Self {
+        Self(
             id: id,
             type: type,
             skillName: skillName,

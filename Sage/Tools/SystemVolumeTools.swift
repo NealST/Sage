@@ -20,7 +20,7 @@ nonisolated struct GetSystemVolumeTool: AgentTool {
         parameters: .schemaObject(properties: [:])
     )
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let (volume, muted) = try getOutputVolume()
         let percent = Int(round(volume * 100))
         return "volume: \(percent)\nmuted: \(muted)"
@@ -49,7 +49,7 @@ nonisolated struct SetSystemVolumeTool: AgentTool {
         let mute: FlexibleBool?
     }
 
-    func call(argumentsJSON: String) async throws -> String {
+    func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let clamped = min(max(args.volume, 0), 100)
         let floatVolume = Float32(clamped) / 100.0
@@ -152,4 +152,3 @@ nonisolated private func setOutputMute(_ mute: Bool) throws {
         throw ToolError.operationFailed("Cannot set mute state (error \(status)). The device may not support mute.")
     }
 }
-

@@ -15,7 +15,7 @@ nonisolated struct PromptLayout: Sendable {
     var capabilityReminder: String = ""
     var workPlanAppendix: String = ""
     var todoAppendix: String = ""
-    var workingMemory: TaskWorkingMemory? = nil
+    var workingMemory: TaskWorkingMemory?
     var reviewFeedback: String = ""
     var skillsCatalog: String = ""
     var relatedSnippets: [RelatedTaskContextSnippet] = []
@@ -83,7 +83,7 @@ nonisolated enum ContextBudget {
         let lastUser = sanitized.last { $0.kind == .userInput && !$0.protected }
         let lastUserID = lastUser?.id
         let lastUserIndex = lastUser.flatMap { user in
-            sanitized.firstIndex(where: { $0.id == user.id })
+            sanitized.firstIndex { $0.id == user.id }
         }
 
         var folded = Set(activeMemory?.foldedEventIDs(in: layout.events) ?? [])
@@ -356,6 +356,7 @@ nonisolated enum ContextBudget {
                 switch turn.kind {
                 case .user:
                     lines.append("  User: \(clipped)")
+
                 case .assistant:
                     lines.append("  Assistant: \(clipped)")
                 }

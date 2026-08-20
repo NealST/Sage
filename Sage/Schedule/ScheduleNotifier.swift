@@ -38,7 +38,7 @@ nonisolated struct ScheduleNotificationPayload: Sendable, Equatable {
         return info
     }
 
-    static func fromUserInfo(_ userInfo: [AnyHashable: Any]) -> ScheduleNotificationPayload? {
+    static func fromUserInfo(_ userInfo: [AnyHashable: Any]) -> Self? {
         guard userInfo[Key.isSchedule] as? String == "1",
               let rawID = userInfo[Key.scheduleID] as? String,
               let scheduleID = UUID(uuidString: rawID),
@@ -47,7 +47,7 @@ nonisolated struct ScheduleNotificationPayload: Sendable, Equatable {
         else { return nil }
         let projectID = (userInfo[Key.projectID] as? String).flatMap(UUID.init(uuidString:))
         let taskID = (userInfo[Key.taskID] as? String).flatMap(UUID.init(uuidString:))
-        return ScheduleNotificationPayload(
+        return Self(
             scheduleID: scheduleID,
             title: "",
             body: "",
@@ -79,8 +79,10 @@ enum ScheduleNotifier {
             switch settings.authorizationStatus {
             case .notDetermined:
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
+
             case .denied:
                 return
+
             default:
                 break
             }

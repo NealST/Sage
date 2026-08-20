@@ -13,7 +13,7 @@ import Foundation
 final class ScheduleTrigger {
     private var timer: DispatchSourceTimer?
     private var wakeTask: Task<Void, Never>?
-    var onFire: () async -> Void = {}
+    var onFire: () -> Void = {}
 
     /// Starts observing `NSWorkspace.didWakeNotification`. Safe to call once.
     func startWakeObserver() {
@@ -35,7 +35,7 @@ final class ScheduleTrigger {
         timer = nil
         guard let upcoming = ScheduleRecord.nextTimerFire(in: records, now: now) else { return }
         // Cap far-future sleeps so a missed wake still rescans within half a day.
-        let delay = min(max(upcoming.timeIntervalSinceNow, 0.25), 12 * 3600)
+        let delay = min(max(upcoming.timeIntervalSinceNow, 0.25), 12 * 3_600)
         let nanos = Int64((delay * 1_000_000_000).rounded())
         let source = DispatchSource.makeTimerSource(queue: .main)
         source.schedule(

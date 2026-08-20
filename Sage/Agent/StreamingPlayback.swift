@@ -18,7 +18,7 @@ final class StreamingPlayback {
     func apply(_ text: String) {
         updateLineCount(for: text)
         self.text = text
-        scrollThrottleKey = lineCount &* 1000 &+ (text.utf16.count / 80)
+        scrollThrottleKey = lineCount &* 1_000 &+ (text.utf16.count / 80)
     }
 
     func clear() {

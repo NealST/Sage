@@ -33,7 +33,7 @@ final class AccessibilitySettings {
             queue: .main
         ) { _ in
             Task { @MainActor in
-                AccessibilitySettings.shared.refresh()
+                Self.shared.refresh()
             }
         }
     }

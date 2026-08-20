@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class SaveSkillActionTests: XCTestCase {
     private struct Args: Decodable {

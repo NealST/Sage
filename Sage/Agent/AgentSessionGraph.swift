@@ -34,7 +34,7 @@ struct AgentSessionGraph {
         systemPrompt: String,
         streaming: StreamingTextPump,
         streamingPlayback: StreamingPlayback
-    ) -> AgentSessionGraph {
+    ) -> Self {
         let state = AgentSessionState()
         let planProgress = PlanProgress()
         weak let catalogRef = skillCatalog
@@ -121,9 +121,9 @@ struct AgentSessionGraph {
             topicCoordinator: topicCoordinator,
             skills: skills
         )
-        skillRecall.bind(skillHost: { [weak host] in host })
+        skillRecall.bind { [weak host] in host }
 
-        return AgentSessionGraph(
+        return Self(
             state: state,
             planProgress: planProgress,
             router: router,

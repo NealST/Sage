@@ -30,9 +30,8 @@ final class SkillsManageWindowController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(
             rootView: SkillsManageView(
-                pinnedSession: pinnedSession,
-                onDone: { [weak self] in self?.window?.performClose(nil) }
-            )
+                pinnedSession: pinnedSession
+            ) { [weak self] in self?.window?.performClose(nil) }
             .sageScaledTypography()
             .sageAccessibilityObservation()
             .environment(appState)

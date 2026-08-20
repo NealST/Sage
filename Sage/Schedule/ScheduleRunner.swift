@@ -235,7 +235,7 @@ final class ScheduleRunner {
             return .needsConfirmation(taskID: taskID, plan: session.agent.state.activeTask?.workPlan)
         }
         let task = session.agent.state.activeTask
-        let summary = task?.events.last(where: { $0.kind == .assistantResponse })?.content
+        let summary = task?.events.last { $0.kind == .assistantResponse }?.content
             ?? session.agent.state.lastAssistantText
             ?? "Finished"
         let ok: Bool

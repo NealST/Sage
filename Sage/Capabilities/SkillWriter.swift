@@ -22,16 +22,22 @@ nonisolated enum SkillWriter {
             switch self {
             case .invalidName(let name):
                 return "Invalid skill name: \(name). Must be 1-64 chars, lowercase alphanumeric and hyphens."
+
             case .alreadyExists(let name):
                 return "Skill '\(name)' already exists. Use enhance to update it, or choose a different name."
+
             case .directoryCreationFailed(let path):
                 return "Could not create skill directory at: \(path)"
+
             case .writeFailed(let path):
                 return "Could not write SKILL.md at: \(path)"
+
             case .skillNotFound(let name):
                 return "Skill '\(name)' not found in registry."
+
             case .projectRootRequired:
                 return "A project folder is required to save a project skill."
+
             case .trashFailed(let path):
                 return "Could not move skill to Trash: \(path)"
             }

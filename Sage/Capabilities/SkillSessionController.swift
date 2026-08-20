@@ -134,13 +134,11 @@ final class SkillSessionController {
             SkillCatalogSummary(name: $0.name, description: $0.description, scope: $0.scope)
         }
         let pathByName = Dictionary(
-            catalogSkills.map { ($0.name, $0.path) },
-            uniquingKeysWith: { first, _ in first }
-        )
+            catalogSkills.map { ($0.name, $0.path) }
+        ) { first, _ in first }
         let scopeByName = Dictionary(
-            catalogSkills.map { ($0.name, $0.scope) },
-            uniquingKeysWith: { first, _ in first }
-        )
+            catalogSkills.map { ($0.name, $0.scope) }
+        ) { first, _ in first }
 
         let taskCopy = task
         let extractionService = extractionService
@@ -186,6 +184,7 @@ final class SkillSessionController {
             switch result {
             case .none, .some(.skip):
                 suggestion = nil
+
             case .some(.newSkill(let name, let description)):
                 if pathByName[name] != nil {
                     suggestion = enhanceSuggestion(name: name, description: description)
@@ -212,6 +211,7 @@ final class SkillSessionController {
                         sourceTaskID: taskCopy.id
                     )
                 }
+
             case .some(.enhance(let existingName, let description)):
                 suggestion = enhanceSuggestion(name: existingName, description: description)
             }
@@ -351,7 +351,7 @@ final class SkillSessionController {
                   FileManager.default.fileExists(atPath: path) else {
                 throw SkillWriter.WriteError.skillNotFound(suggestion.skillName)
             }
-            let existing = runtime.skillCatalog?.skills.first(where: { $0.path == path })
+            let existing = runtime.skillCatalog?.skills.first { $0.path == path }
                 ?? SkillRecord(
                     name: suggestion.skillName,
                     description: suggestion.skillDescription,
@@ -394,7 +394,7 @@ final class SkillSessionController {
 
         var inputs: [(name: String, description: String, body: String)] = []
         for candidate in suggestion.candidates {
-            let record = runtime.skillCatalog?.skills.first(where: { $0.path == candidate.path })
+            let record = runtime.skillCatalog?.skills.first { $0.path == candidate.path }
             let body: String
             if let record {
                 body = await SkillRegistry.shared.readBody(for: record)
@@ -435,7 +435,6 @@ final class SkillSessionController {
             throw SkillCompositionError.mergeCleanupFailed(deleteFailures)
         }
     }
-
 }
 
 /// Lightweight catalog entry for extraction analysis (no body).

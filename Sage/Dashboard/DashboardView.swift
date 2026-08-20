@@ -182,8 +182,8 @@ struct DashboardView: View {
     // MARK: - Helpers
 
     private func formatTokenCount(_ count: Int) -> String {
-        if count < 1000 { return "\(count)" }
-        let k = Double(count) / 1000
+        if count < 1_000 { return "\(count)" }
+        let k = Double(count) / 1_000
         return String(format: "%.1fk", k)
     }
 

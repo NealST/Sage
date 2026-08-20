@@ -144,15 +144,19 @@ extension GRDBTaskRepository {
         case .once(let date):
             cadenceKind = "once"
             cadenceJSON = jsonObject(["date": date.timeIntervalSince1970])
+
         case .interval(let seconds):
             cadenceKind = "interval"
             cadenceJSON = jsonObject(["seconds": seconds])
+
         case .weekdays(let hour, let minute):
             cadenceKind = "weekdays"
             cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+
         case .daily(let hour, let minute):
             cadenceKind = "daily"
             cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+
         case .delay(let seconds):
             cadenceKind = "delay"
             cadenceJSON = jsonObject(["seconds": seconds])
@@ -293,22 +297,27 @@ extension GRDBTaskRepository {
         case "once":
             guard let interval = number(object["date"]) else { return nil }
             return .once(date: Date(timeIntervalSince1970: interval))
+
         case "interval":
             guard let seconds = number(object["seconds"]) else { return nil }
             return .interval(seconds: seconds)
+
         case "weekdays":
             guard let hour = int(object["hour"]), let minute = int(object["minute"]) else {
                 return nil
             }
             return .weekdays(hour: hour, minute: minute)
+
         case "daily":
             guard let hour = int(object["hour"]), let minute = int(object["minute"]) else {
                 return nil
             }
             return .daily(hour: hour, minute: minute)
+
         case "delay":
             guard let seconds = number(object["seconds"]) else { return nil }
             return .delay(seconds: seconds)
+
         default:
             return nil
         }

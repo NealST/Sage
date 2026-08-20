@@ -39,13 +39,17 @@ nonisolated enum ScheduleCadence: Codable, Sendable, Equatable {
         switch self {
         case .once(let date):
             return date.formatted(date: .abbreviated, time: .shortened)
+
         case .interval(let seconds):
             let minutes = max(1, Int((seconds / 60).rounded()))
             return "Every \(minutes) min"
+
         case .weekdays(let hour, let minute):
             return "Weekdays \(Self.clockLabel(hour: hour, minute: minute))"
+
         case .daily(let hour, let minute):
             return "Daily \(Self.clockLabel(hour: hour, minute: minute))"
+
         case .delay(let seconds):
             let minutes = max(1, Int((seconds / 60).rounded()))
             if minutes == 60 { return "In 1 hour" }
@@ -54,10 +58,11 @@ nonisolated enum ScheduleCadence: Codable, Sendable, Equatable {
     }
 
     /// Turns a relative delay into an absolute `once` date. Call at Save, not parse.
-    func resolvedForSave(now: Date = .now) -> ScheduleCadence {
+    func resolvedForSave(now: Date = .now) -> Self {
         switch self {
         case .delay(let seconds):
             return .once(date: now.addingTimeInterval(seconds))
+
         default:
             return self
         }
@@ -68,6 +73,7 @@ nonisolated enum ScheduleCadence: Codable, Sendable, Equatable {
         switch self {
         case .interval:
             return false
+
         case .once, .delay, .weekdays, .daily:
             return true
         }
@@ -138,7 +144,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
     }
 
     /// Soonest future fire among recipes the timer should wait for.
-    static func nextTimerFire(in records: [ScheduleRecord], now: Date = .now) -> Date? {
+    static func nextTimerFire(in records: [Self], now: Date = .now) -> Date? {
         records
             .filter(\.allowsTimerArming)
             .compactMap(\.nextFireAt)
@@ -161,6 +167,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
         case .once, .delay:
             enabled = false
             nextFireAt = nil
+
         case .interval, .weekdays, .daily:
             nextFireAt = ScheduleClock.nextFireDateAfterRun(for: cadence, from: now)
         }
@@ -168,7 +175,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
     }
 
     /// Copies fire metadata from a finished run without replacing Pause / Re-plan fields.
-    func adoptingRunMetadata(from result: ScheduleRecord, now: Date = .now) -> ScheduleRecord {
+    func adoptingRunMetadata(from result: Self, now: Date = .now) -> Self {
         var next = self
         next.lastFireAt = result.lastFireAt
         next.lastRunTaskID = result.lastRunTaskID
@@ -264,6 +271,7 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
         case .once, .delay:
             nextFireAt = nil
             updatedAt = .now
+
         case .interval, .weekdays, .daily:
             finishTiming(at: .now)
         }
@@ -298,8 +306,8 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
     }
 
     /// Confirmed agent recipe from the composer tip.
-    static func agent(from draft: ScheduleDraft) -> ScheduleRecord {
-        ScheduleRecord(
+    static func agent(from draft: ScheduleDraft) -> Self {
+        Self(
             title: makeTitle(from: draft.prompt),
             kind: .agent,
             projectID: draft.projectID,
@@ -317,8 +325,8 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
         cadence: ScheduleCadence,
         projectID: UUID?,
         workingDirectory: String? = nil
-    ) -> ScheduleRecord {
-        ScheduleRecord(
+    ) -> Self {
+        Self(
             title: makeTitle(from: command),
             kind: .script,
             projectID: projectID,
@@ -455,13 +463,16 @@ nonisolated enum ScheduleBeatResult: Sendable, Equatable {
         switch self {
         case .stopped:
             return .none
+
         case .script(let outcome):
             if outcome.failed { return .sound }
             return (isTrial || cadence.playsSuccessSound) ? .sound : .silent
+
         case .agent(let outcome):
             switch outcome {
             case .degraded, .needsConfirmation:
                 return .sound
+
             case .finished(let ok, _, _, _):
                 if !ok { return .sound }
                 return (isTrial || cadence.playsSuccessSound) ? .sound : .silent
@@ -494,10 +505,13 @@ extension ScheduleRecord {
             switch (lhs.nextFireAt, rhs.nextFireAt) {
             case (nil, nil):
                 return lhs.updatedAt > rhs.updatedAt
+
             case (nil, _):
                 return false
+
             case (_, nil):
                 return true
+
             case (let left?, let right?):
                 if left != right { return left < right }
                 return lhs.updatedAt > rhs.updatedAt

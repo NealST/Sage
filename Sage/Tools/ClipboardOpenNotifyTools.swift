@@ -212,12 +212,15 @@ nonisolated struct NotifyTool: AgentTool {
             guard granted else {
                 throw ToolError.operationFailed("Notification permission was denied")
             }
+
         case .denied:
             throw ToolError.operationFailed(
                 "Notification permission denied. Enable in System Settings → Notifications → Sage."
             )
+
         case .authorized, .provisional, .ephemeral:
             break
+
         @unknown default:
             break
         }
@@ -236,4 +239,3 @@ nonisolated struct NotifyTool: AgentTool {
         return "[OK] Notification delivered"
     }
 }
-

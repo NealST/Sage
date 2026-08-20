@@ -64,8 +64,8 @@ nonisolated struct SkillConsolidateSuggestion: Identifiable, Equatable, Sendable
     }
 
     /// Returns a copy with an explicit keep target (after the user chooses in the tip).
-    func resolved(primaryPath: String) -> SkillConsolidateSuggestion {
-        SkillConsolidateSuggestion(
+    func resolved(primaryPath: String) -> Self {
+        Self(
             id: id,
             candidates: candidates,
             primaryPath: primaryPath

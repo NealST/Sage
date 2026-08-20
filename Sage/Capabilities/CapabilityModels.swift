@@ -24,7 +24,7 @@ nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     /// When any activated skill declares this, runtime tool calls are restricted to the union.
     var allowedTools: String?
     /// Frontmatter `source` value (e.g. `auto-generated`). Nil for hand-authored skills.
-    var provenance: String? = nil
+    var provenance: String?
 
     /// Disk/UI label ("User" / "Project").
     var sourceLabel: String { scope.sourceLabel }
@@ -99,7 +99,7 @@ nonisolated struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
     /// Number of consecutive reconnect attempts. Reset on successful connect.
     var reconnectAttempts: Int = 0
 
-    static func == (lhs: MCPServerConfig, rhs: MCPServerConfig) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.command == rhs.command
         && lhs.args == rhs.args && lhs.env == rhs.env && lhs.enabled == rhs.enabled
         && lhs.status == rhs.status && lhs.statusMessage == rhs.statusMessage

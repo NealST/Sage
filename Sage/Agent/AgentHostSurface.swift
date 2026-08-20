@@ -93,10 +93,12 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         switch hookDecision {
         case .allow:
             break
+
         case .ask(let reason):
             throw ToolError.operationFailed(
                 "PreToolUse hook requires interactive approval: \(reason)"
             )
+
         case .deny(let reason):
             throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
         }
@@ -148,7 +150,7 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
     @discardableResult
     func appendProtectedUserInput(_ content: String) async -> Bool {
         let event = AgentEvent(kind: .userInput, content: content, protected: true)
-        return await taskStore.commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
+        return await taskStore.commit(appendEvents: [event], deleteEventIDs: []) { _ in }
     }
 
     func scheduleExplicitRemember(userNote: String?) {
@@ -186,7 +188,7 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         )
 
         activateSkill(named: skill.name)
-        let ok = await taskStore.commit(appendEvents: [event], deleteEventIDs: [], mutate: { _ in })
+        let ok = await taskStore.commit(appendEvents: [event], deleteEventIDs: []) { _ in }
         if !ok {
             state.activatedSkillNames.remove(skill.name)
             reportCommandFailure("Couldn’t activate skill '\(skill.name)'.")

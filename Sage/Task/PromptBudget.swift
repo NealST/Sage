@@ -30,9 +30,9 @@ nonisolated struct PromptBudget: Sendable, Equatable {
     }
 
     /// Creates a budget for `model`, reserving ~10% of the window for output.
-    static func forModel(_ model: String) -> PromptBudget {
+    static func forModel(_ model: String) -> Self {
         let window = windowTokens(forModel: model)
-        return PromptBudget(
+        return Self(
             windowTokens: window,
             reservedOutputTokens: max(window / 10, 256),
             reservedToolTokens: 0
@@ -40,14 +40,14 @@ nonisolated struct PromptBudget: Sendable, Equatable {
     }
 
     /// Tight default used by tests and `select(from:)` when no model is in play.
-    static let `default` = PromptBudget(
+    static let `default` = Self(
         windowTokens: 32_000,
         reservedOutputTokens: 3_200,
         reservedToolTokens: 0
     )
 
     /// Returns a copy that also reserves space for tool schemas.
-    func deductingToolDefinitions(_ tools: [ToolDefinition]) -> PromptBudget {
+    func deductingToolDefinitions(_ tools: [ToolDefinition]) -> Self {
         var copy = self
         copy.reservedToolTokens += tools.reduce(0) { $0 + Self.estimatedTokenCount(of: $1) }
         return copy

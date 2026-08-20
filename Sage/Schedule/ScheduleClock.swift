@@ -14,11 +14,14 @@ nonisolated enum ScheduleClock {
         switch cadence {
         case .once(let date):
             return date > from ? date : nil
+
         case .delay(let seconds):
             return from.addingTimeInterval(max(1, seconds))
+
         case .interval(let seconds):
             let step = max(60, seconds)
             return from.addingTimeInterval(step)
+
         case .weekdays(let hour, let minute):
             return nextMatching(
                 after: from,
@@ -28,6 +31,7 @@ nonisolated enum ScheduleClock {
             ) { weekday in
                 (2...6).contains(weekday)
             }
+
         case .daily(let hour, let minute):
             return nextMatching(
                 after: from,
@@ -43,6 +47,7 @@ nonisolated enum ScheduleClock {
         switch cadence {
         case .once, .delay:
             return nil
+
         case .interval, .weekdays, .daily:
             return nextFireDate(for: cadence, after: now)
         }
@@ -124,7 +129,7 @@ nonisolated enum ScheduleCadenceParser {
     /// Cadence for a slash preset, evaluated at save time (`in 1 hour` is relative).
     static func cadence(fromPresetInsert insert: String, now: Date = .now) -> ScheduleCadence? {
         if insert.lowercased() == "in 1 hour" {
-            return .once(date: now.addingTimeInterval(3600))
+            return .once(date: now.addingTimeInterval(3_600))
         }
         return parseAgentArgument("\(insert) _")?.cadence
     }
@@ -154,7 +159,7 @@ nonisolated enum ScheduleCadenceParser {
         let unit = parts[1].lowercased()
         let seconds: TimeInterval
         if unit.hasPrefix("hour") {
-            seconds = amount * 3600
+            seconds = amount * 3_600
         } else if unit.hasPrefix("min") {
             seconds = amount * 60
         } else {

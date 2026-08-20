@@ -48,15 +48,19 @@ enum ModelClientError: LocalizedError {
         switch self {
         case .notConfigured:
             return "Add an API key in Settings before asking Sage."
+
         case .invalidURL:
             return "Model base URL is invalid."
+
         case .httpStatus(let code, let body):
             return Self.actionableMessage(code: code, body: body)
+
         case .rateLimited(let retryAfter):
             if let seconds = retryAfter {
                 return "Rate limited — retry available in \(Int(seconds.rounded(.up)))s."
             }
             return "Rate limited by the API. Wait a moment and try again."
+
         case .decoding(let detail):
             return "Could not parse model response: \(detail)"
         }
@@ -66,6 +70,7 @@ enum ModelClientError: LocalizedError {
     var isTransient: Bool {
         switch self {
         case .rateLimited: return true
+
         case .httpStatus(let code, _):
             // 5xx = server error, 408 = request timeout
             return code >= 500 || code == 408
@@ -77,17 +82,23 @@ enum ModelClientError: LocalizedError {
         switch code {
         case 401:
             return "Authentication failed (401). Check your API key in Settings."
+
         case 403:
             return "Access denied (403). Your API key may lack permissions for this model."
+
         case 404:
             return "Model endpoint not found (404). Verify the base URL in Settings."
+
         case 408:
             return "Request timed out (408). Check your network connection."
+
         case 429:
             return "Rate limited (429). Too many requests — wait a moment."
+
         case 500...599:
             let short = body.prefix(120)
             return "Server error (\(code)). The provider may be experiencing issues.\(short.isEmpty ? "" : " \(short)")"
+
         default:
             let short = body.prefix(200)
             return "Model API error (\(code))\(short.isEmpty ? "." : ": \(short)")"
@@ -104,7 +115,7 @@ nonisolated struct RetryPolicy: Sendable {
     let baseDelay: TimeInterval
     let maxDelay: TimeInterval
 
-    static let `default` = RetryPolicy(maxAttempts: 3, baseDelay: 1.0, maxDelay: 30.0)
+    static let `default` = Self(maxAttempts: 3, baseDelay: 1.0, maxDelay: 30.0)
 
     /// Calculates the delay for a given attempt (0-indexed).
     /// If a `retryAfter` value is provided (from 429 header), uses that instead.
@@ -289,6 +300,7 @@ actor ModelClient {
                 switch try await operation(attempt) {
                 case .success(let value):
                     return value
+
                 case .retryableHTTP(let status, let body, let response, let attempt):
                     if status == 429 {
                         let retryAfter = Self.parseRetryAfter(response)
@@ -466,7 +478,6 @@ actor ModelClient {
         return nil
     }
 }
-
 
 nonisolated struct ModelSettingsSnapshot: Sendable {
     let baseURL: String

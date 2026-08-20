@@ -39,8 +39,10 @@ nonisolated struct SkillSaveJob: Identifiable, Equatable, Sendable {
         switch type {
         case .new:
             return "Creating \(skillName)"
+
         case .enhance:
             return "Enhancing \(skillName)"
+
         case .merge:
             return "Merging into \(skillName)"
         }
@@ -54,8 +56,10 @@ nonisolated struct SkillSaveJob: Identifiable, Equatable, Sendable {
             case .enhance: return "Enhancing…"
             case .merge: return "Merging…"
             }
+
         case .succeeded:
             return "Saved"
+
         case .failed(let message):
             return message
         }

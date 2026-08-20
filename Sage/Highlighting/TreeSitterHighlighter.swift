@@ -16,9 +16,9 @@ import TreeSitterCPP
 import TreeSitterCSS
 import TreeSitterGo
 import TreeSitterHTML
-import TreeSitterJSON
 import TreeSitterJava
 import TreeSitterJavaScript
+import TreeSitterJSON
 import TreeSitterKotlin
 import TreeSitterPython
 import TreeSitterRuby
@@ -34,7 +34,6 @@ import TreeSitterTypeScript
 /// Produces SwiftUI `Text` with Xcode-style colors via `SageCodeTheme`.
 /// Falls back to plain monospaced text for unsupported languages.
 struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
-
     func highlightCode(_ code: String, language: String?) -> Text {
         guard let language, let config = Self.languageConfig(for: language) else {
             return Text(code).foregroundStyle(SageCodeTheme.plain)
@@ -52,7 +51,6 @@ struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
 // MARK: - Highlighting Engine
 
 private extension TreeSitterCodeHighlighter {
-
     /// Parses code and returns highlight ranges using tree-sitter.
     static func highlight(code: String, config: LanguageConfiguration) throws -> [NamedRange] {
         let parser = Parser()
@@ -113,7 +111,6 @@ private extension TreeSitterCodeHighlighter {
 // MARK: - Language Registry
 
 private extension TreeSitterCodeHighlighter {
-
     /// Resolves a language identifier (from markdown fence info) to a tree-sitter configuration.
     static func languageConfig(for identifier: String) -> LanguageConfiguration? {
         let normalized = identifier.lowercased().trimmingCharacters(in: .whitespaces)
@@ -123,9 +120,9 @@ private extension TreeSitterCodeHighlighter {
         }
 
         // Cache configurations to avoid repeated bundle lookups
-        return configCache.value(for: normalized, creating: {
+        return configCache.value(for: normalized) {
             try? LanguageConfiguration(entry.language, name: entry.name)
-        })
+        }
     }
 
     /// Maps common language identifiers to tree-sitter language functions.

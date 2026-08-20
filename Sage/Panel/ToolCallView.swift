@@ -10,10 +10,10 @@ import SwiftUI
 struct ToolCallView: View {
     let name: String
     let argumentsJSON: String
-    var titleOverride: String? = nil
-    var status: StepStatus? = nil
+    var titleOverride: String?
+    var status: StepStatus?
     /// Completed tool result (may embed a write-file diff payload).
-    var resultContent: String? = nil
+    var resultContent: String?
     /// Compare proposed content against the file on disk (plan confirmation).
     /// Do not enable for historical transcript chips after the write already landed.
     var previewAgainstDisk: Bool = false
@@ -168,10 +168,13 @@ struct ToolCallView: View {
             switch model.body {
             case let .fileEdit(path, content, language):
                 fileEditPreview(path: path, content: content, language: language)
+
             case let .text(label, value):
                 labeledText(label: label, value: value)
+
             case let .fields(pairs):
                 fieldsPreview(pairs)
+
             case .empty:
                 EmptyView()
             }
@@ -204,10 +207,13 @@ struct ToolCallView: View {
                     .padding(.horizontal, 12)
                     proposedContent(content, language: language)
                 }
+
             case .absent:
                 UnifiedDiffView(before: nil, after: content, created: true, path: path)
+
             case .unreadable:
                 UnifiedDiffView(before: nil, after: content, created: false, path: path)
+
             case let .text(before):
                 UnifiedDiffView(before: before, after: content, created: false, path: path)
             }
@@ -289,17 +295,21 @@ struct ToolCallView: View {
             Image(systemName: SageDesign.Symbol.stepPending)
                 .font(.system(size: SageDesign.Typography.microSize, weight: .regular))
                 .foregroundStyle(.tertiary)
+
         case .running:
             ProgressView()
                 .controlSize(.mini)
+
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
                 .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                 .foregroundStyle(.green)
+
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
                 .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                 .foregroundStyle(.red)
+
         case .skipped:
             Image(systemName: "minus.circle")
                 .font(.system(size: SageDesign.Typography.microSize))

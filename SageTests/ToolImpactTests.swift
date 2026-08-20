@@ -1,5 +1,5 @@
-import XCTest
 @testable import Sage
+import XCTest
 
 final class ToolImpactTests: XCTestCase {
     func testObservationToolsSkipConfirmation() {
