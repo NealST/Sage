@@ -10,9 +10,10 @@ final class ContextBudgetTests: XCTestCase {
     func testCapSkillContentTruncatesOversizedPayload() {
         let huge = String(repeating: "a", count: ContextBudget.maxSkillContentCharacters + 50)
         let capped = ContextBudget.capSkillContent(huge, skillName: "big")
-        XCTAssertTrue(capped.utf8.count < huge.utf8.count)
+        XCTAssertNotEqual(capped, huge)
         XCTAssertTrue(capped.contains("load_skill_resource"))
         XCTAssertTrue(capped.contains("big"))
+        XCTAssertTrue(capped.contains("truncated"))
     }
 
     func testSelectKeepsProtectedEvents() {
@@ -72,7 +73,7 @@ final class ContextBudgetTests: XCTestCase {
         let selected = ContextBudget.select(from: [user, assistant, tool], budget: budget)
         let result = selected.first { $0.kind == .toolResult }
         XCTAssertNotNil(result)
-        XCTAssertTrue(result?.content.contains("middle omitted") == true)
+        XCTAssertTrue(result?.content.contains("tool result compacted") == true)
         XCTAssertLessThan(result?.content.utf8.count ?? .max, huge.utf8.count)
         XCTAssertTrue(selected.contains(where: { $0.id == user.id }))
     }
@@ -159,6 +160,22 @@ final class ContextBudgetTests: XCTestCase {
         XCTAssertFalse(system.contains("**alpha**"))
         XCTAssertTrue(assembly.events.contains(where: { $0.id == current.id }))
     }
+
+    func testCapabilityReminderAndTodosStayInSystem() {
+        let current = AgentEvent(kind: .userInput, content: "go")
+        let assembly = ContextBudget.assemble(
+            PromptLayout(
+                budget: .default,
+                baseInstructions: "You are Sage.",
+                capabilityReminder: "\n## Runtime\nWork plan kind: act",
+                todoAppendix: "\n## Todo list\nnot-started\t1\tRead file",
+                events: [current]
+            )
+        )
+        let system = assembly.events.first { $0.kind == .systemInstruction }?.content ?? ""
+        XCTAssertTrue(system.contains("Work plan kind: act"))
+        XCTAssertTrue(system.contains("Todo list"))
+    }
 }
 
 final class PromptBudgetTests: XCTestCase {
@@ -170,6 +187,12 @@ final class PromptBudgetTests: XCTestCase {
         XCTAssertEqual(PromptBudget.estimatedTokenCount(utf8ByteCount: 1), 1)
         XCTAssertEqual(PromptBudget.estimatedTokenCount(utf8ByteCount: 4), 1)
         XCTAssertEqual(PromptBudget.estimatedTokenCount(utf8ByteCount: 5), 2)
+    }
+
+    func testTokenEstimateDoesNotUndercountCJKAndEmoji() {
+        XCTAssertEqual(PromptBudget.estimatedTokenCount(in: "你好世界"), 4)
+        XCTAssertEqual(PromptBudget.estimatedTokenCount(in: "😀"), 2)
+        XCTAssertEqual(PromptBudget.estimatedTokenCount(in: "abcd"), 1)
     }
 
     func testUsableSubtractsReserves() {

@@ -131,20 +131,37 @@ nonisolated struct AgentPlan: Identifiable, Codable, Sendable, Equatable {
     }
 }
 
+/// In-window pause that is not a work-plan card or an in-flight tool batch.
+nonisolated enum AgentPendingPrompt: Equatable, Sendable, Codable {
+    case toolRoundLimit(currentLimit: Int, nextLimit: Int)
+    case toolApproval(toolCallID: String, toolName: String, argumentsJSON: String, title: String)
+}
+
 /// Which confirm chrome to show. Work plan and tool batch must not share a card.
-enum AgentTurnChrome: Equatable, Sendable {
+nonisolated enum AgentTurnChrome: Equatable, Sendable {
     case workPlan
     case toolBatch
+    case toolRoundLimit
+    case toolApproval
 
     static func resolve(
         phase: AgentPhase,
         hasWorkPlan: Bool,
-        hasToolBatch: Bool
+        hasToolBatch: Bool,
+        pendingPrompt: AgentPendingPrompt? = nil
     ) -> AgentTurnChrome? {
         switch phase {
         case .executing:
             return hasToolBatch ? .toolBatch : nil
         case .awaitingConfirmation:
+            switch pendingPrompt {
+            case .toolApproval:
+                return .toolApproval
+            case .toolRoundLimit:
+                return .toolRoundLimit
+            case nil:
+                break
+            }
             if hasToolBatch { return .toolBatch }
             if hasWorkPlan { return .workPlan }
             return nil
@@ -154,7 +171,7 @@ enum AgentTurnChrome: Equatable, Sendable {
     }
 }
 
-enum AgentPhase: Equatable {
+nonisolated enum AgentPhase: Equatable, Sendable {
     case idle
     case thinking
     /// Work plan lives on `TaskRecord.workPlan`. Tool batch on `PlanProgress` / `pendingPlan`.

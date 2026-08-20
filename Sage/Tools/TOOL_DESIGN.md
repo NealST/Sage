@@ -55,8 +55,52 @@
 - **全局 cap**：所有工具结果在 runtime 层截断到 50K 字符
 - **超时**：所有工具执行有 30s 超时保护
 - **Plan 是解题策略**（意图 + 做法），由 plan 子 agent 产出，不是工具步骤
-- **act** 策略需确认一次；确认后执行 agent 按 ReAct 调工具直到任务结束
+- **act** 策略需确认一次；确认后文件工具可直接跑。`run_shell_command` 与 MCP 工具在本任务第一次出现该精确调用时仍会暂停（允许一次 / 允许本调用 / 允许该工具本任务 / 跳过）。定时任务的无人值守执行跳过这层门
+- 工具失败会把 ERROR 结果交给模型并继续本批次其余步骤，而不是整批停住等人 Retry
+- 连续的观察类工具可并行；写入 / shell / MCP / todo 仍串行
+- 工具轮次默认 8 批，到达上限后询问是否再开 8 批（最多 64）。若模型在上限时仍给出 tool calls，先收进 pendingPlan，Continue 再执行
+- `manage_todo_list` 只在 act 计划下暴露，用来跟踪剩余步骤，不重写 work plan
 - **answer / observe** 不确认，直接进入执行
+
+### 5.1 PreToolUse Hooks
+
+Project 可在 `<project>/.sage/hooks.json`、Skill 可在其 `SKILL.md` 同目录放置
+`hooks.json`。Hook 只声明规则，不执行脚本；所有调用仍经过 Plan、Skill policy、
+PathGuard、参数 schema、超时与结果 cap。
+
+```json
+{
+  "pre_tool_use": [
+    {
+      "tool": "run_*",
+      "action": "ask",
+      "reason": "Review shell commands"
+    },
+    {
+      "tool": "run_shell_command",
+      "action": "deny",
+      "argument_contains": { "command": "sudo " },
+      "reason": "sudo is not allowed in this project"
+    }
+  ]
+}
+```
+
+- `tool` 支持 `*` 通配符
+- `argument_equals` / `argument_contains` 对顶层参数做可选匹配
+- 多条命中按 `deny > ask > allow` 合并
+- `allow` 只表示 Hook 不拦截，不会绕过 Sage 自带的 shell / MCP 审批
+- 配置文件存在但格式错误时 fail closed，并把可修复的错误作为 tool result 返回
+
+### 5.2 Progressive MCP 与 Explore
+
+- MCP 工具总数不超过 20 时直接暴露；超过后，未解锁的 Server 只暴露一个
+  `mcp_group__<server>` 入口。解锁状态跟随 Task 持久化，避免切换任务或重启后丢失。
+- `explore_subagent` 创建最多 6 个工具轮次的隔离子 Agent，只开放
+  `list_directory`、`read_text_file`、`search_files`，并继承 PathGuard 与
+  PreToolUse deny/ask 约束；子 Agent 不写主 transcript，只返回最终结论。
+- `load_skill` 的 `mode: "fork"` 在上述 Explore 子 Agent 内运行 Skill；
+  不把 Skill 激活进父 Agent，避免 Skill 指令和中间读取长期占用主上下文。
 
 ### 6. 性能要求
 

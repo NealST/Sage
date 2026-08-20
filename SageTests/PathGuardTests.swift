@@ -7,8 +7,11 @@ final class PathGuardTests: XCTestCase {
     private var skillDir: URL!
 
     override func setUpWithError() throws {
-        fixtureRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SagePathGuard-\(UUID().uuidString)", isDirectory: true)
+        fixtureRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(
+                "Library/Caches/SagePathGuard-\(UUID().uuidString)",
+                isDirectory: true
+            )
         skillDir = fixtureRoot.appendingPathComponent("skill-outside", isDirectory: true)
         let project = fixtureRoot.appendingPathComponent("project", isDirectory: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
@@ -124,7 +127,7 @@ final class PathGuardTests: XCTestCase {
         let inside = projectRoot.appendingPathComponent("ok.txt")
         try "ok".write(to: inside, atomically: true, encoding: .utf8)
 
-        try PathGuard.$policy.withValue(.project(root: projectRoot)) {
+        PathGuard.$policy.withValue(.project(root: projectRoot)) {
             XCTAssertNil(PathGuard.resolveEnumeratedURL(leak, access: .read))
             XCTAssertNotNil(PathGuard.resolveEnumeratedURL(inside, access: .read))
         }

@@ -45,6 +45,12 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     /// Never shown in the transcript, Recents, or chrome.
     var workingMemory: TaskWorkingMemory?
     var pendingPlan: AgentPlan?
+    /// Execute-agent checklist for this task. Empty means unused.
+    var todos: [AgentTodoItem]
+    /// MCP server groups unlocked for this task after progressive disclosure.
+    var unlockedMCPServerNames: Set<String>
+    /// Round-limit or per-tool approval sitting in front of the execute loop.
+    var pendingPrompt: AgentPendingPrompt?
     var entities: [TaskEntity]
     var relatedTaskIDs: [UUID]
     /// Skills activated in this task (persisted so they survive task switches).
@@ -68,6 +74,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         workPlan: WorkPlan? = nil,
         workingMemory: TaskWorkingMemory? = nil,
         pendingPlan: AgentPlan? = nil,
+        todos: [AgentTodoItem] = [],
+        unlockedMCPServerNames: Set<String> = [],
+        pendingPrompt: AgentPendingPrompt? = nil,
         entities: [TaskEntity] = [],
         relatedTaskIDs: [UUID] = [],
         activatedSkillNames: Set<String> = [],
@@ -87,6 +96,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.workPlan = workPlan
         self.workingMemory = workingMemory
         self.pendingPlan = pendingPlan
+        self.todos = todos
+        self.unlockedMCPServerNames = unlockedMCPServerNames
+        self.pendingPrompt = pendingPrompt
         self.entities = entities
         self.relatedTaskIDs = relatedTaskIDs
         self.activatedSkillNames = activatedSkillNames
@@ -109,6 +121,12 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         workPlan = try container.decodeIfPresent(WorkPlan.self, forKey: .workPlan)
         workingMemory = try container.decodeIfPresent(TaskWorkingMemory.self, forKey: .workingMemory)
         pendingPlan = try container.decodeIfPresent(AgentPlan.self, forKey: .pendingPlan)
+        todos = try container.decodeIfPresent([AgentTodoItem].self, forKey: .todos) ?? []
+        unlockedMCPServerNames = try container.decodeIfPresent(
+            Set<String>.self,
+            forKey: .unlockedMCPServerNames
+        ) ?? []
+        pendingPrompt = try container.decodeIfPresent(AgentPendingPrompt.self, forKey: .pendingPrompt)
         entities = try container.decodeIfPresent([TaskEntity].self, forKey: .entities) ?? []
         relatedTaskIDs = try container.decodeIfPresent([UUID].self, forKey: .relatedTaskIDs) ?? []
         activatedSkillNames = try container.decodeIfPresent(Set<String>.self, forKey: .activatedSkillNames) ?? []
@@ -131,6 +149,9 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(workPlan, forKey: .workPlan)
         try container.encodeIfPresent(workingMemory, forKey: .workingMemory)
         try container.encodeIfPresent(pendingPlan, forKey: .pendingPlan)
+        try container.encode(todos, forKey: .todos)
+        try container.encode(unlockedMCPServerNames, forKey: .unlockedMCPServerNames)
+        try container.encodeIfPresent(pendingPrompt, forKey: .pendingPrompt)
         try container.encode(entities, forKey: .entities)
         try container.encode(relatedTaskIDs, forKey: .relatedTaskIDs)
         try container.encode(activatedSkillNames, forKey: .activatedSkillNames)
@@ -142,7 +163,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, status, projectID, summary, topic, abstract, topicUpdatedAt
-        case events, workPlan, workingMemory, pendingPlan, entities, relatedTaskIDs, activatedSkillNames
+        case events, workPlan, workingMemory, pendingPlan, todos, unlockedMCPServerNames
+        case pendingPrompt, entities, relatedTaskIDs, activatedSkillNames
         case skillPersistConsidered
         case originScheduleID
         case createdAt, updatedAt

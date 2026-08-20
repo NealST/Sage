@@ -11,12 +11,10 @@ actor GRDBTaskRepository: TaskRepository {
     let legacyJSONURL: URL
     var databasePool: DatabasePool?
 
-    convenience init() {
+    init() {
         _ = AppSupportPaths.sageDirectory(createIfNeeded: true)
-        self.init(
-            databaseURL: AppSupportPaths.sqliteDatabaseURL(),
-            legacyJSONURL: AppSupportPaths.legacyTasksJSONURL()
-        )
+        databaseURL = AppSupportPaths.sqliteDatabaseURL()
+        legacyJSONURL = AppSupportPaths.legacyTasksJSONURL()
     }
 
     /// Isolated database for tests. Does not touch Application Support.
@@ -594,6 +592,52 @@ actor GRDBTaskRepository: TaskRepository {
                 sql: """
                 UPDATE tasks
                 SET working_memory_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    json,
+                    Date.now.timeIntervalSince1970,
+                    taskID.uuidString,
+                ]
+            )
+        }
+    }
+
+    func updateTodoList(taskID: UUID, items: [AgentTodoItem]) throws {
+        let pool = try database()
+        let json: String? = items.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(items))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                UPDATE tasks
+                SET todo_list_json = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                arguments: [
+                    json,
+                    Date.now.timeIntervalSince1970,
+                    taskID.uuidString,
+                ]
+            )
+        }
+    }
+
+    func updateUnlockedMCPServers(taskID: UUID, names: Set<String>) throws {
+        let pool = try database()
+        let json: String? = names.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(names.sorted()))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        try pool.write { db in
+            try db.execute(
+                sql: """
+                UPDATE tasks
+                SET unlocked_mcp_servers_json = ?,
                     updated_at = ?
                 WHERE id = ?
                 """,

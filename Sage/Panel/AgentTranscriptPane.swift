@@ -180,54 +180,97 @@ struct AgentTranscriptPane: View {
     private func phaseAccessory(onStreamScroll: @escaping () -> Void) -> some View {
         switch session.agent.state.phase {
         case .thinking:
-            ThinkingStreamAccessory(
-                retryState: session.agent.state.retryState,
-                canStop: session.agent.canStop,
-                onStop: { session.agent.stop() },
-                onStreamScroll: onStreamScroll
-            )
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+                if let todos = session.agent.state.activeTask?.todos, !todos.isEmpty {
+                    TodoListCard(items: todos)
+                }
+                ThinkingStreamAccessory(
+                    retryState: session.agent.state.retryState,
+                    canStop: session.agent.canStop,
+                    onStop: { session.agent.stop() },
+                    onStreamScroll: onStreamScroll
+                )
+            }
 
         case .awaitingConfirmation, .executing:
             let isExecuting: Bool = {
                 if case .executing = session.agent.state.phase { return true }
                 return false
             }()
-            switch session.agent.turnChrome {
-            case .workPlan:
-                if let workPlan = session.agent.state.activeTask?.workPlan {
-                    WorkPlanCard(
-                        plan: workPlan,
-                        isExecuting: isExecuting,
-                        onConfirm: {
-                            Task { await session.agent.confirmWorkPlan() }
-                        },
-                        onCancel: {
-                            Task { await session.agent.cancelPendingPlan() }
-                        },
-                        onStop: {
-                            session.agent.stop()
-                        }
-                    )
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+                if let todos = session.agent.state.activeTask?.todos, !todos.isEmpty {
+                    TodoListCard(items: todos)
                 }
-            case .toolBatch:
-                if let plan = session.agent.planProgress.plan
-                    ?? session.agent.state.activeTask?.pendingPlan {
-                    PlanCardView(
-                        plan: plan,
-                        isExecuting: isExecuting,
-                        onConfirm: {
-                            Task { await session.agent.confirmToolBatch() }
-                        },
-                        onCancel: {
-                            Task { await session.agent.cancelPendingPlan() }
-                        },
-                        onStop: {
-                            session.agent.stop()
-                        }
-                    )
+                switch session.agent.turnChrome {
+                case .workPlan:
+                    if let workPlan = session.agent.state.activeTask?.workPlan {
+                        WorkPlanCard(
+                            plan: workPlan,
+                            isExecuting: isExecuting,
+                            onConfirm: {
+                                Task { await session.agent.confirmWorkPlan() }
+                            },
+                            onCancel: {
+                                Task { await session.agent.cancelPendingPlan() }
+                            },
+                            onStop: {
+                                session.agent.stop()
+                            }
+                        )
+                    }
+                case .toolBatch:
+                    if let plan = session.agent.planProgress.plan
+                        ?? session.agent.state.activeTask?.pendingPlan {
+                        PlanCardView(
+                            plan: plan,
+                            isExecuting: isExecuting,
+                            onConfirm: {
+                                Task { await session.agent.confirmToolBatch() }
+                            },
+                            onCancel: {
+                                Task { await session.agent.cancelPendingPlan() }
+                            },
+                            onStop: {
+                                session.agent.stop()
+                            }
+                        )
+                    }
+                case .toolRoundLimit:
+                    if case .toolRoundLimit(let current, let next) = session.agent.state.pendingPrompt {
+                        ToolRoundLimitCard(
+                            currentLimit: current,
+                            nextLimit: next,
+                            onContinue: {
+                                Task { await session.agent.confirmToolRoundLimit() }
+                            },
+                            onFinish: {
+                                Task { await session.agent.finishToolRoundLimit() }
+                            }
+                        )
+                    }
+                case .toolApproval:
+                    if case .toolApproval(_, let name, let args, let title) = session.agent.state.pendingPrompt {
+                        ToolApprovalCard(
+                            title: title,
+                            toolName: name,
+                            argumentsJSON: args,
+                            onAllowOnce: {
+                                Task { await session.agent.confirmToolApproval(scope: .once) }
+                            },
+                            onAllowSession: {
+                                Task { await session.agent.confirmToolApproval(scope: .session) }
+                            },
+                            onAllowTool: {
+                                Task { await session.agent.confirmToolApproval(scope: .tool) }
+                            },
+                            onSkip: {
+                                Task { await session.agent.skipToolApproval() }
+                            }
+                        )
+                    }
+                case .none:
+                    EmptyView()
                 }
-            case .none:
-                EmptyView()
             }
 
         case .failed(let message):

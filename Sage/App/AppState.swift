@@ -62,7 +62,14 @@ final class AppState {
         case .thinking:
             return "Thinking…"
         case .awaitingConfirmation:
-            return "Plan waiting for confirmation"
+            switch keySession.agent.turnChrome {
+            case .toolRoundLimit:
+                return "Tool round limit — continue or finish"
+            case .toolApproval:
+                return "Tool waiting for approval"
+            default:
+                return "Plan waiting for confirmation"
+            }
         case .executing:
             return "Working…"
         case .completed:

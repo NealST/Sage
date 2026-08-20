@@ -19,7 +19,7 @@ final class WorkPlanTests: XCTestCase {
         XCTAssertEqual(plan?.sideEffects, "会改 README.md")
         XCTAssertTrue(plan?.requiresConfirmation == true)
         XCTAssertTrue(plan?.promptAppendix.contains("Confirmed work plan") == true)
-        XCTAssertTrue(plan?.promptAppendix.contains("Do not ask the user to re-approve") == true)
+        XCTAssertTrue(plan?.promptAppendix.contains("Shell commands and MCP tools") == true)
     }
 
     func testAcceptsLegacyApproachArray() {
@@ -99,6 +99,27 @@ final class WorkPlanTests: XCTestCase {
             hasToolBatch: false
         )
         XCTAssertNil(thinkingHidesStrategy)
+
+        let roundLimit = AgentTurnChrome.resolve(
+            phase: .awaitingConfirmation,
+            hasWorkPlan: true,
+            hasToolBatch: false,
+            pendingPrompt: .toolRoundLimit(currentLimit: 8, nextLimit: 16)
+        )
+        XCTAssertEqual(roundLimit, .toolRoundLimit)
+
+        let approvalBeatsBatch = AgentTurnChrome.resolve(
+            phase: .awaitingConfirmation,
+            hasWorkPlan: true,
+            hasToolBatch: true,
+            pendingPrompt: .toolApproval(
+                toolCallID: "1",
+                toolName: "run_shell_command",
+                argumentsJSON: "{}",
+                title: "Run: ls"
+            )
+        )
+        XCTAssertEqual(approvalBeatsBatch, .toolApproval)
 
         let failedHidesBoth = AgentTurnChrome.resolve(
             phase: .failed(message: "Stopped"),

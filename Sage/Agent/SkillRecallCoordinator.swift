@@ -77,12 +77,9 @@ final class SkillRecallCoordinator {
 
             let result: String
             do {
-                result = capToolResult(
-                    try await SkillToolExecutor.execute(
-                        name: "load_skill",
-                        argumentsJSON: argsJSON,
-                        host: skillHost
-                    )
+                result = try await skillHost.executeToolInvocation(
+                    name: "load_skill",
+                    argumentsJSON: argsJSON
                 )
             } catch {
                 continue

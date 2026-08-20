@@ -135,6 +135,7 @@ final class ScheduleRunner {
         session.agent.state.didBootstrap = true
         inFlightSessions[record.id] = session
         defer { inFlightSessions[record.id] = nil }
+        let agent = session.agent
 
         return await withTaskCancellationHandler {
             await self.performAgentRun(
@@ -143,9 +144,9 @@ final class ScheduleRunner {
                 session: session,
                 project: project
             )
-        } onCancel: { [weak self] in
-            Task { @MainActor in
-                self?.inFlightSessions[record.id]?.agent.stop()
+        } onCancel: {
+            Task { @MainActor [agent] in
+                agent.stop()
             }
         }
     }

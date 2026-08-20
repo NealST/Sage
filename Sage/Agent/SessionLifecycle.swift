@@ -191,11 +191,13 @@ final class SessionLifecycle {
     @discardableResult
     private func persistScopeLastActive() async -> Bool {
         if var current = state.activeTask {
-            if case .awaitingConfirmation = state.phase,
-               let plan = planProgress.plan ?? current.pendingPlan {
-                current.pendingPlan = plan
+            if case .awaitingConfirmation = state.phase {
+                if let plan = planProgress.plan ?? current.pendingPlan {
+                    current.pendingPlan = plan
+                }
                 current.status = .awaitingApproval
             }
+            current.pendingPrompt = state.pendingPrompt
             current.updatedAt = .now
             do {
                 try await taskRepository.saveTaskState(current, setActive: false)

@@ -72,7 +72,11 @@ nonisolated enum SkillToolPolicy {
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills
         ) else { return }
-        guard allowed.contains(name) || name == RecallTaskTranscriptTool.name else {
+        guard allowed.contains(name)
+                || name == RecallTaskTranscriptTool.name
+                || name == ManageTodoListTool.name
+                || name == ExploreSubagentTool.name
+                || MCPToolGroupTool.isGroupTool(name) else {
             throw ToolError.operationFailed(
                 "Tool '\(name)' is not permitted by the activated skill allowed-tools list."
             )
@@ -89,7 +93,11 @@ nonisolated enum SkillToolPolicy {
             enabledSkills: enabledSkills
         ) else { return definitions }
         return definitions.filter {
-            allowed.contains($0.name) || $0.name == RecallTaskTranscriptTool.name
+            allowed.contains($0.name)
+                || $0.name == RecallTaskTranscriptTool.name
+                || $0.name == ManageTodoListTool.name
+                || $0.name == ExploreSubagentTool.name
+                || MCPToolGroupTool.isGroupTool($0.name)
         }
     }
 }

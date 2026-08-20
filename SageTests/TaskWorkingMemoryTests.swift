@@ -122,7 +122,8 @@ final class TaskWorkingMemoryTests: XCTestCase {
 
         task.workingMemory = nil
         try await repository.saveTaskState(task, setActive: false)
-        XCTAssertNil(try await repository.loadTask(id: task.id)?.workingMemory)
+        let cleared = try await repository.loadTask(id: task.id)
+        XCTAssertNil(cleared?.workingMemory)
     }
 
     func testDoesNotPersistAnEmptySnapshot() async throws {
@@ -143,7 +144,8 @@ final class TaskWorkingMemoryTests: XCTestCase {
             )
         )
         try await repository.saveTaskState(task, setActive: true)
-        XCTAssertNil(try await repository.loadTask(id: task.id)?.workingMemory)
+        let persisted = try await repository.loadTask(id: task.id)
+        XCTAssertNil(persisted?.workingMemory)
     }
 
     func testUpdateWorkingMemoryDoesNotRewriteEvents() async throws {

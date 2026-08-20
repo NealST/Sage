@@ -251,5 +251,34 @@ nonisolated enum GRDBTaskSchema {
                 """)
             }
         }
+        migrator.registerMigration("addTaskTodoList") { db in
+            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "todo_list_json" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks
+                    ADD COLUMN todo_list_json TEXT;
+                """)
+            }
+        }
+        migrator.registerMigration("addTaskPendingPrompt") { db in
+            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "pending_prompt_json" }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks
+                    ADD COLUMN pending_prompt_json TEXT;
+                """)
+            }
+        }
+        migrator.registerMigration("addTaskUnlockedMCPServers") { db in
+            let hasColumn = try db.columns(in: "tasks").contains {
+                $0.name == "unlocked_mcp_servers_json"
+            }
+            if !hasColumn {
+                try db.execute(sql: """
+                    ALTER TABLE tasks
+                    ADD COLUMN unlocked_mcp_servers_json TEXT;
+                """)
+            }
+        }
     }
 }

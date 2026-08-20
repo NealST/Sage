@@ -126,7 +126,7 @@ final class PlanAgent {
     Skip one-off answers, trivial lookups, failed or abandoned work, and things already covered by an existing skill.
     """
 
-    static func fallback(for userText: String) -> WorkPlan {
+    nonisolated static func fallback(for userText: String) -> WorkPlan {
         WorkPlan(
             kind: .act,
             intent: String(userText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)),
@@ -144,7 +144,7 @@ final class PlanAgent {
         )
     }
 
-    static func parse(_ raw: String?) -> WorkPlan? {
+    nonisolated static func parse(_ raw: String?) -> WorkPlan? {
         guard let object = ModelJSON.object(from: raw) else { return nil }
         guard let kindRaw = object["kind"] as? String,
               let kind = WorkPlan.Kind(rawValue: kindRaw),
@@ -194,7 +194,7 @@ final class PlanAgent {
         )
     }
 
-    static func parsePersist(_ raw: String?) -> SkillPersistAdvice? {
+    nonisolated static func parsePersist(_ raw: String?) -> SkillPersistAdvice? {
         guard let object = ModelJSON.object(from: raw) else { return nil }
         if let persist = object["persist"] as? Bool {
             return SkillPersistAdvice(persist: persist)

@@ -1,4 +1,8 @@
 .derivedData/
+DerivedData/
+build/
 xcuserdata/
 *.xcuserstate
 .DS_Store
+.swiftpm/configuration
+.swiftpm/xcode

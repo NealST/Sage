@@ -13,6 +13,7 @@ struct ExecuteServices {
     let planProgress: PlanProgress
     let taskStore: AgentTaskStore
     let modelGateway: AgentModelGateway
+    let modelSettings: () -> ModelSettingsSnapshot
     let tools: ToolRegistry
     let mcp: CapabilityStore?
     let skillHost: SkillToolHost
@@ -21,6 +22,10 @@ struct ExecuteServices {
     /// After a batch finishes, offer tools again (ReAct) unless the loop cap is hit.
     let allowToolsAfterExecute: () -> Bool
     let continueTurn: (ModelTurn) async -> Void
+    let preToolUseDecision: (String, String) async -> PreToolUseDecision
+    let isToolApproved: (String, String) -> Bool
+    let pauseForToolApproval: (AgentStep) async -> Void
+    let pauseForToolRoundLimit: () async -> Void
 
     var events: [AgentEvent] { state.events }
 
@@ -58,9 +63,14 @@ struct ExecuteServices {
                 activatedSkillNames: activated,
                 enabledSkills: enabled,
                 skillHost: skillHost,
-                workPlanKind: state.activeTask?.workPlan?.kind
+                workPlanKind: state.activeTask?.workPlan?.kind,
+                modelSettings: modelSettings()
             )
         }
+    }
+
+    func evaluatePreToolUse(name: String, argumentsJSON: String) async -> PreToolUseDecision {
+        await preToolUseDecision(name, argumentsJSON)
     }
 
     func loadSkillName(from argumentsJSON: String) -> String? {

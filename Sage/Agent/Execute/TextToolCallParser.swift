@@ -56,9 +56,8 @@ nonisolated enum TextToolCallParser {
         var earliest: String.Index?
         for marker in markers {
             guard let range = buffer.range(of: marker) else { continue }
-            if earliest == nil || range.lowerBound < earliest! {
-                earliest = range.lowerBound
-            }
+            if let current = earliest, range.lowerBound >= current { continue }
+            earliest = range.lowerBound
         }
         return earliest
     }

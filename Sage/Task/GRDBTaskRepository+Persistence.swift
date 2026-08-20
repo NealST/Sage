@@ -25,16 +25,29 @@ extension GRDBTaskRepository {
             return (try? JSONEncoder().encode(memory))
                 .flatMap { String(data: $0, encoding: .utf8) }
         }
+        let todoListJSON: String? = task.todos.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(task.todos))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        let pendingPromptJSON: String? = task.pendingPrompt.flatMap { prompt in
+            (try? JSONEncoder().encode(prompt))
+                .flatMap { String(data: $0, encoding: .utf8) }
+        }
+        let unlockedMCPServersJSON: String? = task.unlockedMCPServerNames.isEmpty
+            ? nil
+            : (try? JSONEncoder().encode(task.unlockedMCPServerNames.sorted()))
+                .flatMap { String(data: $0, encoding: .utf8) }
 
         try db.execute(
             sql: """
             INSERT INTO tasks (
                 id, status, project_id, summary, topic, abstract,
                 topic_updated_at, activated_skills, work_plan_json,
-                working_memory_json,
+                working_memory_json, todo_list_json, pending_prompt_json,
+                unlocked_mcp_servers_json,
                 skill_persist_considered, origin_schedule_id, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 project_id = excluded.project_id,
@@ -45,6 +58,9 @@ extension GRDBTaskRepository {
                 activated_skills = excluded.activated_skills,
                 work_plan_json = excluded.work_plan_json,
                 working_memory_json = excluded.working_memory_json,
+                todo_list_json = excluded.todo_list_json,
+                pending_prompt_json = excluded.pending_prompt_json,
+                unlocked_mcp_servers_json = excluded.unlocked_mcp_servers_json,
                 skill_persist_considered = excluded.skill_persist_considered,
                 origin_schedule_id = COALESCE(excluded.origin_schedule_id, tasks.origin_schedule_id),
                 updated_at = excluded.updated_at
@@ -60,6 +76,9 @@ extension GRDBTaskRepository {
                 activatedSkillsJSON,
                 workPlanJSON,
                 workingMemoryJSON,
+                todoListJSON,
+                pendingPromptJSON,
+                unlockedMCPServersJSON,
                 task.skillPersistConsidered ? 1 : 0,
                 task.originScheduleID?.uuidString,
                 task.createdAt.timeIntervalSince1970,

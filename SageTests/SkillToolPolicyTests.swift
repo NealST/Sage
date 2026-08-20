@@ -2,6 +2,18 @@ import XCTest
 @testable import Sage
 
 final class SkillToolPolicyTests: XCTestCase {
+    func testForkedLoadSkillDoesNotActivateInParent() {
+        XCTAssertEqual(
+            SkillToolExecutor.loadSkillName(from: #"{"name":"demo"}"#),
+            "demo"
+        )
+        XCTAssertNil(
+            SkillToolExecutor.loadSkillName(
+                from: #"{"name":"demo","mode":"fork","task":"inspect"}"#
+            )
+        )
+    }
+
     private func skill(
         name: String,
         allowedTools: String? = nil
@@ -101,6 +113,11 @@ final class SkillToolPolicyTests: XCTestCase {
             activatedSkillNames: ["demo"],
             enabledSkills: skills
         )
+        try SkillToolPolicy.assertToolAllowed(
+            ManageTodoListTool.name,
+            activatedSkillNames: ["demo"],
+            enabledSkills: skills
+        )
         let defs = [
             ToolDefinition(
                 name: "read_text_file",
@@ -113,12 +130,16 @@ final class SkillToolPolicyTests: XCTestCase {
                 parameters: .schemaObject(properties: [:])
             ),
             RecallTaskTranscriptTool.definition,
+            ManageTodoListTool.definition,
         ]
         let filtered = SkillToolPolicy.filterDefinitions(
             defs,
             activatedSkillNames: ["demo"],
             enabledSkills: skills
         )
-        XCTAssertEqual(filtered.map(\.name), ["read_text_file", RecallTaskTranscriptTool.name])
+        XCTAssertEqual(
+            filtered.map(\.name),
+            ["read_text_file", RecallTaskTranscriptTool.name, ManageTodoListTool.name]
+        )
     }
 }

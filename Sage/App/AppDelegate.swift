@@ -98,15 +98,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let userInfo = response.notification.request.content.userInfo
+        let payload = ScheduleNotificationPayload.fromUserInfo(
+            response.notification.request.content.userInfo
+        )
+        completionHandler()
+        guard let payload else { return }
         Task { @MainActor in
-            await handleScheduleNotificationTap(userInfo)
-            completionHandler()
+            await handleScheduleNotificationTap(payload)
         }
     }
 
-    private func handleScheduleNotificationTap(_ userInfo: [AnyHashable: Any]) async {
-        guard let payload = ScheduleNotificationPayload.fromUserInfo(userInfo) else { return }
+    private func handleScheduleNotificationTap(_ payload: ScheduleNotificationPayload) async {
         if let taskID = payload.taskID {
             await appState.revealScheduledTask(projectID: payload.projectID, taskID: taskID)
         } else {

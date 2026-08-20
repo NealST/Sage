@@ -120,6 +120,10 @@ nonisolated protocol TaskRepository: Sendable {
     ) async throws
     /// Updates only the working-memory blob — safe against concurrent event writes.
     func updateWorkingMemory(taskID: UUID, memory: TaskWorkingMemory?) async throws
+    /// Updates only the todo list — safe against concurrent plan / event writes.
+    func updateTodoList(taskID: UUID, items: [AgentTodoItem]) async throws
+    /// Persists MCP progressive-disclosure state without replacing task history.
+    func updateUnlockedMCPServers(taskID: UUID, names: Set<String>) async throws
     /// Deletes a task and cascaded rows (events, plans, relations).
     func deleteTask(id: UUID) async throws
     /// Sets focus + active task together (enforces project/task scope invariant).

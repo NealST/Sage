@@ -32,6 +32,17 @@ nonisolated enum AgentEventHelpers {
         }
     }
 
+    /// Tool call IDs that already have a non-ERROR result. Scan once per batch.
+    static func successfulToolCallIDs(in events: [AgentEvent]) -> Set<String> {
+        Set(events.compactMap { event in
+            guard event.kind == .toolResult,
+                  let id = event.toolCallID,
+                  !event.content.hasPrefix("ERROR:")
+            else { return nil }
+            return id
+        })
+    }
+
     /// Fork at a user message: that input starts a new task; later replies stay off both threads.
     static func forkLastUserInput(
         events: [AgentEvent],

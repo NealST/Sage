@@ -76,7 +76,7 @@ final class ReviewAgent {
     - Write feedback in the same language the user used.
     """
 
-    static func parse(_ raw: String?) -> ReviewVerdict? {
+    nonisolated static func parse(_ raw: String?) -> ReviewVerdict? {
         guard let object = ModelJSON.object(from: raw),
               let decisionRaw = object["decision"] as? String,
               let decision = ReviewVerdict.Decision(rawValue: decisionRaw)
@@ -86,7 +86,7 @@ final class ReviewAgent {
         return ReviewVerdict(decision: decision, feedback: feedback)
     }
 
-    static func fallbackAccept() -> ReviewVerdict {
+    nonisolated static func fallbackAccept() -> ReviewVerdict {
         ReviewVerdict(decision: .accept, feedback: "")
     }
 

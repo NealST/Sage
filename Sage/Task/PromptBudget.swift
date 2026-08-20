@@ -29,11 +29,6 @@ nonisolated struct PromptBudget: Sendable, Equatable {
         max(windowTokens / 2, 1)
     }
 
-    /// UTF-8 byte ceiling matching `maxToolResultTokens` under the 4-bytes-per-token estimate.
-    var maxToolResultUTF8Bytes: Int {
-        maxToolResultTokens * PromptBudget.bytesPerToken
-    }
-
     /// Creates a budget for `model`, reserving ~10% of the window for output.
     static func forModel(_ model: String) -> PromptBudget {
         let window = windowTokens(forModel: model)
@@ -58,14 +53,38 @@ nonisolated struct PromptBudget: Sendable, Equatable {
         return copy
     }
 
-    /// Rough token count: UTF-8 bytes / 4, rounded up. Empty text is 0.
+    /// Model-agnostic token estimate: ASCII at ~4 bytes/token, CJK/BMP
+    /// scalars at ~1 token, and supplementary-plane scalars at ~2 tokens.
+    /// This avoids the old systematic undercount for Chinese while remaining
+    /// deterministic for arbitrary OpenAI-compatible model names.
     static func estimatedTokenCount(in text: String) -> Int {
-        estimatedTokenCount(utf8ByteCount: text.utf8.count)
+        guard !text.isEmpty else { return 0 }
+        var asciiBytes = 0
+        var nonASCII = 0
+        for scalar in text.unicodeScalars {
+            if scalar.value < 128 {
+                asciiBytes += 1
+            } else {
+                nonASCII += scalar.value <= 0xFFFF ? 1 : 2
+            }
+        }
+        return estimatedTokenCount(utf8ByteCount: asciiBytes) + nonASCII
     }
 
     /// Rough token count for a transcript event (body + tool-call payloads).
     static func estimatedTokenCount(of event: AgentEvent) -> Int {
-        estimatedTokenCount(utf8ByteCount: utf8ByteCount(of: event))
+        let body = event.kind == .toolResult
+            ? WriteFileResultCodec.modelFacing(event.content)
+            : event.content
+        var cost = estimatedTokenCount(in: body)
+        if let calls = event.toolCalls {
+            cost += calls.reduce(0) {
+                $0
+                    + estimatedTokenCount(in: $1.argumentsJSON)
+                    + estimatedTokenCount(in: $1.name)
+            }
+        }
+        return cost
     }
 
     /// Rough token count for one tool schema.

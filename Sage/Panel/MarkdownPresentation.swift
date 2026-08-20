@@ -6,7 +6,7 @@
 
 import Foundation
 
-enum MarkdownPresentation {
+nonisolated enum MarkdownPresentation {
     /// Softens completed GFM task items for display by wrapping their text in
     /// strikethrough. Skips fenced code blocks and lines already struck through.
     ///

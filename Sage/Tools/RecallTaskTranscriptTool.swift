@@ -7,12 +7,18 @@
 
 import Foundation
 
-/// Current-task context for recall. Set around tool dispatch.
-enum ActiveTaskContext {
+/// Current-task context for recall / todos. Set around tool dispatch.
+nonisolated enum ActiveTaskContext {
     @TaskLocal
     static var repository: (any TaskRepository)?
     @TaskLocal
     static var taskID: UUID?
+    @TaskLocal
+    static var applyTodoList: (@Sendable ([AgentTodoItem]) async -> Void)?
+    @TaskLocal
+    static var unlockedMCPServerNames: Set<String> = []
+    @TaskLocal
+    static var applyUnlockedMCPServers: (@Sendable (Set<String>) async -> Void)?
 }
 
 /// Loads exact prior turns that working memory only summarized.
@@ -41,6 +47,13 @@ nonisolated enum RecallTaskTranscriptTool {
     private struct Args: Decodable {
         var fromEventID: String
         var throughEventID: String
+
+        // JSONDecoder.convertFromSnakeCase maps `from_event_id` → `fromEventId`,
+        // not `fromEventID`.
+        private enum CodingKeys: String, CodingKey {
+            case fromEventID = "fromEventId"
+            case throughEventID = "throughEventId"
+        }
     }
 
     static func execute(argumentsJSON: String) async throws -> String {
@@ -64,17 +77,17 @@ nonisolated enum RecallTaskTranscriptTool {
             throw ToolError.operationFailed("The current task is gone. Continue without the recalled turns.")
         }
 
-        var fromIndex = task.events.firstIndex(where: { $0.id == fromID })
-        var throughIndex = task.events.firstIndex(where: { $0.id == throughID })
-        if fromIndex == nil || throughIndex == nil {
+        guard var fromIndex = task.events.firstIndex(where: { $0.id == fromID }),
+              var throughIndex = task.events.firstIndex(where: { $0.id == throughID })
+        else {
             throw ToolError.operationFailed(
                 "Those event IDs are not on the current task. Use the IDs printed in working memory."
             )
         }
-        if let start = fromIndex, let end = throughIndex, start > end {
+        if fromIndex > throughIndex {
             swap(&fromIndex, &throughIndex)
         }
-        let slice = Array(task.events[fromIndex!...throughIndex!])
+        let slice = Array(task.events[fromIndex...throughIndex])
         guard !slice.isEmpty else {
             return "(no events in that range)"
         }

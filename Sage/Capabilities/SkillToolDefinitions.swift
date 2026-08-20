@@ -9,7 +9,7 @@ import Foundation
 
 extension SkillToolExecutor {
     /// Tool definition for `load_skill` — exposed to the cloud model when skills are deferred.
-    static let loadSkillDefinition = ToolDefinition(
+    nonisolated static let loadSkillDefinition = ToolDefinition(
         name: "load_skill",
         description: "Load a skill's full content by name. Use this when a skill from the Available Skills list is relevant to the user's request. Returns the skill's complete instructions.",
         parameters: .object([
@@ -19,13 +19,24 @@ extension SkillToolExecutor {
                     "type": .string("string"),
                     "description": .string("The exact name of the skill to load (from the Available Skills list)."),
                 ]),
+                "mode": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("inline"), .string("fork")]),
+                    "description": .string(
+                        "inline (default) loads instructions into this agent; fork runs a private read-only Explore subagent."
+                    ),
+                ]),
+                "task": .object([
+                    "type": .string("string"),
+                    "description": .string("Required in fork mode: focused task for the skill subagent."),
+                ]),
             ]),
             "required": .array([.string("name")]),
         ])
     )
 
     /// Tool definition for `load_skill_resource` — available when any skill is activated.
-    static let loadSkillResourceDefinition = ToolDefinition(
+    nonisolated static let loadSkillResourceDefinition = ToolDefinition(
         name: "load_skill_resource",
         description: """
             Load a reference or resource file from an activated skill's directory. \
@@ -50,7 +61,7 @@ extension SkillToolExecutor {
     )
 
     /// Tool definition for `run_skill_script` — available when any skill is activated.
-    static let runSkillScriptDefinition = ToolDefinition(
+    nonisolated static let runSkillScriptDefinition = ToolDefinition(
         name: "run_skill_script",
         description: """
             Execute a script bundled with an activated skill. \
@@ -88,7 +99,7 @@ extension SkillToolExecutor {
 
     /// Tool definition for `save_skill` — allows the agent to create or enhance skills
     /// based on reusable experience identified during conversation.
-    static let saveSkillDefinition = ToolDefinition(
+    nonisolated static let saveSkillDefinition = ToolDefinition(
         name: "save_skill",
         description: """
             Create a new skill or enhance an existing one to persist reusable experience as long-term memory. \

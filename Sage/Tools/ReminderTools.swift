@@ -35,8 +35,6 @@ nonisolated struct CreateReminderTool: AgentTool {
         let priority: Int?
     }
 
-    private static let store = EKEventStore()
-
     func call(argumentsJSON: String) async throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
 
@@ -44,7 +42,8 @@ nonisolated struct CreateReminderTool: AgentTool {
             throw ToolError.invalidArguments("Reminder title cannot be empty.")
         }
 
-        let store = Self.store
+        // EventKit stores are not Sendable; keep this instance local to one invocation.
+        let store = EKEventStore()
 
         // Request access
         let granted: Bool

@@ -65,6 +65,30 @@ extension GRDBTaskRepository {
             workPlan: workPlan,
             workingMemory: workingMemory,
             pendingPlan: includeHistory ? try loadPlan(taskID: id, database: db) : nil,
+            todos: {
+                if let json: String = row["todo_list_json"],
+                   let data = json.data(using: .utf8),
+                   let items = try? JSONDecoder().decode([AgentTodoItem].self, from: data) {
+                    return items
+                }
+                return []
+            }(),
+            unlockedMCPServerNames: {
+                if let json: String = row["unlocked_mcp_servers_json"],
+                   let data = json.data(using: .utf8),
+                   let names = try? JSONDecoder().decode([String].self, from: data) {
+                    return Set(names)
+                }
+                return []
+            }(),
+            pendingPrompt: {
+                if let json: String = row["pending_prompt_json"],
+                   let data = json.data(using: .utf8),
+                   let prompt = try? JSONDecoder().decode(AgentPendingPrompt.self, from: data) {
+                    return prompt
+                }
+                return nil
+            }(),
             // Entity extraction is not wired; skip the table read on the hot path.
             entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: db),

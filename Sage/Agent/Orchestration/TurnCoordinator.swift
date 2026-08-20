@@ -28,7 +28,7 @@ final class TurnCoordinator {
     let reviewer: ReviewAgent
 
     private weak var slashHost: SlashCommandHost?
-    private var executeToolBatch: (() async -> Void)?
+    private var executeToolBatch: ((Bool) async -> Void)?
     private var handleStop: ((AgentPlan?) async -> Void)?
     /// User approved a side-effect work plan this turn.
     private(set) var planApproved = false
@@ -78,14 +78,16 @@ final class TurnCoordinator {
 
     func bind(
         slashHost: SlashCommandHost,
-        executeToolBatch: @escaping () async -> Void,
+        executeToolBatch: @escaping (Bool) async -> Void,
         handleStop: @escaping (AgentPlan?) async -> Void
     ) {
         self.slashHost = slashHost
         self.executeToolBatch = executeToolBatch
         self.handleStop = handleStop
         execute.bind(
-            executeTools: executeToolBatch,
+            executeTools: { [weak self] in
+                await self?.executeToolBatch?(false)
+            },
             onCandidateReply: { [weak self] text in
                 await self?.reviewAndFinish(text)
             },
@@ -198,7 +200,11 @@ final class TurnCoordinator {
         resetTurn()
         keepWorkPlanAfterComplete = true
         allowDriftOffer = false
-        defer { keepWorkPlanAfterComplete = false }
+        state.skipsSessionToolGate = true
+        defer {
+            keepWorkPlanAfterComplete = false
+            state.skipsSessionToolGate = false
+        }
 
         let userEvent = AgentEvent(kind: .userInput, content: prompt, protected: true)
         guard await taskStore.commit(
@@ -274,7 +280,7 @@ final class TurnCoordinator {
     func performRetry() async {
         if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
             planProgress.replace(plan)
-            await executeToolBatch?()
+            await executeToolBatch?(true)
             return
         }
         if state.activeTask?.workPlan?.requiresConfirmation == true, !planApproved {
@@ -312,6 +318,34 @@ final class TurnCoordinator {
         planApproved = true
     }
 
+    func extendAndContinueToolRounds() async {
+        execute.extendToolBatchLimit()
+        guard await persistClearedPendingPrompt() else { return }
+        await execute.continueWithTools()
+    }
+
+    func finishWithoutMoreToolRounds() async {
+        await execute.finishWithoutMoreTools()
+    }
+
+    func pauseForToolRoundLimit() async {
+        await execute.pauseForToolRoundLimit()
+    }
+
+    @discardableResult
+    private func persistClearedPendingPrompt() async -> Bool {
+        guard state.pendingPrompt != nil || state.activeTask?.pendingPrompt != nil else {
+            return true
+        }
+        return await taskStore.commit(
+            appendEvents: [],
+            deleteEventIDs: [],
+            mutate: { task in
+                task.pendingPrompt = nil
+            }
+        )
+    }
+
     func startExecution() async {
         planApproved = true
         if let workPlan = state.activeTask?.workPlan {
@@ -345,6 +379,7 @@ final class TurnCoordinator {
             reviewRounds += 1
             state.reviewFeedback = verdict.feedback.nilIfEmpty
                 ?? "The result does not fully match the plan. Finish the remaining work."
+            execute.resetLoop()
             await execute.start()
         } catch is CancellationError {
             streaming.clear()
@@ -370,16 +405,18 @@ final class TurnCoordinator {
             deleteEventIDs: [],
             mutate: { task in
                 task.status = .completed
+                task.pendingPlan = nil
+                task.pendingPrompt = nil
                 if !keepWorkPlanAfterComplete {
                     task.workPlan = nil
                 }
-                task.pendingPlan = nil
                 task.skillPersistConsidered = true
             }
         ) else { return }
 
         streaming.clear()
         state.reviewFeedback = nil
+        state.clearPendingPrompt()
         state.lastAssistantText = reply
         state.enterCompleted(summary: reply)
         planProgress.clear()

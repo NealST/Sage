@@ -4,13 +4,7 @@ import Foundation
 /// File and shell tools hop off the main actor. AppKit / Accessibility tools stay on it.
 /// Skill and MCP hop back because their hosts are main-actor isolated.
 nonisolated enum ToolInvocationDispatcher {
-    private static let interactiveTools: Set<String> = [
-        "run_shell_command",
-        "take_screenshot",
-        "toggle_appearance",
-        "create_reminder",
-    ]
-
+    @MainActor
     static func execute(
         name: String,
         argumentsJSON: String,
@@ -20,17 +14,59 @@ nonisolated enum ToolInvocationDispatcher {
         activatedSkillNames: Set<String>,
         enabledSkills: [SkillRecord],
         skillHost: SkillToolHost,
-        workPlanKind: WorkPlan.Kind? = nil
+        workPlanKind: WorkPlan.Kind? = nil,
+        modelSettings: ModelSettingsSnapshot? = nil
     ) async throws -> String {
-        try assertMutatingToolsAllowed(for: name, workPlanKind: workPlanKind)
-        try SkillToolPolicy.assertToolAllowed(
-            name,
+        try await ToolInvocationPipeline.execute(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            tools: tools,
+            mcp: mcp,
+            pathGuardPolicy: pathGuardPolicy,
             activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills
+            enabledSkills: enabledSkills,
+            skillHost: skillHost,
+            workPlanKind: workPlanKind,
+            modelSettings: modelSettings
         )
+    }
 
+    /// Dispatches an invocation after `ToolInvocationPipeline` applies policy and schema checks.
+    @MainActor
+    static func dispatch(
+        name: String,
+        argumentsJSON: String,
+        tools: ToolRegistry,
+        mcp: CapabilityStore?,
+        pathGuardPolicy: PathGuard.Policy,
+        activatedSkillNames: Set<String>,
+        enabledSkills: [SkillRecord],
+        skillHost: SkillToolHost,
+        modelSettings: ModelSettingsSnapshot?
+    ) async throws -> String {
         if name == RecallTaskTranscriptTool.name {
             return try await RecallTaskTranscriptTool.execute(argumentsJSON: argumentsJSON)
+        }
+        if name == ManageTodoListTool.name {
+            return try await ManageTodoListTool.execute(argumentsJSON: argumentsJSON)
+        }
+        if name == ExploreSubagentTool.name {
+            guard let modelSettings else {
+                throw ToolError.operationFailed("Explore subagent model settings are unavailable.")
+            }
+            return try await ExploreSubagentRunner.run(
+                argumentsJSON: argumentsJSON,
+                settings: modelSettings,
+                tools: tools,
+                pathGuardPolicy: pathGuardPolicy,
+                skillHost: skillHost
+            )
+        }
+        if MCPToolGroupTool.isGroupTool(name) {
+            return try await MCPToolGroupTool.execute(
+                name: name,
+                availableTools: mcp?.mcpToolDefinitions() ?? []
+            )
         }
 
         if name.hasPrefix("mcp__") {
@@ -52,36 +88,18 @@ nonisolated enum ToolInvocationDispatcher {
             throw ToolError.operationFailed("Unknown tool: \(name)")
         }
 
-        let timeout: Duration = interactiveTools.contains(name)
-            ? .seconds(130)
-            : toolExecutionTimeout
         let allowlist = SkillToolExecutor.readAllowlist(
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills
         )
 
-        return try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await Self.invokeBuiltIn(
-                    named: name,
-                    tool: tool,
-                    argumentsJSON: argumentsJSON,
-                    pathGuardPolicy: pathGuardPolicy,
-                    allowlist: allowlist
-                )
-            }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                throw ToolError.operationFailed(
-                    "Tool '\(name)' timed out after \(Int(timeout.components.seconds))s"
-                )
-            }
-            guard let result = try await group.next() else {
-                throw ToolError.operationFailed("Tool '\(name)' produced no result.")
-            }
-            group.cancelAll()
-            return result
-        }
+        return try await Self.invokeBuiltIn(
+            named: name,
+            tool: tool,
+            argumentsJSON: argumentsJSON,
+            pathGuardPolicy: pathGuardPolicy,
+            allowlist: allowlist
+        )
     }
 
     /// Rejects tools that change the Mac unless the work plan is `act`.
@@ -122,6 +140,7 @@ nonisolated enum ToolInvocationDispatcher {
         "take_screenshot",
     ]
 
+    @MainActor
     private static func invokeBuiltIn(
         named name: String,
         tool: any AgentTool,
@@ -129,16 +148,20 @@ nonisolated enum ToolInvocationDispatcher {
         pathGuardPolicy: PathGuard.Policy,
         allowlist: [String]
     ) async throws -> String {
-        let work: @Sendable () async throws -> String = {
-            try await PathGuard.$policy.withValue(pathGuardPolicy) {
+        if mainActorToolNames.contains(name) {
+            return try await PathGuard.$policy.withValue(pathGuardPolicy) {
                 try await PathGuard.$readAllowlist.withValue(allowlist) {
                     try await tool.call(argumentsJSON: argumentsJSON)
                 }
             }
+        } else {
+            return try await Task.detached(priority: .userInitiated) {
+                try await PathGuard.$policy.withValue(pathGuardPolicy) {
+                    try await PathGuard.$readAllowlist.withValue(allowlist) {
+                        try await tool.call(argumentsJSON: argumentsJSON)
+                    }
+                }
+            }.value
         }
-        if mainActorToolNames.contains(name) {
-            return try await work()
-        }
-        return try await Task.detached(priority: .userInitiated, operation: work).value
     }
 }

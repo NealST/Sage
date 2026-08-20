@@ -13,7 +13,7 @@ nonisolated enum JSONValue: Codable, Sendable, Equatable {
     case array([JSONValue])
     case null
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {
             self = .null
@@ -32,7 +32,7 @@ nonisolated enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    nonisolated func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .string(let value): try container.encode(value)
@@ -44,19 +44,19 @@ nonisolated enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 
-    var stringValue: String? {
+    nonisolated var stringValue: String? {
         if case .string(let value) = self { return value }
         return nil
     }
 
-    subscript(key: String) -> JSONValue? {
+    nonisolated subscript(key: String) -> JSONValue? {
         if case .object(let object) = self { return object[key] }
         return nil
     }
 }
 
 extension JSONValue {
-    static func schemaObject(
+    nonisolated static func schemaObject(
         properties: [String: JSONValue],
         required: [String] = [],
         description: String? = nil
@@ -74,21 +74,21 @@ extension JSONValue {
         return .object(object)
     }
 
-    static func stringProperty(_ description: String) -> JSONValue {
+    nonisolated static func stringProperty(_ description: String) -> JSONValue {
         .object([
             "type": .string("string"),
             "description": .string(description),
         ])
     }
 
-    static func intProperty(_ description: String) -> JSONValue {
+    nonisolated static func intProperty(_ description: String) -> JSONValue {
         .object([
             "type": .string("integer"),
             "description": .string(description),
         ])
     }
 
-    static func boolProperty(_ description: String) -> JSONValue {
+    nonisolated static func boolProperty(_ description: String) -> JSONValue {
         .object([
             "type": .string("boolean"),
             "description": .string(description),

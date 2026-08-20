@@ -41,8 +41,10 @@ nonisolated enum ConversationFold {
 
         guard startIndex <= throughIndex else { return nil }
         let span = timeline[startIndex...throughIndex]
-        guard span.count >= minimumSpanEvents else { return nil }
-        return (span.first!.id, span.last!.id)
+        guard span.count >= minimumSpanEvents, let first = span.first, let last = span.last else {
+            return nil
+        }
+        return (first.id, last.id)
     }
 
     /// Events from `from` through `through`, in order.

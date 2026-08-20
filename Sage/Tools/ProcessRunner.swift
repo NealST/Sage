@@ -23,7 +23,10 @@ nonisolated enum ProcessRunner {
     static let maxCapturedBytes = 1_048_576
 
     private static let lock = NSLock()
-    private static var liveProcesses: [ObjectIdentifier: (process: Process, ownerID: UUID?)] = [:]
+    /// Every access is serialized by `lock`.
+    nonisolated(unsafe) private static var liveProcesses: [
+        ObjectIdentifier: (process: Process, ownerID: UUID?)
+    ] = [:]
 
     /// Runs a process, collecting combined stdout/stderr.
     /// Honors Task cancellation (SIGTERM → brief grace → SIGKILL) and optional timeout.

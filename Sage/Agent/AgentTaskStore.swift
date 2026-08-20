@@ -94,6 +94,7 @@ final class AgentTaskStore {
             try await taskRepository.saveTaskState(task, setActive: true)
             state.activeTask = task
             state.activeTaskID = task.id
+            state.pendingPrompt = nil
             state.refreshSummary(for: task)
             state.enterIdle()
             state.lastAssistantText = nil
@@ -114,7 +115,7 @@ final class AgentTaskStore {
     @discardableResult
     func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
         contextCompactor?.cancel()
-        var inheritedRelated = relatedTaskIDs
+        let inheritedRelated = relatedTaskIDs
 
         if var closing = state.activeTask {
             let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: closing.events)
@@ -132,6 +133,7 @@ final class AgentTaskStore {
                         closing.status = .completed
                     }
                     closing.pendingPlan = nil
+                    closing.pendingPrompt = nil
                     closing.workPlan = nil
                     closing.workingMemory = closing.workingMemory?.validated(against: closing.events)
                     closing.updatedAt = .now
@@ -162,6 +164,7 @@ final class AgentTaskStore {
         state.activeTaskID = nil
         state.clearTokenUsage()
         state.activatedSkillNames = []
+        state.sessionAllowlist.reset()
         state.clearThreadRoutingNotices()
         skillRecall?.clearTurnCache()
 
@@ -192,6 +195,7 @@ final class AgentTaskStore {
             planProgress.clear()
             state.clearTokenUsage()
             state.activatedSkillNames = []
+            state.sessionAllowlist.reset()
             skillRecall?.clearTurnCache()
             return task.id
         } catch {
@@ -206,10 +210,13 @@ final class AgentTaskStore {
         suppressScopeActivePointer = false
 
         if var current = state.activeTask {
-            if case .awaitingConfirmation = state.phase, let plan = planProgress.plan ?? current.pendingPlan {
-                current.pendingPlan = plan
+            if case .awaitingConfirmation = state.phase {
+                if let plan = planProgress.plan ?? current.pendingPlan {
+                    current.pendingPlan = plan
+                }
                 current.status = .awaitingApproval
             }
+            current.pendingPrompt = state.pendingPrompt
             current.updatedAt = .now
             do {
                 try await taskRepository.saveTaskState(current, setActive: false)
@@ -237,6 +244,7 @@ final class AgentTaskStore {
             state.activeTask = task
             state.activeTaskID = task.id
             state.refreshSummary(for: task)
+            state.sessionAllowlist.reset()
             await restorePhaseFromActiveTask()
             state.clearTopicDriftOffer()
             state.suppressedDriftOfferTaskID = nil
@@ -271,6 +279,7 @@ final class AgentTaskStore {
 
         closing.events = fork.kept
         closing.pendingPlan = nil
+        closing.pendingPrompt = nil
         closing.workPlan = nil
         closing.workingMemory = closing.workingMemory?.validated(against: fork.kept)
         closing.updatedAt = .now
@@ -320,6 +329,7 @@ final class AgentTaskStore {
         state.lastAssistantText = nil
         skillRecall?.clearTurnCache()
         planProgress.clear()
+        state.sessionAllowlist.reset()
         state.clearThreadRoutingNotices()
         await restorePhaseFromActiveTask()
         topicCoordinator?.scheduleTopicGeneration(for: opening)
@@ -355,9 +365,41 @@ final class AgentTaskStore {
         }
 
         state.activatedSkillNames = task.activatedSkillNames
+        state.pendingPrompt = task.pendingPrompt
         state.lastAssistantText = task.events.last(where: {
             $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
         })?.content
+
+        if case .toolRoundLimit = task.pendingPrompt {
+            if var plan = task.pendingPlan {
+                normalizeRestoredPlan(&plan, events: task.events)
+                if plan.steps.contains(where: { $0.status != .succeeded && $0.status != .skipped }) {
+                    var updated = task
+                    updated.pendingPlan = plan
+                    state.activeTask = updated
+                    planProgress.replace(plan)
+                } else {
+                    planProgress.clear()
+                }
+            } else {
+                planProgress.clear()
+            }
+            state.enterAwaitingConfirmation()
+            return
+        }
+
+        if case .toolApproval = task.pendingPrompt {
+            if var plan = task.pendingPlan {
+                normalizeRestoredPlan(&plan, events: task.events)
+                var updated = task
+                updated.pendingPlan = plan
+                state.activeTask = updated
+                planProgress.replace(plan)
+                state.enterAwaitingConfirmation()
+                return
+            }
+            state.clearPendingPrompt()
+        }
 
         guard var plan = task.pendingPlan else {
             if task.workPlan?.requiresConfirmation == true,
@@ -371,19 +413,7 @@ final class AgentTaskStore {
             return
         }
 
-        for index in plan.steps.indices {
-            if let result = task.events.last(where: {
-                $0.kind == .toolResult && $0.toolCallID == plan.steps[index].toolCallID
-            }) {
-                if result.content.hasPrefix("ERROR:") {
-                    plan.steps[index].status = .failed
-                } else {
-                    plan.steps[index].status = .succeeded
-                }
-            } else if plan.steps[index].status == .running {
-                plan.steps[index].status = .pending
-            }
-        }
+        normalizeRestoredPlan(&plan, events: task.events)
 
         var updated = task
         let unfinished = plan.steps.contains {
@@ -410,6 +440,22 @@ final class AgentTaskStore {
         }
     }
 
+    private func normalizeRestoredPlan(_ plan: inout AgentPlan, events: [AgentEvent]) {
+        for index in plan.steps.indices {
+            if let result = events.last(where: {
+                $0.kind == .toolResult && $0.toolCallID == plan.steps[index].toolCallID
+            }) {
+                if result.content.hasPrefix("ERROR:") {
+                    plan.steps[index].status = .failed
+                } else {
+                    plan.steps[index].status = .succeeded
+                }
+            } else if plan.steps[index].status == .running {
+                plan.steps[index].status = .pending
+            }
+        }
+    }
+
     /// Writes `task` into memory, preserving a topic that arrived concurrently.
     func adoptTaskInMemory(_ task: TaskRecord) {
         var merged = task
@@ -427,9 +473,12 @@ final class AgentTaskStore {
             merged.workingMemory = current.workingMemory
         }
         state.activeTask = merged
+        state.pendingPrompt = merged.pendingPrompt
         state.refreshSummary(for: merged)
         if let plan = merged.pendingPlan {
             planProgress.replace(plan)
+        } else {
+            planProgress.clear()
         }
     }
 
@@ -485,10 +534,12 @@ final class AgentTaskStore {
         do {
             try await taskRepository.saveTaskState(task, setActive: setsScopeActive)
             state.activeTask = task
+            state.pendingPrompt = task.pendingPrompt
             state.refreshSummary(for: task)
             state.enterFailed(message: message)
         } catch {
             state.activeTask = task
+            state.pendingPrompt = task.pendingPrompt
             state.enterFailed(
                 message: "Could not save progress. \(error.localizedDescription)"
             )
@@ -534,10 +585,38 @@ final class AgentTaskStore {
     func withActiveTaskContext<T>(
         _ operation: () async throws -> T
     ) async rethrows -> T {
-        try await ActiveTaskContext.$repository.withValue(taskRepository) {
+        let applyTodos: @Sendable ([AgentTodoItem]) async -> Void = { [weak self] items in
+            await self?.applyTodoList(items)
+        }
+        let applyMCPServers: @Sendable (Set<String>) async -> Void = { [weak self] names in
+            await self?.applyUnlockedMCPServers(names)
+        }
+        return try await ActiveTaskContext.$repository.withValue(taskRepository) {
             try await ActiveTaskContext.$taskID.withValue(state.activeTaskID) {
-                try await operation()
+                try await ActiveTaskContext.$applyTodoList.withValue(applyTodos) {
+                    try await ActiveTaskContext.$unlockedMCPServerNames.withValue(
+                        state.activeTask?.unlockedMCPServerNames ?? []
+                    ) {
+                        try await ActiveTaskContext.$applyUnlockedMCPServers.withValue(
+                            applyMCPServers
+                        ) {
+                            try await operation()
+                        }
+                    }
+                }
             }
         }
+    }
+
+    func applyTodoList(_ items: [AgentTodoItem]) async {
+        guard var task = state.activeTask else { return }
+        task.todos = items
+        state.activeTask = task
+    }
+
+    func applyUnlockedMCPServers(_ names: Set<String>) async {
+        guard var task = state.activeTask else { return }
+        task.unlockedMCPServerNames = names
+        state.activeTask = task
     }
 }

@@ -141,6 +141,8 @@ nonisolated enum ToolCallPresentation {
             return action == "enhance" ? "Enhance skill: \(name)" : "Save skill: \(name)"
         case "recall_task_transcript":
             return "Recall earlier turns"
+        case "manage_todo_list":
+            return "Update todo list"
         default:
             if name.hasPrefix("mcp__") {
                 return name.split(separator: "__").last.map(String.init)?

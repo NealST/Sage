@@ -12,7 +12,7 @@ nonisolated struct ToolDefinition: Sendable {
     /// When false, the runtime may run the tool in a ReAct loop without a plan card.
     let requiresConfirmation: Bool
 
-    init(
+    nonisolated init(
         name: String,
         description: String,
         parameters: JSONValue,
@@ -26,7 +26,7 @@ nonisolated struct ToolDefinition: Sendable {
     }
 
     /// Reads and context loads only — no lasting change to the user's Mac.
-    static let observationToolNames: Set<String> = [
+    nonisolated static let observationToolNames: Set<String> = [
         "list_directory",
         "read_text_file",
         "search_files",
@@ -38,10 +38,13 @@ nonisolated struct ToolDefinition: Sendable {
         "load_skill",
         "load_skill_resource",
         "recall_task_transcript",
+        "manage_todo_list",
+        "explore_subagent",
     ]
 
-    static func requiresConfirmation(forToolNamed name: String) -> Bool {
-        !observationToolNames.contains(name)
+    nonisolated static func requiresConfirmation(forToolNamed name: String) -> Bool {
+        if MCPToolGroupTool.isGroupTool(name) { return false }
+        return !observationToolNames.contains(name)
     }
 }
 
@@ -220,7 +223,14 @@ nonisolated enum PathGuard: Sendable {
     /// - Project: relative to root when inside (`.` for the root itself); otherwise tilde / absolute.
     /// - Home: tilde-shortened under `~`; otherwise absolute.
     nonisolated static func displayPath(_ path: String, policy: Policy = policy) -> String {
-        let expanded = (path as NSString).expandingTildeInPath
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expanded: String
+        switch policy {
+        case .project(let root) where !trimmed.hasPrefix("~") && !trimmed.hasPrefix("/"):
+            expanded = root.appendingPathComponent(trimmed).path
+        default:
+            expanded = (trimmed as NSString).expandingTildeInPath
+        }
         let resolved = URL(fileURLWithPath: expanded)
             .standardizedFileURL
             .resolvingSymlinksInPath()
@@ -334,7 +344,7 @@ nonisolated struct FlexibleBool: Decodable, Sendable, Equatable {
 }
 
 /// Maximum characters a tool result may return before truncation.
-private let toolResultMaxChars = 50_000
+nonisolated private let toolResultMaxChars = 50_000
 
 /// Truncates a tool result string if it exceeds the global cap.
 nonisolated func capToolResult(_ result: String) -> String {

@@ -13,7 +13,8 @@ nonisolated enum AppSupportPaths {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
-        ).first!
+        ).first ?? URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
         let dir = appSupport.appendingPathComponent("Sage", isDirectory: true)
         if createIfNeeded {
             try? FileManager.default.createDirectory(

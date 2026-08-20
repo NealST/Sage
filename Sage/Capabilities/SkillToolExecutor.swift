@@ -16,6 +16,13 @@ protocol SkillToolHost: AnyObject {
     var catalogSkills: [SkillRecord] { get }
     var focusedProjectRoot: URL? { get }
     func broadcastSkillsCatalogChange() async
+    func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String
+    func runExploreSubagent(
+        task: String,
+        context: String?,
+        instructions: String?,
+        activatedSkillNames: Set<String>
+    ) async throws -> String
 }
 
 /// Create vs enhance for `save_skill` tool arguments.
@@ -80,9 +87,15 @@ enum SkillToolExecutor {
     }
 
     /// Parses `load_skill` tool args for post-commit activation bookkeeping.
-    static func loadSkillName(from argumentsJSON: String) -> String? {
-        struct Args: Decodable { let name: String }
-        return try? decodeToolArgs(argumentsJSON, as: Args.self).name
+    nonisolated static func loadSkillName(from argumentsJSON: String) -> String? {
+        struct Args: Decodable {
+            let name: String
+            let mode: String?
+        }
+        guard let args = try? decodeToolArgs(argumentsJSON, as: Args.self),
+              args.mode != "fork"
+        else { return nil }
+        return args.name
     }
 
     /// Safe JSON arguments for auto `load_skill` (handles names with quotes).
@@ -139,11 +152,15 @@ enum SkillToolExecutor {
     }
 
     private static func executeLoadSkill(argumentsJSON: String, host: SkillToolHost) async throws -> String {
-        struct Args: Decodable { let name: String }
+        struct Args: Decodable {
+            let name: String
+            let mode: String?
+            let task: String?
+        }
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
 
         // Deduplication: don't re-inject a skill already loaded in this task.
-        if host.activatedSkillNames.contains(args.name) {
+        if args.mode != "fork", host.activatedSkillNames.contains(args.name) {
             return "Skill '\(args.name)' is already loaded in this session. Its instructions are active."
         }
 
@@ -156,6 +173,22 @@ enum SkillToolExecutor {
         let body = await SkillRegistry.shared.readBody(for: skill)
         guard !body.isEmpty else {
             throw ToolError.operationFailed("Skill '\(args.name)' has no content.")
+        }
+
+        if args.mode == "fork" {
+            let task = args.task?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty
+            guard let task else {
+                throw ToolError.invalidArguments("task is required when load_skill mode is 'fork'.")
+            }
+            let instructions = await buildSkillContent(for: skill)
+            return try await host.runExploreSubagent(
+                task: task,
+                context: "Use skill '\(skill.name)' for this investigation.",
+                instructions: instructions,
+                activatedSkillNames: [skill.name]
+            )
         }
 
         // Activation is marked by the caller only after a successful commit, so a failed

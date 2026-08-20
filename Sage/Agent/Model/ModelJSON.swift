@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum ModelJSON {
+nonisolated enum ModelJSON {
     static func object(from raw: String?) -> [String: Any]? {
         guard var text = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !text.isEmpty

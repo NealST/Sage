@@ -327,7 +327,9 @@ private struct ScheduleDashboardRow: View {
     private var isOnBinding: Binding<Bool> {
         Binding(
             get: { !isPaused },
-            set: onSetEnabled
+            set: { enabled in
+                onSetEnabled(enabled)
+            }
         )
     }
 

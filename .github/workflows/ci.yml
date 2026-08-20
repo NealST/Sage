@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode
+        run: xcodebuild -version
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project Sage.xcodeproj \
+            -scheme Sage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derivedData \
+            CODE_SIGNING_ALLOWED=NO

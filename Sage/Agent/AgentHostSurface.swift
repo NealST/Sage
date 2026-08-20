@@ -63,8 +63,45 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         state.activatedSkillNames.insert(name)
     }
 
+    func runExploreSubagent(
+        task: String,
+        context: String?,
+        instructions: String?,
+        activatedSkillNames: Set<String>
+    ) async throws -> String {
+        try await ExploreSubagentRunner.runTask(
+            task: task,
+            context: context,
+            instructions: instructions,
+            settings: settings.snapshot(for: .execute),
+            tools: tools,
+            pathGuardPolicy: state.pathGuardPolicy,
+            skillHost: self,
+            activatedSkillNames: activatedSkillNames,
+            enabledSkills: enabledSkills
+        )
+    }
+
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
-        try await taskStore.withActiveTaskContext {
+        let activated = enabledSkills.filter { activatedSkillNames.contains($0.name) }
+        let hookDecision = await PreToolUseHookEvaluator.shared.evaluate(
+            toolName: name,
+            argumentsJSON: argumentsJSON,
+            projectRoot: state.focusedProject?.rootURL,
+            activatedSkills: activated
+        )
+        switch hookDecision {
+        case .allow:
+            break
+        case .ask(let reason):
+            throw ToolError.operationFailed(
+                "PreToolUse hook requires interactive approval: \(reason)"
+            )
+        case .deny(let reason):
+            throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
+        }
+
+        return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(
                 name: name,
                 argumentsJSON: argumentsJSON,
@@ -74,7 +111,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
                 activatedSkillNames: activatedSkillNames,
                 enabledSkills: enabledSkills,
                 skillHost: self,
-                workPlanKind: state.activeTask?.workPlan?.kind
+                workPlanKind: state.activeTask?.workPlan?.kind,
+                modelSettings: settings.snapshot(for: .execute)
             )
         }
     }

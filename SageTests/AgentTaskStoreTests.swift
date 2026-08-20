@@ -14,30 +14,41 @@ final class AgentTaskStoreTests: XCTestCase {
 
     func testSpawnScheduledTaskDoesNotMoveLastGeneralPointer() async throws {
         let (repository, store, state) = try makeStore()
-        let userID = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
-        XCTAssertEqual(try await repository.lastGeneralTaskID(), userID)
+        let createdUser = await store.createAndActivateTask(relatedTo: [])
+        let userID = try XCTUnwrap(createdUser)
+        let lastBeforeSpawn = try await repository.lastGeneralTaskID()
+        XCTAssertEqual(lastBeforeSpawn, userID)
 
-        let spawnedID = try XCTUnwrap(
-            await store.spawnScheduledTask(
-                projectID: nil,
-                summary: "Nightly inbox",
-                originScheduleID: UUID()
-            )
+        let schedule = ScheduleRecord(
+            title: "Nightly inbox",
+            kind: .agent,
+            prompt: "Nightly inbox",
+            cadence: .daily(hour: 3, minute: 0)
         )
+        try await repository.upsertSchedule(schedule, scriptRun: nil)
+        let spawned = await store.spawnScheduledTask(
+            projectID: nil,
+            summary: "Nightly inbox",
+            originScheduleID: schedule.id
+        )
+        let spawnedID = try XCTUnwrap(spawned)
         XCTAssertNotEqual(spawnedID, userID)
         XCTAssertEqual(state.activeTaskID, spawnedID)
-        XCTAssertEqual(try await repository.lastGeneralTaskID(), userID)
+        let lastAfterSpawn = try await repository.lastGeneralTaskID()
+        XCTAssertEqual(lastAfterSpawn, userID)
         XCTAssertNil(state.recentSummaries.first { $0.id == spawnedID })
     }
 
     func testActivateTaskSwitchesTheWindowThread() async throws {
         let (_, store, state) = try makeStore()
-        let first = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
+        let createdFirst = await store.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
         _ = await store.commit(
             appendEvents: [AgentEvent(kind: .userInput, content: "keep first")],
             deleteEventIDs: []
         )
-        let second = try XCTUnwrap(await store.beginNewTask(relatedTo: []))
+        let createdSecond = await store.beginNewTask(relatedTo: [])
+        let second = try XCTUnwrap(createdSecond)
         XCTAssertEqual(state.activeTaskID, second)
 
         await store.activateTask(first)
@@ -45,9 +56,23 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(state.phase, .idle)
     }
 
+    func testApplyBeginNewCreatesFreshTask() async throws {
+        let (_, store, state) = try makeStore()
+        let createdFirst = await store.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "hello")],
+            deleteEventIDs: []
+        )
+        let applied = await store.apply(.beginNew(reason: "explicit fresh start"))
+        XCTAssertEqual(applied?.action, .beginNew)
+        XCTAssertNotEqual(state.activeTaskID, first)
+        XCTAssertEqual(state.phase, .idle)
+    }
+
     func testRestorePhaseWaitsOnUnfinishedToolBatch() async throws {
         let (_, store, state) = try makeStore()
-        _ = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
+        _ = await store.createAndActivateTask(relatedTo: [])
         let plan = AgentPlan(
             summary: "Write a file",
             steps: [
@@ -59,52 +84,39 @@ final class AgentTaskStoreTests: XCTestCase {
                 )
             ]
         )
-        XCTAssertTrue(
-            await store.commit(appendEvents: [], deleteEventIDs: []) { task in
-                task.pendingPlan = plan
-                task.status = .awaitingApproval
-            }
-        )
+        let savedPending = await store.commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.pendingPlan = plan
+            task.status = .awaitingApproval
+        }
+        XCTAssertTrue(savedPending)
         await store.restorePhaseFromActiveTask()
         XCTAssertEqual(state.phase, .awaitingConfirmation)
     }
 
     func testBeginNewTaskDoesNotInheritWorkingMemory() async throws {
         let (repository, store, state) = try makeStore()
-        let first = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
+        let createdFirst = await store.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
         let foldedFrom = AgentEvent(kind: .userInput, content: "clean downloads")
         let foldedThrough = AgentEvent(kind: .assistantResponse, content: "listed files")
-        XCTAssertTrue(
-            await store.commit(
-                appendEvents: [foldedFrom, foldedThrough],
-                deleteEventIDs: []
-            ) { task in
-                task.workingMemory = .makeStructured(
-                    foldedFromEventID: foldedFrom.id,
-                    foldedThroughEventID: foldedThrough.id,
-                    overview: "Clean Downloads"
-                )
-            }
-        )
-
-        let second = try XCTUnwrap(await store.beginNewTask(relatedTo: []))
+        let savedMemory = await store.commit(
+            appendEvents: [foldedFrom, foldedThrough],
+            deleteEventIDs: []
+        ) { task in
+            task.workingMemory = .makeStructured(
+                foldedFromEventID: foldedFrom.id,
+                foldedThroughEventID: foldedThrough.id,
+                overview: "Clean Downloads"
+            )
+        }
+        XCTAssertTrue(savedMemory)
+        let createdSecond = await store.beginNewTask(relatedTo: [])
+        let second = try XCTUnwrap(createdSecond)
         XCTAssertNotEqual(second, first)
         XCTAssertNil(state.activeTask?.workingMemory)
 
         let archived = try await repository.loadTask(id: first)
         XCTAssertEqual(archived?.workingMemory?.overview, "Clean Downloads")
-    }
-
-        let (_, store, state) = try makeStore()
-        let first = try XCTUnwrap(await store.createAndActivateTask(relatedTo: []))
-        _ = await store.commit(
-            appendEvents: [AgentEvent(kind: .userInput, content: "hello")],
-            deleteEventIDs: []
-        )
-        let applied = await store.apply(.beginNew(reason: "explicit fresh start"))
-        XCTAssertEqual(applied?.action, .beginNew)
-        XCTAssertNotEqual(state.activeTaskID, first)
-        XCTAssertEqual(state.phase, .idle)
     }
 
     func testActivateTaskCancelsInFlightWork() async throws {
@@ -116,12 +128,14 @@ final class AgentTaskStoreTests: XCTestCase {
             taskRepository: repository,
             skills: skills
         )
-        let first = try XCTUnwrap(await runtime.taskStore.createAndActivateTask(relatedTo: []))
+        let createdFirst = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
         _ = await runtime.taskStore.commit(
             appendEvents: [AgentEvent(kind: .userInput, content: "keep")],
             deleteEventIDs: []
         )
-        let second = try XCTUnwrap(await runtime.taskStore.beginNewTask(relatedTo: []))
+        let createdSecond = await runtime.taskStore.beginNewTask(relatedTo: [])
+        let second = try XCTUnwrap(createdSecond)
         XCTAssertEqual(runtime.state.activeTaskID, second)
 
         let started = expectation(description: "busy")
@@ -165,7 +179,7 @@ final class SessionOperationGateTests: XCTestCase {
     func testCancelInFlightClearsBusy() async {
         let state = AgentSessionState()
         let gate = SessionOperationGate(state: state)
-        let started = expectation(description: "started")
+        let started = expectation(description: "busy")
         let work = Task {
             await gate.run {
                 started.fulfill()
@@ -213,7 +227,7 @@ final class TurnCoordinatorRoutingTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        _ = try XCTUnwrap(await runtime.taskStore.createAndActivateTask(relatedTo: []))
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         let plan = AgentPlan(
             summary: "pending",
             steps: [

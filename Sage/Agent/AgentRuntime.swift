@@ -92,7 +92,8 @@ final class AgentRuntime {
         AgentTurnChrome.resolve(
             phase: state.phase,
             hasWorkPlan: state.activeTask?.workPlan != nil,
-            hasToolBatch: planProgress.plan != nil || state.activeTask?.pendingPlan != nil
+            hasToolBatch: planProgress.plan != nil || state.activeTask?.pendingPlan != nil,
+            pendingPrompt: state.pendingPrompt
         )
     }
 
@@ -115,12 +116,10 @@ final class AgentRuntime {
     static let defaultSystemPrompt = """
     You are Sage, a native macOS agent that helps the user get work done on their Mac.
     Prefer using tools for real actions (files, clipboard, apps, notifications).
-    A separate planner already produced the work plan — follow it. Use tools as you go;
-    do not wait for the user to approve each call. Expand ~ paths when useful.
-    File tools stay inside the active sandbox described below.
-    Shell working directory is sandboxed; the command string itself can still cd or touch other paths. Prefer file tools for reads and writes.
-    When rewriting text for the clipboard, use get_clipboard / set_clipboard.
-    After tools run, you will see their results — then continue or give a short summary.
+    A separate planner already produced the work plan — follow it. Use tools as you go.
+    Expand ~ paths when useful. Follow Active sandbox and Confirmed work plan. Runtime lists live skills, MCP, and todos.
+    Prefer file tools for reads and writes. After tools run, you will see their results — then continue or give a short summary.
+    For multi-step act work, track remaining steps with manage_todo_list — do not rewrite the work plan.
     Reply in the same language the user uses.
     """
 
@@ -181,7 +180,9 @@ final class AgentRuntime {
         }
         turns.bind(
             slashHost: host,
-            executeToolBatch: { [weak self] in await self?.executeCurrentPlanUnlocked() },
+            executeToolBatch: { [weak self] retryFailed in
+                await self?.executeCurrentPlanUnlocked(retryFailedSteps: retryFailed)
+            },
             handleStop: { [weak self] plan in
                 guard let self else { return }
                 await ToolBatchExecutor.handleStop(plan: plan, services: self.makeExecuteServices())
@@ -195,6 +196,7 @@ final class AgentRuntime {
             planProgress: planProgress,
             taskStore: taskStore,
             modelGateway: modelGateway,
+            modelSettings: { [settings] in settings.snapshot(for: .execute) },
             tools: tools,
             mcp: mcpHub,
             skillHost: host,
@@ -205,6 +207,39 @@ final class AgentRuntime {
             },
             continueTurn: { [weak self] turn in
                 await self?.turns.handleTurn(turn)
+            },
+            preToolUseDecision: { [weak self] name, args in
+                guard let self else { return .deny("The agent session is no longer available.") }
+                let activated = self.host.enabledSkills.filter {
+                    self.state.activatedSkillNames.contains($0.name)
+                }
+                let decision = await PreToolUseHookEvaluator.shared.evaluate(
+                    toolName: name,
+                    argumentsJSON: args,
+                    projectRoot: self.state.focusedProject?.rootURL,
+                    activatedSkills: activated
+                )
+                if self.state.skipsSessionToolGate,
+                   case .ask(let reason) = decision {
+                    return .deny(
+                        "Scheduled runs cannot satisfy an interactive PreToolUse approval: \(reason)"
+                    )
+                }
+                return decision
+            },
+            isToolApproved: { [weak self] name, args in
+                guard let self else { return false }
+                if self.state.skipsSessionToolGate { return true }
+                return self.state.sessionAllowlist.consumeApproval(
+                    name: name,
+                    argumentsJSON: args
+                )
+            },
+            pauseForToolApproval: { [weak self] _ in
+                self?.state.enterAwaitingConfirmation()
+            },
+            pauseForToolRoundLimit: { [weak self] in
+                await self?.turns.pauseForToolRoundLimit()
             }
         )
     }
@@ -338,8 +373,14 @@ final class AgentRuntime {
         switch turnChrome {
         case .workPlan:
             await confirmWorkPlan()
-        case .toolBatch, .none:
+        case .toolBatch:
             await confirmToolBatch()
+        case .toolRoundLimit:
+            await confirmToolRoundLimit()
+        case .toolApproval:
+            await confirmToolApproval(scope: .session)
+        case .none:
+            break
         }
     }
 
@@ -349,7 +390,71 @@ final class AgentRuntime {
     }
 
     func confirmToolBatch() async {
-        _ = await operations.run { await self.executeCurrentPlanUnlocked() }
+        _ = await operations.run { await self.executeCurrentPlanUnlocked(retryFailedSteps: false) }
+    }
+
+    func confirmToolRoundLimit() async {
+        guard turnChrome == .toolRoundLimit else { return }
+        _ = await operations.run { await self.turns.extendAndContinueToolRounds() }
+    }
+
+    func finishToolRoundLimit() async {
+        guard turnChrome == .toolRoundLimit else { return }
+        _ = await operations.run { await self.turns.finishWithoutMoreToolRounds() }
+    }
+
+    func confirmToolApproval(scope: SessionToolApprovalScope) async {
+        guard case .toolApproval(_, let name, let args, _) = state.pendingPrompt else { return }
+        switch scope {
+        case .once:
+            state.sessionAllowlist.allowOnce(name: name, argumentsJSON: args)
+        case .session:
+            state.sessionAllowlist.allowThisSession(name: name, argumentsJSON: args)
+        case .tool:
+            state.sessionAllowlist.allowToolThisSession(named: name)
+        }
+        _ = await operations.run {
+            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+        }
+    }
+
+    func skipToolApproval() async {
+        guard case .toolApproval(let callID, _, _, _) = state.pendingPrompt else { return }
+        guard var plan = planProgress.plan ?? state.activeTask?.pendingPlan,
+              let index = plan.steps.firstIndex(where: { $0.toolCallID == callID })
+        else {
+            _ = await operations.run {
+                _ = await self.taskStore.commit(
+                    appendEvents: [],
+                    deleteEventIDs: [],
+                    mutate: { task in
+                        task.pendingPrompt = nil
+                    }
+                )
+            }
+            return
+        }
+        plan.steps[index].status = .failed
+        plan.steps[index].result = "User skipped this tool."
+        let planToCommit = plan
+        let event = AgentEvent(
+            kind: .toolResult,
+            content: "ERROR: User skipped this tool. Continue with the remaining work or pick another approach.",
+            toolCallID: callID
+        )
+        planProgress.update(planToCommit)
+        _ = await operations.run {
+            guard await self.taskStore.commit(
+                appendEvents: [event],
+                deleteEventIDs: [],
+                mutate: { task in
+                    task.pendingPlan = planToCommit
+                    task.pendingPrompt = nil
+                    task.status = .active
+                }
+            ) else { return }
+            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+        }
     }
 
     func cancelPendingPlan() async {
@@ -424,15 +529,33 @@ final class AgentRuntime {
         state.activatedSkillNames.formUnion(names)
     }
 
-    func executeCurrentPlanUnlocked() async {
+    func executeCurrentPlanUnlocked(retryFailedSteps: Bool = false) async {
         let plan = planProgress.plan ?? state.activeTask?.pendingPlan
         guard let initialPlan = plan else { return }
-        await ToolBatchExecutor.execute(initialPlan: initialPlan, services: makeExecuteServices())
+        await ToolBatchExecutor.execute(
+            initialPlan: initialPlan,
+            services: makeExecuteServices(),
+            retryFailedSteps: retryFailedSteps
+        )
     }
 
     @discardableResult
     private func performCancelPendingPlan() async -> Bool {
         guard case .awaitingConfirmation = state.phase else { return false }
+        if case .toolRoundLimit = state.pendingPrompt {
+            if state.activeTask?.pendingPlan != nil || planProgress.hasPlan {
+                return await ToolBatchExecutor.cancelPendingPlan(services: makeExecuteServices())
+            }
+            guard await taskStore.commit(
+                appendEvents: [],
+                deleteEventIDs: [],
+                mutate: { task in
+                    task.pendingPrompt = nil
+                }
+            ) else { return false }
+            state.enterIdle()
+            return true
+        }
         return await ToolBatchExecutor.cancelPendingPlan(services: makeExecuteServices())
     }
 

@@ -65,9 +65,17 @@ final class AgentModelGateway {
 
     /// Single source of truth for tools exposed to the model (and UI).
     func availableToolDefinitions(includeSkills: Bool = true) async -> [ToolDefinition] {
-        var defs = tools.definitions + mcpToolDefinitions()
+        let mcpDefinitions = MCPToolGroupTool.groupedDefinitions(
+            mcpToolDefinitions(),
+            unlockedServerNames: state.activeTask?.unlockedMCPServerNames ?? []
+        )
+        var defs = tools.definitions + mcpDefinitions
         if state.activeTask?.workingMemory?.hasContent == true {
             defs.append(RecallTaskTranscriptTool.definition)
+        }
+        defs.append(ExploreSubagentTool.definition)
+        if state.activeTask?.workPlan?.kind == .act {
+            defs.append(ManageTodoListTool.definition)
         }
         guard includeSkills else { return defs }
 
@@ -266,7 +274,14 @@ final class AgentModelGateway {
                 budget: budget,
                 baseInstructions: systemPrompt,
                 projectAppendix: projectPromptAppendix(),
+                capabilityReminder: ExecuteCapabilityReminder.make(
+                    planKind: state.activeTask?.workPlan?.kind,
+                    activatedSkillNames: state.activatedSkillNames,
+                    mcpServerNames: ExecuteCapabilityReminder.mcpServerNames(from: tools),
+                    todos: state.activeTask?.todos ?? []
+                ),
                 workPlanAppendix: state.activeTask?.workPlan?.promptAppendix ?? "",
+                todoAppendix: ManageTodoListTool.promptAppendix(state.activeTask?.todos ?? []),
                 workingMemory: workingMemory,
                 reviewFeedback: reviewFeedbackAppendix(),
                 skillsCatalog: skillResult?.text ?? "",

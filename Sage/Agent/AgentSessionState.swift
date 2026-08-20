@@ -45,6 +45,12 @@ final class AgentSessionState {
     /// Becomes true after the first `bootstrap` finishes (success or failure).
     /// UI must not paint workspace chrome/transcript until this is set.
     var didBootstrap = false
+    /// Exact shell / MCP invocations approved for the current task.
+    let sessionAllowlist = SessionToolAllowlist()
+    /// Unattended schedule replay skips the shell/MCP gate (no HUD operator).
+    var skipsSessionToolGate = false
+    /// Round-limit or per-tool approval sitting in front of the execute loop.
+    var pendingPrompt: AgentPendingPrompt?
 
     var events: [AgentEvent] {
         activeTask?.events ?? []
@@ -52,7 +58,11 @@ final class AgentSessionState {
 
     var hasPendingPlan: Bool {
         if case .awaitingConfirmation = phase { return true }
-        return activeTask?.pendingPlan != nil
+        return activeTask?.pendingPlan != nil || pendingPrompt != nil
+    }
+
+    func clearPendingPrompt() {
+        pendingPrompt = nil
     }
 
     var pathGuardPolicy: PathGuard.Policy {
@@ -96,6 +106,8 @@ final class AgentSessionState {
         contextHint = nil
         forceFreshOnNextSubmit = false
         reviewFeedback = nil
+        pendingPrompt = nil
+        skipsSessionToolGate = false
     }
 
     func clearTokenUsage() {

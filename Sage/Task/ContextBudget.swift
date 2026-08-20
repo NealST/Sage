@@ -12,7 +12,9 @@ nonisolated struct PromptLayout: Sendable {
     var budget: PromptBudget
     var baseInstructions: String = ""
     var projectAppendix: String = ""
+    var capabilityReminder: String = ""
     var workPlanAppendix: String = ""
+    var todoAppendix: String = ""
     var workingMemory: TaskWorkingMemory? = nil
     var reviewFeedback: String = ""
     var skillsCatalog: String = ""
@@ -71,7 +73,7 @@ nonisolated enum ContextBudget {
     static func assemble(_ layout: PromptLayout) -> PromptAssembly {
         let budget = layout.budget
         let sanitized = sanitize(layout.events).map {
-            capToolResult($0, maxUTF8Bytes: budget.maxToolResultUTF8Bytes)
+            capToolResult($0, maxTokens: budget.maxToolResultTokens)
         }
 
         let memory = layout.workingMemory?.validated(against: layout.events)
@@ -121,7 +123,9 @@ nonisolated enum ContextBudget {
 
         let nonFlexBase = [
             layout.baseInstructions,
+            layout.capabilityReminder,
             layout.workPlanAppendix,
+            layout.todoAppendix,
             memoryAppendix,
             layout.reviewFeedback,
         ]
@@ -316,7 +320,9 @@ nonisolated enum ContextBudget {
         [
             layout.baseInstructions,
             projectAppendix,
+            layout.capabilityReminder,
             layout.workPlanAppendix,
+            layout.todoAppendix,
             workingMemoryAppendix,
             layout.reviewFeedback,
             skillsCatalog,
@@ -447,7 +453,7 @@ nonisolated enum ContextBudget {
                     blockStart -= 1
                 }
                 var block = Array(events[blockStart...index])
-                var cost = tokenCount(of: block)
+                let cost = tokenCount(of: block)
                 let room = tokenBudget - tokens
                 if cost > room {
                     if selectedReversed.isEmpty {
@@ -495,13 +501,10 @@ nonisolated enum ContextBudget {
         let current = tokenCount(of: block)
         guard current > tokenBudget else { return block }
         let resultCount = max(block.filter { $0.kind == .toolResult }.count, 1)
-        let bytesEach = max(
-            (tokenBudget * PromptBudget.bytesPerToken) / resultCount,
-            64
-        )
+        let tokensEach = max(tokenBudget / resultCount, 16)
         return block.map { event in
             guard event.kind == .toolResult else { return event }
-            return capToolResult(event, maxUTF8Bytes: bytesEach)
+            return capToolResult(event, maxTokens: tokensEach)
         }
     }
 
@@ -523,13 +526,56 @@ nonisolated enum ContextBudget {
         return head + marker + tail
     }
 
-    private static func capToolResult(_ event: AgentEvent, maxUTF8Bytes: Int) -> AgentEvent {
+    private static func capToolResult(_ event: AgentEvent, maxTokens: Int) -> AgentEvent {
         guard event.kind == .toolResult else { return event }
         let body = WriteFileResultCodec.modelFacing(event.content)
-        guard body.utf8.count > maxUTF8Bytes else { return event }
+        let originalTokens = PromptBudget.estimatedTokenCount(in: body)
+        guard originalTokens > maxTokens else { return event }
         var copy = event
-        copy.content = middleOut(body, maxUTF8Bytes: maxUTF8Bytes)
+        copy.content = middleOutByTokens(
+            body,
+            maxTokens: maxTokens,
+            originalTokens: originalTokens
+        )
         return copy
+    }
+
+    /// Deterministic tool-result summary: preserve evidence at both ends and
+    /// account for CJK/emoji using the same estimator as the prompt budget.
+    private static func middleOutByTokens(
+        _ string: String,
+        maxTokens: Int,
+        originalTokens: Int
+    ) -> String {
+        let marker = "\n… [tool result compacted from ~\(originalTokens) tokens] …\n"
+        let markerCost = PromptBudget.estimatedTokenCount(in: marker)
+        guard maxTokens > markerCost + 2 else {
+            return utf8Prefix(string, maxBytes: max(maxTokens * 2, 8))
+        }
+
+        let characters = Array(string)
+        let keep = maxTokens - markerCost
+        let headBudget = max((keep * 2) / 5, 1)
+        let tailBudget = max(keep - headBudget, 1)
+
+        var head: [Character] = []
+        var headCost = 0
+        for character in characters {
+            let cost = PromptBudget.estimatedTokenCount(in: String(character))
+            guard headCost + cost <= headBudget else { break }
+            head.append(character)
+            headCost += cost
+        }
+
+        var tail: [Character] = []
+        var tailCost = 0
+        for character in characters.reversed() {
+            let cost = PromptBudget.estimatedTokenCount(in: String(character))
+            guard tailCost + cost <= tailBudget else { break }
+            tail.append(character)
+            tailCost += cost
+        }
+        return String(head) + marker + String(tail.reversed())
     }
 
     private static func capProtectedEvent(_ event: AgentEvent) -> AgentEvent {

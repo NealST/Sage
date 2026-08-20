@@ -64,7 +64,7 @@ struct AgentComposerView: View {
 
                 Spacer(minLength: 0)
                 if case .awaitingConfirmation = session.agent.state.phase {
-                    Label("Run or Cancel the pending plan", systemImage: SageDesign.Symbol.pending)
+                    Label(pendingConfirmationHint, systemImage: SageDesign.Symbol.pending)
                         .font(.system(size: type.micro))
                         .foregroundStyle(.orange.opacity(0.95))
                         .labelStyle(.titleAndIcon)
@@ -125,6 +125,17 @@ struct AgentComposerView: View {
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    private var pendingConfirmationHint: String {
+        switch session.agent.turnChrome {
+        case .toolRoundLimit:
+            return "Continue for more tool rounds, or finish"
+        case .toolApproval:
+            return "Allow, skip, or stop this tool"
+        default:
+            return "Run or Cancel the pending plan"
+        }
     }
 
     private var composerPlaceholder: String {
