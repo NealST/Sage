@@ -285,6 +285,11 @@ nonisolated enum PathGuard: Sendable {
 /// Shared argument decoder for all tools.
 /// Uses `.convertFromSnakeCase` so tool Args structs can use camelCase properties
 /// without manually defining CodingKeys for every snake_case JSON parameter.
+///
+/// Do not map `CodingKeys` back to the original snake_case names (`line_start`).
+/// After conversion the decoder looks up `lineStart`; `lineStart = "line_start"`
+/// silently drops the field. `*ID` properties are the exception: conversion yields
+/// `fromEventId`, not `fromEventID`, so those keys must be `"fromEventId"`.
 nonisolated func decodeToolArgs<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
     guard let data = json.data(using: .utf8) else {
         throw ToolError.invalidArguments("Arguments are not UTF-8")

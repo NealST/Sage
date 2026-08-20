@@ -35,12 +35,6 @@ nonisolated struct RunShellCommandTool: AgentTool {
         let command: String
         let workingDirectory: String?
         let timeoutSeconds: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case command
-            case workingDirectory = "working_directory"
-            case timeoutSeconds = "timeout_seconds"
-        }
     }
 
     private static let maxOutputBytes = 50_000

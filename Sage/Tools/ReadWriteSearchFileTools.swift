@@ -28,12 +28,6 @@ nonisolated struct ReadTextFileTool: AgentTool {
         let path: String
         let lineStart: Int?
         let lineEnd: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case path
-            case lineStart = "line_start"
-            case lineEnd = "line_end"
-        }
     }
 
     private static let maxBytes = 100_000

@@ -63,11 +63,6 @@ nonisolated struct RenameFileTool: AgentTool {
     private struct Args: Decodable {
         let path: String
         let newName: String
-
-        enum CodingKeys: String, CodingKey {
-            case path
-            case newName = "new_name"
-        }
     }
 
     func call(argumentsJSON: String) async throws -> String {

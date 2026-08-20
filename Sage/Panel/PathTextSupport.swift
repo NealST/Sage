@@ -19,7 +19,11 @@ enum PathTextSupport {
     private static let pathRegex: NSRegularExpression = {
         // ~/… or absolute /Users|/home paths. Avoid matching URL schemes (no "://").
         let pattern = #"(?<![A-Za-z0-9@:])(~(?:/[^ \t\n<>"'`]+)+|/(?:Users|home)/[^ \t\n<>"'`]+)"#
-        return try! NSRegularExpression(pattern: pattern, options: [])
+        do {
+            return try NSRegularExpression(pattern: pattern, options: [])
+        } catch {
+            preconditionFailure("PathTextSupport path regex is invalid: \(error)")
+        }
     }()
 
     static func isImagePath(_ path: String) -> Bool {
