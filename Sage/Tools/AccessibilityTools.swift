@@ -23,7 +23,10 @@ nonisolated struct GetSelectedTextTool: AgentTool {
         // Check accessibility permission
         guard AXIsProcessTrusted() else {
             throw ToolError.operationFailed(
-                "Accessibility permission not granted. Enable in System Settings → Privacy & Security → Accessibility → Sage."
+                """
+                Accessibility permission not granted. Enable in System Settings → \
+                Privacy & Security → Accessibility → Sage.
+                """
             )
         }
 
@@ -50,7 +53,7 @@ nonisolated struct GetSelectedTextTool: AgentTool {
             }
 
             // Get selected text from the focused element
-            let axElement = element as! AXUIElement
+            let axElement = unsafeDowncast(element, to: AXUIElement.self)
 
             // Try getting selected text directly
             var selectedText: CFTypeRef?
@@ -113,108 +116,97 @@ nonisolated struct TypeTextTool: AgentTool {
 
         guard AXIsProcessTrusted() else {
             throw ToolError.operationFailed(
-                "Accessibility permission not granted. Enable in System Settings → Privacy & Security → Accessibility → Sage."
+                """
+                Accessibility permission not granted. Enable in System Settings → \
+                Privacy & Security → Accessibility → Sage.
+                """
             )
         }
 
         return try await MainActor.run {
-            guard let focusedApp = NSWorkspace.shared.frontmostApplication else {
-                throw ToolError.operationFailed(
-                    "No frontmost application found. Bring an app to the foreground first."
-                )
-            }
+            try Self.typeIntoFrontmostApp(args.text)
+        }
+    }
 
-            // Prevent typing into Sage's own window
-            if focusedApp.bundleIdentifier == Self.sageBundleID {
-                throw ToolError.operationFailed(
-                    "Cannot type into Sage's own window. Bring the target application to the foreground first."
-                )
-            }
-
-            let appElement = AXUIElementCreateApplication(focusedApp.processIdentifier)
-
-            // Get the focused UI element
-            var focusedRef: CFTypeRef?
-            let focusResult = AXUIElementCopyAttributeValue(
-                appElement,
-                kAXFocusedUIElementAttribute as CFString,
-                &focusedRef
-            )
-
-            guard focusResult == .success,
-                  let ref = focusedRef,
-                  CFGetTypeID(ref) == AXUIElementGetTypeID()
-            else {
-                throw ToolError.operationFailed(
-                    "No focused element in \(focusedApp.localizedName ?? "the app"). Click on a text field first."
-                )
-            }
-
-            let element = ref as! AXUIElement
-
-            // Check if the element's role supports text input
-            var roleRef: CFTypeRef?
-            AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
-            let role = roleRef as? String ?? ""
-
-            // Verify the element is editable by checking if AXValue is settable
-            var isSettable: DarwinBoolean = false
-            let settableResult = AXUIElementIsAttributeSettable(
-                element,
-                kAXValueAttribute as CFString,
-                &isSettable
-            )
-
-            // Strategy 1: Set selected text (works for replacing selection or inserting at cursor)
-            var lastAXError: AXError?
-
-            let selectedTextSettable: DarwinBoolean = {
-                var settable: DarwinBoolean = false
-                AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable)
-                return settable
-            }()
-
-            if selectedTextSettable.boolValue {
-                let setResult = AXUIElementSetAttributeValue(
-                    element,
-                    kAXSelectedTextAttribute as CFString,
-                    args.text as CFTypeRef
-                )
-                if setResult == .success {
-                    return "[OK] Typed \(args.text.count) characters into \(focusedApp.localizedName ?? "app")"
-                }
-                lastAXError = setResult
-            }
-
-            // Strategy 2: If selected text attribute isn't settable, try setting the full value
-            // (only for simple single-value fields like search bars — replaces entire field content)
-            if settableResult == .success, isSettable.boolValue {
-                let textRoles = ["AXTextField", "AXSearchField", "AXComboBox"]
-                if textRoles.contains(role) {
-                    let setResult = AXUIElementSetAttributeValue(
-                        element,
-                        kAXValueAttribute as CFString,
-                        args.text as CFTypeRef
-                    )
-                    if setResult == .success {
-                        return "[OK] Set value to \(args.text.count) characters in \(focusedApp.localizedName ?? "app")"
-                    }
-                    lastAXError = setResult
-                }
-            }
-
-            // If we get here, the element doesn't support text input
-            let roleSuffix = role.isEmpty ? "" : " (role: \(role))"
-            let errorDetail: String
-            if let axErr = lastAXError {
-                errorDetail = " AX error: \(axErr.rawValue)."
-            } else {
-                errorDetail = ""
-            }
+    @MainActor
+    static func typeIntoFrontmostApp(_ text: String) throws -> String {
+        guard let focusedApp = NSWorkspace.shared.frontmostApplication else {
             throw ToolError.operationFailed(
-                "Focused element is not editable\(roleSuffix).\(errorDetail) Click on a text field or editor first."
+                "No frontmost application found. Bring an app to the foreground first."
             )
         }
+        if focusedApp.bundleIdentifier == sageBundleID {
+            throw ToolError.operationFailed(
+                "Cannot type into Sage's own window. Bring the target application to the foreground first."
+            )
+        }
+        let element = try focusedElement(in: focusedApp)
+        if let typed = trySetSelectedText(text, on: element, appName: focusedApp.localizedName) {
+            return typed
+        }
+        if let replaced = trySetFieldValue(text, on: element, appName: focusedApp.localizedName) {
+            return replaced
+        }
+        throw ToolError.operationFailed(
+            "Focused element is not editable. Click on a text field or editor first."
+        )
+    }
+
+    @MainActor
+    static func focusedElement(in app: NSRunningApplication) throws -> AXUIElement {
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        var focusedRef: CFTypeRef?
+        let focusResult = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+        guard focusResult == .success,
+              let ref = focusedRef,
+              CFGetTypeID(ref) == AXUIElementGetTypeID()
+        else {
+            throw ToolError.operationFailed(
+                "No focused element in \(app.localizedName ?? "the app"). Click on a text field first."
+            )
+        }
+        return unsafeDowncast(ref, to: AXUIElement.self)
+    }
+
+    @MainActor
+    static func trySetSelectedText(_ text: String, on element: AXUIElement, appName: String?) -> String? {
+        var settable: DarwinBoolean = false
+        AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable)
+        guard settable.boolValue else { return nil }
+        let setResult = AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextAttribute as CFString,
+            text as CFTypeRef
+        )
+        guard setResult == .success else { return nil }
+        return "[OK] Typed \(text.count) characters into \(appName ?? "app")"
+    }
+
+    @MainActor
+    static func trySetFieldValue(_ text: String, on element: AXUIElement, appName: String?) -> String? {
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+        let role = roleRef as? String ?? ""
+        var isSettable: DarwinBoolean = false
+        let settableResult = AXUIElementIsAttributeSettable(
+            element,
+            kAXValueAttribute as CFString,
+            &isSettable
+        )
+        guard settableResult == .success, isSettable.boolValue else { return nil }
+        let textRoles = ["AXTextField", "AXSearchField", "AXComboBox"]
+        guard textRoles.contains(role) else { return nil }
+        let setResult = AXUIElementSetAttributeValue(
+            element,
+            kAXValueAttribute as CFString,
+            text as CFTypeRef
+        )
+        guard setResult == .success else { return nil }
+        return "[OK] Set value to \(text.count) characters in \(appName ?? "app")"
     }
 }
 
@@ -259,42 +251,45 @@ nonisolated struct GetScreenInfoTool: AgentTool {
                 }
             }
 
-            // Report active window frame if accessibility is available
-            if AXIsProcessTrusted(),
-               let app = NSWorkspace.shared.frontmostApplication {
-                let appElement = AXUIElementCreateApplication(app.processIdentifier)
-                var windowRef: CFTypeRef?
-                let result = AXUIElementCopyAttributeValue(
-                    appElement,
-                    kAXFocusedWindowAttribute as CFString,
-                    &windowRef
-                )
-                if result == .success,
-                   let window = windowRef,
-                   CFGetTypeID(window) == AXUIElementGetTypeID() {
-                    let winElement = window as! AXUIElement
-                    var posRef: CFTypeRef?
-                    var sizeRef: CFTypeRef?
-                    AXUIElementCopyAttributeValue(winElement, kAXPositionAttribute as CFString, &posRef)
-                    AXUIElementCopyAttributeValue(winElement, kAXSizeAttribute as CFString, &sizeRef)
-
-                    var point = CGPoint.zero
-                    var size = CGSize.zero
-                    if let posRef, CFGetTypeID(posRef) == AXValueGetTypeID(),
-                       AXValueGetValue(posRef as! AXValue, .cgPoint, &point),
-                       let sizeRef, CFGetTypeID(sizeRef) == AXValueGetTypeID(),
-                       AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) {
-                        lines.append("")
-                        lines.append("active_window:")
-                        lines.append("  app: \(app.localizedName ?? "(unknown)")")
-                        lines.append("  position: (\(Int(point.x)), \(Int(point.y)))")
-                        lines.append("  size: \(Int(size.width))x\(Int(size.height))")
-                    }
-                }
-            }
-
+            lines.append(contentsOf: Self.activeWindowLines())
             return lines.joined(separator: "\n")
         }
+    }
+
+    @MainActor
+    static func activeWindowLines() -> [String] {
+        guard AXIsProcessTrusted(),
+              let app = NSWorkspace.shared.frontmostApplication else { return [] }
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        var windowRef: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedWindowAttribute as CFString,
+            &windowRef
+        )
+        guard result == .success,
+              let window = windowRef,
+              CFGetTypeID(window) == AXUIElementGetTypeID() else { return [] }
+        let winElement = unsafeDowncast(window, to: AXUIElement.self)
+        var posRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(winElement, kAXPositionAttribute as CFString, &posRef)
+        AXUIElementCopyAttributeValue(winElement, kAXSizeAttribute as CFString, &sizeRef)
+        var point = CGPoint.zero
+        var size = CGSize.zero
+        guard let posRef, CFGetTypeID(posRef) == AXValueGetTypeID(),
+              AXValueGetValue(unsafeDowncast(posRef, to: AXValue.self), .cgPoint, &point),
+              let sizeRef, CFGetTypeID(sizeRef) == AXValueGetTypeID(),
+              AXValueGetValue(unsafeDowncast(sizeRef, to: AXValue.self), .cgSize, &size) else {
+            return []
+        }
+        return [
+            "",
+            "active_window:",
+            "  app: \(app.localizedName ?? "(unknown)")",
+            "  position: (\(Int(point.x)), \(Int(point.y)))",
+            "  size: \(Int(size.width))x\(Int(size.height))",
+        ]
     }
 }
 
@@ -334,7 +329,7 @@ nonisolated struct GetFrontmostAppTool: AgentTool {
                    CFGetTypeID(window) == AXUIElementGetTypeID() {
                     var titleValue: CFTypeRef?
                     let titleResult = AXUIElementCopyAttributeValue(
-                        window as! AXUIElement,
+                        unsafeDowncast(window, to: AXUIElement.self),
                         kAXTitleAttribute as CFString,
                         &titleValue
                     )

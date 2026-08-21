@@ -10,34 +10,7 @@ import GRDB
 
 extension GRDBTaskRepository {
     func upsertTask(_ task: TaskRecord, database: Database) throws {
-        // COALESCE keeps an existing topic when a concurrent in-memory snapshot
-        // still has nil (topic generation racing with commit/mutate).
-        let activatedSkillsJSON: String? = task.activatedSkillNames.isEmpty
-            ? nil
-            : (try? JSONEncoder().encode(Array(task.activatedSkillNames)))
-                .flatMap { String(data: $0, encoding: .utf8) }
-        let workPlanJSON: String? = task.workPlan.flatMap { plan in
-            (try? JSONEncoder().encode(plan))
-                .flatMap { String(data: $0, encoding: .utf8) }
-        }
-        let workingMemoryJSON: String? = task.workingMemory.flatMap { memory in
-            guard memory.hasContent else { return nil }
-            return (try? JSONEncoder().encode(memory))
-                .flatMap { String(data: $0, encoding: .utf8) }
-        }
-        let todoListJSON: String? = task.todos.isEmpty
-            ? nil
-            : (try? JSONEncoder().encode(task.todos))
-                .flatMap { String(data: $0, encoding: .utf8) }
-        let pendingPromptJSON: String? = task.pendingPrompt.flatMap { prompt in
-            (try? JSONEncoder().encode(prompt))
-                .flatMap { String(data: $0, encoding: .utf8) }
-        }
-        let unlockedMCPServersJSON: String? = task.unlockedMCPServerNames.isEmpty
-            ? nil
-            : (try? JSONEncoder().encode(task.unlockedMCPServerNames.sorted()))
-                .flatMap { String(data: $0, encoding: .utf8) }
-
+        let payload = encodedTaskColumns(task)
         try database.execute(
             sql: """
             INSERT INTO tasks (
@@ -73,18 +46,45 @@ extension GRDBTaskRepository {
                 task.topic,
                 task.abstract,
                 task.topicUpdatedAt?.timeIntervalSince1970,
-                activatedSkillsJSON,
-                workPlanJSON,
-                workingMemoryJSON,
-                todoListJSON,
-                pendingPromptJSON,
-                unlockedMCPServersJSON,
+                payload.activatedSkillsJSON,
+                payload.workPlanJSON,
+                payload.workingMemoryJSON,
+                payload.todoListJSON,
+                payload.pendingPromptJSON,
+                payload.unlockedMCPServersJSON,
                 task.skillPersistConsidered ? 1 : 0,
                 task.originScheduleID?.uuidString,
                 task.createdAt.timeIntervalSince1970,
                 task.updatedAt.timeIntervalSince1970,
             ]
         )
+    }
+
+    struct EncodedTaskColumns {
+        var activatedSkillsJSON: String?
+        var workPlanJSON: String?
+        var workingMemoryJSON: String?
+        var todoListJSON: String?
+        var pendingPromptJSON: String?
+        var unlockedMCPServersJSON: String?
+    }
+
+    func encodedTaskColumns(_ task: TaskRecord) -> EncodedTaskColumns {
+        EncodedTaskColumns(
+            activatedSkillsJSON: task.activatedSkillNames.isEmpty
+                ? nil : encodeJSON(Array(task.activatedSkillNames)),
+            workPlanJSON: encodeJSON(task.workPlan),
+            workingMemoryJSON: task.workingMemory?.hasContent == true ? encodeJSON(task.workingMemory) : nil,
+            todoListJSON: task.todos.isEmpty ? nil : encodeJSON(task.todos),
+            pendingPromptJSON: encodeJSON(task.pendingPrompt),
+            unlockedMCPServersJSON: task.unlockedMCPServerNames.isEmpty
+                ? nil : encodeJSON(task.unlockedMCPServerNames.sorted())
+        )
+    }
+
+    func encodeJSON<T: Encodable>(_ value: T?) -> String? {
+        guard let value else { return nil }
+        return (try? JSONEncoder().encode(value)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     /// Entity extraction is not wired yet — skip the DELETE when the in-memory
@@ -129,7 +129,8 @@ extension GRDBTaskRepository {
             ORDER BY position ASC
             """,
             arguments: [taskID.uuidString]
-        ).compactMap(UUID.init(uuidString:))
+        )
+        .compactMap(UUID.init(uuidString:))
         guard existingIDs != relatedTaskIDs else { return }
 
         try database.execute(
@@ -188,47 +189,13 @@ extension GRDBTaskRepository {
             var keepStepIDs = Set<String>()
             for (position, step) in plan.steps.enumerated() {
                 keepStepIDs.insert(step.id.uuidString)
-                if existingStepIDs.contains(step.id.uuidString) {
-                    try database.execute(
-                        sql: """
-                        UPDATE plan_steps
-                        SET position = ?, tool_call_id = ?, tool_name = ?,
-                            arguments_json = ?, title = ?, status = ?, result = ?
-                        WHERE id = ? AND plan_id = ?
-                        """,
-                        arguments: [
-                            position,
-                            step.toolCallID,
-                            step.toolName,
-                            step.argumentsJSON,
-                            step.title,
-                            step.status.rawValue,
-                            step.result,
-                            step.id.uuidString,
-                            plan.id.uuidString,
-                        ]
-                    )
-                } else {
-                    try database.execute(
-                        sql: """
-                        INSERT INTO plan_steps (
-                            id, plan_id, position, tool_call_id, tool_name,
-                            arguments_json, title, status, result
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        arguments: [
-                            step.id.uuidString,
-                            plan.id.uuidString,
-                            position,
-                            step.toolCallID,
-                            step.toolName,
-                            step.argumentsJSON,
-                            step.title,
-                            step.status.rawValue,
-                            step.result,
-                        ]
-                    )
-                }
+                try upsertPlanStep(
+                    step,
+                    planID: plan.id,
+                    position: position,
+                    existingIDs: existingStepIDs,
+                    database: database
+                )
             }
 
             let stale = existingStepIDs.subtracting(keepStepIDs)
@@ -242,6 +209,65 @@ extension GRDBTaskRepository {
         }
 
         try replacePendingPlan(plan, taskID: taskID, database: database)
+    }
+
+    func upsertPlanStep(
+        _ step: AgentStep,
+        planID: UUID,
+        position: Int,
+        existingIDs: Set<String>,
+        database: Database
+    ) throws {
+        if existingIDs.contains(step.id.uuidString) {
+            try database.execute(
+                sql: """
+                UPDATE plan_steps
+                SET position = ?, tool_call_id = ?, tool_name = ?,
+                    arguments_json = ?, title = ?, status = ?, result = ?
+                WHERE id = ? AND plan_id = ?
+                """,
+                arguments: [
+                    position,
+                    step.toolCallID,
+                    step.toolName,
+                    step.argumentsJSON,
+                    step.title,
+                    step.status.rawValue,
+                    step.result,
+                    step.id.uuidString,
+                    planID.uuidString,
+                ]
+            )
+            return
+        }
+        try insertPlanStep(step, planID: planID, position: position, database: database)
+    }
+
+    func insertPlanStep(
+        _ step: AgentStep,
+        planID: UUID,
+        position: Int,
+        database: Database
+    ) throws {
+        try database.execute(
+            sql: """
+            INSERT INTO plan_steps (
+                id, plan_id, position, tool_call_id, tool_name,
+                arguments_json, title, status, result
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                step.id.uuidString,
+                planID.uuidString,
+                position,
+                step.toolCallID,
+                step.toolName,
+                step.argumentsJSON,
+                step.title,
+                step.status.rawValue,
+                step.result,
+            ]
+        )
     }
 
     func replacePendingPlan(
@@ -263,25 +289,7 @@ extension GRDBTaskRepository {
             ]
         )
         for (position, step) in plan.steps.enumerated() {
-            try database.execute(
-                sql: """
-                INSERT INTO plan_steps (
-                    id, plan_id, position, tool_call_id, tool_name,
-                    arguments_json, title, status, result
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                arguments: [
-                    step.id.uuidString,
-                    plan.id.uuidString,
-                    position,
-                    step.toolCallID,
-                    step.toolName,
-                    step.argumentsJSON,
-                    step.title,
-                    step.status.rawValue,
-                    step.result,
-                ]
-            )
+            try insertPlanStep(step, planID: plan.id, position: position, database: database)
         }
     }
 
@@ -308,7 +316,11 @@ extension GRDBTaskRepository {
                 event.createdAt.timeIntervalSince1970,
             ]
         )
+        try insertEventToolCalls(event, database: database)
+        try insertEventContext(event, database: database)
+    }
 
+    func insertEventToolCalls(_ event: AgentEvent, database: Database) throws {
         for (position, call) in (event.toolCalls ?? []).enumerated() {
             try database.execute(
                 sql: """
@@ -325,84 +337,36 @@ extension GRDBTaskRepository {
                 ]
             )
         }
+    }
 
-        if let context = event.context {
+    func insertEventContext(_ event: AgentEvent, database: Database) throws {
+        guard let context = event.context else { return }
+        try database.execute(
+            sql: """
+            INSERT INTO event_contexts (event_id, confidence, reason)
+            VALUES (?, ?, ?)
+            """,
+            arguments: [
+                event.id.uuidString,
+                context.confidence,
+                context.reason,
+            ]
+        )
+        for (position, relatedID) in context.relatedTaskIDs.enumerated() {
             try database.execute(
                 sql: """
-                INSERT INTO event_contexts (event_id, confidence, reason)
-                VALUES (?, ?, ?)
+                INSERT INTO event_context_tasks (
+                    event_id, related_task_id, position
+                ) VALUES (?, ?, ?)
                 """,
                 arguments: [
                     event.id.uuidString,
-                    context.confidence,
-                    context.reason,
+                    relatedID.uuidString,
+                    position,
                 ]
             )
-            for (position, relatedID) in context.relatedTaskIDs.enumerated() {
-                try database.execute(
-                    sql: """
-                    INSERT INTO event_context_tasks (
-                        event_id, related_task_id, position
-                    ) VALUES (?, ?, ?)
-                    """,
-                    arguments: [
-                        event.id.uuidString,
-                        relatedID.uuidString,
-                        position,
-                    ]
-                )
-            }
         }
     }
 
     /// Imports the short-lived JSON prototype once, then removes it.
-    func importLegacyJSONIfNeeded(into pool: DatabasePool) throws {
-        guard
-            let data = try? Data(contentsOf: legacyJSONURL),
-            let snapshot = try? JSONDecoder().decode(TaskLibrarySnapshot.self, from: data)
-        else {
-            return
-        }
-
-        let didImport = try pool.write { database in
-            let existingCount = try Int.fetchOne(
-                database,
-                sql: "SELECT COUNT(*) FROM tasks"
-            ) ?? 0
-            guard existingCount == 0 else { return false }
-
-            // Insert every task first so relation foreign keys are valid.
-            for task in snapshot.tasks {
-                try upsertTask(task, database: database)
-            }
-            for task in snapshot.tasks {
-                try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: database)
-                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: database)
-                try syncPendingPlan(task.pendingPlan, taskID: task.id, database: database)
-                for (sequence, event) in task.events.enumerated() {
-                    try insertEvent(
-                        event,
-                        taskID: task.id,
-                        sequence: sequence,
-                        database: database
-                    )
-                }
-            }
-            try database.execute(
-                sql: """
-                INSERT INTO app_state (singleton, active_task_id, focused_project_id)
-                VALUES (1, ?, NULL)
-                ON CONFLICT(singleton) DO UPDATE
-                SET active_task_id = excluded.active_task_id
-                """,
-                arguments: [snapshot.activeTaskID?.uuidString]
-            )
-            return true
-        }
-
-        // Always remove legacy JSON after an import attempt so it cannot resurrect history.
-        if didImport || FileManager.default.fileExists(atPath: legacyJSONURL.path) {
-            try? FileManager.default.removeItem(at: legacyJSONURL)
-        }
-    }
 }

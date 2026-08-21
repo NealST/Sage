@@ -23,119 +23,219 @@ struct AgentSessionGraph {
     let turns: TurnCoordinator
     let contextCompactor: ContextCompactor
 
-    static func assemble(
-        settings: ModelSettings,
-        tools: ToolRegistry,
-        taskRepository: any TaskRepository,
-        contextResolver: any TaskRouting,
-        skillCatalog: SkillCatalog?,
-        mcpHub: CapabilityStore?,
-        skills: SkillSessionController,
-        systemPrompt: String,
-        streaming: StreamingTextPump,
-        streamingPlayback: StreamingPlayback
-    ) -> Self {
+    static func assemble(_ request: AgentSessionGraphRequest) -> Self {
         let state = AgentSessionState()
         let planProgress = PlanProgress()
-        weak let catalogRef = skillCatalog
-        weak let mcpRef = mcpHub
-
-        let continuity = (contextResolver as? ContinuityTaskResolver) ?? ContinuityTaskResolver()
+        weak let catalogRef = request.skillCatalog
+        weak let mcpRef = request.mcpHub
+        let continuity = (request.contextResolver as? ContinuityTaskResolver) ?? ContinuityTaskResolver()
         let router = CompositeTaskRouter(continuity: continuity)
         let taskStore = AgentTaskStore(
             state: state,
             planProgress: planProgress,
-            taskRepository: taskRepository,
-            skills: skills
+            taskRepository: request.taskRepository,
+            skills: request.skills
         )
-        let host = AgentHostSurface(
-            state: state,
-            taskStore: taskStore,
-            skills: skills,
-            settings: settings,
-            tools: tools,
-            skillCatalog: skillCatalog,
-            mcpHub: mcpHub
-        )
+        let host = makeHost(request, state: state, taskStore: taskStore)
         let skillRecall = SkillRecallCoordinator(
             state: state,
-            skills: skills,
+            skills: request.skills,
             skillCatalog: { catalogRef },
             taskStore: taskStore
         )
-        streaming.attach(playback: streamingPlayback)
+        request.streaming.attach(playback: request.streamingPlayback)
+        return makeSessionCore(
+            SessionCoreParts(
+                request: request,
+                state: state,
+                planProgress: planProgress,
+                router: router,
+                taskStore: taskStore,
+                host: host,
+                skillRecall: skillRecall,
+                catalogRef: catalogRef,
+                mcpRef: mcpRef
+            )
+        )
+    }
 
-        let modelGateway = AgentModelGateway(
-            state: state,
-            settings: settings,
-            tools: tools,
-            systemPrompt: systemPrompt,
-            skillRecall: skillRecall,
-            skillCatalog: { catalogRef },
-            mcpToolDefinitions: { mcpRef?.mcpToolDefinitions() ?? [] },
-            taskRepository: taskRepository,
-            projectPromptAppendix: {
-                SessionLifecycle.projectPromptAppendix(for: state.focusedProject)
-            },
-            streaming: streaming
+    struct SessionCoreParts {
+        var request: AgentSessionGraphRequest
+        var state: AgentSessionState
+        var planProgress: PlanProgress
+        var router: CompositeTaskRouter
+        var taskStore: AgentTaskStore
+        var host: AgentHostSurface
+        var skillRecall: SkillRecallCoordinator
+        var catalogRef: SkillCatalog?
+        var mcpRef: CapabilityStore?
+    }
+
+    static func makeSessionCore(_ parts: SessionCoreParts) -> Self {
+        let context = makeContextLayer(parts)
+        let operations = SessionOperationGate(state: parts.state)
+        let lifecycle = makeLifecycle(parts, context: context, operations: operations)
+        let turns = makeTurns(
+            TurnsParts(
+                request: parts.request,
+                state: parts.state,
+                planProgress: parts.planProgress,
+                taskStore: parts.taskStore,
+                router: parts.router,
+                skillRecall: parts.skillRecall,
+                modelGateway: context.modelGateway,
+                catalogRef: parts.catalogRef,
+                lifecycle: lifecycle,
+                topicCoordinator: context.topicCoordinator
+            )
+        )
+        parts.skillRecall.bind { [weak host = parts.host] in host }
+        return assembled(parts, context: context, operations: operations, lifecycle: lifecycle, turns: turns)
+    }
+
+    struct ContextLayer {
+        var modelGateway: AgentModelGateway
+        var topicCoordinator: TopicCoordinator
+        var contextCompactor: ContextCompactor
+    }
+
+    static func makeContextLayer(_ parts: SessionCoreParts) -> ContextLayer {
+        let modelGateway = makeModelGateway(
+            parts.request,
+            state: parts.state,
+            skillRecall: parts.skillRecall,
+            catalogRef: parts.catalogRef,
+            mcpRef: parts.mcpRef
         )
         let topicCoordinator = TopicCoordinator(
-            state: state,
-            taskRepository: taskRepository
+            state: parts.state,
+            taskRepository: parts.request.taskRepository
         )
         let contextCompactor = ContextCompactor(
-            state: state,
-            taskStore: taskStore,
+            state: parts.state,
+            taskStore: parts.taskStore,
             modelGateway: modelGateway,
-            settings: settings
+            settings: parts.request.settings
         )
         modelGateway.bind(compact: contextCompactor)
-        taskStore.bind(
+        parts.taskStore.bind(
             topicCoordinator: topicCoordinator,
-            skillRecall: skillRecall,
+            skillRecall: parts.skillRecall,
             contextCompactor: contextCompactor
         )
-
-        let operations = SessionOperationGate(state: state)
-        let lifecycle = SessionLifecycle(
-            state: state,
-            planProgress: planProgress,
-            taskRepository: taskRepository,
-            skillCatalog: { catalogRef },
-            skills: skills,
+        return ContextLayer(
             modelGateway: modelGateway,
-            taskStore: taskStore,
+            topicCoordinator: topicCoordinator,
+            contextCompactor: contextCompactor
+        )
+    }
+
+    static func makeLifecycle(
+        _ parts: SessionCoreParts,
+        context: ContextLayer,
+        operations: SessionOperationGate
+    ) -> SessionLifecycle {
+        SessionLifecycle(
+            state: parts.state,
+            planProgress: parts.planProgress,
+            taskRepository: parts.request.taskRepository,
+            skillCatalog: { parts.catalogRef },
+            skills: parts.request.skills,
+            modelGateway: context.modelGateway,
+            taskStore: parts.taskStore,
             operations: operations
         )
-        let turns = TurnCoordinator(
-            state: state,
-            planProgress: planProgress,
-            taskStore: taskStore,
-            router: router,
-            skillRecall: skillRecall,
-            modelGateway: modelGateway,
-            settings: settings,
-            skillCatalog: { catalogRef },
-            workspaceSnapshot: { lifecycle.currentWorkspaceSnapshot() },
-            streaming: streaming,
-            topicCoordinator: topicCoordinator,
-            skills: skills
-        )
-        skillRecall.bind { [weak host] in host }
+    }
 
-        return Self(
-            state: state,
-            planProgress: planProgress,
-            router: router,
-            taskStore: taskStore,
-            host: host,
-            skillRecall: skillRecall,
-            modelGateway: modelGateway,
-            topicCoordinator: topicCoordinator,
+    static func assembled(
+        _ parts: SessionCoreParts,
+        context: ContextLayer,
+        operations: SessionOperationGate,
+        lifecycle: SessionLifecycle,
+        turns: TurnCoordinator
+    ) -> Self {
+        Self(
+            state: parts.state,
+            planProgress: parts.planProgress,
+            router: parts.router,
+            taskStore: parts.taskStore,
+            host: parts.host,
+            skillRecall: parts.skillRecall,
+            modelGateway: context.modelGateway,
+            topicCoordinator: context.topicCoordinator,
             operations: operations,
             lifecycle: lifecycle,
             turns: turns,
-            contextCompactor: contextCompactor
+            contextCompactor: context.contextCompactor
+        )
+    }
+
+    static func makeHost(
+        _ request: AgentSessionGraphRequest,
+        state: AgentSessionState,
+        taskStore: AgentTaskStore
+    ) -> AgentHostSurface {
+        AgentHostSurface(
+            state: state,
+            taskStore: taskStore,
+            skills: request.skills,
+            settings: request.settings,
+            tools: request.tools,
+            skillCatalog: request.skillCatalog,
+            mcpHub: request.mcpHub
+        )
+    }
+
+    static func makeModelGateway(
+        _ request: AgentSessionGraphRequest,
+        state: AgentSessionState,
+        skillRecall: SkillRecallCoordinator,
+        catalogRef: SkillCatalog?,
+        mcpRef: CapabilityStore?
+    ) -> AgentModelGateway {
+        AgentModelGateway(
+            state: state,
+            settings: request.settings,
+            tools: request.tools,
+            systemPrompt: request.systemPrompt,
+            skillRecall: skillRecall,
+            skillCatalog: { catalogRef },
+            mcpToolDefinitions: { mcpRef?.mcpToolDefinitions() ?? [] },
+            taskRepository: request.taskRepository,
+            projectPromptAppendix: {
+                SessionLifecycle.projectPromptAppendix(for: state.focusedProject)
+            },
+            streaming: request.streaming
+        )
+    }
+
+    struct TurnsParts {
+        var request: AgentSessionGraphRequest
+        var state: AgentSessionState
+        var planProgress: PlanProgress
+        var taskStore: AgentTaskStore
+        var router: CompositeTaskRouter
+        var skillRecall: SkillRecallCoordinator
+        var modelGateway: AgentModelGateway
+        var catalogRef: SkillCatalog?
+        var lifecycle: SessionLifecycle
+        var topicCoordinator: TopicCoordinator
+    }
+
+    static func makeTurns(_ parts: TurnsParts) -> TurnCoordinator {
+        TurnCoordinator(
+            state: parts.state,
+            planProgress: parts.planProgress,
+            taskStore: parts.taskStore,
+            router: parts.router,
+            skillRecall: parts.skillRecall,
+            modelGateway: parts.modelGateway,
+            settings: parts.request.settings,
+            skillCatalog: { parts.catalogRef },
+            workspaceSnapshot: { parts.lifecycle.currentWorkspaceSnapshot() },
+            streaming: parts.request.streaming,
+            topicCoordinator: parts.topicCoordinator,
+            skills: parts.request.skills
         )
     }
 }

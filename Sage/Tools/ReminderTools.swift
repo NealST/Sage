@@ -21,7 +21,9 @@ nonisolated struct CreateReminderTool: AgentTool {
             properties: [
                 "title": .stringProperty("Reminder title (required)"),
                 "notes": .stringProperty("Optional notes/body text for the reminder"),
-                "due_date": .stringProperty("Optional due date in ISO 8601 format (e.g. '2024-12-31T09:00:00'). Omit for no due date."),
+                "due_date": .stringProperty(
+                    "Optional due date in ISO 8601 format (e.g. '2024-12-31T09:00:00'). Omit for no due date."
+                ),
                 "priority": .intProperty("Priority: 0 = none (default), 1 = high, 5 = medium, 9 = low"),
             ],
             required: ["title"]
@@ -64,36 +66,8 @@ nonisolated struct CreateReminderTool: AgentTool {
         reminder.notes = args.notes
         reminder.priority = args.priority ?? 0
         reminder.calendar = store.defaultCalendarForNewReminders()
-
-        // Parse due date if provided
         if let dueDateStr = args.dueDate, !dueDateStr.isEmpty {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            // Try with fractional seconds first, then without
-            var date = formatter.date(from: dueDateStr)
-            if date == nil {
-                formatter.formatOptions = [.withInternetDateTime]
-                date = formatter.date(from: dueDateStr)
-            }
-            if date == nil {
-                // Try basic format without timezone: "2024-12-31T09:00:00"
-                let basic = ISO8601DateFormatter()
-                basic.formatOptions = [.withFullDate, .withFullTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
-                date = basic.date(from: dueDateStr)
-            }
-
-            guard let parsedDate = date else {
-                throw ToolError.invalidArguments(
-                    "Invalid due_date format: '\(dueDateStr)'. Use ISO 8601 (e.g. '2024-12-31T09:00:00' or '2024-12-31T09:00:00Z')."
-                )
-            }
-
-            let calendar = Calendar.current
-            let components = calendar.dateComponents(
-                [.year, .month, .day, .hour, .minute, .second],
-                from: parsedDate
-            )
-            reminder.dueDateComponents = components
+            reminder.dueDateComponents = try Self.dueDateComponents(from: dueDateStr)
         }
 
         try store.save(reminder, commit: true)
@@ -103,5 +77,37 @@ nonisolated struct CreateReminderTool: AgentTool {
             result += " (due: \(dueDate))"
         }
         return result
+    }
+
+    static func dueDateComponents(from dueDateStr: String) throws -> DateComponents {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: dueDateStr)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: dueDateStr)
+        }
+        if date == nil {
+            let basic = ISO8601DateFormatter()
+            basic.formatOptions = [
+                .withFullDate,
+                .withFullTime,
+                .withDashSeparatorInDate,
+                .withColonSeparatorInTime,
+            ]
+            date = basic.date(from: dueDateStr)
+        }
+        guard let parsedDate = date else {
+            throw ToolError.invalidArguments(
+                """
+                Invalid due_date format: '\(dueDateStr)'. \
+                Use ISO 8601 (e.g. '2024-12-31T09:00:00' or '2024-12-31T09:00:00Z').
+                """
+            )
+        }
+        return Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: parsedDate
+        )
     }
 }

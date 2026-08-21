@@ -135,8 +135,7 @@ struct AgentWorkspaceView: View {
 
     // MARK: - Tabs
 
-    @ViewBuilder
-    private var projectTabBody: some View {
+    @ViewBuilder private var projectTabBody: some View {
         switch projectTab {
         case .task:
             taskPane

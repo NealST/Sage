@@ -63,7 +63,7 @@ nonisolated protocol TaskRouting: Sendable {
     func route(
         input: String,
         workspace: TaskWorkspaceSnapshot
-    ) async -> TaskRoute
+    ) -> TaskRoute
 }
 
 /// Continuity only: explicit fresh-start language, or keep the current task.
@@ -79,8 +79,8 @@ final class CompositeTaskRouter {
     func route(
         input: String,
         workspace: TaskWorkspaceSnapshot
-    ) async -> TaskRoute {
-        let firstPass = await continuity.route(input: input, workspace: workspace)
+    ) -> TaskRoute {
+        let firstPass = continuity.route(input: input, workspace: workspace)
         guard case .continueActive = firstPass.action else {
             return firstPass
         }

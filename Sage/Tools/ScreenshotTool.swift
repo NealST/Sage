@@ -22,7 +22,9 @@ nonisolated struct TakeScreenshotTool: AgentTool {
         parameters: .schemaObject(
             properties: [
                 "mode": .stringProperty("Capture mode: 'screen' (default) or 'window'"),
-                "path": .stringProperty("Optional save path (must be under ~/). Defaults to ~/Desktop/sage_screenshot_<timestamp>.png"),
+                "path": .stringProperty(
+                    "Optional save path (must be under ~/). Defaults to ~/Desktop/sage_screenshot_<timestamp>.png"
+                ),
             ],
             required: []
         )
@@ -82,7 +84,10 @@ nonisolated struct TakeScreenshotTool: AgentTool {
         }
 
         throw ToolError.operationFailed(
-            "Screenshot failed. Ensure Sage has Screen Recording permission in System Settings → Privacy & Security → Screen Recording → Sage."
+            """
+            Screenshot failed. Ensure Sage has Screen Recording permission in \
+            System Settings → Privacy & Security → Screen Recording → Sage.
+            """
         )
     }
 
@@ -105,23 +110,8 @@ nonisolated struct TakeScreenshotTool: AgentTool {
         var fallback: CGWindowID?
 
         for info in infoList {
-            guard let pidValue = info[kCGWindowOwnerPID as String] as? NSNumber else { continue }
-            let pid = pid_t(pidValue.int32Value)
-            if pid == sagePID { continue }
-
-            let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
-            guard layer == 0 else { continue }
-
-            if let bounds = info[kCGWindowBounds as String] as? [String: Any] {
-                let width = (bounds["Width"] as? NSNumber)?.doubleValue ?? 0
-                let height = (bounds["Height"] as? NSNumber)?.doubleValue ?? 0
-                // Skip menu bar extras / tiny panels.
-                guard width >= 80, height >= 80 else { continue }
-            }
-
-            guard let number = info[kCGWindowNumber as String] as? NSNumber else { continue }
-            let windowID = CGWindowID(number.uint32Value)
-
+            guard let windowID = capturableWindowID(from: info, sagePID: sagePID) else { continue }
+            let pid = pid_t((info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value ?? 0)
             if let preferredPID, pid == preferredPID {
                 return windowID
             }
@@ -131,6 +121,25 @@ nonisolated struct TakeScreenshotTool: AgentTool {
         }
 
         return fallback
+    }
+
+    @MainActor
+    private static func capturableWindowID(
+        from info: [String: Any],
+        sagePID: pid_t
+    ) -> CGWindowID? {
+        guard let pidValue = info[kCGWindowOwnerPID as String] as? NSNumber else { return nil }
+        let pid = pid_t(pidValue.int32Value)
+        if pid == sagePID { return nil }
+        let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+        guard layer == 0 else { return nil }
+        if let bounds = info[kCGWindowBounds as String] as? [String: Any] {
+            let width = (bounds["Width"] as? NSNumber)?.doubleValue ?? 0
+            let height = (bounds["Height"] as? NSNumber)?.doubleValue ?? 0
+            guard width >= 80, height >= 80 else { return nil }
+        }
+        guard let number = info[kCGWindowNumber as String] as? NSNumber else { return nil }
+        return CGWindowID(number.uint32Value)
     }
 
     private func runScreencapture(arguments: [String]) async throws -> Int32 {

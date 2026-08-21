@@ -191,9 +191,10 @@ final class ManageTodoListToolTests: XCTestCase {
 
     func testPromptAppendixEmptyWhenUnused() {
         XCTAssertEqual(ManageTodoListTool.promptAppendix([]), "")
-        XCTAssertTrue(ManageTodoListTool.promptAppendix([
+        let appendix = ManageTodoListTool.promptAppendix([
             AgentTodoItem(id: 1, title: "Ship it", status: .completed),
-        ]).contains("manage_todo_list"))
+        ])
+        XCTAssertTrue(appendix.contains("manage_todo_list"))
     }
 }
 

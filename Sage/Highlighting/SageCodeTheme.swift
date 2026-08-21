@@ -106,50 +106,42 @@ enum SageCodeTheme {
     /// Maps a tree-sitter capture name (e.g. "keyword.function") to a color.
     static func color(for captureName: String) -> Color {
         let base = captureName.split(separator: ".").first.map(String.init) ?? captureName
+        return captureColors[base] ?? plain
+    }
 
-        switch base {
-        case "keyword", "conditional", "repeat", "include", "exception":
-            return keyword
-
-        case "type", "storageclass", "structure":
-            return type
-
-        case "function", "method":
-            return function
-
-        case "string", "character":
-            return string
-
-        case "number", "float", "boolean":
-            return number
-
-        case "comment":
-            return comment
-
-        case "operator":
-            return `operator`
-
-        case "preproc", "define", "attribute", "label":
-            return preprocessor
-
-        case "property", "field", "parameter", "variable":
-            return property
-
-        case "punctuation":
-            return punctuation
-
-        case "constant":
-            return number
-
-        case "tag":
-            return keyword
-
-        case "namespace", "module":
-            return type
-
-        default:
-            return plain
-        }
+    private static var captureColors: [String: Color] {
+        [
+            "keyword": keyword,
+            "conditional": keyword,
+            "repeat": keyword,
+            "include": keyword,
+            "exception": keyword,
+            "tag": keyword,
+            "type": type,
+            "storageclass": type,
+            "structure": type,
+            "namespace": type,
+            "module": type,
+            "function": function,
+            "method": function,
+            "string": string,
+            "character": string,
+            "number": number,
+            "float": number,
+            "boolean": number,
+            "constant": number,
+            "comment": comment,
+            "operator": `operator`,
+            "preproc": preprocessor,
+            "define": preprocessor,
+            "attribute": preprocessor,
+            "label": preprocessor,
+            "property": property,
+            "field": property,
+            "parameter": property,
+            "variable": property,
+            "punctuation": punctuation,
+        ]
     }
 }
 

@@ -127,22 +127,7 @@ struct MCPManageView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            HStack {
-                Text(statusLabel(server))
-                    .font(.system(size: type.micro))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if server.status == .error || server.status == .disconnected {
-                    Button("Connect") {
-                        Task { await appState.mcpHub.connect(serverID: server.id) }
-                    }
-                    .controlSize(.small)
-                }
-                Button("Delete", role: .destructive) {
-                    serverPendingDelete = server
-                }
-                .controlSize(.small)
-            }
+            serverRowActions(server)
 
             if let tools = toolsByServerID[server.id], !tools.isEmpty {
                 DisclosureGroup("Tools (\(server.toolCount))") {
@@ -158,6 +143,26 @@ struct MCPManageView: View {
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(server.name), \(statusLabel(server))")
+    }
+
+    @ViewBuilder
+    private func serverRowActions(_ server: MCPServerConfig) -> some View {
+        HStack {
+            Text(statusLabel(server))
+                .font(.system(size: type.micro))
+                .foregroundStyle(.secondary)
+            Spacer()
+            if server.status == .error || server.status == .disconnected {
+                Button("Connect") {
+                    Task { await appState.mcpHub.connect(serverID: server.id) }
+                }
+                .controlSize(.small)
+            }
+            Button("Delete", role: .destructive) {
+                serverPendingDelete = server
+            }
+            .controlSize(.small)
+        }
     }
 
     private var addSheet: some View {

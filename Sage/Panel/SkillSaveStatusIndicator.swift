@@ -61,8 +61,7 @@ struct SkillSaveStatusIndicator: View {
         .foregroundStyle(chipForeground)
     }
 
-    @ViewBuilder
-    private var chipIcon: some View {
+    @ViewBuilder private var chipIcon: some View {
         switch aggregate {
         case .running:
             ProgressView()

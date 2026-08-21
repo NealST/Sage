@@ -16,6 +16,11 @@ nonisolated enum ActiveTaskContext {
     @TaskLocal static var applyUnlockedMCPServers: (@Sendable (Set<String>) async -> Void)?
 }
 
+private enum RecallTaskTranscriptArgKeys: String, CodingKey {
+    case fromEventID = "fromEventId"
+    case throughEventID = "throughEventId"
+}
+
 /// Loads exact prior turns that working memory only summarized.
 nonisolated enum RecallTaskTranscriptTool {
     static let name = "recall_task_transcript"
@@ -45,9 +50,10 @@ nonisolated enum RecallTaskTranscriptTool {
 
         // JSONDecoder.convertFromSnakeCase maps `from_event_id` → `fromEventId`,
         // not `fromEventID`.
-        private enum CodingKeys: String, CodingKey {
-            case fromEventID = "fromEventId"
-            case throughEventID = "throughEventId"
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: RecallTaskTranscriptArgKeys.self)
+            fromEventID = try container.decode(String.self, forKey: .fromEventID)
+            throughEventID = try container.decode(String.self, forKey: .throughEventID)
         }
     }
 

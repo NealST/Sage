@@ -32,7 +32,7 @@ enum ProjectPanelActions {
     }
 
     @MainActor
-    static func promptCreateProject() -> (parent: URL, name: String, gitInit: Bool)? {
+    static func promptCreateProject() -> NewProjectRequest? {
         guard let parent = pickDirectory(message: "Choose a parent folder for the new project") else {
             return nil
         }
@@ -63,6 +63,12 @@ enum ProjectPanelActions {
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
-        return (parent, name, gitButton.state == .on)
+        return NewProjectRequest(parent: parent, name: name, gitInit: gitButton.state == .on)
     }
+}
+
+struct NewProjectRequest {
+    var parent: URL
+    var name: String
+    var gitInit: Bool
 }

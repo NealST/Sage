@@ -88,10 +88,16 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         ]
         if kind == .act {
             lines.append("Follow this plan. Use tools as needed.")
-            lines.append("File tools do not need re-approval. Shell commands and MCP tools still pause the first time that exact call appears in this task.")
+            lines.append("""
+            File tools do not need re-approval. Shell commands and MCP tools still pause \
+            the first time that exact call appears in this task.
+            """)
         } else {
             lines.append(
-                "Follow this plan. This is a \(kind.rawValue) plan — do not change the Mac. Mutating tools are rejected at runtime."
+                """
+                Follow this plan. This is a \(kind.rawValue) plan — do not change the Mac. \
+                Mutating tools are rejected at runtime.
+                """
             )
         }
         lines.append("Intent: \(intent)")

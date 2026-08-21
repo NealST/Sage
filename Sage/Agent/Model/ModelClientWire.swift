@@ -7,6 +7,14 @@
 
 import Foundation
 
+nonisolated struct ChatCompletionStreamOptions: Encodable {
+    let includeUsage: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case includeUsage = "include_usage"
+    }
+}
+
 nonisolated struct ChatCompletionRequest: Encodable {
     let model: String
     let messages: [APIMessage]
@@ -14,20 +22,12 @@ nonisolated struct ChatCompletionRequest: Encodable {
     let toolChoice: String?
     let temperature: Double?
     let stream: Bool?
-    let streamOptions: StreamOptions?
+    let streamOptions: ChatCompletionStreamOptions?
 
     enum CodingKeys: String, CodingKey {
         case model, messages, tools, stream, temperature
         case toolChoice = "tool_choice"
         case streamOptions = "stream_options"
-    }
-
-    struct StreamOptions: Encodable {
-        let includeUsage: Bool
-
-        enum CodingKeys: String, CodingKey {
-            case includeUsage = "include_usage"
-        }
     }
 
     init(
@@ -37,7 +37,7 @@ nonisolated struct ChatCompletionRequest: Encodable {
         toolChoice: String?,
         temperature: Double? = nil,
         stream: Bool? = nil,
-        streamOptions: StreamOptions? = nil
+        streamOptions: ChatCompletionStreamOptions? = nil
     ) {
         self.model = model
         self.messages = messages
@@ -141,69 +141,69 @@ nonisolated struct APIUsage: Decodable {
     }
 }
 
+nonisolated struct ChatCompletionChoiceMessage: Decodable {
+    let content: String?
+    let toolCalls: [ChatCompletionToolCall]?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case toolCalls = "tool_calls"
+    }
+}
+
+nonisolated struct ChatCompletionToolCallFunction: Decodable {
+    let name: String
+    let arguments: String
+}
+
+nonisolated struct ChatCompletionToolCall: Decodable {
+    let id: String
+    let function: ChatCompletionToolCallFunction
+}
+
+nonisolated struct ChatCompletionChoice: Decodable {
+    let message: ChatCompletionChoiceMessage
+}
+
 nonisolated struct ChatCompletionResponse: Decodable {
-    let choices: [Choice]
+    let choices: [ChatCompletionChoice]
     let usage: APIUsage?
-
-    struct Choice: Decodable {
-        let message: Message
-    }
-
-    struct Message: Decodable {
-        let content: String?
-        let toolCalls: [ToolCall]?
-
-        enum CodingKeys: String, CodingKey {
-            case content
-            case toolCalls = "tool_calls"
-        }
-    }
-
-    struct ToolCall: Decodable {
-        let id: String
-        let function: Function
-
-        struct Function: Decodable {
-            let name: String
-            let arguments: String
-        }
-    }
 }
 
 // MARK: - Streaming wire format
 
+nonisolated struct StreamingFunctionDelta: Decodable {
+    let name: String?
+    let arguments: String?
+}
+
+nonisolated struct StreamingToolCallDelta: Decodable {
+    let index: Int
+    let id: String?
+    let function: StreamingFunctionDelta?
+}
+
+nonisolated struct StreamingDelta: Decodable {
+    let content: String?
+    let toolCalls: [StreamingToolCallDelta]?
+
+    enum CodingKeys: String, CodingKey {
+        case content
+        case toolCalls = "tool_calls"
+    }
+}
+
+nonisolated struct StreamingChoice: Decodable {
+    let delta: StreamingDelta?
+    let finishReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case delta
+        case finishReason = "finish_reason"
+    }
+}
+
 nonisolated struct StreamingChunk: Decodable {
     let choices: [StreamingChoice]
     let usage: APIUsage?
-
-    struct StreamingChoice: Decodable {
-        let delta: Delta?
-        let finishReason: String?
-
-        enum CodingKeys: String, CodingKey {
-            case delta
-            case finishReason = "finish_reason"
-        }
-    }
-
-    struct Delta: Decodable {
-        let content: String?
-        let toolCalls: [ToolCallDelta]?
-
-        enum CodingKeys: String, CodingKey {
-            case content
-            case toolCalls = "tool_calls"
-        }
-    }
-
-    struct ToolCallDelta: Decodable {
-        let index: Int
-        let id: String?
-        let function: FunctionDelta?
-
-        struct FunctionDelta: Decodable {
-            let name: String?
-            let arguments: String?
-        }
-    }
 }

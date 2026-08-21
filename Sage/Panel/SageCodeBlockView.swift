@@ -64,7 +64,10 @@ struct SageCodeBlockView: View {
                     FontFamilyVariant(.monospaced)
                     FontSize(SageDesign.Markdown.codeFontSize)
                 }
-                .padding(.top, SageDesign.Markdown.codeBlockContentPadding + SageDesign.Markdown.codeBlockChromeClearance)
+                .padding(
+                    .top,
+                    SageDesign.Markdown.codeBlockContentPadding + SageDesign.Markdown.codeBlockChromeClearance
+                )
                 .padding(.horizontal, SageDesign.Markdown.codeBlockContentPadding)
                 .padding(.bottom, SageDesign.Markdown.codeBlockContentPadding)
                 .frame(

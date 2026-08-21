@@ -150,14 +150,7 @@ nonisolated protocol TaskRepository: Sendable {
     func upsertSchedule(_ schedule: ScheduleRecord, scriptRun: ScheduleRunRecord?) async throws
     func deleteSchedule(id: UUID) async throws
     func dueSchedules(at date: Date) async throws -> [ScheduleRecord]
-    func insertScheduleRun(
-        id: UUID,
-        scheduleID: UUID,
-        startedAt: Date,
-        endedAt: Date?,
-        exitCode: Int32?,
-        outputExcerpt: String?
-    ) async throws
+    func insertScheduleRun(_ run: ScheduleRunRecord) async throws
     /// Most recent run log for a schedule, if any.
     func latestScheduleRun(scheduleID: UUID) async throws -> ScheduleRunRecord?
 }

@@ -102,20 +102,8 @@ nonisolated enum SkillMarkdown {
             defer { index += 1 }
 
             if inMetadata {
-                let trimmed = raw.trimmingCharacters(in: .whitespaces)
-                if raw.hasPrefix("  ") || raw.hasPrefix("\t"), !trimmed.isEmpty, trimmed != "---" {
-                    if let colon = trimmed.firstIndex(of: ":") {
-                        let key = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
-                        let value = unquoteYAMLScalar(
-                            String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-                        )
-                        if !key.isEmpty {
-                            result.metadata[key] = value
-                        }
-                    }
-                    continue
-                }
-                inMetadata = false
+                inMetadata = parseMetadataLine(raw, into: &result)
+                if inMetadata { continue }
             }
 
             guard let colon = raw.firstIndex(of: ":") else { continue }
@@ -148,6 +136,23 @@ nonisolated enum SkillMarkdown {
             result.scalars[key] = value
         }
         return result
+    }
+
+    static func parseMetadataLine(_ raw: String, into result: inout ParsedFrontmatter) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if raw.hasPrefix("  ") || raw.hasPrefix("\t"), !trimmed.isEmpty, trimmed != "---" {
+            if let colon = trimmed.firstIndex(of: ":") {
+                let key = String(trimmed[..<colon]).trimmingCharacters(in: .whitespaces)
+                let value = unquoteYAMLScalar(
+                    String(trimmed[trimmed.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+                )
+                if !key.isEmpty {
+                    result.metadata[key] = value
+                }
+            }
+            return true
+        }
+        return false
     }
 
     /// Upserts name / description / optional source into body text (adds frontmatter if missing).

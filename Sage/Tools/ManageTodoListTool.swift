@@ -19,6 +19,12 @@ nonisolated struct AgentTodoItem: Codable, Sendable, Equatable, Identifiable {
     var status: Status
 }
 
+private struct TodoListItemDraft: Decodable {
+    var id: Int
+    var title: String
+    var status: AgentTodoItem.Status
+}
+
 nonisolated enum ManageTodoListTool {
     static let name = "manage_todo_list"
 
@@ -48,7 +54,10 @@ nonisolated enum ManageTodoListTool {
                                     .string("completed"),
                                 ]),
                                 "description": .string(
-                                    "not-started: not begun | in-progress: currently working (max 1) | completed: finished"
+                                    """
+                                    not-started: not begun | in-progress: currently working (max 1) \
+                                    | completed: finished
+                                    """
                                 ),
                             ]),
                         ],
@@ -62,13 +71,7 @@ nonisolated enum ManageTodoListTool {
     )
 
     private struct Args: Decodable {
-        var todoList: [Item]
-
-        struct Item: Decodable {
-            var id: Int
-            var title: String
-            var status: AgentTodoItem.Status
-        }
+        var todoList: [TodoListItemDraft]
     }
 
     static func execute(argumentsJSON: String) async throws -> String {

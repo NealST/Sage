@@ -3,7 +3,9 @@ import XCTest
 
 final class TextToolCallParserTests: XCTestCase {
     private let leaked = """
-        <｜｜DSML｜｜tool_calls> <｜｜DSML｜｜invoke name="read_file"> <｜｜DSML｜｜parameter name="path" string="true">README.zh-CN.md</｜｜DSML｜｜parameter> </｜｜DSML｜｜invoke> </｜｜DSML｜｜tool_calls>
+        <｜｜DSML｜tool_calls> <｜｜DSML｜invoke name="read_file"> \
+        <｜｜DSML｜parameter name="path" string="true">README.zh-CN.md</｜｜DSML｜parameter> \
+        </｜｜DSML｜invoke> </｜｜DSML｜tool_calls>
         """
 
     func testRecoversDSMLReadFileAsReadTextFile() {

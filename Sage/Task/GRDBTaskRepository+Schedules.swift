@@ -76,27 +76,10 @@ extension GRDBTaskRepository {
         }
     }
 
-    func insertScheduleRun(
-        id: UUID,
-        scheduleID: UUID,
-        startedAt: Date,
-        endedAt: Date?,
-        exitCode: Int32?,
-        outputExcerpt: String?
-    ) throws {
+    func insertScheduleRun(_ run: ScheduleRunRecord) throws {
         let pool = try database()
         try pool.write { database in
-            try Self.writeScheduleRun(
-                ScheduleRunRecord(
-                    id: id,
-                    scheduleID: scheduleID,
-                    startedAt: startedAt,
-                    endedAt: endedAt,
-                    exitCode: exitCode,
-                    outputExcerpt: outputExcerpt
-                ),
-                database: database
-            )
+            try Self.writeScheduleRun(run, database: database)
         }
     }
 
@@ -138,83 +121,88 @@ extension GRDBTaskRepository {
     }
 
     private static func writeSchedule(_ schedule: ScheduleRecord, database: Database) throws {
-        let cadenceKind: String
-        let cadenceJSON: String
-        switch schedule.cadence {
+        let cadence = encodedCadence(schedule.cadence)
+        try database.execute(
+            sql: upsertScheduleSQL,
+            arguments: StatementArguments(scheduleBindArguments(schedule, cadence: cadence))
+        )
+    }
+
+    private static let upsertScheduleSQL = """
+        INSERT INTO schedules (
+            id, title, kind, project_id, prompt, command, working_directory,
+            cadence_kind, cadence_json, enabled, status,
+            next_fire_at, last_fire_at, last_status,
+            frozen_work_plan_json, frozen_skill_names, origin_task_id,
+            last_run_task_id, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            kind = excluded.kind,
+            project_id = excluded.project_id,
+            prompt = excluded.prompt,
+            command = excluded.command,
+            working_directory = excluded.working_directory,
+            cadence_kind = excluded.cadence_kind,
+            cadence_json = excluded.cadence_json,
+            enabled = excluded.enabled,
+            status = excluded.status,
+            next_fire_at = excluded.next_fire_at,
+            last_fire_at = excluded.last_fire_at,
+            last_status = excluded.last_status,
+            frozen_work_plan_json = excluded.frozen_work_plan_json,
+            frozen_skill_names = excluded.frozen_skill_names,
+            origin_task_id = excluded.origin_task_id,
+            last_run_task_id = excluded.last_run_task_id,
+            updated_at = excluded.updated_at
+        """
+
+    private static func scheduleBindArguments(
+        _ schedule: ScheduleRecord,
+        cadence: (kind: String, json: String)
+    ) -> [DatabaseValueConvertible?] {
+        [
+            schedule.id.uuidString,
+            schedule.title,
+            schedule.kind.rawValue,
+            schedule.projectID?.uuidString,
+            schedule.prompt,
+            schedule.command,
+            schedule.workingDirectory,
+            cadence.kind,
+            cadence.json,
+            schedule.enabled ? 1 : 0,
+            schedule.status.rawValue,
+            schedule.nextFireAt?.timeIntervalSince1970,
+            schedule.lastFireAt?.timeIntervalSince1970,
+            schedule.lastStatus,
+            schedule.frozenWorkPlanJSON,
+            encodeJSON(schedule.frozenSkillNames),
+            schedule.originTaskID?.uuidString,
+            schedule.lastRunTaskID?.uuidString,
+            schedule.createdAt.timeIntervalSince1970,
+            schedule.updatedAt.timeIntervalSince1970,
+        ]
+    }
+
+    private static func encodedCadence(_ cadence: ScheduleCadence) -> (kind: String, json: String) {
+        switch cadence {
         case .once(let date):
-            cadenceKind = "once"
-            cadenceJSON = jsonObject(["date": date.timeIntervalSince1970])
+            ("once", jsonObject(["date": date.timeIntervalSince1970]))
 
         case .interval(let seconds):
-            cadenceKind = "interval"
-            cadenceJSON = jsonObject(["seconds": seconds])
+            ("interval", jsonObject(["seconds": seconds]))
 
         case .weekdays(let hour, let minute):
-            cadenceKind = "weekdays"
-            cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+            ("weekdays", jsonObject(["hour": hour, "minute": minute]))
 
         case .daily(let hour, let minute):
-            cadenceKind = "daily"
-            cadenceJSON = jsonObject(["hour": hour, "minute": minute])
+            ("daily", jsonObject(["hour": hour, "minute": minute]))
 
         case .delay(let seconds):
-            cadenceKind = "delay"
-            cadenceJSON = jsonObject(["seconds": seconds])
+            ("delay", jsonObject(["seconds": seconds]))
         }
-        let skillsJSON = encodeJSON(schedule.frozenSkillNames)
-        try database.execute(
-            sql: """
-            INSERT INTO schedules (
-                id, title, kind, project_id, prompt, command, working_directory,
-                cadence_kind, cadence_json, enabled, status,
-                next_fire_at, last_fire_at, last_status,
-                frozen_work_plan_json, frozen_skill_names, origin_task_id,
-                last_run_task_id, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                title = excluded.title,
-                kind = excluded.kind,
-                project_id = excluded.project_id,
-                prompt = excluded.prompt,
-                command = excluded.command,
-                working_directory = excluded.working_directory,
-                cadence_kind = excluded.cadence_kind,
-                cadence_json = excluded.cadence_json,
-                enabled = excluded.enabled,
-                status = excluded.status,
-                next_fire_at = excluded.next_fire_at,
-                last_fire_at = excluded.last_fire_at,
-                last_status = excluded.last_status,
-                frozen_work_plan_json = excluded.frozen_work_plan_json,
-                frozen_skill_names = excluded.frozen_skill_names,
-                origin_task_id = excluded.origin_task_id,
-                last_run_task_id = excluded.last_run_task_id,
-                updated_at = excluded.updated_at
-            """,
-            arguments: [
-                schedule.id.uuidString,
-                schedule.title,
-                schedule.kind.rawValue,
-                schedule.projectID?.uuidString,
-                schedule.prompt,
-                schedule.command,
-                schedule.workingDirectory,
-                cadenceKind,
-                cadenceJSON,
-                schedule.enabled ? 1 : 0,
-                schedule.status.rawValue,
-                schedule.nextFireAt?.timeIntervalSince1970,
-                schedule.lastFireAt?.timeIntervalSince1970,
-                schedule.lastStatus,
-                schedule.frozenWorkPlanJSON,
-                skillsJSON,
-                schedule.originTaskID?.uuidString,
-                schedule.lastRunTaskID?.uuidString,
-                schedule.createdAt.timeIntervalSince1970,
-                schedule.updatedAt.timeIntervalSince1970,
-            ]
-        )
     }
 
     private static func writeScheduleRun(_ run: ScheduleRunRecord, database: Database) throws {
@@ -295,32 +283,33 @@ extension GRDBTaskRepository {
         else { return nil }
         switch kind {
         case "once":
-            guard let interval = number(object["date"]) else { return nil }
-            return .once(date: Date(timeIntervalSince1970: interval))
+            return number(object["date"]).map { .once(date: Date(timeIntervalSince1970: $0)) }
 
         case "interval":
-            guard let seconds = number(object["seconds"]) else { return nil }
-            return .interval(seconds: seconds)
+            return number(object["seconds"]).map { .interval(seconds: $0) }
 
         case "weekdays":
-            guard let hour = int(object["hour"]), let minute = int(object["minute"]) else {
-                return nil
-            }
-            return .weekdays(hour: hour, minute: minute)
+            return clockCadence(object, as: ScheduleCadence.weekdays)
 
         case "daily":
-            guard let hour = int(object["hour"]), let minute = int(object["minute"]) else {
-                return nil
-            }
-            return .daily(hour: hour, minute: minute)
+            return clockCadence(object, as: ScheduleCadence.daily)
 
         case "delay":
-            guard let seconds = number(object["seconds"]) else { return nil }
-            return .delay(seconds: seconds)
+            return number(object["seconds"]).map { .delay(seconds: $0) }
 
         default:
             return nil
         }
+    }
+
+    private static func clockCadence(
+        _ object: [String: Any],
+        as make: (Int, Int) -> ScheduleCadence
+    ) -> ScheduleCadence? {
+        guard let hour = int(object["hour"]), let minute = int(object["minute"]) else {
+            return nil
+        }
+        return make(hour, minute)
     }
 
     private static func number(_ any: Any?) -> Double? {

@@ -66,9 +66,15 @@ struct ToolApprovalCard: View {
 
     private var subtitle: String {
         if toolName.hasPrefix("mcp__") {
-            return "MCP tools stay gated after the work plan. Allow this exact call, remember this MCP tool for the rest of the task, or skip it."
+            return """
+            MCP tools stay gated after the work plan. Allow this exact call, remember this MCP tool \
+            for the rest of the task, or skip it.
+            """
         }
-        return "Shell commands stay gated after the work plan. Allow this exact command, remember any shell for the rest of the task, or skip it."
+        return """
+        Shell commands stay gated after the work plan. Allow this exact command, remember any shell \
+        for the rest of the task, or skip it.
+        """
     }
 
     private var toolSessionTitle: String {

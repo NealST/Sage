@@ -18,7 +18,10 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testSpawnScheduledTaskDoesNotMoveLastGeneralPointer() async throws {
-        let (repository, store, state) = try makeStore()
+        let fixture = try makeStore()
+        let repository = fixture.repository
+        let store = fixture.store
+        let state = fixture.state
         let createdUser = await store.createAndActivateTask(relatedTo: [])
         let userID = try XCTUnwrap(createdUser)
         let lastBeforeSpawn = try await repository.lastGeneralTaskID()
@@ -45,7 +48,9 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testActivateTaskSwitchesTheWindowThread() async throws {
-        let (_, store, state) = try makeStore()
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
         let createdFirst = await store.createAndActivateTask(relatedTo: [])
         let first = try XCTUnwrap(createdFirst)
         _ = await store.commit(
@@ -62,7 +67,9 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testApplyBeginNewCreatesFreshTask() async throws {
-        let (_, store, state) = try makeStore()
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
         let createdFirst = await store.createAndActivateTask(relatedTo: [])
         let first = try XCTUnwrap(createdFirst)
         _ = await store.commit(
@@ -76,7 +83,9 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testRestorePhaseWaitsOnUnfinishedToolBatch() async throws {
-        let (_, store, state) = try makeStore()
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
         _ = await store.createAndActivateTask(relatedTo: [])
         let plan = AgentPlan(
             summary: "Write a file",
@@ -99,7 +108,10 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testBeginNewTaskDoesNotInheritWorkingMemory() async throws {
-        let (repository, store, state) = try makeStore()
+        let fixture = try makeStore()
+        let repository = fixture.repository
+        let store = fixture.store
+        let state = fixture.state
         let createdFirst = await store.createAndActivateTask(relatedTo: [])
         let first = try XCTUnwrap(createdFirst)
         let foldedFrom = AgentEvent(kind: .userInput, content: "clean downloads")
@@ -125,7 +137,8 @@ final class AgentTaskStoreTests: XCTestCase {
     }
 
     func testActivateTaskCancelsInFlightWork() async throws {
-        let (repository, _, _) = try makeStore()
+        let fixture = try makeStore()
+        let repository = fixture.repository
         let skills = SkillSessionController()
         let runtime = AgentRuntime(
             settings: .shared,
@@ -159,7 +172,7 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(runtime.state.activeTaskID, first)
     }
 
-    private func makeStore() throws -> (GRDBTaskRepository, AgentTaskStore, AgentSessionState) {
+    private func makeStore() throws -> AgentStoreFixture {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SageTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -175,8 +188,14 @@ final class AgentTaskStoreTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        return (repository, store, state)
+        return AgentStoreFixture(repository: repository, store: store, state: state)
     }
+}
+
+private struct AgentStoreFixture {
+    var repository: GRDBTaskRepository
+    var store: AgentTaskStore
+    var state: AgentSessionState
 }
 
 @MainActor

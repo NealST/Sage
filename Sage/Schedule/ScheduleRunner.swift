@@ -61,30 +61,7 @@ final class ScheduleRunner {
         do {
             return try await ProcessRunner.$ownerID.withValue(Optional(processOwnerID)) {
                 try await PathGuard.$policy.withValue(policy) {
-                    let cwd = try Self.resolveWorkingDirectory(record.workingDirectory, policy: policy)
-                    let result = try await ProcessRunner.run(
-                        executable: URL(fileURLWithPath: "/bin/zsh"),
-                        arguments: ["-c", command],
-                        currentDirectory: cwd,
-                        timeout: .seconds(30)
-                    )
-                    let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let excerpt = output.isEmpty ? "(no output)" : String(output.prefix(240))
-                    if result.timedOut {
-                        return ScheduleScriptOutcome(
-                            excerpt: "Failed: timed out. \(excerpt)",
-                            exitCode: result.exitCode,
-                            failed: true
-                        )
-                    }
-                    if result.exitCode != 0 {
-                        return ScheduleScriptOutcome(
-                            excerpt: "Failed (exit \(result.exitCode)): \(excerpt)",
-                            exitCode: result.exitCode,
-                            failed: true
-                        )
-                    }
-                    return ScheduleScriptOutcome(excerpt: excerpt, exitCode: 0, failed: false)
+                    try await Self.executeValidatedScript(record, command: command, policy: policy)
                 }
             }
         } catch is CancellationError {
@@ -96,6 +73,37 @@ final class ScheduleRunner {
                 failed: true
             )
         }
+    }
+
+    nonisolated static func executeValidatedScript(
+        _ record: ScheduleRecord,
+        command: String,
+        policy: PathGuard.Policy
+    ) async throws -> ScheduleScriptOutcome {
+        let cwd = try resolveWorkingDirectory(record.workingDirectory, policy: policy)
+        let result = try await ProcessRunner.run(
+            executable: URL(fileURLWithPath: "/bin/zsh"),
+            arguments: ["-c", command],
+            currentDirectory: cwd,
+            timeout: .seconds(30)
+        )
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerpt = output.isEmpty ? "(no output)" : String(output.prefix(240))
+        if result.timedOut {
+            return ScheduleScriptOutcome(
+                excerpt: "Failed: timed out. \(excerpt)",
+                exitCode: result.exitCode,
+                failed: true
+            )
+        }
+        if result.exitCode != 0 {
+            return ScheduleScriptOutcome(
+                excerpt: "Failed (exit \(result.exitCode)): \(excerpt)",
+                exitCode: result.exitCode,
+                failed: true
+            )
+        }
+        return ScheduleScriptOutcome(excerpt: excerpt, exitCode: 0, failed: false)
     }
 
     func runAgent(_ record: ScheduleRecord) async -> ScheduleAgentOutcome {
@@ -209,12 +217,13 @@ final class ScheduleRunner {
             return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: nil)
         }
 
-        let spawned = await session.agent.spawnScheduledTask(
-            projectID: project?.id,
-            summary: String(prompt.prefix(160)),
-            originScheduleID: record.id
+        guard let taskID = await spawnScheduledTaskID(
+            session: session,
+            project: project,
+            record: record,
+            prompt: prompt
         )
-        guard let taskID = spawned else {
+        else {
             return .finished(
                 succeeded: false,
                 summary: "Could not create a task for this schedule.",
@@ -225,9 +234,29 @@ final class ScheduleRunner {
         if Task.isCancelled {
             return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: taskID)
         }
-
         let frozen = isReplay ? record.frozenWorkPlan : nil
         await session.agent.performScheduledRun(prompt: prompt, frozenPlan: frozen)
+        return finishScheduledRun(session: session, taskID: taskID, frozen: frozen)
+    }
+
+    func spawnScheduledTaskID(
+        session: AgentSession,
+        project: ProjectRecord?,
+        record: ScheduleRecord,
+        prompt: String
+    ) async -> UUID? {
+        await session.agent.spawnScheduledTask(
+            projectID: project?.id,
+            summary: String(prompt.prefix(160)),
+            originScheduleID: record.id
+        )
+    }
+
+    func finishScheduledRun(
+        session: AgentSession,
+        taskID: UUID,
+        frozen: WorkPlan?
+    ) -> ScheduleAgentOutcome {
         if Task.isCancelled {
             return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: taskID)
         }

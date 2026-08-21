@@ -18,7 +18,9 @@ nonisolated struct ToggleAppearanceTool: AgentTool {
             """,
         parameters: .schemaObject(
             properties: [
-                "mode": .stringProperty("Set to 'light', 'dark', or 'toggle' (default). 'toggle' switches to the opposite of current."),
+                "mode": .stringProperty(
+                    "Set to 'light', 'dark', or 'toggle' (default). 'toggle' switches to the opposite of current."
+                ),
             ],
             required: []
         )

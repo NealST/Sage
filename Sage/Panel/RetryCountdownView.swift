@@ -36,7 +36,9 @@ struct RetryCountdownView: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Retrying, attempt \(state.attempt) of \(state.maxAttempts), \(state.secondsRemaining) seconds remaining")
+        .accessibilityLabel(
+            "Retrying, attempt \(state.attempt) of \(state.maxAttempts), \(state.secondsRemaining) seconds remaining"
+        )
     }
 
     private var countdownRing: some View {

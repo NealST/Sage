@@ -50,16 +50,16 @@ final class SkillRecallCoordinator {
 
     /// Builds the Available Skills appendix. Never injects a skill body.
     @discardableResult
-    func prepareSkillsForTurn(query: String) async -> Bool {
+    func prepareSkillsForTurn(query: String) -> Bool {
         guard let skillCatalog = skillCatalog() else { return true }
-        let appendix = await skillCatalog.skillsPromptAppendix()
+        let appendix = skillCatalog.skillsPromptAppendix()
         rememberCache(appendix, query: query)
         return true
     }
 
     /// After the user picks a skill from a tip.
-    func refreshCatalogWithoutRematch(query: String) async {
-        guard let appendix = await skillCatalog()?.skillsPromptAppendix() else { return }
+    func refreshCatalogWithoutRematch(query: String) {
+        guard let appendix = skillCatalog()?.skillsPromptAppendix() else { return }
         rememberCache(appendix, query: query)
     }
 

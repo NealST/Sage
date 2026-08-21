@@ -38,32 +38,32 @@ final class QuickLookPresenter: NSResponder, QLPreviewPanelDataSource, QLPreview
 
     // MARK: - NSResponder (QLPreviewPanelController)
 
-    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel?) -> Bool {
         MainActor.assumeIsolated { !urls.isEmpty }
     }
 
-    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel?) {
         MainActor.assumeIsolated {
-            panel.dataSource = self
-            panel.delegate = self
+            panel?.dataSource = self
+            panel?.delegate = self
         }
     }
 
-    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel?) {
         MainActor.assumeIsolated {
-            panel.dataSource = nil
-            panel.delegate = nil
+            panel?.dataSource = nil
+            panel?.delegate = nil
             restorePreviousFocus()
         }
     }
 
     // MARK: - QLPreviewPanelDataSource
 
-    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+    func numberOfPreviewItems(in panel: QLPreviewPanel?) -> Int {
         urls.count
     }
 
-    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
+    func previewPanel(_ panel: QLPreviewPanel?, previewItemAt index: Int) -> (any QLPreviewItem)? {
         urls[index] as NSURL
     }
 

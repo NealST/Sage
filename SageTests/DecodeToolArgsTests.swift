@@ -1,6 +1,11 @@
 @testable import Sage
 import XCTest
 
+private enum EventIDArgKeys: String, CodingKey {
+    case fromEventID = "fromEventId"
+    case throughEventID = "throughEventId"
+}
+
 final class DecodeToolArgsTests: XCTestCase {
     private struct LineRangeArgs: Decodable {
         let path: String
@@ -27,9 +32,10 @@ final class DecodeToolArgsTests: XCTestCase {
         var fromEventID: String
         var throughEventID: String
 
-        private enum CodingKeys: String, CodingKey {
-            case fromEventID = "fromEventId"
-            case throughEventID = "throughEventId"
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: EventIDArgKeys.self)
+            fromEventID = try container.decode(String.self, forKey: .fromEventID)
+            throughEventID = try container.decode(String.self, forKey: .throughEventID)
         }
     }
 

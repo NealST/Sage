@@ -153,8 +153,8 @@ nonisolated enum SkillWriter {
     /// Reads the frontmatter `source` value from an on-disk SKILL.md, if present.
     private static func readFrontmatterSource(at skillFile: URL) -> String? {
         guard let text = try? String(contentsOf: skillFile, encoding: .utf8) else { return nil }
-        let value = SkillMarkdown.parseFrontmatter(text).scalars["source"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawSource = SkillMarkdown.parseFrontmatter(text).scalars["source"]
+        let value = rawSource?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value, !value.isEmpty else { return nil }
         return value
     }

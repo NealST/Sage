@@ -9,47 +9,30 @@ import Foundation
 
 nonisolated enum ToolInvocationPipeline {
     @MainActor
-    static func execute(
-        name: String,
-        argumentsJSON: String,
-        tools: ToolRegistry,
-        mcp: CapabilityStore?,
-        pathGuardPolicy: PathGuard.Policy,
-        activatedSkillNames: Set<String>,
-        enabledSkills: [SkillRecord],
-        skillHost: SkillToolHost,
-        workPlanKind: WorkPlan.Kind?,
-        modelSettings: ModelSettingsSnapshot?
-    ) async throws -> String {
+    static func execute(_ request: ToolInvocationRequest) async throws -> String {
         try ToolInvocationDispatcher.assertMutatingToolsAllowed(
-            for: name,
-            workPlanKind: workPlanKind
+            for: request.name,
+            workPlanKind: request.workPlanKind
         )
         try SkillToolPolicy.assertToolAllowed(
-            name,
-            activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills
+            request.name,
+            activatedSkillNames: request.activatedSkillNames,
+            enabledSkills: request.enabledSkills
         )
 
-        let definition = try definition(for: name, tools: tools, mcp: mcp)
+        let definition = try definition(
+            for: request.name,
+            tools: request.tools,
+            mcp: request.mcp
+        )
         try ToolArgumentValidator.validate(
-            argumentsJSON: argumentsJSON,
+            argumentsJSON: request.argumentsJSON,
             against: definition.parameters
         )
 
-        let timeout = timeoutDuration(for: name)
+        let timeout = timeoutDuration(for: request.name)
         let operation = Task { @MainActor in
-            try await ToolInvocationDispatcher.dispatch(
-                name: name,
-                argumentsJSON: argumentsJSON,
-                tools: tools,
-                mcp: mcp,
-                pathGuardPolicy: pathGuardPolicy,
-                activatedSkillNames: activatedSkillNames,
-                enabledSkills: enabledSkills,
-                skillHost: skillHost,
-                modelSettings: modelSettings
-            )
+            try await ToolInvocationDispatcher.dispatch(request)
         }
         defer { operation.cancel() }
         let result = try await withThrowingTaskGroup(of: String.self) { group in
@@ -57,11 +40,11 @@ nonisolated enum ToolInvocationPipeline {
             group.addTask {
                 try await Task.sleep(for: timeout)
                 throw ToolError.operationFailed(
-                    "Tool '\(name)' timed out after \(Int(timeout.components.seconds))s"
+                    "Tool '\(request.name)' timed out after \(Int(timeout.components.seconds))s"
                 )
             }
             guard let result = try await group.next() else {
-                throw ToolError.operationFailed("Tool '\(name)' produced no result.")
+                throw ToolError.operationFailed("Tool '\(request.name)' produced no result.")
             }
             group.cancelAll()
             return result

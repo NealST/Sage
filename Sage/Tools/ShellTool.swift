@@ -59,7 +59,10 @@ nonisolated struct RunShellCommandTool: AgentTool {
 
         guard FileManager.default.fileExists(atPath: workDir.path) else {
             throw ToolError.operationFailed(
-                "Working directory does not exist: \(args.workingDirectory ?? workDir.path). Use create_directory first."
+                """
+                Working directory does not exist: \(args.workingDirectory ?? workDir.path). \
+                Use create_directory first.
+                """
             )
         }
 

@@ -17,19 +17,19 @@ struct PreparedModelRequest: Sendable {
 /// Owns the remote `ModelClient` and builds/streams chat completions.
 @MainActor
 final class AgentModelGateway {
-    private let modelClient = ModelClient()
-    private let state: AgentSessionState
-    private let settings: ModelSettings
-    private let tools: ToolRegistry
-    private let systemPrompt: String
-    private let skillRecall: SkillRecallCoordinator
-    private let skillCatalog: () -> SkillCatalog?
-    private let mcpToolDefinitions: () -> [ToolDefinition]
-    private let taskRepository: any TaskRepository
-    private let projectPromptAppendix: () -> String
-    private let streaming: StreamingTextPump
-    private var relatedContextCache: (taskID: UUID, relatedIDs: [UUID], snippets: [RelatedTaskContextSnippet])?
-    private weak var compact: ContextCompactor?
+    let modelClient = ModelClient()
+    let state: AgentSessionState
+    let settings: ModelSettings
+    let tools: ToolRegistry
+    let systemPrompt: String
+    let skillRecall: SkillRecallCoordinator
+    let skillCatalog: () -> SkillCatalog?
+    let mcpToolDefinitions: () -> [ToolDefinition]
+    let taskRepository: any TaskRepository
+    let projectPromptAppendix: () -> String
+    let streaming: StreamingTextPump
+    var relatedContextCache: RelatedContextCache?
+    weak var compact: ContextCompactor?
 
     init(
         state: AgentSessionState,
@@ -64,7 +64,7 @@ final class AgentModelGateway {
     }
 
     /// Single source of truth for tools exposed to the model (and UI).
-    func availableToolDefinitions(includeSkills: Bool = true) async -> [ToolDefinition] {
+    func availableToolDefinitions(includeSkills: Bool = true) -> [ToolDefinition] {
         let mcpDefinitions = MCPToolGroupTool.groupedDefinitions(
             mcpToolDefinitions(),
             unlockedServerNames: state.activeTask?.unlockedMCPServerNames ?? []
@@ -83,7 +83,7 @@ final class AgentModelGateway {
         if let cached = skillRecall.cachedResult {
             skillResult = cached
         } else {
-            skillResult = await skillCatalog()?.skillsPromptAppendix()
+            skillResult = skillCatalog()?.skillsPromptAppendix()
         }
 
         if skillResult?.needsLoadSkillTool == true {
@@ -109,7 +109,7 @@ final class AgentModelGateway {
             skillResult = cached
         } else {
             let latestUserMessage = state.events.last { $0.kind == .userInput }?.content ?? ""
-            let computed = await skillCatalog()?.skillsPromptAppendix()
+            let computed = skillCatalog()?.skillsPromptAppendix()
             if let computed {
                 skillRecall.rememberCache(computed, query: latestUserMessage)
             }
@@ -118,7 +118,7 @@ final class AgentModelGateway {
 
         let toolDefinitions: [ToolDefinition]
         if includeTools {
-            toolDefinitions = await availableToolDefinitions(includeSkills: true)
+            toolDefinitions = availableToolDefinitions(includeSkills: true)
         } else {
             toolDefinitions = []
         }
@@ -132,7 +132,7 @@ final class AgentModelGateway {
         if assembly.didExceedBudget {
             _ = await compact?.handleOverflow(tools: resolvedTools)
             if includeTools {
-                resolvedTools = await availableToolDefinitions(includeSkills: true)
+                resolvedTools = availableToolDefinitions(includeSkills: true)
             }
             assembly = await assemblePrompt(
                 tools: resolvedTools,
@@ -152,7 +152,7 @@ final class AgentModelGateway {
     /// Occupancy as if the fold were expanded. Used to discard a snapshot when
     /// the window grew enough that raw history already fits.
     func occupancyIgnoringWorkingMemory() async -> Double {
-        let toolDefinitions = await availableToolDefinitions(includeSkills: true)
+        let toolDefinitions = availableToolDefinitions(includeSkills: true)
         let skillResult = skillRecall.cachedResult
         let assembly = await assemblePrompt(
             tools: toolDefinitions,
@@ -194,7 +194,7 @@ final class AgentModelGateway {
         return turn.content ?? ""
     }
 
-    private func reviewFeedbackAppendix() -> String {
+    func reviewFeedbackAppendix() -> String {
         guard let feedback = state.reviewFeedback?.trimmingCharacters(in: .whitespacesAndNewlines),
               !feedback.isEmpty
         else { return "" }
@@ -260,70 +260,4 @@ final class AgentModelGateway {
         compact?.considerBackground(occupancy: req.occupancy, tools: req.tools)
         return ModelTurn(content: recovered.content, toolCalls: recovered.calls, usage: usage)
     }
-
-    private func assemblePrompt(
-        tools: [ToolDefinition],
-        workingMemory: TaskWorkingMemory?,
-        skillResult: SkillCatalog.SkillAppendixResult?
-    ) async -> PromptAssembly {
-        let snapshot = settings.snapshot(for: .execute)
-        let budget = PromptBudget.forModel(snapshot.model)
-            .deductingToolDefinitions(tools)
-        return ContextBudget.assemble(
-            PromptLayout(
-                budget: budget,
-                baseInstructions: systemPrompt,
-                projectAppendix: projectPromptAppendix(),
-                capabilityReminder: ExecuteCapabilityReminder.make(
-                    planKind: state.activeTask?.workPlan?.kind,
-                    activatedSkillNames: state.activatedSkillNames,
-                    mcpServerNames: ExecuteCapabilityReminder.mcpServerNames(from: tools),
-                    todos: state.activeTask?.todos ?? []
-                ),
-                workPlanAppendix: state.activeTask?.workPlan?.promptAppendix ?? "",
-                todoAppendix: ManageTodoListTool.promptAppendix(state.activeTask?.todos ?? []),
-                workingMemory: workingMemory,
-                reviewFeedback: reviewFeedbackAppendix(),
-                skillsCatalog: skillResult?.text ?? "",
-                relatedSnippets: await relatedContextSnippets(),
-                events: state.events
-            )
-        )
-    }
-
-    // MARK: - Related context
-
-    private func relatedContextSnippets() async -> [RelatedTaskContextSnippet] {
-        guard let task = state.activeTask else { return [] }
-        let relatedIDs = Array(
-            task.relatedTaskIDs
-                .filter { $0 != task.id }
-                .prefix(3)
-        )
-        guard !relatedIDs.isEmpty else { return [] }
-        if let cached = relatedContextCache,
-           cached.taskID == task.id,
-           cached.relatedIDs == relatedIDs {
-            return cached.snippets
-        }
-
-        let snippets: [RelatedTaskContextSnippet]
-        do {
-            snippets = try await taskRepository.loadRelatedContextSnippets(
-                ids: relatedIDs,
-                projectID: state.focusedProject?.id
-            )
-        } catch {
-            return []
-        }
-        relatedContextCache = (task.id, relatedIDs, snippets)
-        return snippets
-    }
-}
-
-/// Accumulates streamed tool-call fragments by index.
-struct ToolCallBuilder {
-    var id: String?
-    var name: String?
-    var arguments: String = ""
 }

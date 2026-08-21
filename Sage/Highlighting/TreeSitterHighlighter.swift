@@ -129,23 +129,39 @@ private extension TreeSitterCodeHighlighter {
     static let languageMap: [String: LanguageEntry] = {
         var map: [String: LanguageEntry] = [:]
 
-        let entries: [(keys: [String], language: Language, name: String)] = [
-            (["swift"], Language(tree_sitter_swift()), "Swift"),
-            (["python", "py"], Language(tree_sitter_python()), "Python"),
-            (["javascript", "js"], Language(tree_sitter_javascript()), "JavaScript"),
-            (["typescript", "ts"], Language(tree_sitter_typescript()), "TypeScript"),
-            (["tsx"], Language(tree_sitter_tsx()), "TSX"),
-            (["rust", "rs"], Language(tree_sitter_rust()), "Rust"),
-            (["go", "golang"], Language(tree_sitter_go()), "Go"),
-            (["c"], Language(tree_sitter_c()), "C"),
-            (["cpp", "c++", "cxx", "cc"], Language(tree_sitter_cpp()), "CPP"),
-            (["json"], Language(tree_sitter_json()), "JSON"),
-            (["html", "htm"], Language(tree_sitter_html()), "HTML"),
-            (["css"], Language(tree_sitter_css()), "CSS"),
-            (["bash", "sh", "shell", "zsh"], Language(tree_sitter_bash()), "Bash"),
-            (["ruby", "rb"], Language(tree_sitter_ruby()), "Ruby"),
-            (["java"], Language(tree_sitter_java()), "Java"),
-            (["kotlin", "kt"], Language(tree_sitter_kotlin()), "Kotlin"),
+        let entries: [LanguageMapSeed] = [
+            LanguageMapSeed(keys: ["swift"], language: Language(tree_sitter_swift()), name: "Swift"),
+            LanguageMapSeed(keys: ["python", "py"], language: Language(tree_sitter_python()), name: "Python"),
+            LanguageMapSeed(
+                keys: ["javascript", "js"],
+                language: Language(tree_sitter_javascript()),
+                name: "JavaScript"
+            ),
+            LanguageMapSeed(
+                keys: ["typescript", "ts"],
+                language: Language(tree_sitter_typescript()),
+                name: "TypeScript"
+            ),
+            LanguageMapSeed(keys: ["tsx"], language: Language(tree_sitter_tsx()), name: "TSX"),
+            LanguageMapSeed(keys: ["rust", "rs"], language: Language(tree_sitter_rust()), name: "Rust"),
+            LanguageMapSeed(keys: ["go", "golang"], language: Language(tree_sitter_go()), name: "Go"),
+            LanguageMapSeed(keys: ["c"], language: Language(tree_sitter_c()), name: "C"),
+            LanguageMapSeed(
+                keys: ["cpp", "c++", "cxx", "cc"],
+                language: Language(tree_sitter_cpp()),
+                name: "CPP"
+            ),
+            LanguageMapSeed(keys: ["json"], language: Language(tree_sitter_json()), name: "JSON"),
+            LanguageMapSeed(keys: ["html", "htm"], language: Language(tree_sitter_html()), name: "HTML"),
+            LanguageMapSeed(keys: ["css"], language: Language(tree_sitter_css()), name: "CSS"),
+            LanguageMapSeed(
+                keys: ["bash", "sh", "shell", "zsh"],
+                language: Language(tree_sitter_bash()),
+                name: "Bash"
+            ),
+            LanguageMapSeed(keys: ["ruby", "rb"], language: Language(tree_sitter_ruby()), name: "Ruby"),
+            LanguageMapSeed(keys: ["java"], language: Language(tree_sitter_java()), name: "Java"),
+            LanguageMapSeed(keys: ["kotlin", "kt"], language: Language(tree_sitter_kotlin()), name: "Kotlin"),
         ]
 
         for entry in entries {
@@ -162,6 +178,12 @@ private extension TreeSitterCodeHighlighter {
 // MARK: - Supporting Types
 
 private struct LanguageEntry {
+    let language: Language
+    let name: String
+}
+
+private struct LanguageMapSeed {
+    let keys: [String]
     let language: Language
     let name: String
 }

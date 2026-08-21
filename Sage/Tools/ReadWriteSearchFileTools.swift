@@ -35,59 +35,62 @@ nonisolated struct ReadTextFileTool: AgentTool {
     func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path, access: .read)
+        try Self.assertReadableFile(at: url, path: args.path)
+        if args.lineStart == nil && args.lineEnd == nil {
+            return try Self.readEntireFile(at: url)
+        }
+        return try Self.readLineRange(at: url, path: args.path, start: args.lineStart, end: args.lineEnd)
+    }
 
+    static func assertReadableFile(at url: URL, path: String) throws {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
             throw ToolError.operationFailed(
-                "File does not exist: \(args.path). Use list_directory to verify the path."
+                "File does not exist: \(path). Use list_directory to verify the path."
             )
         }
         guard !isDir.boolValue else {
             throw ToolError.operationFailed(
-                "Path is a directory, not a file: \(args.path). Use list_directory to browse directories."
+                "Path is a directory, not a file: \(path). Use list_directory to browse directories."
             )
         }
+    }
 
-        // Full file read (no line range)
-        if args.lineStart == nil && args.lineEnd == nil {
-            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-            let fileSize = (attrs[.size] as? Int) ?? 0
-            guard fileSize <= Self.maxBytes else {
-                throw ToolError.operationFailed(
-                    "File too large (\(fileSize) bytes). Use line_start/line_end to read a section."
-                )
-            }
-            let data = try Data(contentsOf: url)
-            guard let text = String(data: data, encoding: .utf8) else {
-                throw ToolError.operationFailed("File is not valid UTF-8 text")
-            }
-            return text
+    static func readEntireFile(at url: URL) throws -> String {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = (attrs[.size] as? Int) ?? 0
+        guard fileSize <= maxBytes else {
+            throw ToolError.operationFailed(
+                "File too large (\(fileSize) bytes). Use line_start/line_end to read a section."
+            )
         }
+        let data = try Data(contentsOf: url)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw ToolError.operationFailed("File is not valid UTF-8 text")
+        }
+        return text
+    }
 
-        // Partial read: stream lines with UTF-8 safe chunk handling
+    static func readLineRange(at url: URL, path: String, start: Int?, end: Int?) throws -> String {
         guard let handle = FileHandle(forReadingAtPath: url.path) else {
-            throw ToolError.operationFailed("Cannot open file: \(args.path)")
+            throw ToolError.operationFailed("Cannot open file: \(path)")
         }
         defer { handle.closeFile() }
-
-        let startLine = max((args.lineStart ?? 1), 1)
-        let endLine = args.lineEnd ?? Int.max
-
+        let startLine = max((start ?? 1), 1)
+        let endLine = end ?? Int.max
         guard startLine <= endLine else {
             throw ToolError.invalidArguments("line_start (\(startLine)) must be ≤ line_end (\(endLine))")
         }
-
         var currentLine = 1
         var result: [String] = []
         var totalBytes = 0
         var truncated = false
-
         try UTF8LineStreamer.forEachLine(handle: handle, strict: true) { line in
             if currentLine > endLine { return false }
             if currentLine >= startLine {
                 result.append(line)
                 totalBytes += line.utf8.count + 1
-                if totalBytes > Self.maxBytes {
+                if totalBytes > maxBytes {
                     truncated = true
                     return false
                 }
@@ -95,17 +98,17 @@ nonisolated struct ReadTextFileTool: AgentTool {
             currentLine += 1
             return true
         }
-
         if truncated {
-            return result.joined(separator: "\n") + "\n… (truncated at \(Self.maxBytes) bytes)"
+            return result.joined(separator: "\n") + "\n… (truncated at \(maxBytes) bytes)"
         }
-
         if result.isEmpty {
             throw ToolError.invalidArguments(
-                "Line range \(startLine)–\(endLine == Int.max ? "end" : String(endLine)) is out of bounds (file has \(currentLine - 1) lines)"
+                """
+                Line range \(startLine)–\(endLine == Int.max ? "end" : String(endLine)) \
+                is out of bounds (file has \(currentLine - 1) lines)
+                """
             )
         }
-
         return result.joined(separator: "\n")
     }
 }
@@ -175,8 +178,12 @@ nonisolated struct SearchFilesTool: AgentTool {
                 "path": .stringProperty(
                     "Directory to search in (recursive). Optional in a focused project — defaults to the project root."
                 ),
-                "name_pattern": .stringProperty("Glob pattern for file names (e.g. '*.swift', 'README*'). Default '*' matches all."),
-                "content_pattern": .stringProperty("Optional regex pattern to search inside matching files. Only UTF-8 text files are searched."),
+                "name_pattern": .stringProperty(
+                    "Glob pattern for file names (e.g. '*.swift', 'README*'). Default '*' matches all."
+                ),
+                "content_pattern": .stringProperty(
+                    "Optional regex pattern to search inside matching files. Only UTF-8 text files are searched."
+                ),
                 "include_hidden": .boolProperty("Include hidden files/directories. Default false."),
             ],
             required: []
@@ -197,80 +204,31 @@ nonisolated struct SearchFilesTool: AgentTool {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let effectivePath = try PathGuard.defaultExplorationPath(args.path)
         let rootURL = try PathGuard.resolveAllowed(effectivePath, access: .read)
-
         guard FileManager.default.fileExists(atPath: rootURL.path) else {
             throw ToolError.operationFailed(
                 "Directory does not exist: \(effectivePath). Use list_directory to verify the path."
             )
         }
-
-        let namePattern = args.namePattern ?? "*"
         let skipHidden = !(args.includeHidden?.value ?? false)
-
-        // Compile content regex if provided
-        let contentRegex: NSRegularExpression?
-        if let pattern = args.contentPattern, !pattern.isEmpty {
-            do {
-                contentRegex = try NSRegularExpression(pattern: pattern, options: [])
-            } catch {
-                throw ToolError.invalidArguments(
-                    "Invalid regex pattern: \(error.localizedDescription)"
-                )
-            }
-        } else {
-            contentRegex = nil
-        }
-
-        var results: [String] = []
-        let fileManager = FileManager.default
-        guard let enumerator = fileManager.enumerator(
+        let contentRegex = try Self.compileContentRegex(args.contentPattern)
+        guard let enumerator = FileManager.default.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .isDirectoryKey],
             options: skipHidden ? [.skipsHiddenFiles] : []
         ) else {
             throw ToolError.operationFailed("Cannot enumerate directory: \(effectivePath)")
         }
-
+        var results: [String] = []
         while let fileURL = enumerator.nextObject() as? URL {
             try Task.checkCancellation()
             if results.count >= Self.maxResults { break }
-
-            guard let allowed = PathGuard.resolveEnumeratedURL(fileURL, access: .read) else {
-                enumerator.skipDescendants()
-                continue
-            }
-
-            let values = try? allowed.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
-
-            // Skip directories for matching (but enumerator still recurses into them)
-            guard values?.isRegularFile == true else { continue }
-
-            // Match file name against glob pattern
-            let fileName = allowed.lastPathComponent
-            guard globMatch(fileName, pattern: namePattern) else { continue }
-
-            if let regex = contentRegex {
-                // Content search — skip large or binary files
-                let fileSize = values?.fileSize ?? 0
-                guard fileSize <= Self.maxFileSize else { continue }
-                guard let handle = FileHandle(forReadingAtPath: allowed.path) else { continue }
-                defer { handle.closeFile() }
-
-                // Stream lines to avoid loading entire file into memory
-                var lineNumber = 0
-                try UTF8LineStreamer.forEachLine(handle: handle, strict: false) { line in
-                    lineNumber += 1
-                    if results.count >= Self.maxResults { return false }
-                    let range = NSRange(line.startIndex..., in: line)
-                    if regex.firstMatch(in: line, range: range) != nil {
-                        results.append("\(PathGuard.displayPath(allowed.path)):\(lineNumber):\(line)")
-                    }
-                    return results.count < Self.maxResults
-                }
-            } else {
-                // Name-only search
-                results.append(PathGuard.displayPath(allowed.path))
-            }
+            try Self.collectMatch(
+                fileURL,
+                enumerator: enumerator,
+                namePattern: args.namePattern ?? "*",
+                contentRegex: contentRegex,
+                into: &results
+            )
         }
 
         if results.isEmpty {
@@ -284,8 +242,59 @@ nonisolated struct SearchFilesTool: AgentTool {
         return output
     }
 
+    static func compileContentRegex(_ pattern: String?) throws -> NSRegularExpression? {
+        guard let pattern, !pattern.isEmpty else { return nil }
+        do {
+            return try NSRegularExpression(pattern: pattern, options: [])
+        } catch {
+            throw ToolError.invalidArguments("Invalid regex pattern: \(error.localizedDescription)")
+        }
+    }
+
+    static func collectMatch(
+        _ fileURL: URL,
+        enumerator: FileManager.DirectoryEnumerator,
+        namePattern: String,
+        contentRegex: NSRegularExpression?,
+        into results: inout [String]
+    ) throws {
+        guard let allowed = PathGuard.resolveEnumeratedURL(fileURL, access: .read) else {
+            enumerator.skipDescendants()
+            return
+        }
+        let values = try? allowed.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
+        guard values?.isRegularFile == true else { return }
+        guard globMatch(allowed.lastPathComponent, pattern: namePattern) else { return }
+        if let regex = contentRegex {
+            try appendContentMatches(allowed, fileSize: values?.fileSize ?? 0, regex: regex, into: &results)
+        } else {
+            results.append(PathGuard.displayPath(allowed.path))
+        }
+    }
+
+    static func appendContentMatches(
+        _ allowed: URL,
+        fileSize: Int,
+        regex: NSRegularExpression,
+        into results: inout [String]
+    ) throws {
+        guard fileSize <= maxFileSize else { return }
+        guard let handle = FileHandle(forReadingAtPath: allowed.path) else { return }
+        defer { handle.closeFile() }
+        var lineNumber = 0
+        try UTF8LineStreamer.forEachLine(handle: handle, strict: false) { line in
+            lineNumber += 1
+            if results.count >= maxResults { return false }
+            let range = NSRange(line.startIndex..., in: line)
+            if regex.firstMatch(in: line, range: range) != nil {
+                results.append("\(PathGuard.displayPath(allowed.path)):\(lineNumber):\(line)")
+            }
+            return results.count < maxResults
+        }
+    }
+
     /// Simple glob matching: supports * (any chars) and ? (single char).
-    private func globMatch(_ string: String, pattern: String) -> Bool {
+    static func globMatch(_ string: String, pattern: String) -> Bool {
         let pred = NSPredicate(format: "SELF LIKE[c] %@", pattern)
         return pred.evaluate(with: string)
     }

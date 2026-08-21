@@ -70,15 +70,17 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         activatedSkillNames: Set<String>
     ) async throws -> String {
         try await ExploreSubagentRunner.runTask(
-            task: task,
-            context: context,
-            instructions: instructions,
-            settings: settings.snapshot(for: .execute),
-            tools: tools,
-            pathGuardPolicy: state.pathGuardPolicy,
-            skillHost: self,
-            activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills
+            ExploreSubagentRequest(
+                task: task,
+                context: context,
+                instructions: instructions,
+                settings: settings.snapshot(for: .execute),
+                tools: tools,
+                pathGuardPolicy: state.pathGuardPolicy,
+                skillHost: self,
+                activatedSkillNames: activatedSkillNames,
+                enabledSkills: enabledSkills
+            )
         )
     }
 
@@ -105,16 +107,18 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
 
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(
-                name: name,
-                argumentsJSON: argumentsJSON,
-                tools: tools,
-                mcp: mcpHub,
-                pathGuardPolicy: state.pathGuardPolicy,
-                activatedSkillNames: activatedSkillNames,
-                enabledSkills: enabledSkills,
-                skillHost: self,
-                workPlanKind: state.activeTask?.workPlan?.kind,
-                modelSettings: settings.snapshot(for: .execute)
+                ToolInvocationRequest(
+                    name: name,
+                    argumentsJSON: argumentsJSON,
+                    tools: tools,
+                    mcp: mcpHub,
+                    pathGuardPolicy: state.pathGuardPolicy,
+                    activatedSkillNames: activatedSkillNames,
+                    enabledSkills: enabledSkills,
+                    skillHost: self,
+                    workPlanKind: state.activeTask?.workPlan?.kind,
+                    modelSettings: settings.snapshot(for: .execute)
+                )
             )
         }
     }

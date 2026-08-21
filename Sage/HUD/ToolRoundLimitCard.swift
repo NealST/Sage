@@ -19,7 +19,10 @@ struct ToolRoundLimitCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
-            Text("Sage used \(currentLimit) tool rounds on this turn. Continue for \(nextLimit - currentLimit) more, or finish and summarize.")
+            Text("""
+            Sage used \(currentLimit) tool rounds on this turn. Continue for \
+            \(nextLimit - currentLimit) more, or finish and summarize.
+            """)
                 .font(.system(size: SageDesign.Typography.captionSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

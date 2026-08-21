@@ -15,7 +15,9 @@ struct SettingsSchedulesSection: View {
             VStack(spacing: 0) {
                 SettingsFormChrome.quickToggleRow(
                     title: "Open Sage at login",
-                    detail: loginItemHint ?? "Schedules only run while Sage is open. Turn this on so Sage launches at login.",
+                    detail: loginItemHint ?? """
+                    Schedules only run while Sage is open. Turn this on so Sage launches at login.
+                    """,
                     isLast: !SageLoginItem.needsApproval,
                     isOn: Binding(
                         get: { openAtLogin },

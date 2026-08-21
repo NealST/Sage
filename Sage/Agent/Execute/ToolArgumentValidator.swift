@@ -31,7 +31,18 @@ nonisolated enum ToolArgumentValidator {
         path: String
     ) throws {
         guard case .object(let rules) = schema else { return }
+        try validateConstAndEnum(value, rules: rules, path: path)
+        try validateType(value, rules: rules, path: path)
+        try validateCombinators(value, rules: rules, path: path)
+        try validateObject(value, rules: rules, path: path)
+        try validateArray(value, rules: rules, path: path)
+    }
 
+    private static func validateConstAndEnum(
+        _ value: JSONValue,
+        rules: [String: JSONValue],
+        path: String
+    ) throws {
         if let constant = rules["const"], constant != value {
             throw ToolError.invalidArguments("\(path) must equal \(constant.displayValue).")
         }
@@ -39,7 +50,13 @@ nonisolated enum ToolArgumentValidator {
             let choices = allowed.map(\.displayValue).joined(separator: ", ")
             throw ToolError.invalidArguments("\(path) must be one of: \(choices).")
         }
+    }
 
+    private static func validateType(
+        _ value: JSONValue,
+        rules: [String: JSONValue],
+        path: String
+    ) throws {
         if let expectedTypes = schemaTypes(from: rules["type"]),
            !expectedTypes.isEmpty,
            !expectedTypes.contains(where: { matches(value, type: $0) }) {
@@ -47,6 +64,13 @@ nonisolated enum ToolArgumentValidator {
                 "\(path) must be \(expectedTypes.joined(separator: " or ")); got \(value.typeName)."
             )
         }
+    }
+
+    private static func validateCombinators(
+        _ value: JSONValue,
+        rules: [String: JSONValue],
+        path: String
+    ) throws {
         if let schemas = rules["allOf"]?.arrayValue {
             for childSchema in schemas {
                 try validate(value, against: childSchema, path: path)
@@ -66,36 +90,50 @@ nonisolated enum ToolArgumentValidator {
                 throw ToolError.invalidArguments("\(path) must match exactly one allowed schema.")
             }
         }
+    }
 
-        if case .object(let object) = value {
-            let required = rules["required"]?.arrayValue?.compactMap(\.stringValue) ?? []
-            let missing = required.filter { object[$0] == nil }
-            if !missing.isEmpty {
+    private static func validateObject(
+        _ value: JSONValue,
+        rules: [String: JSONValue],
+        path: String
+    ) throws {
+        guard case .object(let object) = value else { return }
+        let required = rules["required"]?.arrayValue?.compactMap(\.stringValue) ?? []
+        let missing = required.filter { object[$0] == nil }
+        if !missing.isEmpty {
+            throw ToolError.invalidArguments(
+                """
+                \(path) is missing required field\(missing.count == 1 ? "" : "s"): \
+                \(missing.joined(separator: ", ")).
+                """
+            )
+        }
+        guard case .object(let properties) = rules["properties"] else { return }
+        if rules["additionalProperties"] == .bool(false) {
+            let unknown = object.keys.filter { properties[$0] == nil }.sorted()
+            if !unknown.isEmpty {
                 throw ToolError.invalidArguments(
-                    "\(path) is missing required field\(missing.count == 1 ? "" : "s"): \(missing.joined(separator: ", "))."
+                    """
+                    \(path) contains unknown field\(unknown.count == 1 ? "" : "s"): \
+                    \(unknown.joined(separator: ", ")).
+                    """
                 )
             }
-
-            if case .object(let properties) = rules["properties"] {
-                if rules["additionalProperties"] == .bool(false) {
-                    let unknown = object.keys.filter { properties[$0] == nil }.sorted()
-                    if !unknown.isEmpty {
-                        throw ToolError.invalidArguments(
-                            "\(path) contains unknown field\(unknown.count == 1 ? "" : "s"): \(unknown.joined(separator: ", "))."
-                        )
-                    }
-                }
-                for (name, childSchema) in properties {
-                    guard let child = object[name] else { continue }
-                    try validate(child, against: childSchema, path: "\(path).\(name)")
-                }
-            }
         }
+        for (name, childSchema) in properties {
+            guard let child = object[name] else { continue }
+            try validate(child, against: childSchema, path: "\(path).\(name)")
+        }
+    }
 
-        if case .array(let items) = value, let itemSchema = rules["items"] {
-            for (index, item) in items.enumerated() {
-                try validate(item, against: itemSchema, path: "\(path)[\(index)]")
-            }
+    private static func validateArray(
+        _ value: JSONValue,
+        rules: [String: JSONValue],
+        path: String
+    ) throws {
+        guard case .array(let items) = value, let itemSchema = rules["items"] else { return }
+        for (index, item) in items.enumerated() {
+            try validate(item, against: itemSchema, path: "\(path)[\(index)]")
         }
     }
 

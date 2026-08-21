@@ -5,101 +5,78 @@ import Foundation
 /// Skill and MCP hop back because their hosts are main-actor isolated.
 nonisolated enum ToolInvocationDispatcher {
     @MainActor
-    static func execute(
-        name: String,
-        argumentsJSON: String,
-        tools: ToolRegistry,
-        mcp: CapabilityStore?,
-        pathGuardPolicy: PathGuard.Policy,
-        activatedSkillNames: Set<String>,
-        enabledSkills: [SkillRecord],
-        skillHost: SkillToolHost,
-        workPlanKind: WorkPlan.Kind? = nil,
-        modelSettings: ModelSettingsSnapshot? = nil
-    ) async throws -> String {
-        try await ToolInvocationPipeline.execute(
-            name: name,
-            argumentsJSON: argumentsJSON,
-            tools: tools,
-            mcp: mcp,
-            pathGuardPolicy: pathGuardPolicy,
-            activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills,
-            skillHost: skillHost,
-            workPlanKind: workPlanKind,
-            modelSettings: modelSettings
-        )
+    static func execute(_ request: ToolInvocationRequest) async throws -> String {
+        try await ToolInvocationPipeline.execute(request)
     }
 
     /// Dispatches an invocation after `ToolInvocationPipeline` applies policy and schema checks.
     @MainActor
-    static func dispatch(
-        name: String,
-        argumentsJSON: String,
-        tools: ToolRegistry,
-        mcp: CapabilityStore?,
-        pathGuardPolicy: PathGuard.Policy,
-        activatedSkillNames: Set<String>,
-        enabledSkills: [SkillRecord],
-        skillHost: SkillToolHost,
-        modelSettings: ModelSettingsSnapshot?
-    ) async throws -> String {
-        if name == RecallTaskTranscriptTool.name {
-            return try await RecallTaskTranscriptTool.execute(argumentsJSON: argumentsJSON)
-        }
-        if name == ManageTodoListTool.name {
-            return try await ManageTodoListTool.execute(argumentsJSON: argumentsJSON)
-        }
-        if name == ExploreSubagentTool.name {
-            guard let modelSettings else {
-                throw ToolError.operationFailed("Explore subagent model settings are unavailable.")
-            }
-            return try await ExploreSubagentRunner.run(
-                argumentsJSON: argumentsJSON,
-                settings: modelSettings,
-                tools: tools,
-                pathGuardPolicy: pathGuardPolicy,
-                skillHost: skillHost
-            )
-        }
-        if MCPToolGroupTool.isGroupTool(name) {
-            return try await MCPToolGroupTool.execute(
-                name: name,
-                availableTools: mcp?.mcpToolDefinitions() ?? []
-            )
+    static func dispatch(_ request: ToolInvocationRequest) async throws -> String {
+        if let result = try await dispatchSpecializedTool(request) {
+            return result
         }
 
-        if name.hasPrefix("mcp__") {
-            guard let mcp else {
-                throw ToolError.operationFailed("MCP tools are unavailable.")
-            }
-            return try await mcp.callMCPTool(qualifiedName: name, argumentsJSON: argumentsJSON)
-        }
-
-        if SkillToolExecutor.isSkillTool(name) {
-            return try await SkillToolExecutor.execute(
-                name: name,
-                argumentsJSON: argumentsJSON,
-                host: skillHost
-            )
-        }
-
-        guard let tool = tools.tool(named: name) else {
-            throw ToolError.operationFailed("Unknown tool: \(name)")
+        guard let tool = request.tools.tool(named: request.name) else {
+            throw ToolError.operationFailed("Unknown tool: \(request.name)")
         }
 
         let allowlist = SkillToolExecutor.readAllowlist(
-            activatedSkillNames: activatedSkillNames,
-            enabledSkills: enabledSkills
+            activatedSkillNames: request.activatedSkillNames,
+            enabledSkills: request.enabledSkills
         )
 
         return try await Self.invokeBuiltIn(
-            named: name,
+            named: request.name,
             tool: tool,
-            argumentsJSON: argumentsJSON,
-            pathGuardPolicy: pathGuardPolicy,
+            argumentsJSON: request.argumentsJSON,
+            pathGuardPolicy: request.pathGuardPolicy,
             allowlist: allowlist
         )
+    }
+
+    @MainActor
+    static func dispatchSpecializedTool(_ request: ToolInvocationRequest) async throws -> String? {
+        if request.name == RecallTaskTranscriptTool.name {
+            return try await RecallTaskTranscriptTool.execute(argumentsJSON: request.argumentsJSON)
+        }
+        if request.name == ManageTodoListTool.name {
+            return try await ManageTodoListTool.execute(argumentsJSON: request.argumentsJSON)
+        }
+        if request.name == ExploreSubagentTool.name {
+            guard let modelSettings = request.modelSettings else {
+                throw ToolError.operationFailed("Explore subagent model settings are unavailable.")
+            }
+            return try await ExploreSubagentRunner.run(
+                argumentsJSON: request.argumentsJSON,
+                settings: modelSettings,
+                tools: request.tools,
+                pathGuardPolicy: request.pathGuardPolicy,
+                skillHost: request.skillHost
+            )
+        }
+        if MCPToolGroupTool.isGroupTool(request.name) {
+            return try await MCPToolGroupTool.execute(
+                name: request.name,
+                availableTools: request.mcp?.mcpToolDefinitions() ?? []
+            )
+        }
+        if request.name.hasPrefix("mcp__") {
+            guard let mcp = request.mcp else {
+                throw ToolError.operationFailed("MCP tools are unavailable.")
+            }
+            return try await mcp.callMCPTool(
+                qualifiedName: request.name,
+                argumentsJSON: request.argumentsJSON
+            )
+        }
+        if SkillToolExecutor.isSkillTool(request.name) {
+            return try await SkillToolExecutor.execute(
+                name: request.name,
+                argumentsJSON: request.argumentsJSON,
+                host: request.skillHost
+            )
+        }
+        return nil
     }
 
     /// Rejects tools that change the Mac unless the work plan is `act`.
@@ -123,7 +100,10 @@ nonisolated enum ToolInvocationDispatcher {
             "not an act plan"
         }
         throw ToolError.operationFailed(
-            "Tool '\(name)' would change the Mac, but this turn is \(planLabel). Stick to observation tools, or wait for an act plan the user has confirmed."
+            """
+            Tool '\(name)' would change the Mac, but this turn is \(planLabel). \
+            Stick to observation tools, or wait for an act plan the user has confirmed.
+            """
         )
     }
 

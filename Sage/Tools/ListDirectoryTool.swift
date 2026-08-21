@@ -10,10 +10,12 @@ nonisolated struct ListDirectoryTool: AgentTool {
         name: "list_directory",
         description: """
             List files and folders in a directory. Paths must stay inside the active sandbox \
-            (home ~/ in General, or the focused project root). Relative paths resolve against the project root when focused. \
+            (home ~/ in General, or the focused project root). \
+            Relative paths resolve against the project root when focused. \
             In a project, omit `path` (or pass ".") to list the project root. \
             Symlinks that resolve outside the sandbox are skipped. \
-            Output format: one entry per line as "kind\\tsize\\tpath" (kind is "dir" or "file", size in bytes or "-" for dirs). \
+            Output format: one entry per line as "kind\\tsize\\tpath" \
+            (kind is "dir" or "file", size in bytes or "-" for dirs). \
             Recursive listing indents child entries with spaces. Capped at 500 entries. \
             Use depth=1 (default) for a quick overview, increase up to 5 for deeper exploration.
             """,
@@ -58,26 +60,32 @@ nonisolated struct ListDirectoryTool: AgentTool {
         let requestedDepth = args.depth ?? 1
         let maxDepth = min(max(requestedDepth, 1), 5)
         let skipHidden = !(args.includeHidden?.value ?? false)
-        var lines: [String] = []
-        var truncated = false
-        listRecursive(url: url, depth: maxDepth, currentDepth: 0, skipHidden: skipHidden, lines: &lines, truncated: &truncated)
+        var listing = DirectoryListingState(
+            url: url,
+            depth: maxDepth,
+            currentDepth: 0,
+            skipHidden: skipHidden,
+            lines: [],
+            truncated: false
+        )
+        listRecursive(&listing)
 
-        var result = lines.isEmpty ? "(empty directory)" : lines.joined(separator: "\n")
+        var result = listing.lines.isEmpty ? "(empty directory)" : listing.lines.joined(separator: "\n")
         if requestedDepth != maxDepth {
             result += "\n(note: depth clamped to \(maxDepth), requested \(requestedDepth))"
         }
-        if truncated {
+        if listing.truncated {
             result += "\n… (truncated at \(Self.maxEntries) entries — narrow the path or reduce depth to see more)"
         }
         return result
     }
 
-    private func listRecursive(url: URL, depth: Int, currentDepth: Int, skipHidden: Bool, lines: inout [String], truncated: inout Bool) {
-        guard currentDepth < depth, !truncated else { return }
+    private func listRecursive(_ listing: inout DirectoryListingState) {
+        guard listing.currentDepth < listing.depth, !listing.truncated else { return }
         guard let items = try? FileManager.default.contentsOfDirectory(
-            at: url,
+            at: listing.url,
             includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-            options: skipHidden ? [.skipsHiddenFiles] : []
+            options: listing.skipHidden ? [.skipsHiddenFiles] : []
         ) else { return }
 
         let sorted = items.sorted { lhs, rhs in
@@ -85,8 +93,8 @@ nonisolated struct ListDirectoryTool: AgentTool {
         }
 
         for item in sorted {
-            if lines.count >= Self.maxEntries {
-                truncated = true
+            if listing.lines.count >= Self.maxEntries {
+                listing.truncated = true
                 return
             }
             guard let allowed = PathGuard.resolveEnumeratedURL(item, access: .read) else {
@@ -96,17 +104,20 @@ nonisolated struct ListDirectoryTool: AgentTool {
             let isDirectory = values?.isDirectory == true
             let kind = isDirectory ? "dir" : "file"
             let size = isDirectory ? "-" : "\(values?.fileSize ?? 0)"
-            let indent = String(repeating: "  ", count: currentDepth)
-            lines.append("\(indent)\(kind)\t\(size)\t\(PathGuard.displayPath(allowed.path))")
+            let indent = String(repeating: "  ", count: listing.currentDepth)
+            listing.lines.append("\(indent)\(kind)\t\(size)\t\(PathGuard.displayPath(allowed.path))")
             if isDirectory {
-                listRecursive(
+                var nested = DirectoryListingState(
                     url: allowed,
-                    depth: depth,
-                    currentDepth: currentDepth + 1,
-                    skipHidden: skipHidden,
-                    lines: &lines,
-                    truncated: &truncated
+                    depth: listing.depth,
+                    currentDepth: listing.currentDepth + 1,
+                    skipHidden: listing.skipHidden,
+                    lines: listing.lines,
+                    truncated: listing.truncated
                 )
+                listRecursive(&nested)
+                listing.lines = nested.lines
+                listing.truncated = nested.truncated
             }
         }
     }

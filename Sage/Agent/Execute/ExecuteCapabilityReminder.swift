@@ -33,7 +33,10 @@ nonisolated enum ExecuteCapabilityReminder {
 
         if !activatedSkillNames.isEmpty {
             lines.append(
-                "Activated skills: \(activatedSkillNames.sorted().joined(separator: ", ")). Use load_skill_resource / run_skill_script as allowed."
+                """
+                Activated skills: \(activatedSkillNames.sorted().joined(separator: ", ")). \
+                Use load_skill_resource / run_skill_script as allowed.
+                """
             )
         }
 

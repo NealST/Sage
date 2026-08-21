@@ -33,6 +33,12 @@ nonisolated struct SkillDraft: Sendable {
     let body: String
 }
 
+nonisolated struct SkillMergeInput: Sendable {
+    let name: String
+    let description: String
+    let body: String
+}
+
 nonisolated enum SkillCompositionError: LocalizedError {
     case emptyTranscript
     case sourceTaskMissing
@@ -74,7 +80,7 @@ nonisolated enum SkillCompositionError: LocalizedError {
 
 /// Extracts reusable experiences from completed tasks via cloud model analysis.
 actor SkillExtractionService {
-    private let modelClient: ModelClient
+    let modelClient: ModelClient
 
     init(modelClient: ModelClient = ModelClient()) {
         self.modelClient = modelClient
@@ -103,51 +109,16 @@ actor SkillExtractionService {
     ) async -> SkillExtractionResult? {
         let transcript = buildTranscript(from: task)
         guard !transcript.isEmpty else { return nil }
-
-        let preferredSet = Set(preferredEnhanceTargets)
-        let skillsCatalog = existingSkills.map { skill in
-            let mark = preferredSet.contains(skill.name) ? " ← preferred enhance target" : ""
-            return "- \(skill.name) [\(skill.scope.catalogLabel)]: \(skill.description)\(mark)"
-        }.joined(separator: "\n")
-
-        let systemPrompt: String
-        switch mode {
-        case .automatic:
-            systemPrompt = SkillExtractionPrompts.automaticSystemPrompt(
-                skillsCatalog: skillsCatalog,
+        let events = extractionPromptEvents(
+            ExtractionPromptInput(
+                task: task,
+                transcript: transcript,
+                existingSkills: existingSkills,
+                mode: mode,
+                userNote: userNote,
                 preferredEnhanceTargets: preferredEnhanceTargets
             )
-
-        case .explicitRemember:
-            systemPrompt = SkillExtractionPrompts.explicitRememberSystemPrompt(
-                skillsCatalog: skillsCatalog,
-                preferredEnhanceTargets: preferredEnhanceTargets
-            )
-        }
-
-        var userPrompt = """
-        ## Task Summary
-        \(task.topic ?? task.summary ?? "Untitled task")
-
-        ## Task Transcript
-        \(transcript)
-        """
-        if mode == .explicitRemember,
-           let note = userNote?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !note.isEmpty {
-            userPrompt += """
-
-
-            ## User note
-            The user added this hint with /remember: \(note)
-            """
-        }
-
-        let events: [AgentEvent] = [
-            AgentEvent(kind: .systemInstruction, content: systemPrompt),
-            AgentEvent(kind: .userInput, content: userPrompt),
-        ]
-
+        )
         let catalogNames = Set(existingSkills.map(\.name))
 
         do {
@@ -174,6 +145,59 @@ actor SkillExtractionService {
         } catch {
             return nil
         }
+    }
+
+    struct ExtractionPromptInput {
+        var task: TaskRecord
+        var transcript: String
+        var existingSkills: [SkillCatalogSummary]
+        var mode: SkillExtractionMode
+        var userNote: String?
+        var preferredEnhanceTargets: [String]
+    }
+
+    func extractionPromptEvents(_ input: ExtractionPromptInput) -> [AgentEvent] {
+        let preferredSet = Set(input.preferredEnhanceTargets)
+        let skillLines = input.existingSkills.map { skill in
+            let mark = preferredSet.contains(skill.name) ? " ← preferred enhance target" : ""
+            return "- \(skill.name) [\(skill.scope.catalogLabel)]: \(skill.description)\(mark)"
+        }
+        let skillsCatalog = skillLines.joined(separator: "\n")
+        let systemPrompt: String
+        switch input.mode {
+        case .automatic:
+            systemPrompt = SkillExtractionPrompts.automaticSystemPrompt(
+                skillsCatalog: skillsCatalog,
+                preferredEnhanceTargets: input.preferredEnhanceTargets
+            )
+
+        case .explicitRemember:
+            systemPrompt = SkillExtractionPrompts.explicitRememberSystemPrompt(
+                skillsCatalog: skillsCatalog,
+                preferredEnhanceTargets: input.preferredEnhanceTargets
+            )
+        }
+        var userPrompt = """
+        ## Task Summary
+        \(input.task.topic ?? input.task.summary ?? "Untitled task")
+
+        ## Task Transcript
+        \(input.transcript)
+        """
+        if input.mode == .explicitRemember,
+           let note = input.userNote?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !note.isEmpty {
+            userPrompt += """
+
+
+            ## User note
+            The user added this hint with /remember: \(note)
+            """
+        }
+        return [
+            AgentEvent(kind: .systemInstruction, content: systemPrompt),
+            AgentEvent(kind: .userInput, content: userPrompt),
+        ]
     }
 
     /// Composes a new skill from task knowledge after the user confirms a banner suggestion.
@@ -216,14 +240,13 @@ actor SkillExtractionService {
     /// following `save_skill` authoring best practices.
     ///
     /// Called after the user confirms an enhance suggestion in the banner.
-    func composeEnhancedSkill(
-        skillName: String,
-        currentDescription: String,
-        currentBody: String,
-        suggestedDescription: String,
-        task: TaskRecord,
-        settings: ModelSettingsSnapshot
-    ) async throws -> SkillDraft {
+    func composeEnhancedSkill(_ input: SkillEnhanceInput) async throws -> SkillDraft {
+        let skillName = input.skillName
+        let currentDescription = input.currentDescription
+        let currentBody = input.currentBody
+        let suggestedDescription = input.suggestedDescription
+        let task = input.task
+        let settings = input.settings
         let transcript = try requireTranscript(from: task)
         let systemPrompt = SkillExtractionPrompts.authoringSystemPrompt(
             role: "skill editor",
@@ -266,7 +289,7 @@ actor SkillExtractionService {
     /// Merges several overlapping skills into one coherent document (quality / consolidate tip).
     func composeMergedSkills(
         primaryName: String,
-        skills: [(name: String, description: String, body: String)],
+        skills: [SkillMergeInput],
         settings: ModelSettingsSnapshot
     ) async throws -> SkillDraft {
         guard skills.count >= 2 else {
@@ -310,111 +333,5 @@ actor SkillExtractionService {
             userPrompt: sections.joined(separator: "\n"),
             settings: settings
         )
-    }
-
-    // MARK: - Composition Helpers
-
-    private func requireTranscript(from task: TaskRecord) throws -> String {
-        let transcript = buildTranscript(from: task)
-        guard !transcript.isEmpty else {
-            throw SkillCompositionError.emptyTranscript
-        }
-        return transcript
-    }
-
-    private func completeCompose(
-        systemPrompt: String,
-        userPrompt: String,
-        settings: ModelSettingsSnapshot
-    ) async throws -> SkillDraft {
-        let events: [AgentEvent] = [
-            AgentEvent(kind: .systemInstruction, content: systemPrompt),
-            AgentEvent(kind: .userInput, content: userPrompt),
-        ]
-
-        do {
-            let turn = try await modelClient.complete(
-                events: events,
-                tools: [],
-                settings: settings,
-                retryPolicy: RetryPolicy(maxAttempts: 2, baseDelay: 1.0, maxDelay: 10.0)
-            )
-            guard let content = turn.content else {
-                throw SkillCompositionError.invalidResponse
-            }
-            return try parseComposeResponse(content)
-        } catch let error as SkillCompositionError {
-            throw error
-        } catch {
-            throw SkillCompositionError.modelFailed(error.localizedDescription)
-        }
-    }
-
-    // MARK: - Transcript Building
-
-    /// Extracts a concise transcript from task events, focusing on key interactions.
-    private func buildTranscript(from task: TaskRecord) -> String {
-        var lines: [String] = []
-        var totalLength = 0
-        let maxLength = 6_000
-        let separatorLength = 1 // "\n"
-
-        for event in task.events {
-            let prefix: String
-            switch event.kind {
-            case .userInput:
-                prefix = "User"
-
-            case .assistantResponse:
-                prefix = "Assistant"
-
-            case .toolResult:
-                prefix = "Tool Result"
-
-            case .systemInstruction:
-                continue
-            }
-
-            let contentPreview: String
-            if event.kind == .toolResult && event.content.count > 500 {
-                contentPreview = String(event.content.prefix(500)) + "…[truncated]"
-            } else {
-                contentPreview = event.content
-            }
-
-            let line: String
-            if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
-                let callSummaries = toolCalls.map { "[\($0.name)]" }.joined(separator: ", ")
-                line = "\(prefix) (calls: \(callSummaries)): \(contentPreview)"
-            } else {
-                line = "\(prefix): \(contentPreview)"
-            }
-
-            if !lines.isEmpty {
-                totalLength += separatorLength
-            }
-            lines.append(line)
-            totalLength += line.count
-
-            if totalLength > maxLength {
-                let keep = max(lines.count / 2, 1)
-                let dropped = lines.prefix(lines.count - keep)
-                let droppedLength = dropped.reduce(0) { $0 + $1.count } + dropped.count * separatorLength
-                lines = Array(lines.suffix(keep))
-                let marker = "[...earlier conversation truncated...]"
-                lines.insert(marker, at: 0)
-                totalLength = totalLength - droppedLength + marker.count + separatorLength
-            }
-        }
-
-        return lines.joined(separator: "\n")
-    }
-
-    private func parseResponse(_ content: String) -> SkillExtractionResult {
-        SkillExtractionParsing.parseResponse(content)
-    }
-
-    private func parseComposeResponse(_ content: String) throws -> SkillDraft {
-        try SkillExtractionParsing.parseComposeResponse(content)
     }
 }

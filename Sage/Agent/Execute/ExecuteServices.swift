@@ -55,16 +55,18 @@ struct ExecuteServices {
         let enabled = skillHost.enabledSkills
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(
-                name: name,
-                argumentsJSON: argumentsJSON,
-                tools: tools,
-                mcp: mcp,
-                pathGuardPolicy: policy,
-                activatedSkillNames: activated,
-                enabledSkills: enabled,
-                skillHost: skillHost,
-                workPlanKind: state.activeTask?.workPlan?.kind,
-                modelSettings: modelSettings()
+                ToolInvocationRequest(
+                    name: name,
+                    argumentsJSON: argumentsJSON,
+                    tools: tools,
+                    mcp: mcp,
+                    pathGuardPolicy: policy,
+                    activatedSkillNames: activated,
+                    enabledSkills: enabled,
+                    skillHost: skillHost,
+                    workPlanKind: state.activeTask?.workPlan?.kind,
+                    modelSettings: modelSettings()
+                )
             )
         }
     }

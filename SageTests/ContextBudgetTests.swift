@@ -48,7 +48,12 @@ final class ContextBudgetTests: XCTestCase {
         var events: [AgentEvent] = []
         for index in 0..<12 {
             events.append(AgentEvent(kind: .userInput, content: String(repeating: "old-\(index) ", count: 40)))
-            events.append(AgentEvent(kind: .assistantResponse, content: String(repeating: "reply-\(index) ", count: 40)))
+            events.append(
+                AgentEvent(
+                    kind: .assistantResponse,
+                    content: String(repeating: "reply-\(index) ", count: 40)
+                )
+            )
         }
         let current = AgentEvent(kind: .userInput, content: "CURRENT-TURN")
         events.append(current)

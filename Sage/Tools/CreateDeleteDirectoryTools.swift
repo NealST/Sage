@@ -8,7 +8,10 @@ import Foundation
 nonisolated struct CreateDirectoryTool: AgentTool {
     let definition = ToolDefinition(
         name: "create_directory",
-        description: "Create a directory (and any missing parent directories) inside the active sandbox (home ~/ or the focused project root). Safe to call if the directory already exists.",
+        description: """
+            Create a directory (and any missing parent directories) inside the active sandbox \
+            (home ~/ or the focused project root). Safe to call if the directory already exists.
+            """,
         parameters: .schemaObject(
             properties: [
                 "path": .stringProperty("Directory path to create"),

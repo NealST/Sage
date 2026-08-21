@@ -12,18 +12,18 @@ import Foundation
 @Observable
 final class SkillSessionController {
     let tips = SkillTipStore()
-    private(set) var saveJobs: [SkillSaveJob] = []
+    var saveJobs: [SkillSaveJob] = []
     /// `/schedule-script` panel for this window.
     var scriptScheduleDraft: ScheduleScriptDraft?
 
-    private var suggestionGeneration: UInt64 = 0
-    private var extractionTaskIDs: Set<UUID> = []
-    private var inFlightExtractionTasks: [UUID: Task<Void, Never>] = [:]
-    private var persistJudgmentTasks: [UUID: Task<Void, Never>] = [:]
-    private var saveSuccessClearTasks: [UUID: Task<Void, Never>] = [:]
-    private var inFlightSaveTasks: [UUID: Task<Void, Never>] = [:]
-    private let extractionService = SkillExtractionService()
-    private weak var runtime: AgentRuntime?
+    var suggestionGeneration: UInt64 = 0
+    var extractionTaskIDs: Set<UUID> = []
+    var inFlightExtractionTasks: [UUID: Task<Void, Never>] = [:]
+    var persistJudgmentTasks: [UUID: Task<Void, Never>] = [:]
+    var saveSuccessClearTasks: [UUID: Task<Void, Never>] = [:]
+    var inFlightSaveTasks: [UUID: Task<Void, Never>] = [:]
+    let extractionService = SkillExtractionService()
+    weak var runtime: AgentRuntime?
 
     func attach(runtime: AgentRuntime) {
         self.runtime = runtime
@@ -107,39 +107,11 @@ final class SkillSessionController {
         userNote: String? = nil,
         presentImmediately: Bool = false
     ) {
-        guard let runtime else { return }
-        if mode == .automatic {
-            guard task.events.count >= 4 else { return }
-        }
-        guard runtime.settings.isConfigured else { return }
-        guard !extractionTaskIDs.contains(task.id) else {
-            if mode == .explicitRemember {
-                runtime.applySkillExtractionPhase(
-                    .failed(message: "Already identifying what to remember for this task.")
-                )
-            }
-            return
-        }
+        guard let runtime, canStartExtraction(for: task, mode: mode, runtime: runtime) else { return }
         extractionTaskIDs.insert(task.id)
 
         let snapshot = runtime.settings.snapshot(for: .plan)
-
-        let inProjectContext = runtime.state.focusedProject != nil
-        let projectRootPath = runtime.state.focusedProject?.rootURL.path
-        let catalogSkills = (runtime.skillCatalog?.skills ?? [])
-            .filter(\.enabled)
-            .filter { inProjectContext || $0.scope == .global }
-        // Analyze needs metadata only — bodies are loaded later on confirm/compose.
-        let existingSkills: [SkillCatalogSummary] = catalogSkills.map { skill in
-            SkillCatalogSummary(name: skill.name, description: skill.description, scope: skill.scope)
-        }
-        let pathByName = Dictionary(
-            catalogSkills.map { ($0.name, $0.path) }
-        ) { first, _ in first }
-        let scopeByName = Dictionary(
-            catalogSkills.map { ($0.name, $0.scope) }
-        ) { first, _ in first }
-
+        let catalog = extractionCatalog(runtime: runtime)
         let taskCopy = task
         let extractionService = extractionService
         let tipStore = tips
@@ -158,288 +130,156 @@ final class SkillSessionController {
 
             let result = await extractionService.analyze(
                 task: taskCopy,
-                existingSkills: existingSkills,
+                existingSkills: catalog.existingSkills,
                 settings: snapshot,
                 mode: mode,
                 userNote: note
             )
-
             guard !Task.isCancelled else { return }
-
-            func enhanceSuggestion(name: String, description: String) -> SkillSuggestion? {
-                guard let path = pathByName[name], let scope = scopeByName[name] else { return nil }
-                return SkillSuggestion(
-                    type: .enhance,
-                    skillName: name,
-                    skillDescription: description,
-                    scope: scope,
-                    allowsScopeChoice: false,
-                    projectRootPath: scope == .project ? projectRootPath : nil,
-                    targetSkillPath: path,
-                    sourceTaskID: taskCopy.id
-                )
-            }
-
-            let suggestion: SkillSuggestion?
-            switch result {
-            case .none, .some(.skip):
-                suggestion = nil
-
-            case .some(.newSkill(let name, let description)):
-                if pathByName[name] != nil {
-                    suggestion = enhanceSuggestion(name: name, description: description)
-                } else if inProjectContext {
-                    suggestion = SkillSuggestion(
-                        type: .new,
-                        skillName: name,
-                        skillDescription: description,
-                        scope: .project,
-                        allowsScopeChoice: true,
-                        projectRootPath: projectRootPath,
-                        targetSkillPath: nil,
-                        sourceTaskID: taskCopy.id
-                    )
-                } else {
-                    suggestion = SkillSuggestion(
-                        type: .new,
-                        skillName: name,
-                        skillDescription: description,
-                        scope: .global,
-                        allowsScopeChoice: false,
-                        projectRootPath: nil,
-                        targetSkillPath: nil,
-                        sourceTaskID: taskCopy.id
-                    )
-                }
-
-            case .some(.enhance(let existingName, let description)):
-                suggestion = enhanceSuggestion(name: existingName, description: description)
-            }
-
+            let suggestion = catalog.suggestion(from: result, taskID: taskCopy.id)
             await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard !Task.isCancelled else { return }
-                guard let runtime = self.runtime,
-                      !runtime.state.isTornDown,
-                      self.suggestionGeneration == generation,
-                      runtime.state.focusedProject?.id == focusedProjectID else {
-                    if mode == .explicitRemember {
-                        self.runtime?.applySkillExtractionPhase(.idle)
-                    }
-                    return
-                }
-                if let suggestion {
-                    if presentImmediately {
-                        tipStore.enqueueSaveImmediate(suggestion)
-                    } else {
-                        tipStore.enqueueSave(suggestion)
-                    }
-                    if mode == .explicitRemember {
-                        runtime.applySkillExtractionPhase(
-                            .completed(
-                                summary: suggestion.type == .enhance
-                                    ? "Ready to update existing experience “\(suggestion.skillName)”. Confirm in the tip below."
-                                    : "Ready to save “\(suggestion.skillName)”. Confirm in the tip below."
-                            )
-                        )
-                    }
-                } else if mode == .explicitRemember {
-                    runtime.applySkillExtractionPhase(
-                        .failed(
-                            message: "Couldn’t identify what to remember. Try again, or add a short note: /remember …"
-                        )
+                self?.applyExtractionResult(
+                    ExtractionApplyRequest(
+                        suggestion: suggestion,
+                        mode: mode,
+                        presentImmediately: presentImmediately,
+                        generation: generation,
+                        focusedProjectID: focusedProjectID,
+                        tipStore: tipStore
                     )
-                }
+                )
             }
         }
         inFlightExtractionTasks[taskID] = work
     }
 
-    // MARK: - Save / consolidate jobs
-
-    func startSuggestionSave(_ suggestion: SkillSuggestion) {
-        runSaveJob(type: suggestion.type, skillName: suggestion.skillName) {
-            try await self.confirmSuggestion(suggestion)
-        }
-    }
-
-    func startConsolidate(_ suggestion: SkillConsolidateSuggestion) {
-        guard let primary = suggestion.primary else { return }
-        runSaveJob(type: .merge, skillName: primary.name) {
-            try await self.confirmConsolidate(suggestion)
-        }
-    }
-
-    private func runSaveJob(
-        type: SkillSuggestion.SuggestionType,
-        skillName: String,
-        work: @escaping @MainActor () async throws -> Void
-    ) {
-        let job = SkillSaveJob(type: type, skillName: skillName, status: .running)
-        saveJobs.insert(job, at: 0)
-        let jobID = job.id
-
-        let task = Task { @MainActor in
-            defer { self.inFlightSaveTasks[jobID] = nil }
-            do {
-                try await work()
-                self.updateSaveJob(jobID, status: .succeeded)
-                self.scheduleSaveJobClear(jobID)
-            } catch {
-                self.saveSuccessClearTasks[jobID]?.cancel()
-                self.saveSuccessClearTasks[jobID] = nil
-                self.updateSaveJob(jobID, status: .failed(error.localizedDescription))
-            }
-        }
-        inFlightSaveTasks[jobID] = task
-    }
-
-    private func updateSaveJob(_ jobID: UUID, status: SkillSaveJob.Status) {
-        guard let index = saveJobs.firstIndex(where: { $0.id == jobID }) else { return }
-        saveJobs[index].status = status
-    }
-
-    private func scheduleSaveJobClear(_ jobID: UUID) {
-        saveSuccessClearTasks[jobID]?.cancel()
-        saveSuccessClearTasks[jobID] = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            self?.dismissSkillSaveJob(jobID)
-        }
-    }
-
-    private func requireRuntime() throws -> AgentRuntime {
-        guard let runtime else { throw SkillCompositionError.hostUnavailable }
-        if runtime.state.isTornDown { throw SkillCompositionError.sessionTornDown }
-        return runtime
-    }
-
-    private func confirmSuggestion(_ suggestion: SkillSuggestion) async throws {
-        let runtime = try requireRuntime()
-        guard let sourceTask = try await runtime.taskRepository.loadTask(id: suggestion.sourceTaskID) else {
-            throw SkillCompositionError.sourceTaskMissing
-        }
-
-        let snapshot = runtime.settings.snapshot(for: .plan)
-
-        switch suggestion.type {
-        case .new:
-            if runtime.skillCatalog?.skills.contains(where: { $0.name == suggestion.skillName }) == true {
-                throw SkillWriter.WriteError.alreadyExists(suggestion.skillName)
-            }
-            let draft = try await extractionService.composeNewSkill(
-                skillName: suggestion.skillName,
-                suggestedDescription: suggestion.skillDescription,
-                task: sourceTask,
-                settings: snapshot
-            )
-            // Re-check after compose — catalog may have changed during the LLM call.
-            if runtime.skillCatalog?.skills.contains(where: { $0.name == suggestion.skillName }) == true {
-                throw SkillWriter.WriteError.alreadyExists(suggestion.skillName)
-            }
-            let projectRoot = suggestion.projectRootPath.map { URL(fileURLWithPath: $0) }
-            try await SkillWriter.createSkill(
-                name: suggestion.skillName,
-                description: draft.description,
-                body: draft.body,
-                scope: suggestion.scope,
-                projectRoot: projectRoot
-            )
-
-        case .enhance:
-            guard let path = suggestion.targetSkillPath,
-                  FileManager.default.fileExists(atPath: path) else {
-                throw SkillWriter.WriteError.skillNotFound(suggestion.skillName)
-            }
-            let existing = runtime.skillCatalog?.skills.first { $0.path == path }
-                ?? SkillRecord(
-                    name: suggestion.skillName,
-                    description: suggestion.skillDescription,
-                    path: path,
-                    enabled: true,
-                    scope: suggestion.scope
+    func canStartExtraction(
+        for task: TaskRecord,
+        mode: SkillExtractionMode,
+        runtime: AgentRuntime
+    ) -> Bool {
+        if mode == .automatic, task.events.count < 4 { return false }
+        guard runtime.settings.isConfigured else { return false }
+        guard !extractionTaskIDs.contains(task.id) else {
+            if mode == .explicitRemember {
+                runtime.applySkillExtractionPhase(
+                    .failed(message: "Already identifying what to remember for this task.")
                 )
-            let currentBody = await SkillRegistry.shared.readBody(for: existing)
-            let draft = try await extractionService.composeEnhancedSkill(
-                skillName: existing.name,
-                currentDescription: existing.description,
-                currentBody: currentBody,
-                suggestedDescription: suggestion.skillDescription,
-                task: sourceTask,
-                settings: snapshot
-            )
-            try await SkillWriter.enhanceSkill(
-                existingRecord: existing,
-                description: draft.description,
-                body: draft.body
-            )
-
-        case .merge:
-            throw SkillCompositionError.unsupportedMergeViaSuggestion
+            }
+            return false
         }
-
-        await runtime.broadcastSkillsCatalogChange()
+        return true
     }
 
-    private func confirmConsolidate(_ suggestion: SkillConsolidateSuggestion) async throws {
-        let runtime = try requireRuntime()
-        guard let primary = suggestion.primary else {
-            throw SkillWriter.WriteError.skillNotFound("merge target")
-        }
-        guard let primaryRecord = runtime.skillCatalog?.skills.first(where: { $0.path == primary.path }) else {
-            throw SkillWriter.WriteError.skillNotFound(primary.name)
+    nonisolated struct ExtractionCatalog {
+        var inProjectContext: Bool
+        var projectRootPath: String?
+        var existingSkills: [SkillCatalogSummary]
+        var pathByName: [String: String]
+        var scopeByName: [String: SkillScope]
+
+        func enhanceSuggestion(name: String, description: String, taskID: UUID) -> SkillSuggestion? {
+            guard let path = pathByName[name], let scope = scopeByName[name] else { return nil }
+            return SkillSuggestion(
+                type: .enhance,
+                skillName: name,
+                skillDescription: description,
+                scope: scope,
+                allowsScopeChoice: false,
+                projectRootPath: scope == .project ? projectRootPath : nil,
+                targetSkillPath: path,
+                sourceTaskID: taskID
+            )
         }
 
-        let snapshot = runtime.settings.snapshot(for: .plan)
+        func suggestion(from result: SkillExtractionResult?, taskID: UUID) -> SkillSuggestion? {
+            switch result {
+            case .none, .some(.skip):
+                return nil
 
-        var inputs: [(name: String, description: String, body: String)] = []
-        for candidate in suggestion.candidates {
-            let record = runtime.skillCatalog?.skills.first { $0.path == candidate.path }
-            let body: String
-            if let record {
-                body = await SkillRegistry.shared.readBody(for: record)
+            case .some(.newSkill(let name, let description)):
+                if pathByName[name] != nil {
+                    return enhanceSuggestion(name: name, description: description, taskID: taskID)
+                }
+                return SkillSuggestion(
+                    type: .new,
+                    skillName: name,
+                    skillDescription: description,
+                    scope: inProjectContext ? .project : .global,
+                    allowsScopeChoice: inProjectContext,
+                    projectRootPath: inProjectContext ? projectRootPath : nil,
+                    targetSkillPath: nil,
+                    sourceTaskID: taskID
+                )
+
+            case .some(.enhance(let existingName, let description)):
+                return enhanceSuggestion(name: existingName, description: description, taskID: taskID)
+            }
+        }
+    }
+
+    func extractionCatalog(runtime: AgentRuntime) -> ExtractionCatalog {
+        let inProjectContext = runtime.state.focusedProject != nil
+        let catalogSkills = (runtime.skillCatalog?.skills ?? [])
+            .filter(\.enabled)
+            .filter { inProjectContext || $0.scope == .global }
+        return ExtractionCatalog(
+            inProjectContext: inProjectContext,
+            projectRootPath: runtime.state.focusedProject?.rootURL.path,
+            existingSkills: catalogSkills.map { skill in
+                SkillCatalogSummary(name: skill.name, description: skill.description, scope: skill.scope)
+            },
+            pathByName: Dictionary(catalogSkills.map { ($0.name, $0.path) }) { first, _ in first },
+            scopeByName: Dictionary(catalogSkills.map { ($0.name, $0.scope) }) { first, _ in first }
+        )
+    }
+
+    struct ExtractionApplyRequest {
+        var suggestion: SkillSuggestion?
+        var mode: SkillExtractionMode
+        var presentImmediately: Bool
+        var generation: UInt64
+        var focusedProjectID: UUID?
+        var tipStore: SkillTipStore
+    }
+
+    func applyExtractionResult(_ request: ExtractionApplyRequest) {
+        guard !Task.isCancelled else { return }
+        guard let runtime,
+              !runtime.state.isTornDown,
+              suggestionGeneration == request.generation,
+              runtime.state.focusedProject?.id == request.focusedProjectID else {
+            if request.mode == .explicitRemember {
+                self.runtime?.applySkillExtractionPhase(.idle)
+            }
+            return
+        }
+        if let suggestion = request.suggestion {
+            if request.presentImmediately {
+                request.tipStore.enqueueSaveImmediate(suggestion)
             } else {
-                body = ""
+                request.tipStore.enqueueSave(suggestion)
             }
-            inputs.append((candidate.name, candidate.description, body))
+            if request.mode == .explicitRemember {
+                runtime.applySkillExtractionPhase(
+                    .completed(
+                        summary: suggestion.type == .enhance
+                            ? """
+                            Ready to update existing experience “\(suggestion.skillName)”. \
+                            Confirm in the tip below.
+                            """
+                            : "Ready to save “\(suggestion.skillName)”. Confirm in the tip below."
+                    )
+                )
+            }
+            return
         }
-
-        let draft = try await extractionService.composeMergedSkills(
-            primaryName: primary.name,
-            skills: inputs,
-            settings: snapshot
-        )
-
-        try await SkillWriter.enhanceSkill(
-            existingRecord: primaryRecord,
-            description: draft.description,
-            body: draft.body
-        )
-
-        var deleteFailures: [String] = []
-        for candidate in suggestion.candidates where candidate.path != primary.path {
-            guard let catalog = runtime.skillCatalog,
-                  let record = catalog.skills.first(where: { $0.path == candidate.path }) else {
-                continue
-            }
-            do {
-                try await catalog.deleteSkill(record)
-            } catch {
-                deleteFailures.append(candidate.name)
-            }
-        }
-
-        await runtime.broadcastSkillsCatalogChange()
-
-        if !deleteFailures.isEmpty {
-            throw SkillCompositionError.mergeCleanupFailed(deleteFailures)
+        if request.mode == .explicitRemember {
+            runtime.applySkillExtractionPhase(
+                .failed(
+                    message: "Couldn’t identify what to remember. Try again, or add a short note: /remember …"
+                )
+            )
         }
     }
-}
-
-/// Lightweight catalog entry for extraction analysis (no body).
-nonisolated struct SkillCatalogSummary: Sendable {
-    let name: String
-    let description: String
-    let scope: SkillScope
 }

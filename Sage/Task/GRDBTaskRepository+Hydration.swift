@@ -28,31 +28,6 @@ extension GRDBTaskRepository {
 
         let projectID = (row["project_id"] as String?).flatMap(UUID.init(uuidString:))
 
-        let activatedSkills: Set<String>
-        if let json: String = row["activated_skills"],
-           let data = json.data(using: .utf8),
-           let names = try? JSONDecoder().decode([String].self, from: data) {
-            activatedSkills = Set(names)
-        } else {
-            activatedSkills = []
-        }
-
-        let workPlan: WorkPlan?
-        if let json: String = row["work_plan_json"],
-           let data = json.data(using: .utf8) {
-            workPlan = try? JSONDecoder().decode(WorkPlan.self, from: data)
-        } else {
-            workPlan = nil
-        }
-
-        let workingMemory: TaskWorkingMemory?
-        if let json: String = row["working_memory_json"],
-           let data = json.data(using: .utf8) {
-            workingMemory = try? JSONDecoder().decode(TaskWorkingMemory.self, from: data)
-        } else {
-            workingMemory = nil
-        }
-
         return TaskRecord(
             id: id,
             status: status,
@@ -62,47 +37,32 @@ extension GRDBTaskRepository {
             abstract: row["abstract"],
             topicUpdatedAt: topicUpdatedAt,
             events: includeHistory ? try loadEvents(taskID: id, database: database) : [],
-            workPlan: workPlan,
-            workingMemory: workingMemory,
+            workPlan: decodeJSON(row["work_plan_json"], as: WorkPlan.self),
+            workingMemory: decodeJSON(row["working_memory_json"], as: TaskWorkingMemory.self),
             pendingPlan: includeHistory ? try loadPlan(taskID: id, database: database) : nil,
-            todos: {
-                if let json: String = row["todo_list_json"],
-                   let data = json.data(using: .utf8),
-                   let items = try? JSONDecoder().decode([AgentTodoItem].self, from: data) {
-                    return items
-                }
-                return []
-            }(),
-            unlockedMCPServerNames: {
-                if let json: String = row["unlocked_mcp_servers_json"],
-                   let data = json.data(using: .utf8),
-                   let names = try? JSONDecoder().decode([String].self, from: data) {
-                    return Set(names)
-                }
-                return []
-            }(),
-            pendingPrompt: {
-                if let json: String = row["pending_prompt_json"],
-                   let data = json.data(using: .utf8),
-                   let prompt = try? JSONDecoder().decode(AgentPendingPrompt.self, from: data) {
-                    return prompt
-                }
-                return nil
-            }(),
-            // Entity extraction is not wired; skip the table read on the hot path.
+            todos: decodeJSON(row["todo_list_json"], as: [AgentTodoItem].self) ?? [],
+            unlockedMCPServerNames: Set(decodeJSON(row["unlocked_mcp_servers_json"], as: [String].self) ?? []),
+            pendingPrompt: decodeJSON(row["pending_prompt_json"], as: AgentPendingPrompt.self),
             entities: [],
             relatedTaskIDs: try loadRelations(taskID: id, database: database),
-            activatedSkillNames: activatedSkills,
-            skillPersistConsidered: {
-                if let flag = row["skill_persist_considered"] as Int? { return flag != 0 }
-                if let flag = row["skill_persist_considered"] as Bool? { return flag }
-                return false
-            }(),
+            activatedSkillNames: Set(decodeJSON(row["activated_skills"], as: [String].self) ?? []),
+            skillPersistConsidered: boolFlag(row),
             originScheduleID: (row["origin_schedule_id"] as String?)
                 .flatMap(UUID.init(uuidString:)),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )
+    }
+
+    func decodeJSON<T: Decodable>(_ raw: String?, as type: T.Type) -> T? {
+        guard let raw, let data = raw.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
+    func boolFlag(_ row: Row) -> Bool {
+        if let flag = row["skill_persist_considered"] as Int? { return flag != 0 }
+        if let flag = row["skill_persist_considered"] as Bool? { return flag }
+        return false
     }
 
     func loadProject(id: UUID, database: Database) throws -> ProjectRecord? {
@@ -329,7 +289,8 @@ extension GRDBTaskRepository {
             ORDER BY position
             """,
             arguments: [taskID.uuidString]
-        ).compactMap(UUID.init(uuidString:))
+        )
+        .compactMap(UUID.init(uuidString:))
     }
 
     func loadPlan(taskID: UUID, database: Database) throws -> AgentPlan? {

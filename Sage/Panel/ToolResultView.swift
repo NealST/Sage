@@ -119,8 +119,7 @@ struct ToolResultView: View {
         split.payload != nil ? "square.and.pencil" : SageDesign.Symbol.tools
     }
 
-    @ViewBuilder
-    private var bodyContent: some View {
+    @ViewBuilder private var bodyContent: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
@@ -146,8 +145,7 @@ struct ToolResultView: View {
         }
     }
 
-    @ViewBuilder
-    private var pathContextMenu: some View {
+    @ViewBuilder private var pathContextMenu: some View {
         let display = split.summary
         let urls = PathTextSupport.allFileURLs(in: display, policy: pathGuardPolicy)
         if urls.isEmpty {

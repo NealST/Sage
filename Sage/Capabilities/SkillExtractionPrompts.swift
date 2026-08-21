@@ -51,7 +51,8 @@ nonisolated enum SkillExtractionPrompts {
         {"action": "new", "name": "kebab-case-name", "description": "One sentence description of when to use the skill"}
 
         If an existing skill should be enhanced:
-        {"action": "enhance", "target": "existing-skill-name", "description": "Updated one-sentence description of when to use the skill"}
+        {"action": "enhance", "target": "existing-skill-name", \
+        "description": "Updated one-sentence description of when to use the skill"}
 
         Do NOT generate the full skill body — it will be composed later when the user confirms, \
         using the task transcript (and for enhance, the existing skill text) plus skill writing best practices.
@@ -87,7 +88,8 @@ nonisolated enum SkillExtractionPrompts {
         {"action": "new", "name": "kebab-case-name", "description": "One sentence description of when to use the skill"}
 
         If an existing skill should be enhanced:
-        {"action": "enhance", "target": "existing-skill-name", "description": "Updated one-sentence description of when to use the skill"}
+        {"action": "enhance", "target": "existing-skill-name", \
+        "description": "Updated one-sentence description of when to use the skill"}
 
         Do NOT use action "skip". Do NOT generate the full skill body — it will be composed later \
         when the user confirms.

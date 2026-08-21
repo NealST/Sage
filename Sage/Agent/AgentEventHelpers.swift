@@ -47,13 +47,19 @@ nonisolated enum AgentEventHelpers {
     static func forkLastUserInput(
         events: [AgentEvent],
         userEventID: UUID
-    ) -> (kept: [AgentEvent], moved: AgentEvent, discarded: [AgentEvent])? {
+    ) -> TranscriptFork? {
         guard let index = events.firstIndex(where: { event in
             event.id == userEventID && event.kind == .userInput
         }) else { return nil }
         let userEvent = events[index]
         let kept = Array(events[..<index])
         let discarded = Array(events[(index + 1)...])
-        return (kept, userEvent, discarded)
+        return TranscriptFork(kept: kept, moved: userEvent, discarded: discarded)
     }
+}
+
+nonisolated struct TranscriptFork: Sendable {
+    var kept: [AgentEvent]
+    var moved: AgentEvent
+    var discarded: [AgentEvent]
 }

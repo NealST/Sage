@@ -138,7 +138,9 @@ nonisolated private func setOutputVolume(_ volume: Float32) throws {
     )
     let status = AudioObjectSetPropertyData(deviceID, &address, 0, nil, size, &vol)
     guard status == noErr else {
-        throw ToolError.operationFailed("Cannot set volume (error \(status)). The device may not support volume control.")
+        throw ToolError.operationFailed(
+            "Cannot set volume (error \(status)). The device may not support volume control."
+        )
     }
 }
 

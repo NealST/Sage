@@ -11,7 +11,10 @@ extension SkillToolExecutor {
     /// Tool definition for `load_skill` — exposed to the cloud model when skills are deferred.
     nonisolated static let loadSkillDefinition = ToolDefinition(
         name: "load_skill",
-        description: "Load a skill's full content by name. Use this when a skill from the Available Skills list is relevant to the user's request. Returns the skill's complete instructions.",
+        description: """
+            Load a skill's full content by name. Use this when a skill from the Available Skills list \
+            is relevant to the user's request. Returns the skill's complete instructions.
+            """,
         parameters: .object([
             "type": .string("object"),
             "properties": .object([
@@ -23,7 +26,10 @@ extension SkillToolExecutor {
                     "type": .string("string"),
                     "enum": .array([.string("inline"), .string("fork")]),
                     "description": .string(
-                        "inline (default) loads instructions into this agent; fork runs a private read-only Explore subagent."
+                        """
+                        inline (default) loads instructions into this agent; \
+                        fork runs a private read-only Explore subagent.
+                        """
                     ),
                 ]),
                 "task": .object([
@@ -53,7 +59,12 @@ extension SkillToolExecutor {
                 ]),
                 "path": .object([
                     "type": .string("string"),
-                    "description": .string("Relative path to the resource file within the skill directory (e.g. 'references/REFERENCE.md')."),
+                    "description": .string(
+                        """
+                        Relative path to the resource file within the skill directory \
+                        (e.g. 'references/REFERENCE.md').
+                        """
+                    ),
                 ]),
             ]),
             "required": .array([.string("skill_name"), .string("path")]),
@@ -78,7 +89,9 @@ extension SkillToolExecutor {
                 ]),
                 "script_path": .object([
                     "type": .string("string"),
-                    "description": .string("Relative path to the script within the skill directory (e.g. 'scripts/extract.py')."),
+                    "description": .string(
+                        "Relative path to the script within the skill directory (e.g. 'scripts/extract.py')."
+                    ),
                 ]),
                 "arguments": .object([
                     "type": .string("string"),
@@ -86,11 +99,18 @@ extension SkillToolExecutor {
                 ]),
                 "interpreter": .object([
                     "type": .string("string"),
-                    "description": .string("Optional interpreter (e.g. 'python3', 'node', 'bash'). If omitted, the script is executed directly."),
+                    "description": .string(
+                        """
+                        Optional interpreter (e.g. 'python3', 'node', 'bash'). \
+                        If omitted, the script is executed directly.
+                        """
+                    ),
                 ]),
                 "timeout_seconds": .object([
                     "type": .string("integer"),
-                    "description": .string("Timeout in seconds (default 30). The script is terminated if it exceeds this limit."),
+                    "description": .string(
+                        "Timeout in seconds (default 30). The script is terminated if it exceeds this limit."
+                    ),
                 ]),
             ]),
             "required": .array([.string("skill_name"), .string("script_path")]),
@@ -118,7 +138,12 @@ extension SkillToolExecutor {
                 ]),
                 "name": .object([
                     "type": .string("string"),
-                    "description": .string("Kebab-case skill name (1-64 chars, lowercase alphanumeric and hyphens). For 'enhance', must match an existing skill name."),
+                    "description": .string(
+                        """
+                        Kebab-case skill name (1-64 chars, lowercase alphanumeric and hyphens). \
+                        For 'enhance', must match an existing skill name.
+                        """
+                    ),
                 ]),
                 "description": .object([
                     "type": .string("string"),

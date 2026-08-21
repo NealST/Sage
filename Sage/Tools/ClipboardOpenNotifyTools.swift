@@ -10,7 +10,10 @@ import UserNotifications
 nonisolated struct GetClipboardTool: AgentTool {
     let definition = ToolDefinition(
         name: "get_clipboard",
-        description: "Read the current text content of the system clipboard. Returns \"(clipboard empty)\" if empty. Capped at 10K characters.",
+        description: """
+            Read the current text content of the system clipboard. \
+            Returns \"(clipboard empty)\" if empty. Capped at 10K characters.
+            """,
         parameters: .schemaObject(properties: [:])
     )
 
@@ -125,7 +128,11 @@ nonisolated struct OpenApplicationTool: AgentTool {
             do {
                 try process.run()
             } catch {
-                continuation.resume(throwing: ToolError.operationFailed("Failed to launch open command: \(error.localizedDescription)"))
+                continuation.resume(
+                    throwing: ToolError.operationFailed(
+                        "Failed to launch open command: \(error.localizedDescription)"
+                    )
+                )
             }
         }
     }
@@ -153,10 +160,15 @@ nonisolated struct OpenApplicationTool: AgentTool {
 nonisolated struct OpenURLTool: AgentTool {
     let definition = ToolDefinition(
         name: "open_url",
-        description: "Open a URL in the user's default browser (http/https) or mail client (mailto). Other schemes are not allowed.",
+        description: """
+            Open a URL in the user's default browser (http/https) or mail client (mailto). \
+            Other schemes are not allowed.
+            """,
         parameters: .schemaObject(
             properties: [
-                "url": .stringProperty("Full URL including scheme (e.g. 'https://example.com' or 'mailto:user@example.com')"),
+                "url": .stringProperty(
+                    "Full URL including scheme (e.g. 'https://example.com' or 'mailto:user@example.com')"
+                ),
             ],
             required: ["url"]
         )

@@ -24,7 +24,7 @@ final class ScheduleTrigger {
             )
             for await _ in stream {
                 guard !Task.isCancelled else { return }
-                await self?.onFire()
+                self?.onFire()
             }
         }
     }
@@ -45,7 +45,7 @@ final class ScheduleTrigger {
         )
         source.setEventHandler { [weak self] in
             Task { @MainActor in
-                await self?.onFire()
+                self?.onFire()
             }
         }
         source.resume()
