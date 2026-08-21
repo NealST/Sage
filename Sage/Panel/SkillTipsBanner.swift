@@ -67,9 +67,9 @@ struct SkillTipsBanner: View {
                                 }
                             },
                             onUpdate: { mutate in
-                                tips.updateSchedule(draft.id) {
-                                    mutate(&$0)
-                                    $0.originTaskID = session.agent.state.activeTaskID
+                                tips.updateSchedule(draft.id) { draft in
+                                    mutate(&draft)
+                                    draft.originTaskID = session.agent.state.activeTaskID
                                 }
                             }
                         )
@@ -132,8 +132,8 @@ struct SkillTipsBanner: View {
         let record = ScheduleRecord.agent(from: saved)
         let trial = saved.runOnceNow
         Task {
-            let ok = await appState.schedules.save(record, runOnceNow: trial)
-            if !ok, let message = appState.schedules.lastError {
+            let didSave = await appState.schedules.save(record, runOnceNow: trial)
+            if !didSave, let message = appState.schedules.lastError {
                 session.agent.reportFailure(message)
             }
         }

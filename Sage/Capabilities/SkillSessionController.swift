@@ -130,8 +130,8 @@ final class SkillSessionController {
             .filter(\.enabled)
             .filter { inProjectContext || $0.scope == .global }
         // Analyze needs metadata only — bodies are loaded later on confirm/compose.
-        let existingSkills: [SkillCatalogSummary] = catalogSkills.map {
-            SkillCatalogSummary(name: $0.name, description: $0.description, scope: $0.scope)
+        let existingSkills: [SkillCatalogSummary] = catalogSkills.map { skill in
+            SkillCatalogSummary(name: skill.name, description: skill.description, scope: skill.scope)
         }
         let pathByName = Dictionary(
             catalogSkills.map { ($0.name, $0.path) }

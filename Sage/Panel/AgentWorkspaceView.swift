@@ -178,7 +178,7 @@ struct AgentWorkspaceView: View {
     }
 
     private var bootstrapPlaceholder: some View {
-        VStack(spacing: SageDesign.Spacing.md) {
+        VStack(spacing: SageDesign.Spacing.medium) {
             ProgressView()
                 .controlSize(.regular)
             Text(isProjectWindow ? "Opening project…" : "Starting Sage…")
@@ -207,8 +207,8 @@ struct AgentWorkspaceView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.small)
         .background(Color.orange.opacity(0.08))
         .accessibilityElement(children: .combine)
     }
@@ -229,9 +229,9 @@ struct AgentWorkspaceView: View {
     /// system titlebar text hidden so it doesn’t repeat the same information.
     private func updateWindowTitle() {
         let autosave = session.windowAutosaveName
-        guard let window = NSApp.windows.first(where: {
-            $0.identifier?.rawValue == autosave
-                || $0.frameAutosaveName == autosave
+        guard let window = NSApp.windows.first(where: { candidate in
+            candidate.identifier?.rawValue == autosave
+                || candidate.frameAutosaveName == autosave
         }) else { return }
 
         window.titleVisibility = .hidden

@@ -81,8 +81,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        let otherOpen = NSApp.windows.contains {
-            ($0.title == "Sage" || $0.title == "Skills" || $0.title == "Dashboard") && $0.isVisible
+        let otherOpen = NSApp.windows.contains { window in
+            (window.title == "Sage" || window.title == "Skills" || window.title == "Dashboard") && window.isVisible
         }
         if !otherOpen {
             NSApp.setActivationPolicy(.accessory)

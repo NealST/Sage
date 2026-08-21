@@ -20,7 +20,7 @@ struct UnifiedDiffView: View {
     @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @State private var expanded = false
 
-    private var ops: [LineDiff.Op] {
+    private var ops: [LineDiff.Operation] {
         let prior = created ? "" : (before ?? "")
         return LineDiff.withCollapsedContext(LineDiff.diff(before: prior, after: after), context: 3)
     }
@@ -31,13 +31,13 @@ struct UnifiedDiffView: View {
         return LineDiff.stats(before: prior, after: after)
     }
 
-    private var displayOps: [LineDiff.Op] {
+    private var displayOps: [LineDiff.Operation] {
         if expanded || ops.count <= collapsedLineLimit { return ops }
         return Array(ops.prefix(collapsedLineLimit))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             HStack(spacing: 6) {
                 if let path {
                     Image(systemName: created ? "doc.badge.plus" : "doc.text")
@@ -58,8 +58,8 @@ struct UnifiedDiffView: View {
             if created, before == nil || before?.isEmpty == true {
                 // Pure create — show after as insertions without a confusing empty left side.
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(displayOps.enumerated()), id: \.offset) { _, op in
-                        diffRow(op)
+                    ForEach(Array(displayOps.enumerated()), id: \.offset) { _, operation in
+                        diffRow(operation)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -78,8 +78,8 @@ struct UnifiedDiffView: View {
                 .padding(.horizontal, 8)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(displayOps.enumerated()), id: \.offset) { _, op in
-                        diffRow(op)
+                    ForEach(Array(displayOps.enumerated()), id: \.offset) { _, operation in
+                        diffRow(operation)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -114,8 +114,8 @@ struct UnifiedDiffView: View {
     }
 
     @ViewBuilder
-    private func diffRow(_ op: LineDiff.Op) -> some View {
-        switch op {
+    private func diffRow(_ operation: LineDiff.Operation) -> some View {
+        switch operation {
         case let .equal(line):
             textRow(prefix: " ", text: line, color: .primary.opacity(0.55), fill: Color.clear)
 

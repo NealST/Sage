@@ -92,12 +92,12 @@ nonisolated enum SkillToolPolicy {
             activatedSkillNames: activatedSkillNames,
             enabledSkills: enabledSkills
         ) else { return definitions }
-        return definitions.filter {
-            allowed.contains($0.name)
-                || $0.name == RecallTaskTranscriptTool.name
-                || $0.name == ManageTodoListTool.name
-                || $0.name == ExploreSubagentTool.name
-                || MCPToolGroupTool.isGroupTool($0.name)
+        return definitions.filter { definition in
+            allowed.contains(definition.name)
+                || definition.name == RecallTaskTranscriptTool.name
+                || definition.name == ManageTodoListTool.name
+                || definition.name == ExploreSubagentTool.name
+                || MCPToolGroupTool.isGroupTool(definition.name)
         }
     }
 }

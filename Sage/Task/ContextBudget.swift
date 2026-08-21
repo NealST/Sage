@@ -72,8 +72,8 @@ nonisolated enum ContextBudget {
     /// Schedules system slices and transcript events into `layout.budget.usableTokens`.
     static func assemble(_ layout: PromptLayout) -> PromptAssembly {
         let budget = layout.budget
-        let sanitized = sanitize(layout.events).map {
-            capToolResult($0, maxTokens: budget.maxToolResultTokens)
+        let sanitized = sanitize(layout.events).map { event in
+            capToolResult(event, maxTokens: budget.maxToolResultTokens)
         }
 
         let memory = layout.workingMemory?.validated(against: layout.events)

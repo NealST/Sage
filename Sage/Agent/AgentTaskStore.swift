@@ -367,8 +367,8 @@ final class AgentTaskStore {
 
         state.activatedSkillNames = task.activatedSkillNames
         state.pendingPrompt = task.pendingPrompt
-        state.lastAssistantText = task.events.last {
-            $0.kind == .assistantResponse && ($0.toolCalls?.isEmpty ?? true)
+        state.lastAssistantText = task.events.last { event in
+            event.kind == .assistantResponse && (event.toolCalls?.isEmpty ?? true)
         }?.content
 
         if case .toolRoundLimit = task.pendingPrompt {
@@ -417,8 +417,8 @@ final class AgentTaskStore {
         normalizeRestoredPlan(&plan, events: task.events)
 
         var updated = task
-        let unfinished = plan.steps.contains {
-            $0.status != .succeeded && $0.status != .skipped
+        let unfinished = plan.steps.contains { step in
+            step.status != .succeeded && step.status != .skipped
         }
         if unfinished {
             updated.pendingPlan = plan
@@ -443,8 +443,8 @@ final class AgentTaskStore {
 
     private func normalizeRestoredPlan(_ plan: inout AgentPlan, events: [AgentEvent]) {
         for index in plan.steps.indices {
-            if let result = events.last(where: {
-                $0.kind == .toolResult && $0.toolCallID == plan.steps[index].toolCallID
+            if let result = events.last(where: { event in
+                event.kind == .toolResult && event.toolCallID == plan.steps[index].toolCallID
             }) {
                 if result.content.hasPrefix("ERROR:") {
                     plan.steps[index].status = .failed

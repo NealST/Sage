@@ -154,12 +154,10 @@ nonisolated enum ShellCommandPolicy {
             }
         }
 
-        for pattern in blockedPatterns {
-            if lowered.contains(pattern) {
-                throw ToolError.operationFailed(
-                    "Command blocked: contains dangerous pattern '\(pattern)'. This operation is not allowed."
-                )
-            }
+        for pattern in blockedPatterns where lowered.contains(pattern) {
+            throw ToolError.operationFailed(
+                "Command blocked: contains dangerous pattern '\(pattern)'. This operation is not allowed."
+            )
         }
     }
 }

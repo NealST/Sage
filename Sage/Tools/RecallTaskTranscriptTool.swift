@@ -9,16 +9,11 @@ import Foundation
 
 /// Current-task context for recall / todos. Set around tool dispatch.
 nonisolated enum ActiveTaskContext {
-    @TaskLocal
-    static var repository: (any TaskRepository)?
-    @TaskLocal
-    static var taskID: UUID?
-    @TaskLocal
-    static var applyTodoList: (@Sendable ([AgentTodoItem]) async -> Void)?
-    @TaskLocal
-    static var unlockedMCPServerNames: Set<String> = []
-    @TaskLocal
-    static var applyUnlockedMCPServers: (@Sendable (Set<String>) async -> Void)?
+    @TaskLocal static var repository: (any TaskRepository)?
+    @TaskLocal static var taskID: UUID?
+    @TaskLocal static var applyTodoList: (@Sendable ([AgentTodoItem]) async -> Void)?
+    @TaskLocal static var unlockedMCPServerNames: Set<String> = []
+    @TaskLocal static var applyUnlockedMCPServers: (@Sendable (Set<String>) async -> Void)?
 }
 
 /// Loads exact prior turns that working memory only summarized.

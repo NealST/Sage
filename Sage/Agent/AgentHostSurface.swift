@@ -125,8 +125,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
 
     var usableTranscriptEventCount: Int {
         guard let task = state.activeTask else { return 0 }
-        return task.events.filter {
-            $0.kind == .userInput || $0.kind == .assistantResponse || $0.kind == .toolResult
+        return task.events.filter { event in
+            event.kind == .userInput || event.kind == .assistantResponse || event.kind == .toolResult
         }.count
     }
 
@@ -188,12 +188,12 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         )
 
         activateSkill(named: skill.name)
-        let ok = await taskStore.commit(appendEvents: [event], deleteEventIDs: []) { _ in }
-        if !ok {
+        let didCommit = await taskStore.commit(appendEvents: [event], deleteEventIDs: []) { _ in }
+        if !didCommit {
             state.activatedSkillNames.remove(skill.name)
             reportCommandFailure("Couldn’t activate skill '\(skill.name)'.")
         }
-        return ok
+        return didCommit
     }
 
     func presentScheduleDraft(_ draft: ScheduleDraft) {

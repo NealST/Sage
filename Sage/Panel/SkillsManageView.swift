@@ -109,7 +109,7 @@ struct SkillsManageView: View {
     // MARK: - Chrome
 
     private var toolbar: some View {
-        HStack(spacing: SageDesign.Spacing.sm) {
+        HStack(spacing: SageDesign.Spacing.small) {
             Spacer(minLength: 0)
 
             Menu {
@@ -144,8 +144,8 @@ struct SkillsManageView: View {
             .help("Refresh")
             .accessibilityLabel("Refresh")
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.small)
     }
 
     // MARK: - Source list
@@ -217,7 +217,7 @@ struct SkillsManageView: View {
     private var detailPane: some View {
         if let selected = selectedSkill {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+                HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selected.name)
                             .font(.system(size: type.title, weight: .semibold))
@@ -240,8 +240,8 @@ struct SkillsManageView: View {
                     }
                     .controlSize(.small)
                 }
-                .padding(.horizontal, SageDesign.Spacing.xl)
-                .padding(.vertical, SageDesign.Spacing.md)
+                .padding(.horizontal, SageDesign.Spacing.extraLarge)
+                .padding(.vertical, SageDesign.Spacing.medium)
 
                 if !selected.description.isEmpty {
                     skillDescriptionSection(selected.description)
@@ -266,8 +266,8 @@ struct SkillsManageView: View {
                             .textSelection(.enabled)
                         }
                     }
-                    .padding(.horizontal, SageDesign.Spacing.xl)
-                    .padding(.vertical, SageDesign.Spacing.lg)
+                    .padding(.horizontal, SageDesign.Spacing.extraLarge)
+                    .padding(.vertical, SageDesign.Spacing.large)
                 }
             }
             .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -319,8 +319,8 @@ struct SkillsManageView: View {
                 .help(descriptionExpanded ? "Collapse description" : "Expand description")
             }
         }
-        .padding(.horizontal, SageDesign.Spacing.xl)
-        .padding(.bottom, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.extraLarge)
+        .padding(.bottom, SageDesign.Spacing.medium)
     }
 
     private static let collapsedDescriptionLineLimit = 3
@@ -339,8 +339,8 @@ struct SkillsManageView: View {
             Button("Done", action: performDone)
                 .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.medium)
     }
 
     private func performDone() {

@@ -98,8 +98,8 @@ nonisolated enum ToolInvocationPipeline {
             return ExploreSubagentTool.definition
         }
         if let server = MCPToolGroupTool.serverName(fromGroupTool: name) {
-            let definitions = mcp?.mcpToolDefinitions().filter {
-                MCPToolGroupTool.serverName(fromQualifiedTool: $0.name) == server
+            let definitions = mcp?.mcpToolDefinitions().filter { definition in
+                MCPToolGroupTool.serverName(fromQualifiedTool: definition.name) == server
             } ?? []
             guard !definitions.isEmpty else {
                 throw ToolError.operationFailed("MCP server '\(server)' has no available tools.")

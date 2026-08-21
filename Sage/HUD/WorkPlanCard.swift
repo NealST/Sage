@@ -14,7 +14,7 @@ struct WorkPlanCard: View {
     var onStop: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.intent)
                 .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -45,7 +45,7 @@ struct WorkPlanCard: View {
             }
 
             if isExecuting {
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Spacer(minLength: 0)
                     if let onStop {
                         Button("Stop", role: .cancel, action: onStop)
@@ -53,9 +53,9 @@ struct WorkPlanCard: View {
                             .controlSize(.regular)
                     }
                 }
-                .padding(.top, SageDesign.Spacing.xs)
+                .padding(.top, SageDesign.Spacing.extraSmall)
             } else {
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Button("Cancel", role: .cancel, action: onCancel)
                         .keyboardShortcut(.cancelAction)
                         .controlSize(.regular)
@@ -67,7 +67,7 @@ struct WorkPlanCard: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.regular)
                 }
-                .padding(.top, SageDesign.Spacing.xs)
+                .padding(.top, SageDesign.Spacing.extraSmall)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -18,14 +18,17 @@ nonisolated enum ToolCallPresentation {
 
         static func == (lhs: Self, rhs: Self) -> Bool {
             switch (lhs, rhs) {
-            case let (.fileEdit(p1, c1, l1), .fileEdit(p2, c2, l2)):
-                return p1 == p2 && c1 == c2 && l1 == l2
+            case let (.fileEdit(leftPath, leftContent, leftLanguage), .fileEdit(rightPath, rightContent, rightLanguage)):
+                return leftPath == rightPath
+                    && leftContent == rightContent
+                    && leftLanguage == rightLanguage
 
-            case let (.text(a1, v1), .text(a2, v2)):
-                return a1 == a2 && v1 == v2
+            case let (.text(leftLabel, leftValue), .text(rightLabel, rightValue)):
+                return leftLabel == rightLabel && leftValue == rightValue
 
-            case let (.fields(f1), .fields(f2)):
-                return f1.map(\.key) == f2.map(\.key) && f1.map(\.value) == f2.map(\.value)
+            case let (.fields(leftFields), .fields(rightFields)):
+                return leftFields.map(\.key) == rightFields.map(\.key)
+                    && leftFields.map(\.value) == rightFields.map(\.value)
 
             case (.empty, .empty):
                 return true
@@ -319,26 +322,26 @@ nonisolated enum ToolCallPresentation {
     private static func display(_ value: JSONValue?) -> String? {
         guard let value else { return nil }
         switch value {
-        case .string(let s):
-            return s
+        case .string(let string):
+            return string
 
-        case .number(let n):
-            if n.rounded() == n, n >= Double(Int.min), n <= Double(Int.max) {
-                return String(Int(n))
+        case .number(let number):
+            if number.rounded() == number, number >= Double(Int.min), number <= Double(Int.max) {
+                return String(Int(number))
             }
-            return String(n)
+            return String(number)
 
-        case .bool(let b):
-            return b ? "true" : "false"
+        case .bool(let flag):
+            return flag ? "true" : "false"
 
         case .null:
             return nil
 
         case .object, .array:
             guard let data = try? JSONEncoder().encode(value),
-                  let s = String(data: data, encoding: .utf8)
+                  let encoded = String(data: data, encoding: .utf8)
             else { return nil }
-            return s
+            return encoded
         }
     }
 

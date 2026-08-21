@@ -169,9 +169,9 @@ nonisolated struct TypeTextTool: AgentTool {
             var lastAXError: AXError?
 
             let selectedTextSettable: DarwinBoolean = {
-                var s: DarwinBoolean = false
-                AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &s)
-                return s
+                var settable: DarwinBoolean = false
+                AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable)
+                return settable
             }()
 
             if selectedTextSettable.boolValue {

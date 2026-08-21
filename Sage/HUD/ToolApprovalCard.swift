@@ -15,7 +15,7 @@ struct ToolApprovalCard: View {
     var onSkip: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(title)
                 .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -35,7 +35,7 @@ struct ToolApprovalCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Button("Skip", role: .cancel, action: onSkip)
                     .keyboardShortcut(.cancelAction)
                     .controlSize(.regular)
@@ -46,7 +46,7 @@ struct ToolApprovalCard: View {
                     .controlSize(.regular)
             }
 
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Spacer(minLength: 0)
 
                 Button(toolSessionTitle, action: onAllowTool)
@@ -57,7 +57,7 @@ struct ToolApprovalCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
             }
-            .padding(.top, SageDesign.Spacing.xs)
+            .padding(.top, SageDesign.Spacing.extraSmall)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)

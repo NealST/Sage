@@ -86,8 +86,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
-        let otherOpen = NSApp.windows.contains {
-            ($0.title == "Sage" || $0.title == "Settings") && $0.isVisible
+        let otherOpen = NSApp.windows.contains { window in
+            (window.title == "Sage" || window.title == "Settings") && window.isVisible
         }
         if !otherOpen {
             NSApp.setActivationPolicy(.accessory)

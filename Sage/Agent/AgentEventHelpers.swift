@@ -25,10 +25,10 @@ nonisolated enum AgentEventHelpers {
     }
 
     static func hasSuccessfulToolResult(for toolCallID: String, in events: [AgentEvent]) -> Bool {
-        events.contains {
-            $0.kind == .toolResult
-                && $0.toolCallID == toolCallID
-                && !$0.content.hasPrefix("ERROR:")
+        events.contains { event in
+            event.kind == .toolResult
+                && event.toolCallID == toolCallID
+                && !event.content.hasPrefix("ERROR:")
         }
     }
 
@@ -48,8 +48,8 @@ nonisolated enum AgentEventHelpers {
         events: [AgentEvent],
         userEventID: UUID
     ) -> (kept: [AgentEvent], moved: AgentEvent, discarded: [AgentEvent])? {
-        guard let index = events.firstIndex(where: {
-            $0.id == userEventID && $0.kind == .userInput
+        guard let index = events.firstIndex(where: { event in
+            event.id == userEventID && event.kind == .userInput
         }) else { return nil }
         let userEvent = events[index]
         let kept = Array(events[..<index])

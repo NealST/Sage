@@ -16,7 +16,7 @@ struct TodoListCard: View {
                 .accessibilityAddTraits(.isHeader)
 
             ForEach(items) { item in
-                HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.sm) {
+                HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
                     Image(systemName: icon(for: item.status))
                         .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
                         .foregroundStyle(color(for: item.status))

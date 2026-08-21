@@ -230,13 +230,13 @@ nonisolated struct ScheduleRecord: Identifiable, Codable, Sendable, Equatable {
                 updatedAt = .now
                 return "A schedule needs confirmation"
 
-            case .finished(let ok, let summary, let plan, _):
+            case .finished(let succeeded, let summary, let plan, _):
                 lastStatus = Self.statusText(summary, afterWake: afterWake)
-                if ok, let plan {
+                if succeeded, let plan {
                     setFrozenWorkPlan(plan)
                     status = .armed
                     completeSuccessfully(isTrial: isTrial)
-                } else if ok {
+                } else if succeeded {
                     status = frozenWorkPlan == nil ? .needsFirstRun : .armed
                     completeSuccessfully(isTrial: isTrial)
                 } else {
@@ -439,7 +439,7 @@ nonisolated struct ScheduleScriptOutcome: Sendable, Equatable {
 
 /// Result of one scheduled agent invocation.
 nonisolated enum ScheduleAgentOutcome: Sendable, Equatable {
-    case finished(ok: Bool, summary: String, plan: WorkPlan?, taskID: UUID?)
+    case finished(succeeded: Bool, summary: String, plan: WorkPlan?, taskID: UUID?)
     case needsConfirmation(taskID: UUID, plan: WorkPlan?)
     case degraded(reason: String)
 
@@ -462,7 +462,7 @@ nonisolated enum ScheduleBeatResult: Sendable, Equatable {
     func notification(isTrial: Bool, cadence: ScheduleCadence) -> ScheduleNotify {
         switch self {
         case .stopped:
-            return .none
+            return .mute
 
         case .script(let outcome):
             if outcome.failed { return .sound }
@@ -473,8 +473,8 @@ nonisolated enum ScheduleBeatResult: Sendable, Equatable {
             case .degraded, .needsConfirmation:
                 return .sound
 
-            case .finished(let ok, _, _, _):
-                if !ok { return .sound }
+            case .finished(let succeeded, _, _, _):
+                if !succeeded { return .sound }
                 return (isTrial || cadence.playsSuccessSound) ? .sound : .silent
             }
         }
@@ -483,7 +483,7 @@ nonisolated enum ScheduleBeatResult: Sendable, Equatable {
 
 /// How loudly a finished beat should announce itself.
 nonisolated enum ScheduleNotify: Sendable, Equatable {
-    case none
+    case mute
     case silent
     case sound
 }

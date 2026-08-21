@@ -135,9 +135,9 @@ struct SkillSaveStatusIndicator: View {
             Text("Skill saves")
                 .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, SageDesign.Spacing.md)
-                .padding(.top, SageDesign.Spacing.md)
-                .padding(.bottom, SageDesign.Spacing.sm)
+                .padding(.horizontal, SageDesign.Spacing.medium)
+                .padding(.top, SageDesign.Spacing.medium)
+                .padding(.bottom, SageDesign.Spacing.small)
 
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
@@ -151,12 +151,12 @@ struct SkillSaveStatusIndicator: View {
             }
         }
         .frame(width: 280)
-        .padding(.bottom, SageDesign.Spacing.sm)
+        .padding(.bottom, SageDesign.Spacing.small)
     }
 
     @ViewBuilder
     private func jobRow(_ job: SkillSaveJob) -> some View {
-        HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+        HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
             jobStatusIcon(job.status)
                 .frame(width: 16, height: 16)
                 .padding(.top, 1)
@@ -194,7 +194,7 @@ struct SkillSaveStatusIndicator: View {
                 .accessibilityLabel("Dismiss")
             }
         }
-        .padding(.horizontal, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.medium)
         .padding(.vertical, 8)
     }
 

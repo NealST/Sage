@@ -83,11 +83,11 @@ nonisolated struct APIMessage: Encodable {
         // empty string is widely accepted by compatible providers.
         if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
             content = event.content.isEmpty ? nil : event.content
-            self.toolCalls = toolCalls.map {
+            self.toolCalls = toolCalls.map { call in
                 APIToolCall(
-                    id: $0.id,
+                    id: call.id,
                     type: "function",
-                    function: APIToolCallFunction(name: $0.name, arguments: $0.argumentsJSON)
+                    function: APIToolCallFunction(name: call.name, arguments: call.argumentsJSON)
                 )
             }
         } else {

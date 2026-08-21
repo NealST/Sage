@@ -18,8 +18,8 @@ enum SlashCommandRegistry {
         let reserved = Set(builtinDefs.map { $0.name.lowercased() })
         let skillDefs = skills
             .filter { !reserved.contains($0.name.lowercased()) }
-            .map {
-                SlashCommandDefinition(name: $0.name, description: $0.description, kind: .skill)
+            .map { skill in
+                SlashCommandDefinition(name: skill.name, description: skill.description, kind: .skill)
             }
         return builtinDefs + skillDefs
     }
@@ -33,15 +33,15 @@ enum SlashCommandRegistry {
         guard let invocation = parse(input) else { return nil }
         let lowered = invocation.name.lowercased()
 
-        if let builtin = builtins.first(where: {
-            $0.definition.name.lowercased() == lowered
+        if let builtin = builtins.first(where: { command in
+            command.definition.name.lowercased() == lowered
         }) {
             return await builtin.handle(argument: invocation.argument, host: host)
         }
 
         // Case-insensitive skill match → canonical name from the catalog.
-        guard let canonical = enabledSkillNames.first(where: {
-            $0.lowercased() == lowered
+        guard let canonical = enabledSkillNames.first(where: { name in
+            name.lowercased() == lowered
         }) else {
             return nil
         }

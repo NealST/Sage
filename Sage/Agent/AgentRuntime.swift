@@ -215,8 +215,8 @@ final class AgentRuntime {
             },
             preToolUseDecision: { [weak self] name, args in
                 guard let self else { return .deny("The agent session is no longer available.") }
-                let activated = self.host.enabledSkills.filter {
-                    self.state.activatedSkillNames.contains($0.name)
+                let activated = self.host.enabledSkills.filter { skill in
+                    self.state.activatedSkillNames.contains(skill.name)
                 }
                 let decision = await PreToolUseHookEvaluator.shared.evaluate(
                     toolName: name,

@@ -34,8 +34,8 @@ final class ScheduleJobQueueTests: XCTestCase {
         let id = UUID()
         _ = queue.enqueue(id, kind: .agent, afterWake: true, isTrial: true)
         let job = try XCTUnwrap(queue.pumpStartable().first)
-        XCTAssertEqual(job.afterWake, true)
-        XCTAssertEqual(job.isTrial, true)
+        XCTAssertTrue(job.afterWake)
+        XCTAssertTrue(job.isTrial)
         XCTAssertEqual(job.kind, .agent)
         XCTAssertTrue(queue.pumpStartable().isEmpty)
         XCTAssertFalse(queue.hasPending)
@@ -62,7 +62,7 @@ final class ScheduleJobQueueTests: XCTestCase {
         XCTAssertEqual(second.map(\.id), [agentB])
     }
 
-    func testScriptCapKeepsTheRestQueued() {
+    func testScriptCapKeepsTheRestQueued() throws {
         let queue = ScheduleJobQueue()
         let ids = (0..<ScheduleJobQueue.maxConcurrentScripts + 1).map { _ in UUID() }
         for id in ids {
@@ -70,7 +70,8 @@ final class ScheduleJobQueueTests: XCTestCase {
         }
         let started = queue.pumpStartable()
         XCTAssertEqual(started.count, ScheduleJobQueue.maxConcurrentScripts)
-        XCTAssertTrue(queue.queuedIDs.contains(ids.last!))
+        let overflowID = try XCTUnwrap(ids.last)
+        XCTAssertTrue(queue.queuedIDs.contains(overflowID))
         XCTAssertEqual(queue.runningIDs.count, ScheduleJobQueue.maxConcurrentScripts)
     }
 
@@ -223,7 +224,7 @@ final class ScheduleJobQueueTests: XCTestCase {
         let next = try XCTUnwrap(record.nextFireAt)
         XCTAssertGreaterThan(next.timeIntervalSinceNow, 50)
         XCTAssertLessThan(next.timeIntervalSinceNow, 70)
-        XCTAssertFalse(record.lastStatus?.contains("Failed") == true)
+        XCTAssertNotEqual(record.lastStatus?.contains("Failed"), true)
     }
 
     func testApplyRunIntervalAdvancesFromCompletionNotStart() throws {
@@ -323,31 +324,31 @@ final class ScheduleJobQueueTests: XCTestCase {
                 isTrial: false,
                 cadence: .interval(seconds: 60)
             ),
-            .none
+            .mute
         )
         XCTAssertEqual(
             ScheduleBeatResult.stopped.notification(
                 isTrial: true,
                 cadence: .daily(hour: 9, minute: 0)
             ),
-            .none
+            .mute
         )
     }
 
     func testIntervalSuccessIsSilentUnlessTrial() {
-        let ok = ScheduleBeatResult.script(
+        let success = ScheduleBeatResult.script(
             ScheduleScriptOutcome(excerpt: "ok", exitCode: 0, failed: false)
         )
         XCTAssertEqual(
-            ok.notification(isTrial: false, cadence: .interval(seconds: 60)),
+            success.notification(isTrial: false, cadence: .interval(seconds: 60)),
             .silent
         )
         XCTAssertEqual(
-            ok.notification(isTrial: true, cadence: .interval(seconds: 60)),
+            success.notification(isTrial: true, cadence: .interval(seconds: 60)),
             .sound
         )
         XCTAssertEqual(
-            ok.notification(isTrial: false, cadence: .daily(hour: 9, minute: 0)),
+            success.notification(isTrial: false, cadence: .daily(hour: 9, minute: 0)),
             .sound
         )
     }

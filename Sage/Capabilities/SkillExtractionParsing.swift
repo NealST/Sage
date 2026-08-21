@@ -120,8 +120,8 @@ nonisolated enum SkillExtractionParsing {
             if catalogNames.contains(target) {
                 return .enhance(existingName: target, description: description)
             }
-            if let match = catalogNames.first(where: {
-                $0.caseInsensitiveCompare(target) == .orderedSame
+            if let match = catalogNames.first(where: { name in
+                name.caseInsensitiveCompare(target) == .orderedSame
             }) {
                 return .enhance(existingName: match, description: description)
             }

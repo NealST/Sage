@@ -80,8 +80,8 @@ nonisolated struct ListDirectoryTool: AgentTool {
             options: skipHidden ? [.skipsHiddenFiles] : []
         ) else { return }
 
-        let sorted = items.sorted {
-            $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending
+        let sorted = items.sorted { lhs, rhs in
+            lhs.lastPathComponent.localizedCaseInsensitiveCompare(rhs.lastPathComponent) == .orderedAscending
         }
 
         for item in sorted {

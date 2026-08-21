@@ -54,9 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         finishTerminate()
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     private func finishTerminate() {
         HotkeyManager.shared.stop()
-        NotificationCenter.default.removeObserver(self)
     }
 
     func toggleAgentWindow() {

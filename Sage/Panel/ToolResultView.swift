@@ -121,7 +121,7 @@ struct ToolResultView: View {
 
     @ViewBuilder
     private var bodyContent: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             if let payload = split.payload {

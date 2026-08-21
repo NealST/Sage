@@ -107,15 +107,21 @@ attributes:
     - "@ObservedObject"
     - "@StateObject"
     - "@Published"
+    - "@TaskLocal"
+    - "@ScaledMetric"
+    - "@AppStorage"
+    - "@SceneStorage"
+    - "@FocusState"
+    - "@GestureState"
+  always_on_line_above:
     - "@MainActor"
+    - "@Observable"
     - "@Sendable"
-    - "@unchecked"
     - "@available"
     - "@discardableResult"
+    - "@unchecked"
     - "@escaping"
     - "@autoclosure"
-    - "@ViewBuilder"
-    - "@TaskLocal"
 
 trailing_comma:
   mandatory_comma: true

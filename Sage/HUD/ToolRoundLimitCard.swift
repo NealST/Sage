@@ -12,7 +12,7 @@ struct ToolRoundLimitCard: View {
     var onFinish: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text("Tool round limit reached")
                 .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
                 .foregroundStyle(.primary)
@@ -24,7 +24,7 @@ struct ToolRoundLimitCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Button("Finish", role: .cancel, action: onFinish)
                     .keyboardShortcut(.cancelAction)
                     .controlSize(.regular)
@@ -36,7 +36,7 @@ struct ToolRoundLimitCard: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
             }
-            .padding(.top, SageDesign.Spacing.xs)
+            .padding(.top, SageDesign.Spacing.extraSmall)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)

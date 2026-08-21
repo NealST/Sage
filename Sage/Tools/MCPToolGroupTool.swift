@@ -66,8 +66,8 @@ nonisolated enum MCPToolGroupTool {
         guard let server = serverName(fromGroupTool: name) else {
             throw ToolError.invalidArguments("Malformed MCP group tool name.")
         }
-        let tools = availableTools.filter {
-            serverName(fromQualifiedTool: $0.name) == server
+        let tools = availableTools.filter { tool in
+            serverName(fromQualifiedTool: tool.name) == server
         }
         guard !tools.isEmpty else {
             throw ToolError.operationFailed("MCP server '\(server)' has no available tools.")

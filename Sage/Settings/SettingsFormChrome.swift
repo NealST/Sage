@@ -18,7 +18,7 @@ enum SettingsFormChrome {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(title)
                 .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -74,7 +74,7 @@ enum SettingsFormChrome {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: SageDesign.Spacing.md) {
+            HStack(spacing: SageDesign.Spacing.medium) {
                 Image(systemName: symbol)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -108,7 +108,7 @@ enum SettingsFormChrome {
         isLast: Bool = false,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack(spacing: SageDesign.Spacing.md) {
+        HStack(spacing: SageDesign.Spacing.medium) {
             Spacer()
                 .frame(width: 20)
 

@@ -118,7 +118,7 @@ final class TaskWorkingMemoryTests: XCTestCase {
 
         let metadata = try await repository.loadTaskMetadata(id: task.id)
         XCTAssertEqual(metadata?.workingMemory?.overview, "Clean Downloads")
-        XCTAssertTrue(metadata?.events.isEmpty == true)
+        XCTAssertEqual(metadata?.events.isEmpty, true)
 
         task.workingMemory = nil
         try await repository.saveTaskState(task, setActive: false)

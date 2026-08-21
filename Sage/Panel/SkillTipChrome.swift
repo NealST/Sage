@@ -45,11 +45,11 @@ enum SkillTipChrome {
 
     @ViewBuilder
     static func bannerStack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: SageDesign.Spacing.xs) {
+        VStack(spacing: SageDesign.Spacing.extraSmall) {
             content()
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.small)
         .transition(bannerTransition)
     }
 

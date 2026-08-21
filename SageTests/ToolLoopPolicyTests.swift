@@ -63,28 +63,28 @@ final class ToolBatchWaveTests: XCTestCase {
 
 final class SessionToolAllowlistTests: XCTestCase {
     func testCombinationKeyIsStableAfterKeyReorder() {
-        let a = SessionToolAllowlist.combinationKey(
+        let firstKey = SessionToolAllowlist.combinationKey(
             name: "run_shell_command",
             argumentsJSON: #"{"command":"ls","cwd":"~"}"#
         )
-        let b = SessionToolAllowlist.combinationKey(
+        let reorderedKey = SessionToolAllowlist.combinationKey(
             name: "run_shell_command",
             argumentsJSON: #"{"cwd":"~","command":"ls"}"#
         )
-        XCTAssertEqual(a, b)
-        XCTAssertEqual(a.count, 64)
+        XCTAssertEqual(firstKey, reorderedKey)
+        XCTAssertEqual(firstKey.count, 64)
     }
 
     func testDifferentCommandsGetDifferentKeys() {
-        let ls = SessionToolAllowlist.combinationKey(
+        let listKey = SessionToolAllowlist.combinationKey(
             name: "run_shell_command",
             argumentsJSON: #"{"command":"ls"}"#
         )
-        let pwd = SessionToolAllowlist.combinationKey(
+        let pwdKey = SessionToolAllowlist.combinationKey(
             name: "run_shell_command",
             argumentsJSON: #"{"command":"pwd"}"#
         )
-        XCTAssertNotEqual(ls, pwd)
+        XCTAssertNotEqual(listKey, pwdKey)
     }
 
     func testOnlyShellAndMCPNeedAGate() {
@@ -230,9 +230,9 @@ final class ToolBatchRetryScopeTests: XCTestCase {
     }
 
     func testSuccessfulToolCallIDsIgnoreErrors() {
-        let ok = AgentEvent(kind: .toolResult, content: "hello", toolCallID: "a")
+        let success = AgentEvent(kind: .toolResult, content: "hello", toolCallID: "a")
         let err = AgentEvent(kind: .toolResult, content: "ERROR: nope", toolCallID: "b")
-        XCTAssertEqual(AgentEventHelpers.successfulToolCallIDs(in: [ok, err]), ["a"])
+        XCTAssertEqual(AgentEventHelpers.successfulToolCallIDs(in: [success, err]), ["a"])
     }
 }
 

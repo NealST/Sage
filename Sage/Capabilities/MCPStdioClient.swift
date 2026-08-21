@@ -373,7 +373,13 @@ actor MCPStdioClient {
 
         if let idValue = map["id"] {
             let id: Int?
-            if case .number(let n) = idValue { id = Int(n) } else if case .string(let s) = idValue { id = Int(s) } else { id = nil }
+            if case .number(let number) = idValue {
+                id = Int(number)
+            } else if case .string(let string) = idValue {
+                id = Int(string)
+            } else {
+                id = nil
+            }
             guard let id, let cont = pending.removeValue(forKey: id) else { return }
             if let error = map["error"] {
                 cont.resume(throwing: ClientError.remote(stringify(error)))
@@ -435,8 +441,8 @@ actor MCPStdioClient {
                   case .string(let name) = tool["name"]
             else { return nil }
             let description: String
-            if case .string(let d) = tool["description"] {
-                description = d
+            if case .string(let text) = tool["description"] {
+                description = text
             } else {
                 description = name
             }
@@ -452,7 +458,7 @@ actor MCPStdioClient {
     }
 
     private func stringify(_ value: JSONValue) -> String {
-        if case .string(let s) = value { return s }
+        if case .string(let string) = value { return string }
         if let data = try? JSONEncoder().encode(value),
            let text = String(data: data, encoding: .utf8) {
             return text

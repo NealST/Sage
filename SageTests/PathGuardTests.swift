@@ -2,17 +2,17 @@
 import XCTest
 
 final class PathGuardTests: XCTestCase {
-    private var fixtureRoot: URL!
-    private var projectRoot: URL!
-    private var skillDir: URL!
+    private var fixtureRoot: URL?
+    private var projectRoot: URL?
+    private var skillDir: URL?
 
     override func setUpWithError() throws {
-        fixtureRoot = FileManager.default.homeDirectoryForCurrentUser
+        let fixtureRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(
                 "Library/Caches/SagePathGuard-\(UUID().uuidString)",
                 isDirectory: true
             )
-        skillDir = fixtureRoot.appendingPathComponent("skill-outside", isDirectory: true)
+        let skillDir = fixtureRoot.appendingPathComponent("skill-outside", isDirectory: true)
         let project = fixtureRoot.appendingPathComponent("project", isDirectory: true)
         try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: skillDir, withIntermediateDirectories: true)
@@ -21,6 +21,8 @@ final class PathGuardTests: XCTestCase {
             atomically: true,
             encoding: .utf8
         )
+        self.fixtureRoot = fixtureRoot
+        self.skillDir = skillDir
         projectRoot = try PathGuard.validateProjectRoot(project)
     }
 
@@ -31,6 +33,8 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testReadAllowlistDoesNotPermitWrites() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
+        let skillDir = try XCTUnwrap(skillDir)
         let policy = PathGuard.Policy.project(root: projectRoot)
         let skillFile = skillDir.appendingPathComponent("notes.txt").path
         let allowlisted = skillDir.resolvingSymlinksInPath().path
@@ -53,6 +57,7 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testDefaultExplorationPath() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
         try PathGuard.$policy.withValue(.project(root: projectRoot)) {
             XCTAssertEqual(try PathGuard.defaultExplorationPath(nil), ".")
             XCTAssertEqual(try PathGuard.defaultExplorationPath("  "), ".")
@@ -65,6 +70,8 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testDisplayPathProjectRelative() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
+        let skillDir = try XCTUnwrap(skillDir)
         let nested = projectRoot.appendingPathComponent("src/App.swift")
         try FileManager.default.createDirectory(
             at: nested.deletingLastPathComponent(),
@@ -101,6 +108,7 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testFileURLForDisplayPath() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
         let nested = projectRoot.appendingPathComponent("readme.md")
         try "hi".write(to: nested, atomically: true, encoding: .utf8)
         let policy = PathGuard.Policy.project(root: projectRoot)
@@ -119,6 +127,8 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testEnumeratedSymlinkOutsideProjectIsSkipped() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
+        let skillDir = try XCTUnwrap(skillDir)
         let leak = projectRoot.appendingPathComponent("leak")
         try FileManager.default.createSymbolicLink(
             at: leak,
@@ -134,6 +144,7 @@ final class PathGuardTests: XCTestCase {
     }
 
     func testEnumeratedInProjectFileResolves() throws {
+        let projectRoot = try XCTUnwrap(projectRoot)
         let inside = projectRoot.appendingPathComponent("notes.txt")
         try "hi".write(to: inside, atomically: true, encoding: .utf8)
         try PathGuard.$policy.withValue(.project(root: projectRoot)) {

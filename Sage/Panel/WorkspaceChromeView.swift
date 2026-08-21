@@ -21,7 +21,7 @@ struct WorkspaceChromeView: View {
     private var isProject: Bool { !session.isGeneral }
 
     var body: some View {
-        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             identityCluster
                 .font(.system(size: type.caption, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -33,14 +33,14 @@ struct WorkspaceChromeView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer(minLength: SageDesign.Spacing.md)
+            Spacer(minLength: SageDesign.Spacing.medium)
 
             trailingCluster
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: SageDesign.Panel.titlebarContentHeight)
-        .padding(.leading, SageDesign.Spacing.lg)
-        .padding(.trailing, SageDesign.Spacing.lg)
+        .padding(.leading, SageDesign.Spacing.large)
+        .padding(.trailing, SageDesign.Spacing.large)
     }
 
     // MARK: - Zones
@@ -108,7 +108,7 @@ struct WorkspaceChromeView: View {
 
     @ViewBuilder
     private var documentCluster: some View {
-        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             if case .awaitingConfirmation = session.agent.state.phase {
                 Text("Awaiting confirmation")
                     .foregroundStyle(.orange)
@@ -132,7 +132,7 @@ struct WorkspaceChromeView: View {
 
     @ViewBuilder
     private var trailingCluster: some View {
-        HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             if session.agent.canStartFresh {
                 Button {
                     session.draft = ""

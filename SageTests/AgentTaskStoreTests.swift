@@ -3,7 +3,12 @@ import XCTest
 
 @MainActor
 final class AgentTaskStoreTests: XCTestCase {
-    private var tempDirectory: URL!
+    private var tempDirectory: URL?
+
+    override func setUp() async throws {
+        try await super.setUp()
+        tempDirectory = nil
+    }
 
     override func tearDown() async throws {
         if let tempDirectory {
@@ -239,8 +244,8 @@ final class TurnCoordinatorRoutingTests: XCTestCase {
                 ),
             ]
         )
-        _ = await runtime.taskStore.commit(appendEvents: [], deleteEventIDs: []) {
-            $0.pendingPlan = plan
+        _ = await runtime.taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.pendingPlan = plan
         }
         runtime.state.enterAwaitingConfirmation()
 

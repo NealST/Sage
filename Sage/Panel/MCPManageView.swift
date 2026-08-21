@@ -81,12 +81,12 @@ struct MCPManageView: View {
             Spacer()
             Button("Add Server") { showingAdd = true }
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.medium)
     }
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text("stdio MCP servers run with Sage’s full user privileges and are not limited by the project sandbox.")
                 .font(.system(size: type.micro))
                 .foregroundStyle(.secondary)
@@ -97,8 +97,8 @@ struct MCPManageView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.medium)
     }
 
     @ViewBuilder

@@ -12,7 +12,7 @@ struct SettingsPrivacySection: View {
 
     var body: some View {
         SettingsFormChrome.section("Privacy") {
-            HStack(spacing: SageDesign.Spacing.md) {
+            HStack(spacing: SageDesign.Spacing.medium) {
                 Image(systemName: "externaldrive")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.secondary)

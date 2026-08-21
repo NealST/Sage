@@ -56,8 +56,8 @@ final class SkillToolPolicyTests: XCTestCase {
             Set(["read_text_file", "run_shell_command"])
                 .union(SkillToolPolicy.progressiveDisclosureToolNames)
         )
-        XCTAssertFalse(allowed?.contains("run_skill_script") == true)
-        XCTAssertFalse(allowed?.contains("save_skill") == true)
+        XCTAssertNotEqual(allowed?.contains("run_skill_script"), true)
+        XCTAssertNotEqual(allowed?.contains("save_skill"), true)
     }
 
     func testAssertAndFilterDefinitions() throws {

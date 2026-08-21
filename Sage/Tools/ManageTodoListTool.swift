@@ -73,8 +73,8 @@ nonisolated enum ManageTodoListTool {
 
     static func execute(argumentsJSON: String) async throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
-        let items = try normalized(args.todoList.map {
-            AgentTodoItem(id: $0.id, title: $0.title, status: $0.status)
+        let items = try normalized(args.todoList.map { item in
+            AgentTodoItem(id: item.id, title: item.title, status: item.status)
         })
 
         guard let repository = ActiveTaskContext.repository,

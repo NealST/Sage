@@ -78,10 +78,10 @@ nonisolated struct PromptBudget: Sendable, Equatable {
             : event.content
         var cost = estimatedTokenCount(in: body)
         if let calls = event.toolCalls {
-            cost += calls.reduce(0) {
-                $0
-                    + estimatedTokenCount(in: $1.argumentsJSON)
-                    + estimatedTokenCount(in: $1.name)
+            cost += calls.reduce(0) { partial, call in
+                partial
+                    + estimatedTokenCount(in: call.argumentsJSON)
+                    + estimatedTokenCount(in: call.name)
             }
         }
         return cost
@@ -102,8 +102,8 @@ nonisolated struct PromptBudget: Sendable, Equatable {
             : event.content
         var cost = body.utf8.count
         if let calls = event.toolCalls {
-            cost += calls.reduce(0) {
-                $0 + $1.argumentsJSON.utf8.count + $1.name.utf8.count
+            cost += calls.reduce(0) { partial, call in
+                partial + call.argumentsJSON.utf8.count + call.name.utf8.count
             }
         }
         return cost

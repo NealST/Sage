@@ -15,14 +15,14 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
+                    VStack(alignment: .leading, spacing: SageDesign.Spacing.extraLarge) {
                         tokenUsageSection
                         mcpServersSection
                         schedulesSection
                     }
-                    .padding(.horizontal, SageDesign.Spacing.xl)
+                    .padding(.horizontal, SageDesign.Spacing.extraLarge)
                     .padding(.top, 20)
-                    .padding(.bottom, SageDesign.Spacing.lg)
+                    .padding(.bottom, SageDesign.Spacing.large)
                 }
                 .onAppear {
                     if let id = appState.focusedScheduleID {
@@ -58,7 +58,7 @@ struct DashboardView: View {
                 }
                 Spacer()
             }
-            .padding(SageDesign.Spacing.md)
+            .padding(SageDesign.Spacing.medium)
             .sagePanelBackground(cornerRadius: 10)
         }
     }
@@ -73,7 +73,7 @@ struct DashboardView: View {
     private var mcpServersSection: some View {
         dashboardSection("MCP Servers") {
             let servers = appState.mcpHub.mcpServers
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 Text("MCP tools are full-trust: they are not limited to the project sandbox.")
                     .font(.system(size: SageDesign.Typography.captionSize))
                     .foregroundStyle(.secondary)
@@ -81,9 +81,9 @@ struct DashboardView: View {
                     Text("No servers configured")
                         .font(.system(size: SageDesign.Typography.captionSize))
                         .foregroundStyle(.tertiary)
-                        .padding(.vertical, SageDesign.Spacing.sm)
+                        .padding(.vertical, SageDesign.Spacing.small)
                 } else {
-                    VStack(spacing: SageDesign.Spacing.sm) {
+                    VStack(spacing: SageDesign.Spacing.small) {
                         ForEach(servers, id: \.id) { server in
                             MCPServerRow(server: server) {
                                 appState.mcpHub.retryServer(server.id)
@@ -92,7 +92,7 @@ struct DashboardView: View {
                     }
                 }
             }
-            .padding(SageDesign.Spacing.md)
+            .padding(SageDesign.Spacing.medium)
         }
     }
 
@@ -101,9 +101,9 @@ struct DashboardView: View {
     private var schedulesSection: some View {
         dashboardSection("Schedules") {
             let records = appState.schedules.records
-            VStack(spacing: SageDesign.Spacing.sm) {
+            VStack(spacing: SageDesign.Spacing.small) {
                 if let message = appState.schedules.lastError {
-                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                    HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                         Text(message)
                             .font(.system(size: SageDesign.Typography.captionSize))
                             .foregroundStyle(.red)
@@ -115,7 +115,7 @@ struct DashboardView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
                     }
-                    .padding(SageDesign.Spacing.md)
+                    .padding(SageDesign.Spacing.medium)
                     .sagePanelBackground(cornerRadius: 10)
                 }
                 if records.isEmpty {
@@ -127,7 +127,7 @@ struct DashboardView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(SageDesign.Spacing.md)
+                    .padding(SageDesign.Spacing.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .sagePanelBackground(cornerRadius: 10)
                 } else {
@@ -183,8 +183,8 @@ struct DashboardView: View {
 
     private func formatTokenCount(_ count: Int) -> String {
         if count < 1_000 { return "\(count)" }
-        let k = Double(count) / 1_000
-        return String(format: "%.1fk", k)
+        let thousands = Double(count) / 1_000
+        return String(format: "%.1fk", thousands)
     }
 
     // MARK: - Section Builder
@@ -193,7 +193,7 @@ struct DashboardView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(title)
                 .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
                 .foregroundStyle(.secondary)
@@ -219,7 +219,7 @@ private struct ScheduleDashboardRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
@@ -238,7 +238,7 @@ private struct ScheduleDashboardRow: View {
                         .lineLimit(isFocused ? 6 : 2)
                 }
 
-                Spacer(minLength: SageDesign.Spacing.sm)
+                Spacer(minLength: SageDesign.Spacing.small)
 
                 if isRunning {
                     Button("Stop") { onStop() }
@@ -297,7 +297,7 @@ private struct ScheduleDashboardRow: View {
                 .accessibilityLabel("Delete schedule \(record.title)")
             }
         }
-        .padding(SageDesign.Spacing.md)
+        .padding(SageDesign.Spacing.medium)
         .sagePanelBackground(cornerRadius: 10)
         .overlay {
             if isFocused {
@@ -390,7 +390,7 @@ private struct MCPServerRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header row
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Circle()
                     .fill(serverStatusColor)
                     .frame(width: 8, height: 8)
@@ -428,7 +428,7 @@ private struct MCPServerRow: View {
                 Text(message)
                     .font(.system(size: SageDesign.Typography.microSize))
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 8 + SageDesign.Spacing.sm) // align with name
+                    .padding(.leading, 8 + SageDesign.Spacing.small) // align with name
                     .padding(.top, 2)
                     .contentTransition(.opacity)
             }
@@ -443,11 +443,11 @@ private struct MCPServerRow: View {
                         .textSelection(.enabled)
                 }
                 .frame(maxHeight: 120)
-                .padding(.top, SageDesign.Spacing.sm)
+                .padding(.top, SageDesign.Spacing.small)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(SageDesign.Spacing.md)
+        .padding(SageDesign.Spacing.medium)
         .sagePanelBackground(cornerRadius: 10)
         .animation(SageDesign.Motion.contentCrossFade, value: server.status)
     }

@@ -136,11 +136,11 @@ final class AppState {
         }
 
         generalSession.draft = ""
-        let ok = await generalSession.agent.eraseAllData()
+        let didErase = await generalSession.agent.eraseAllData()
         await schedules.reload()
         keySession = generalSession
         makeKeyAndShow(generalSession)
-        return ok
+        return didErase
     }
 
     // MARK: - Windows

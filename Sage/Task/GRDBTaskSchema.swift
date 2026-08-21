@@ -102,18 +102,18 @@ nonisolated enum GRDBTaskSchema {
     """
 
     static func registerMigrations(_ migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("createTaskStore") { db in
-            try db.execute(sql: schemaSQL)
+        migrator.registerMigration("createTaskStore") { database in
+            try database.execute(sql: schemaSQL)
         }
-        migrator.registerMigration("addTopicFields") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("addTopicFields") { database in
+            try database.execute(sql: """
                 ALTER TABLE tasks ADD COLUMN topic TEXT;
                 ALTER TABLE tasks ADD COLUMN abstract TEXT;
                 ALTER TABLE tasks ADD COLUMN topic_updated_at REAL;
             """)
         }
-        migrator.registerMigration("addProjects") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("addProjects") { database in
+            try database.execute(sql: """
                 CREATE TABLE projects (
                     id TEXT PRIMARY KEY NOT NULL,
                     name TEXT NOT NULL,
@@ -135,43 +135,43 @@ nonisolated enum GRDBTaskSchema {
                 ALTER TABLE app_state ADD COLUMN focused_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
             """)
         }
-        migrator.registerMigration("addLastGeneralTask") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("addLastGeneralTask") { database in
+            try database.execute(sql: """
                 ALTER TABLE app_state ADD COLUMN last_general_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
             """)
         }
-        migrator.registerMigration("addActivatedSkills") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("addActivatedSkills") { database in
+            try database.execute(sql: """
                 ALTER TABLE tasks ADD COLUMN activated_skills TEXT;
             """)
         }
-        migrator.registerMigration("addWorkPlan") { db in
-            let hasWorkPlan = try db.columns(in: "tasks").contains { $0.name == "work_plan_json" }
+        migrator.registerMigration("addWorkPlan") { database in
+            let hasWorkPlan = try database.columns(in: "tasks").contains { $0.name == "work_plan_json" }
             if !hasWorkPlan {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks ADD COLUMN work_plan_json TEXT;
                 """)
             }
         }
-        migrator.registerMigration("addSkillPersistConsidered") { db in
-            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "skill_persist_considered" }
+        migrator.registerMigration("addSkillPersistConsidered") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { $0.name == "skill_persist_considered" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks ADD COLUMN skill_persist_considered INTEGER NOT NULL DEFAULT 0;
                 """)
             }
         }
-        migrator.registerMigration("addEventProtected") { db in
+        migrator.registerMigration("addEventProtected") { database in
             // Idempotent: base `schemaSQL` may already include the column on fresh installs.
-            let hasProtected = try db.columns(in: "events").contains { $0.name == "protected" }
+            let hasProtected = try database.columns(in: "events").contains { $0.name == "protected" }
             if !hasProtected {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE events ADD COLUMN protected INTEGER NOT NULL DEFAULT 0;
                 """)
             }
         }
-        migrator.registerMigration("addSchedules") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("addSchedules") { database in
+            try database.execute(sql: """
                 CREATE TABLE schedules (
                     id TEXT PRIMARY KEY NOT NULL,
                     title TEXT NOT NULL,
@@ -209,72 +209,72 @@ nonisolated enum GRDBTaskSchema {
                 );
             """)
         }
-        migrator.registerMigration("addScheduleLastRunTask") { db in
-            let hasColumn = try db.columns(in: "schedules").contains { $0.name == "last_run_task_id" }
+        migrator.registerMigration("addScheduleLastRunTask") { database in
+            let hasColumn = try database.columns(in: "schedules").contains { $0.name == "last_run_task_id" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE schedules
                     ADD COLUMN last_run_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;
                 """)
             }
         }
-        migrator.registerMigration("addScheduleWorkingDirectory") { db in
-            let hasColumn = try db.columns(in: "schedules").contains { $0.name == "working_directory" }
+        migrator.registerMigration("addScheduleWorkingDirectory") { database in
+            let hasColumn = try database.columns(in: "schedules").contains { $0.name == "working_directory" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE schedules
                     ADD COLUMN working_directory TEXT;
                 """)
             }
         }
-        migrator.registerMigration("addTaskScheduleOrigin") { db in
-            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "origin_schedule_id" }
+        migrator.registerMigration("addTaskScheduleOrigin") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { $0.name == "origin_schedule_id" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks
                     ADD COLUMN origin_schedule_id TEXT REFERENCES schedules(id) ON DELETE SET NULL;
                 """)
             }
         }
-        migrator.registerMigration("indexScheduleRunsByScheduleStarted") { db in
-            try db.execute(sql: """
+        migrator.registerMigration("indexScheduleRunsByScheduleStarted") { database in
+            try database.execute(sql: """
                 CREATE INDEX IF NOT EXISTS schedule_runs_schedule_started
                 ON schedule_runs(schedule_id, started_at);
             """)
         }
-        migrator.registerMigration("addTaskWorkingMemory") { db in
-            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "working_memory_json" }
+        migrator.registerMigration("addTaskWorkingMemory") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { $0.name == "working_memory_json" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks
                     ADD COLUMN working_memory_json TEXT;
                 """)
             }
         }
-        migrator.registerMigration("addTaskTodoList") { db in
-            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "todo_list_json" }
+        migrator.registerMigration("addTaskTodoList") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { $0.name == "todo_list_json" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks
                     ADD COLUMN todo_list_json TEXT;
                 """)
             }
         }
-        migrator.registerMigration("addTaskPendingPrompt") { db in
-            let hasColumn = try db.columns(in: "tasks").contains { $0.name == "pending_prompt_json" }
+        migrator.registerMigration("addTaskPendingPrompt") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { $0.name == "pending_prompt_json" }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks
                     ADD COLUMN pending_prompt_json TEXT;
                 """)
             }
         }
-        migrator.registerMigration("addTaskUnlockedMCPServers") { db in
-            let hasColumn = try db.columns(in: "tasks").contains {
-                $0.name == "unlocked_mcp_servers_json"
+        migrator.registerMigration("addTaskUnlockedMCPServers") { database in
+            let hasColumn = try database.columns(in: "tasks").contains { column in
+                column.name == "unlocked_mcp_servers_json"
             }
             if !hasColumn {
-                try db.execute(sql: """
+                try database.execute(sql: """
                     ALTER TABLE tasks
                     ADD COLUMN unlocked_mcp_servers_json TEXT;
                 """)

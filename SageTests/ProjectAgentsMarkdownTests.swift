@@ -2,12 +2,13 @@
 import XCTest
 
 final class ProjectAgentsMarkdownTests: XCTestCase {
-    private var fixtureRoot: URL!
+    private var fixtureRoot: URL?
 
     override func setUpWithError() throws {
-        fixtureRoot = FileManager.default.temporaryDirectory
+        let fixtureRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("SageAgentsMD-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
+        self.fixtureRoot = fixtureRoot
     }
 
     override func tearDownWithError() throws {
@@ -16,12 +17,14 @@ final class ProjectAgentsMarkdownTests: XCTestCase {
         }
     }
 
-    func testMissingFileYieldsEmptySection() {
+    func testMissingFileYieldsEmptySection() throws {
+        let fixtureRoot = try XCTUnwrap(fixtureRoot)
         XCTAssertNil(ProjectAgentsMarkdown.loadBody(projectRoot: fixtureRoot))
         XCTAssertEqual(ProjectAgentsMarkdown.promptSection(projectRoot: fixtureRoot), "")
     }
 
     func testLoadsAgentsMarkdownIntoPromptSection() throws {
+        let fixtureRoot = try XCTUnwrap(fixtureRoot)
         let body = "Always run tests before committing."
         try body.write(
             to: fixtureRoot.appendingPathComponent("AGENTS.md"),
@@ -37,6 +40,7 @@ final class ProjectAgentsMarkdownTests: XCTestCase {
     }
 
     func testTruncatesOversizedAgentsMarkdown() throws {
+        let fixtureRoot = try XCTUnwrap(fixtureRoot)
         let huge = String(repeating: "a", count: ProjectAgentsMarkdown.maxUTF8Bytes + 200)
         try huge.write(
             to: fixtureRoot.appendingPathComponent("AGENTS.md"),
@@ -50,6 +54,7 @@ final class ProjectAgentsMarkdownTests: XCTestCase {
     }
 
     func testProjectPromptAppendixIncludesAgentsMarkdown() throws {
+        let fixtureRoot = try XCTUnwrap(fixtureRoot)
         try "Use Swift 6 concurrency.".write(
             to: fixtureRoot.appendingPathComponent("AGENTS.md"),
             atomically: true,

@@ -31,18 +31,18 @@ struct ScheduleScriptPanel: View {
 
     var body: some View {
         SkillTipChrome.row {
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Run a script")
                         .font(.system(size: type.caption, weight: .medium))
-                    Spacer(minLength: SageDesign.Spacing.sm)
+                    Spacer(minLength: SageDesign.Spacing.small)
                     Text(scopeLabel)
                         .font(.system(size: type.micro))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Text("Command")
                         .font(.system(size: type.micro, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -62,7 +62,7 @@ struct ScheduleScriptPanel: View {
                     .disabled(session.agent.blocksNewInput)
                 }
 
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Text("Working dir")
                         .font(.system(size: type.micro, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -88,7 +88,7 @@ struct ScheduleScriptPanel: View {
                         .padding(.leading, 88)
                 }
 
-                HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.sm) {
+                HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
                     Text("When")
                         .font(.system(size: type.micro, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -101,7 +101,7 @@ struct ScheduleScriptPanel: View {
                     }
                 }
 
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Button(runOnceNow ? "Save and run" : "Save") {
                         save()
                     }
@@ -130,8 +130,8 @@ struct ScheduleScriptPanel: View {
                 }
             }
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.small)
         .onAppear {
             commandFocused = true
             refreshWorkingDirectoryAllowed()
@@ -244,8 +244,8 @@ struct ScheduleScriptPanel: View {
         let trial = runOnceNow
         session.skills.scriptScheduleDraft = nil
         Task {
-            let ok = await appState.schedules.save(record, runOnceNow: trial)
-            if !ok, let message = appState.schedules.lastError {
+            let didSave = await appState.schedules.save(record, runOnceNow: trial)
+            if !didSave, let message = appState.schedules.lastError {
                 session.agent.reportFailure(message)
             }
         }

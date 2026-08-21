@@ -222,8 +222,8 @@ nonisolated struct SearchFilesTool: AgentTool {
         }
 
         var results: [String] = []
-        let fm = FileManager.default
-        guard let enumerator = fm.enumerator(
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .isDirectoryKey],
             options: skipHidden ? [.skipsHiddenFiles] : []

@@ -11,10 +11,10 @@ import GRDB
 extension GRDBTaskRepository {
     func setFocus(projectID: UUID?, activeTaskID: UUID?) throws {
         let pool = try database()
-        try pool.write { db in
+        try pool.write { database in
             if let activeTaskID {
                 guard let row = try Row.fetchOne(
-                    db,
+                    database,
                     sql: "SELECT project_id FROM tasks WHERE id = ?",
                     arguments: [activeTaskID.uuidString]
                 ) else {
@@ -30,7 +30,7 @@ extension GRDBTaskRepository {
             try writeFocus(
                 projectID: projectID,
                 activeTaskID: activeTaskID,
-                database: db
+                database: database
             )
         }
     }
@@ -39,20 +39,20 @@ extension GRDBTaskRepository {
         let validated = try PathGuard.validateProjectRoot(rootURL)
         try ProjectSageLayout.ensureLayout(at: validated)
         let pool = try database()
-        return try pool.write { db in
-            if let existing = try loadProject(rootPath: validated.path, database: db) {
+        return try pool.write { database in
+            if let existing = try loadProject(rootPath: validated.path, database: database) {
                 var updated = existing
                 updated.lastOpenedAt = .now
                 updated.updatedAt = .now
                 if let displayName, !displayName.isEmpty {
                     updated.name = displayName
                 }
-                try upsertProject(updated, database: db)
+                try upsertProject(updated, database: database)
                 return updated
             }
             let name = displayName?.nilIfEmpty ?? validated.lastPathComponent
             let project = ProjectRecord(name: name, rootPath: validated.path)
-            try upsertProject(project, database: db)
+            try upsertProject(project, database: database)
             return project
         }
     }
@@ -87,8 +87,8 @@ extension GRDBTaskRepository {
 
     func setProjectLastActiveTask(projectID: UUID, taskID: UUID?) throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE projects
                 SET last_active_task_id = ?, updated_at = ?
@@ -105,17 +105,17 @@ extension GRDBTaskRepository {
 
     func setLastGeneralTaskID(_ taskID: UUID?) throws {
         let pool = try database()
-        try pool.write { db in
+        try pool.write { database in
             // Ensure app_state row exists; preserve other focus columns.
             let active = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT active_task_id FROM app_state WHERE singleton = 1"
             )
             let focused = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT focused_project_id FROM app_state WHERE singleton = 1"
             )
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO app_state (
                     singleton, active_task_id, focused_project_id, last_general_task_id
@@ -130,9 +130,9 @@ extension GRDBTaskRepository {
 
     func lastGeneralTaskID() throws -> UUID? {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let raw = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
             )
             return raw.flatMap(UUID.init(uuidString:))
@@ -141,21 +141,21 @@ extension GRDBTaskRepository {
 
     func eraseAllData() throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(sql: "UPDATE projects SET last_active_task_id = NULL")
-            try db.execute(sql: "DELETE FROM event_context_tasks")
-            try db.execute(sql: "DELETE FROM event_contexts")
-            try db.execute(sql: "DELETE FROM event_tool_calls")
-            try db.execute(sql: "DELETE FROM plan_steps")
-            try db.execute(sql: "DELETE FROM plans")
-            try db.execute(sql: "DELETE FROM task_relations")
-            try db.execute(sql: "DELETE FROM task_entities")
-            try db.execute(sql: "DELETE FROM events")
-            try db.execute(sql: "DELETE FROM app_state")
-            try db.execute(sql: "DELETE FROM schedule_runs")
-            try db.execute(sql: "DELETE FROM schedules")
-            try db.execute(sql: "DELETE FROM tasks")
-            try db.execute(sql: "DELETE FROM projects")
+        try pool.write { database in
+            try database.execute(sql: "UPDATE projects SET last_active_task_id = NULL")
+            try database.execute(sql: "DELETE FROM event_context_tasks")
+            try database.execute(sql: "DELETE FROM event_contexts")
+            try database.execute(sql: "DELETE FROM event_tool_calls")
+            try database.execute(sql: "DELETE FROM plan_steps")
+            try database.execute(sql: "DELETE FROM plans")
+            try database.execute(sql: "DELETE FROM task_relations")
+            try database.execute(sql: "DELETE FROM task_entities")
+            try database.execute(sql: "DELETE FROM events")
+            try database.execute(sql: "DELETE FROM app_state")
+            try database.execute(sql: "DELETE FROM schedule_runs")
+            try database.execute(sql: "DELETE FROM schedules")
+            try database.execute(sql: "DELETE FROM tasks")
+            try database.execute(sql: "DELETE FROM projects")
         }
         try? FileManager.default.removeItem(at: legacyJSONURL)
     }
@@ -163,13 +163,13 @@ extension GRDBTaskRepository {
     private func writeFocus(
         projectID: UUID?,
         activeTaskID: UUID?,
-        database db: Database
+        database: Database
     ) throws {
         let lastGeneral = try String.fetchOne(
-            db,
+            database,
             sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
         )
-        try db.execute(
+        try database.execute(
             sql: """
             INSERT INTO app_state (
                 singleton, active_task_id, focused_project_id, last_general_task_id

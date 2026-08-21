@@ -136,7 +136,7 @@ nonisolated struct RetryPolicy: Sendable {
 /// Status updates emitted during retry waits so the UI can show progress.
 enum RetryStatus: Sendable {
     /// About to retry after a transient failure.
-    case retrying(attempt: Int, of: Int, afterDelay: TimeInterval)
+    case retrying(attempt: Int, total: Int, afterDelay: TimeInterval)
     /// Countdown tick — seconds remaining before next attempt.
     case waiting(secondsRemaining: Int)
 }
@@ -256,11 +256,11 @@ actor ModelClient {
                 do {
                     let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
                     let choice = decoded.choices.first?.message
-                    let toolCalls = (choice?.toolCalls ?? []).map {
+                    let toolCalls = (choice?.toolCalls ?? []).map { call in
                         ToolCallProposal(
-                            id: $0.id,
-                            name: $0.function.name,
-                            argumentsJSON: $0.function.arguments
+                            id: call.id,
+                            name: call.function.name,
+                            argumentsJSON: call.function.arguments
                         )
                     }
                     let usage = TokenUsage(
@@ -414,12 +414,12 @@ actor ModelClient {
                         }
 
                         if let toolCalls = delta.toolCalls {
-                            for tc in toolCalls {
+                            for toolCall in toolCalls {
                                 continuation.yield(.toolCallDelta(
-                                    index: tc.index,
-                                    id: tc.id,
-                                    name: tc.function?.name,
-                                    arguments: tc.function?.arguments
+                                    index: toolCall.index,
+                                    id: toolCall.id,
+                                    name: toolCall.function?.name,
+                                    arguments: toolCall.function?.arguments
                                 ))
                             }
                         }
@@ -448,7 +448,7 @@ actor ModelClient {
         let totalSeconds = Int(delay.rounded(.up))
 
         let callback = onRetryStatus
-        await callback?(.retrying(attempt: attempt + 1, of: retryPolicy.maxAttempts, afterDelay: delay))
+        await callback?(.retrying(attempt: attempt + 1, total: retryPolicy.maxAttempts, afterDelay: delay))
 
         // Emit countdown ticks each second for UI
         for remaining in stride(from: totalSeconds, through: 1, by: -1) {

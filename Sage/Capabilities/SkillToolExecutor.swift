@@ -391,12 +391,10 @@ enum SkillToolExecutor {
         }
 
         let forbidden = CharacterSet(charactersIn: ";|&$`\n\r")
-        for token in tokens {
-            if token.rangeOfCharacter(from: forbidden) != nil {
-                throw ToolError.operationFailed(
-                    "Blocked: script arguments contain shell metacharacters."
-                )
-            }
+        for token in tokens where token.rangeOfCharacter(from: forbidden) != nil {
+            throw ToolError.operationFailed(
+                "Blocked: script arguments contain shell metacharacters."
+            )
         }
         return tokens
     }

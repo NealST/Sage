@@ -104,7 +104,10 @@ final class RecallTaskTranscriptTests: XCTestCase {
         let output = try await ActiveTaskContext.$repository.withValue(repository) {
             try await ActiveTaskContext.$taskID.withValue(task.id) {
                 try await RecallTaskTranscriptTool.execute(
-                    argumentsJSON: json(from: events.first!.id, through: events.last!.id)
+                    argumentsJSON: json(
+                        from: try XCTUnwrap(events.first).id,
+                        through: try XCTUnwrap(events.last).id
+                    )
                 )
             }
         }

@@ -73,8 +73,8 @@ nonisolated enum UTF8LineStreamer {
             let lines = text.components(separatedBy: "\n")
             // Non-EOF data always ends at a newline, so the last split element is empty.
             let processLines = isEOF ? lines[...] : lines.dropLast()
-            for line in processLines {
-                if try !body(line) { return }
+            for line in processLines where try !body(line) {
+                return
             }
             if isEOF { break }
         }

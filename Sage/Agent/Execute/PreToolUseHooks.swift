@@ -100,8 +100,8 @@ actor PreToolUseHookEvaluator {
                     .appendingPathComponent("hooks.json")
             )
         }
-        urls.append(contentsOf: activatedSkills.map {
-            URL(fileURLWithPath: $0.path)
+        urls.append(contentsOf: activatedSkills.map { skill in
+            URL(fileURLWithPath: skill.path)
                 .deletingLastPathComponent()
                 .appendingPathComponent("hooks.json")
         })

@@ -9,8 +9,8 @@ import Foundation
 
 nonisolated enum TranscriptDigest {
     static func make(from events: [AgentEvent], limit: Int = 16) -> String {
-        let relevant = events.filter {
-            $0.kind == .userInput || $0.kind == .assistantResponse || $0.kind == .toolResult
+        let relevant = events.filter { event in
+            event.kind == .userInput || event.kind == .assistantResponse || event.kind == .toolResult
         }
         let slice = relevant.suffix(limit)
         return slice.map { event in

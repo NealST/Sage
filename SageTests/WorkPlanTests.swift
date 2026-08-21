@@ -14,12 +14,12 @@ final class WorkPlanTests: XCTestCase {
         let plan = PlanAgent.parse(raw)
         XCTAssertEqual(plan?.kind, .act)
         XCTAssertEqual(plan?.intent, "给 README 补一节安装说明")
-        XCTAssertTrue(plan?.approach.contains("## 理解") == true)
-        XCTAssertTrue(plan?.approach.contains("只改 README") == true)
+        XCTAssertEqual(plan?.approach.contains("## 理解"), true)
+        XCTAssertEqual(plan?.approach.contains("只改 README"), true)
         XCTAssertEqual(plan?.sideEffects, "会改 README.md")
-        XCTAssertTrue(plan?.requiresConfirmation == true)
-        XCTAssertTrue(plan?.promptAppendix.contains("Confirmed work plan") == true)
-        XCTAssertTrue(plan?.promptAppendix.contains("Shell commands and MCP tools") == true)
+        XCTAssertEqual(plan?.requiresConfirmation, true)
+        XCTAssertEqual(plan?.promptAppendix.contains("Confirmed work plan"), true)
+        XCTAssertEqual(plan?.promptAppendix.contains("Shell commands and MCP tools"), true)
     }
 
     func testAcceptsLegacyApproachArray() {
@@ -27,8 +27,8 @@ final class WorkPlanTests: XCTestCase {
         {"kind":"answer","intent":"解释这个报错","approach":["根据上下文说明原因"],"side_effects":null}
         """)
         XCTAssertEqual(plan?.kind, .answer)
-        XCTAssertTrue(plan?.approach.contains("根据上下文说明原因") == true)
-        XCTAssertFalse(plan?.requiresConfirmation == true)
+        XCTAssertEqual(plan?.approach.contains("根据上下文说明原因"), true)
+        XCTAssertNotEqual(plan?.requiresConfirmation, true)
         XCTAssertNil(plan?.sideEffects)
     }
 
@@ -39,9 +39,9 @@ final class WorkPlanTests: XCTestCase {
         ```
         """)
         XCTAssertEqual(plan?.kind, .observe)
-        XCTAssertTrue(plan?.approach.contains("根目录") == true)
-        XCTAssertTrue(plan?.promptAppendix.contains("observe plan") == true)
-        XCTAssertTrue(plan?.promptAppendix.contains("Mutating tools are rejected") == true)
+        XCTAssertEqual(plan?.approach.contains("根目录"), true)
+        XCTAssertEqual(plan?.promptAppendix.contains("observe plan"), true)
+        XCTAssertEqual(plan?.promptAppendix.contains("Mutating tools are rejected"), true)
     }
 
     func testFallbackIsActMarkdown() {
@@ -75,7 +75,7 @@ final class WorkPlanTests: XCTestCase {
         {"kind":"answer","intent":"解释这个报错","approach":"根据上下文说明。","side_effects":null}
         """)
         XCTAssertEqual(plan?.threadAdvice, .continueThread)
-        XCTAssertTrue(plan?.skillNames.isEmpty == true)
+        XCTAssertEqual(plan?.skillNames.isEmpty, true)
     }
 
     func testTurnChromePrefersToolBatchOnceExecuteStarts() {

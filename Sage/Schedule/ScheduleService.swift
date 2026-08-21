@@ -224,8 +224,8 @@ final class ScheduleService {
         outcome: AgentTaskSettlement,
         postNotification: Bool = true
     ) async {
-        guard let known = records.first(where: {
-            $0.lastRunTaskID == taskID && $0.status == .awaitingConfirmation
+        guard let known = records.first(where: { record in
+            record.lastRunTaskID == taskID && record.status == .awaitingConfirmation
         }) else { return }
         guard var record = try? await taskRepository.loadSchedule(id: known.id),
               record.lastRunTaskID == taskID,
@@ -427,7 +427,7 @@ final class ScheduleService {
     ) {
         let playsSound: Bool
         switch notify {
-        case .none:
+        case .mute:
             return
 
         case .silent:

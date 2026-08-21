@@ -106,8 +106,8 @@ final class SkillTipStore {
     }
 
     var pendingSuggestions: [SkillSuggestion] {
-        items.compactMap {
-            if case .save(let suggestion) = $0 { return suggestion }
+        items.compactMap { item in
+            if case .save(let suggestion) = item { return suggestion }
             return nil
         }
     }
@@ -140,7 +140,7 @@ final class SkillTipStore {
         debounceTask = nil
         removeSaveDuplicates(of: suggestion)
         if !saveBuffer.isEmpty {
-            items.append(contentsOf: saveBuffer.map { .save($0) })
+            items.append(contentsOf: saveBuffer.map { suggestion in .save(suggestion) })
             saveBuffer.removeAll()
         }
         items.append(.save(suggestion))
@@ -149,8 +149,8 @@ final class SkillTipStore {
 
     @discardableResult
     func confirmSave(_ suggestionID: UUID) -> SkillSuggestion? {
-        guard let index = items.firstIndex(where: {
-            if case .save(let suggestion) = $0 { return suggestion.id == suggestionID }
+        guard let index = items.firstIndex(where: { item in
+            if case .save(let suggestion) = item { return suggestion.id == suggestionID }
             return false
         }) else { return nil }
         guard case .save(let suggestion) = items.remove(at: index) else { return nil }
@@ -159,8 +159,8 @@ final class SkillTipStore {
     }
 
     func enqueueSchedule(_ draft: ScheduleDraft) {
-        items.removeAll {
-            if case .schedule = $0 { return true }
+        items.removeAll { item in
+            if case .schedule = item { return true }
             return false
         }
         items.append(.schedule(draft))
@@ -168,8 +168,8 @@ final class SkillTipStore {
     }
 
     func updateSchedule(_ id: UUID, mutate: (inout ScheduleDraft) -> Void) {
-        guard let index = items.firstIndex(where: {
-            if case .schedule(let draft) = $0 { return draft.id == id }
+        guard let index = items.firstIndex(where: { item in
+            if case .schedule(let draft) = item { return draft.id == id }
             return false
         }) else { return }
         guard case .schedule(var draft) = items[index] else { return }
@@ -180,8 +180,8 @@ final class SkillTipStore {
 
     @discardableResult
     func confirmSchedule(_ id: UUID) -> ScheduleDraft? {
-        guard let index = items.firstIndex(where: {
-            if case .schedule(let draft) = $0 { return draft.id == id }
+        guard let index = items.firstIndex(where: { item in
+            if case .schedule(let draft) = item { return draft.id == id }
             return false
         }) else { return nil }
         guard case .schedule(let draft) = items.remove(at: index) else { return nil }
@@ -192,8 +192,8 @@ final class SkillTipStore {
     // MARK: - Recall tips
 
     func enqueueChoose(_ choice: SkillActivationChoice) {
-        items.removeAll {
-            if case .choose = $0 { return true }
+        items.removeAll { item in
+            if case .choose = item { return true }
             return false
         }
         items.insert(.choose(choice), at: 0)
@@ -202,8 +202,8 @@ final class SkillTipStore {
 
     func enqueueConsolidate(_ suggestion: SkillConsolidateSuggestion) {
         let key = Set(suggestion.candidates.map(\.path))
-        let exists = items.contains {
-            guard case .consolidate(let existing) = $0 else { return false }
+        let exists = items.contains { item in
+            guard case .consolidate(let existing) = item else { return false }
             return Set(existing.candidates.map(\.path)) == key
         }
         guard !exists else { return }
@@ -213,8 +213,8 @@ final class SkillTipStore {
 
     func dismissChoose() {
         let before = items.count
-        items.removeAll {
-            if case .choose = $0 { return true }
+        items.removeAll { item in
+            if case .choose = item { return true }
             return false
         }
         if items.count != before { noteMutation() }
@@ -251,8 +251,8 @@ final class SkillTipStore {
     private func removeSaveDuplicates(of suggestion: SkillSuggestion) {
         saveBuffer.removeAll { $0.skillName == suggestion.skillName && $0.type == suggestion.type }
         let before = items.count
-        items.removeAll {
-            guard case .save(let existing) = $0 else { return false }
+        items.removeAll { item in
+            guard case .save(let existing) = item else { return false }
             return existing.skillName == suggestion.skillName && existing.type == suggestion.type
         }
         if items.count != before { noteMutation() }

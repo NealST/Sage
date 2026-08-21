@@ -152,14 +152,14 @@ private final class ThrottledStreamState {
         // We track whether we're inside a fenced code block by counting fence openers/closers.
         var inFencedCode = false
         var lastBoundary: String.Index?
-        var i = text.startIndex
+        var currentIndex = text.startIndex
         var lineStart = text.startIndex
 
-        while i < text.endIndex {
+        while currentIndex < text.endIndex {
             // At the start of each line, check for fence markers
-            if i == lineStart {
-                let lineEnd = text[i...].firstIndex(of: "\n") ?? text.endIndex
-                let line = text[i..<lineEnd]
+            if currentIndex == lineStart {
+                let lineEnd = text[currentIndex...].firstIndex(of: "\n") ?? text.endIndex
+                let line = text[currentIndex..<lineEnd]
                 let trimmed = line.drop { $0 == " " || $0 == "\t" }
                 if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                     inFencedCode.toggle()
@@ -168,13 +168,13 @@ private final class ThrottledStreamState {
 
             // Detect \n\n (blank line boundary) outside fenced code
             if !inFencedCode,
-               text[i] == "\n",
-               text.index(after: i) < text.endIndex,
-               text[text.index(after: i)] == "\n" {
+               text[currentIndex] == "\n",
+               text.index(after: currentIndex) < text.endIndex,
+               text[text.index(after: currentIndex)] == "\n" {
                 // The boundary is at the second \n — the active block starts after it.
                 // But we want committed to include up to (and including) the first \n,
                 // and active to start from the second \n onward.
-                let boundaryStart = text.index(after: i) // points to second \n
+                let boundaryStart = text.index(after: currentIndex) // points to second \n
                 // Only record if there's content after the boundary
                 let afterBoundary = text.index(after: boundaryStart)
                 if afterBoundary <= text.endIndex {
@@ -183,11 +183,11 @@ private final class ThrottledStreamState {
             }
 
             // Advance to next character, tracking line starts
-            let next = text.index(after: i)
-            if text[i] == "\n" && next < text.endIndex {
+            let next = text.index(after: currentIndex)
+            if text[currentIndex] == "\n" && next < text.endIndex {
                 lineStart = next
             }
-            i = next
+            currentIndex = next
         }
 
         guard let boundary = lastBoundary, boundary < text.endIndex else {

@@ -53,8 +53,8 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
     func hide() {
         window?.orderOut(nil)
         appState.noteSessionHidden(session)
-        let anyVisible = NSApp.windows.contains {
-            $0.isVisible && $0.identifier?.rawValue.hasPrefix("SageAgentWindow") == true
+        let anyVisible = NSApp.windows.contains { window in
+            window.isVisible && window.identifier?.rawValue.hasPrefix("SageAgentWindow") == true
         }
         let settingsOpen = NSApp.windows.contains { $0.title == "Settings" && $0.isVisible }
         if !anyVisible && !settingsOpen {
@@ -134,9 +134,9 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         case .project:
             offset = CGFloat(appState.projectSessions.count) * 22
         }
-        let x = visible.midX - size.width / 2 + offset
-        let y = visible.midY - size.height / 2 - offset
-        window.setFrame(NSRect(origin: NSPoint(x: x, y: y), size: size), display: true)
+        let originX = visible.midX - size.width / 2 + offset
+        let originY = visible.midY - size.height / 2 - offset
+        window.setFrame(NSRect(origin: NSPoint(x: originX, y: originY), size: size), display: true)
     }
 
     private func screenForWindow() -> NSScreen {

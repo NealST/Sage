@@ -81,7 +81,7 @@ struct MarkdownContentView: View {
     }
 
     private var collapsibleBody: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             ZStack(alignment: .topLeading) {
                 if needsFreshMeasure {
                     measureMarkdown

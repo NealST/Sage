@@ -47,10 +47,8 @@ actor SkillStateStore {
         guard !keys.isEmpty else { return }
         var map = load()
         var changed = false
-        for key in keys {
-            if map.removeValue(forKey: key) != nil {
-                changed = true
-            }
+        for key in keys where map.removeValue(forKey: key) != nil {
+            changed = true
         }
         if changed {
             save(map)

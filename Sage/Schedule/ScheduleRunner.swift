@@ -100,11 +100,11 @@ final class ScheduleRunner {
 
     func runAgent(_ record: ScheduleRecord) async -> ScheduleAgentOutcome {
         guard settings.isConfigured else {
-            return .finished(ok: false, summary: "API key isn’t configured.", plan: nil, taskID: nil)
+            return .finished(succeeded: false, summary: "API key isn’t configured.", plan: nil, taskID: nil)
         }
         let prompt = record.prompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !prompt.isEmpty else {
-            return .finished(ok: false, summary: "Failed: empty prompt.", plan: nil, taskID: nil)
+            return .finished(succeeded: false, summary: "Failed: empty prompt.", plan: nil, taskID: nil)
         }
 
         let project: ProjectRecord?
@@ -115,8 +115,8 @@ final class ScheduleRunner {
         }
 
         if record.status == .armed, record.projectID != nil {
-            let rootExists = project.map {
-                FileManager.default.fileExists(atPath: $0.rootURL.path)
+            let rootExists = project.map { record in
+                FileManager.default.fileExists(atPath: record.rootURL.path)
             } ?? false
             if !rootExists {
                 return .degraded(reason: "Project folder is gone.")
@@ -206,7 +206,7 @@ final class ScheduleRunner {
             }
         }
         if Task.isCancelled {
-            return .finished(ok: false, summary: "Stopped", plan: nil, taskID: nil)
+            return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: nil)
         }
 
         let spawned = await session.agent.spawnScheduledTask(
@@ -216,20 +216,20 @@ final class ScheduleRunner {
         )
         guard let taskID = spawned else {
             return .finished(
-                ok: false,
+                succeeded: false,
                 summary: "Could not create a task for this schedule.",
                 plan: nil,
                 taskID: nil
             )
         }
         if Task.isCancelled {
-            return .finished(ok: false, summary: "Stopped", plan: nil, taskID: taskID)
+            return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: taskID)
         }
 
         let frozen = isReplay ? record.frozenWorkPlan : nil
         await session.agent.performScheduledRun(prompt: prompt, frozenPlan: frozen)
         if Task.isCancelled {
-            return .finished(ok: false, summary: "Stopped", plan: nil, taskID: taskID)
+            return .finished(succeeded: false, summary: "Stopped", plan: nil, taskID: taskID)
         }
         if case .awaitingConfirmation = session.agent.state.phase {
             return .needsConfirmation(taskID: taskID, plan: session.agent.state.activeTask?.workPlan)
@@ -238,12 +238,17 @@ final class ScheduleRunner {
         let summary = task?.events.last { $0.kind == .assistantResponse }?.content
             ?? session.agent.state.lastAssistantText
             ?? "Finished"
-        let ok: Bool
+        let succeeded: Bool
         if case .failed = session.agent.state.phase {
-            ok = false
+            succeeded = false
         } else {
-            ok = true
+            succeeded = true
         }
-        return .finished(ok: ok, summary: String(summary.prefix(240)), plan: task?.workPlan ?? frozen, taskID: taskID)
+        return .finished(
+            succeeded: succeeded,
+            summary: String(summary.prefix(240)),
+            plan: task?.workPlan ?? frozen,
+            taskID: taskID
+        )
     }
 }

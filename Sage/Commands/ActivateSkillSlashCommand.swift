@@ -14,12 +14,12 @@ enum ActivateSkillSlashCommand {
             return false
         }
 
-        let ok = await host.activateSkill(skill)
-        if ok {
+        let didActivate = await host.activateSkill(skill)
+        if didActivate {
             host.reportCommandCompleted(
                 summary: "Skill '\(name)' activated. Its instructions are now active for this session."
             )
         }
-        return ok
+        return didActivate
     }
 }

@@ -24,7 +24,7 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.xl) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.extraLarge) {
                     SettingsConnectionSection(
                         settings: settings,
                         testState: testState,
@@ -48,14 +48,14 @@ struct SettingsView: View {
                             showEraseConfirm = true
                     }
                 }
-                .padding(.horizontal, SageDesign.Spacing.xl)
+                .padding(.horizontal, SageDesign.Spacing.extraLarge)
                 .padding(.top, 20)
-                .padding(.bottom, SageDesign.Spacing.lg)
+                .padding(.bottom, SageDesign.Spacing.large)
             }
             .frame(maxHeight: 520)
 
             footer
-                .padding(.horizontal, SageDesign.Spacing.xl)
+                .padding(.horizontal, SageDesign.Spacing.extraLarge)
                 .padding(.bottom, 18)
         }
         .frame(width: 440)
@@ -83,8 +83,8 @@ struct SettingsView: View {
         ) {
             Button("Erase Data", role: .destructive) {
                 Task {
-                    let ok = await appState.eraseAllLocalData()
-                    eraseMessage = ok
+                    let didErase = await appState.eraseAllLocalData()
+                    eraseMessage = didErase
                         ? "Local history erased."
                         : "Could not erase local history."
                 }
@@ -96,7 +96,7 @@ struct SettingsView: View {
     }
 
     private var footer: some View {
-        HStack(alignment: .center, spacing: SageDesign.Spacing.md) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.medium) {
             Button("Test Connection") {
                 runConnectionTest()
             }
@@ -112,7 +112,7 @@ struct SettingsView: View {
             .controlSize(.large)
             .buttonStyle(.borderedProminent)
         }
-        .padding(.top, SageDesign.Spacing.lg)
+        .padding(.top, SageDesign.Spacing.large)
     }
 
     private var canTest: Bool {

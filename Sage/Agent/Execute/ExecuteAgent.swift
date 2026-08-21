@@ -135,8 +135,8 @@ final class ExecuteAgent {
         pendingPrompt: AgentPendingPrompt? = nil
     ) async -> Bool {
         let summary = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let storedCalls = turn.toolCalls.map {
-            ToolCallRecord(id: $0.id, name: $0.name, argumentsJSON: $0.argumentsJSON)
+        let storedCalls = turn.toolCalls.map { call in
+            ToolCallRecord(id: call.id, name: call.name, argumentsJSON: call.argumentsJSON)
         }
         let batch = ToolBatchExecutor.makePlan(
             from: turn.toolCalls,

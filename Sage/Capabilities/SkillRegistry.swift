@@ -65,15 +65,11 @@ actor SkillRegistry {
         guard !project.isEmpty else { return user }
         var seen = Set<String>()
         var merged: [SkillRecord] = []
-        for skill in project {
-            if seen.insert(skill.name).inserted {
-                merged.append(skill)
-            }
+        for skill in project where seen.insert(skill.name).inserted {
+            merged.append(skill)
         }
-        for skill in user {
-            if seen.insert(skill.name).inserted {
-                merged.append(skill)
-            }
+        for skill in user where seen.insert(skill.name).inserted {
+            merged.append(skill)
         }
         return merged.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }

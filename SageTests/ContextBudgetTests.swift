@@ -73,7 +73,7 @@ final class ContextBudgetTests: XCTestCase {
         let selected = ContextBudget.select(from: [user, assistant, tool], budget: budget)
         let result = selected.first { $0.kind == .toolResult }
         XCTAssertNotNil(result)
-        XCTAssertTrue(result?.content.contains("tool result compacted") == true)
+        XCTAssertEqual(result?.content.contains("tool result compacted"), true)
         XCTAssertLessThan(result?.content.utf8.count ?? .max, huge.utf8.count)
         XCTAssertTrue(selected.contains { $0.id == user.id })
     }

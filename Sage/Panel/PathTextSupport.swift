@@ -83,8 +83,8 @@ enum PathTextSupport {
         policy: PathGuard.Policy = .home
     ) -> AttributedString {
         var attributed = AttributedString(text)
-        let ns = text as NSString
-        let full = NSRange(location: 0, length: ns.length)
+        let nsString = text as NSString
+        let full = NSRange(location: 0, length: nsString.length)
         let matches = pathRegex.matches(in: text, options: [], range: full)
 
         if matches.isEmpty {
@@ -103,7 +103,7 @@ enum PathTextSupport {
 
         for match in matches.reversed() {
             guard match.numberOfRanges >= 1 else { continue }
-            var raw = ns.substring(with: match.range)
+            var raw = nsString.substring(with: match.range)
             while let last = raw.last, ".,;:)]}".contains(last) {
                 raw.removeLast()
             }
@@ -162,10 +162,10 @@ enum PathTextSupport {
     // MARK: - Private
 
     private static func rawPathMatches(in text: String) -> [String] {
-        let ns = text as NSString
-        let full = NSRange(location: 0, length: ns.length)
+        let nsString = text as NSString
+        let full = NSRange(location: 0, length: nsString.length)
         return pathRegex.matches(in: text, options: [], range: full).compactMap { match in
-            var raw = ns.substring(with: match.range)
+            var raw = nsString.substring(with: match.range)
             while let last = raw.last, ".,;:)]}".contains(last) {
                 raw.removeLast()
             }

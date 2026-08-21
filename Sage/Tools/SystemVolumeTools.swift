@@ -86,7 +86,11 @@ nonisolated private func getDefaultOutputDeviceID() throws -> AudioDeviceID {
     )
     let status = AudioObjectGetPropertyData(
         AudioObjectID(kAudioObjectSystemObject),
-        &address, 0, nil, &size, &deviceID
+        &address,
+        0,
+        nil,
+        &size,
+        &deviceID
     )
     guard status == noErr else {
         throw ToolError.operationFailed("Cannot access audio output device (error \(status)).")

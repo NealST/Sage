@@ -26,7 +26,7 @@ struct AgentComposerView: View {
                 suggestionList
             }
 
-            HStack(alignment: .center, spacing: SageDesign.Spacing.sm) {
+            HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
                 TextField(composerPlaceholder, text: $session.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: type.input))
@@ -52,7 +52,7 @@ struct AgentComposerView: View {
             .padding(.vertical, 10)
             .sagePanelBackground(cornerRadius: 12)
 
-            HStack(spacing: SageDesign.Spacing.sm) {
+            HStack(spacing: SageDesign.Spacing.small) {
                 Text(appState.settings.resolvedModel(for: .execute))
                     .font(.system(size: type.micro))
                     .foregroundStyle(.tertiary)
@@ -80,8 +80,8 @@ struct AgentComposerView: View {
             }
             .animation(SageDesign.Motion.expandAnimation, value: session.skills.saveJobs.count)
         }
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.vertical, SageDesign.Spacing.md)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.medium)
     }
 
     private var suggestionList: some View {
@@ -218,12 +218,12 @@ struct AgentComposerView: View {
         let lowered = draft.lowercased()
         let next: [ComposerSlashSuggestion]
         if lowered.hasPrefix("/schedule"), !lowered.hasPrefix("/schedule-") {
-            next = ScheduleCadenceParser.autocompleteInserts(forDraft: draft).map {
+            next = ScheduleCadenceParser.autocompleteInserts(forDraft: draft).map { insert in
                 ComposerSlashSuggestion(
-                    id: $0.id,
-                    title: "/schedule \($0.insert)",
-                    description: $0.description,
-                    insertDraft: "/schedule \($0.insert) ",
+                    id: insert.id,
+                    title: "/schedule \(insert.insert)",
+                    description: insert.description,
+                    insertDraft: "/schedule \(insert.insert) ",
                     submitOnSelect: false,
                     systemImage: "clock"
                 )

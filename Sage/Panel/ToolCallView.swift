@@ -162,7 +162,7 @@ struct ToolCallView: View {
 
     @ViewBuilder
     private var previewBody: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             switch model.body {
@@ -196,7 +196,7 @@ struct ToolCallView: View {
         } else if previewAgainstDisk {
             switch diskState {
             case .pending:
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.mini)
@@ -223,7 +223,7 @@ struct ToolCallView: View {
     }
 
     private func proposedContent(_ content: String, language: String?, path: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if let path {
                 HStack(spacing: 6) {
                     Image(systemName: "doc.text")

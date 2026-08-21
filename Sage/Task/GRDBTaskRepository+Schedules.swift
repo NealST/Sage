@@ -9,9 +9,9 @@ import GRDB
 extension GRDBTaskRepository {
     func listSchedules() throws -> [ScheduleRecord] {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let rows = try Row.fetchAll(
-                db,
+                database,
                 sql: """
                 SELECT * FROM schedules
                 ORDER BY next_fire_at IS NULL, next_fire_at ASC, updated_at DESC
@@ -23,9 +23,9 @@ extension GRDBTaskRepository {
 
     func loadSchedule(id: UUID) throws -> ScheduleRecord? {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let row = try Row.fetchOne(
-                db,
+                database,
                 sql: "SELECT * FROM schedules WHERE id = ?",
                 arguments: [id.uuidString]
             )
@@ -35,18 +35,18 @@ extension GRDBTaskRepository {
 
     func upsertSchedule(_ schedule: ScheduleRecord, scriptRun: ScheduleRunRecord? = nil) throws {
         let pool = try database()
-        try pool.write { db in
-            try Self.writeSchedule(schedule, database: db)
+        try pool.write { database in
+            try Self.writeSchedule(schedule, database: database)
             if let scriptRun {
-                try Self.writeScheduleRun(scriptRun, database: db)
+                try Self.writeScheduleRun(scriptRun, database: database)
             }
         }
     }
 
     func deleteSchedule(id: UUID) throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: "DELETE FROM schedules WHERE id = ?",
                 arguments: [id.uuidString]
             )
@@ -55,9 +55,9 @@ extension GRDBTaskRepository {
 
     func dueSchedules(at date: Date) throws -> [ScheduleRecord] {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let rows = try Row.fetchAll(
-                db,
+                database,
                 sql: """
                 SELECT * FROM schedules
                 WHERE enabled = 1
@@ -85,7 +85,7 @@ extension GRDBTaskRepository {
         outputExcerpt: String?
     ) throws {
         let pool = try database()
-        try pool.write { db in
+        try pool.write { database in
             try Self.writeScheduleRun(
                 ScheduleRunRecord(
                     id: id,
@@ -95,16 +95,16 @@ extension GRDBTaskRepository {
                     exitCode: exitCode,
                     outputExcerpt: outputExcerpt
                 ),
-                database: db
+                database: database
             )
         }
     }
 
     func latestScheduleRun(scheduleID: UUID) throws -> ScheduleRunRecord? {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let row = try Row.fetchOne(
-                db,
+                database,
                 sql: """
                 SELECT * FROM schedule_runs
                 WHERE schedule_id = ?
@@ -137,7 +137,7 @@ extension GRDBTaskRepository {
         )
     }
 
-    private static func writeSchedule(_ schedule: ScheduleRecord, database db: Database) throws {
+    private static func writeSchedule(_ schedule: ScheduleRecord, database: Database) throws {
         let cadenceKind: String
         let cadenceJSON: String
         switch schedule.cadence {
@@ -162,7 +162,7 @@ extension GRDBTaskRepository {
             cadenceJSON = jsonObject(["seconds": seconds])
         }
         let skillsJSON = encodeJSON(schedule.frozenSkillNames)
-        try db.execute(
+        try database.execute(
             sql: """
             INSERT INTO schedules (
                 id, title, kind, project_id, prompt, command, working_directory,
@@ -217,8 +217,8 @@ extension GRDBTaskRepository {
         )
     }
 
-    private static func writeScheduleRun(_ run: ScheduleRunRecord, database db: Database) throws {
-        try db.execute(
+    private static func writeScheduleRun(_ run: ScheduleRunRecord, database: Database) throws {
+        try database.execute(
             sql: """
             INSERT INTO schedule_runs (
                 id, schedule_id, started_at, ended_at, exit_code, output_excerpt

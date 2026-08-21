@@ -33,8 +33,8 @@ final class ReviewAgent {
     func evaluate() async throws -> ReviewVerdict {
         let plan = state.activeTask?.workPlan
         let userText = state.events.last { $0.kind == .userInput }?.content ?? ""
-        let planLine = plan.map {
-            "kind=\($0.kind.rawValue); intent=\($0.intent)\n\($0.approach)"
+        let planLine = plan.map { workPlan in
+            "kind=\(workPlan.kind.rawValue); intent=\(workPlan.intent)\n\(workPlan.approach)"
         } ?? "(none)"
         let brief = """
         User request:

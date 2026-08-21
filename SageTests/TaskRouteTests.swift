@@ -158,7 +158,7 @@ final class TopicDriftTests: XCTestCase {
         XCTAssertEqual(offer?.taskID, task.id)
         XCTAssertEqual(offer?.triggeringUserEventID, userEventID)
         XCTAssertEqual(offer?.topicLabel, "整理 Downloads")
-        XCTAssertTrue(offer?.message.contains("整理 Downloads") == true)
+        XCTAssertEqual(offer?.message.contains("整理 Downloads"), true)
     }
 
     func testDoesNotOfferShortFollowUps() {

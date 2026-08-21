@@ -18,7 +18,7 @@ struct RetryCountdownView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: SageDesign.Spacing.sm) {
+        HStack(spacing: SageDesign.Spacing.small) {
             countdownRing
             VStack(alignment: .leading, spacing: 2) {
                 Text("Retrying in \(state.secondsRemaining)s")

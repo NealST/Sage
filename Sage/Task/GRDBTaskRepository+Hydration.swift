@@ -13,7 +13,7 @@ extension GRDBTaskRepository {
 
     func loadTask(
         from row: Row,
-        database db: Database,
+        database: Database,
         includeHistory: Bool = true
     ) throws -> TaskRecord? {
         guard
@@ -61,10 +61,10 @@ extension GRDBTaskRepository {
             topic: row["topic"],
             abstract: row["abstract"],
             topicUpdatedAt: topicUpdatedAt,
-            events: includeHistory ? try loadEvents(taskID: id, database: db) : [],
+            events: includeHistory ? try loadEvents(taskID: id, database: database) : [],
             workPlan: workPlan,
             workingMemory: workingMemory,
-            pendingPlan: includeHistory ? try loadPlan(taskID: id, database: db) : nil,
+            pendingPlan: includeHistory ? try loadPlan(taskID: id, database: database) : nil,
             todos: {
                 if let json: String = row["todo_list_json"],
                    let data = json.data(using: .utf8),
@@ -91,7 +91,7 @@ extension GRDBTaskRepository {
             }(),
             // Entity extraction is not wired; skip the table read on the hot path.
             entities: [],
-            relatedTaskIDs: try loadRelations(taskID: id, database: db),
+            relatedTaskIDs: try loadRelations(taskID: id, database: database),
             activatedSkillNames: activatedSkills,
             skillPersistConsidered: {
                 if let flag = row["skill_persist_considered"] as Int? { return flag != 0 }
@@ -105,27 +105,27 @@ extension GRDBTaskRepository {
         )
     }
 
-    func loadProject(id: UUID, database db: Database) throws -> ProjectRecord? {
+    func loadProject(id: UUID, database: Database) throws -> ProjectRecord? {
         guard let row = try Row.fetchOne(
-            db,
+            database,
             sql: "SELECT * FROM projects WHERE id = ?",
             arguments: [id.uuidString]
         ) else { return nil }
         return Self.projectRecord(from: row)
     }
 
-    func loadProject(rootPath: String, database db: Database) throws -> ProjectRecord? {
+    func loadProject(rootPath: String, database: Database) throws -> ProjectRecord? {
         guard let row = try Row.fetchOne(
-            db,
+            database,
             sql: "SELECT * FROM projects WHERE root_path = ?",
             arguments: [rootPath]
         ) else { return nil }
         return Self.projectRecord(from: row)
     }
 
-    func loadRecentProjects(limit: Int, database db: Database) throws -> [ProjectRecord] {
+    func loadRecentProjects(limit: Int, database: Database) throws -> [ProjectRecord] {
         let rows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT * FROM projects
             ORDER BY last_opened_at DESC
@@ -136,8 +136,8 @@ extension GRDBTaskRepository {
         return rows.compactMap(Self.projectRecord(from:))
     }
 
-    func upsertProject(_ project: ProjectRecord, database db: Database) throws {
-        try db.execute(
+    func upsertProject(_ project: ProjectRecord, database: Database) throws {
+        try database.execute(
             sql: """
             INSERT INTO projects (
                 id, name, root_path, created_at, updated_at,
@@ -194,9 +194,9 @@ extension GRDBTaskRepository {
         )
     }
 
-    func loadEvents(taskID: UUID, database db: Database) throws -> [AgentEvent] {
+    func loadEvents(taskID: UUID, database: Database) throws -> [AgentEvent] {
         let rows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT * FROM events
             WHERE task_id = ?
@@ -210,8 +210,8 @@ extension GRDBTaskRepository {
             guard let id = row["id"] as String? else { return nil }
             return id
         }
-        let toolCallsByEvent = try loadToolCalls(forEventIDs: eventIDStrings, database: db)
-        let contextsByEvent = try loadContexts(forEventIDs: eventIDStrings, database: db)
+        let toolCallsByEvent = try loadToolCalls(forEventIDs: eventIDStrings, database: database)
+        let contextsByEvent = try loadContexts(forEventIDs: eventIDStrings, database: database)
 
         return rows.compactMap { row in
             guard
@@ -245,12 +245,12 @@ extension GRDBTaskRepository {
 
     func loadToolCalls(
         forEventIDs eventIDs: [String],
-        database db: Database
+        database: Database
     ) throws -> [String: [ToolCallRecord]] {
         guard !eventIDs.isEmpty else { return [:] }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ", ")
         let rows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT event_id, call_id, name, arguments_json
             FROM event_tool_calls
@@ -275,12 +275,12 @@ extension GRDBTaskRepository {
 
     func loadContexts(
         forEventIDs eventIDs: [String],
-        database db: Database
+        database: Database
     ) throws -> [String: EventContext] {
         guard !eventIDs.isEmpty else { return [:] }
         let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ", ")
         let contextRows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT event_id, confidence, reason
             FROM event_contexts
@@ -291,7 +291,7 @@ extension GRDBTaskRepository {
         guard !contextRows.isEmpty else { return [:] }
 
         let relatedRows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT event_id, related_task_id
             FROM event_context_tasks
@@ -320,9 +320,9 @@ extension GRDBTaskRepository {
         return result
     }
 
-    func loadRelations(taskID: UUID, database db: Database) throws -> [UUID] {
+    func loadRelations(taskID: UUID, database: Database) throws -> [UUID] {
         try String.fetchAll(
-            db,
+            database,
             sql: """
             SELECT target_task_id FROM task_relations
             WHERE source_task_id = ?
@@ -332,16 +332,16 @@ extension GRDBTaskRepository {
         ).compactMap(UUID.init(uuidString:))
     }
 
-    func loadPlan(taskID: UUID, database db: Database) throws -> AgentPlan? {
+    func loadPlan(taskID: UUID, database: Database) throws -> AgentPlan? {
         guard let planRow = try Row.fetchOne(
-            db,
+            database,
             sql: "SELECT * FROM plans WHERE task_id = ?",
             arguments: [taskID.uuidString]
         ), let planID = UUID(uuidString: planRow["id"]) else {
             return nil
         }
         let stepRows = try Row.fetchAll(
-            db,
+            database,
             sql: """
             SELECT * FROM plan_steps
             WHERE plan_id = ?

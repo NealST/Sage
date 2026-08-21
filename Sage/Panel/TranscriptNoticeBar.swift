@@ -73,8 +73,8 @@ struct TranscriptNoticeBar: View {
             .accessibilityLabel("Keep going")
         }
         .foregroundStyle(.secondary)
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.bottom, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.bottom, SageDesign.Spacing.small)
         .accessibilityElement(children: .contain)
     }
 
@@ -98,8 +98,8 @@ struct TranscriptNoticeBar: View {
             .accessibilityHint("Next request starts without this prior context")
         }
         .foregroundStyle(.secondary)
-        .padding(.horizontal, SageDesign.Spacing.lg)
-        .padding(.bottom, SageDesign.Spacing.sm)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.bottom, SageDesign.Spacing.small)
         .accessibilityElement(children: .contain)
     }
 }

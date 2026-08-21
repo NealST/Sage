@@ -276,28 +276,28 @@ final class ScheduleClockTests: XCTestCase {
     func testListingSortPutsSoonestFireFirstAndNullsLast() {
         let early = Date(timeIntervalSince1970: 100)
         let later = Date(timeIntervalSince1970: 200)
-        let a = ScheduleRecord(
+        let laterRecord = ScheduleRecord(
             title: "a",
             kind: .script,
             cadence: .once(date: later),
             nextFireAt: later,
             updatedAt: Date(timeIntervalSince1970: 1)
         )
-        let b = ScheduleRecord(
+        let earlierRecord = ScheduleRecord(
             title: "b",
             kind: .script,
             cadence: .once(date: early),
             nextFireAt: early,
             updatedAt: Date(timeIntervalSince1970: 2)
         )
-        let c = ScheduleRecord(
+        let nullLater = ScheduleRecord(
             title: "c",
             kind: .script,
             cadence: .once(date: early),
             nextFireAt: nil,
             updatedAt: Date(timeIntervalSince1970: 9)
         )
-        let d = ScheduleRecord(
+        let nullEarlier = ScheduleRecord(
             title: "d",
             kind: .script,
             cadence: .once(date: early),
@@ -305,7 +305,7 @@ final class ScheduleClockTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 3)
         )
         XCTAssertEqual(
-            ScheduleRecord.sortedForListing([a, c, b, d]).map(\.title),
+            ScheduleRecord.sortedForListing([laterRecord, nullLater, earlierRecord, nullEarlier]).map(\.title),
             ["b", "a", "c", "d"]
         )
     }

@@ -64,7 +64,7 @@ struct AgentTranscriptPane: View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+                    LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
                         if displayEvents.isEmpty {
                             emptyTranscript
                         }
@@ -80,7 +80,7 @@ struct AgentTranscriptPane: View {
                         }
                         .id("phase-accessory")
                     }
-                    .padding(SageDesign.Spacing.lg)
+                    .padding(SageDesign.Spacing.large)
                 }
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     let threshold: CGFloat = 72
@@ -114,7 +114,7 @@ struct AgentTranscriptPane: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .padding(.bottom, SageDesign.Spacing.md)
+                    .padding(.bottom, SageDesign.Spacing.medium)
                     .accessibilityLabel("Jump to latest")
                 }
             }
@@ -142,7 +142,7 @@ struct AgentTranscriptPane: View {
     }
 
     private var emptyTranscript: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if let project = session.agent.state.focusedProject {
                 Text("Tell me what to do")
                     .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
@@ -163,7 +163,7 @@ struct AgentTranscriptPane: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, SageDesign.Spacing.lg)
+        .padding(.vertical, SageDesign.Spacing.large)
         .accessibilityElement(children: .combine)
     }
 
@@ -178,7 +178,7 @@ struct AgentTranscriptPane: View {
     private func phaseAccessory(onStreamScroll: @escaping () -> Void) -> some View {
         switch session.agent.state.phase {
         case .thinking:
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
                 if let todos = session.agent.state.activeTask?.todos, !todos.isEmpty {
                     TodoListCard(items: todos)
                 }
@@ -195,7 +195,7 @@ struct AgentTranscriptPane: View {
                 if case .executing = session.agent.state.phase { return true }
                 return false
             }()
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.md) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
                 if let todos = session.agent.state.activeTask?.todos, !todos.isEmpty {
                     TodoListCard(items: todos)
                 }
@@ -276,13 +276,13 @@ struct AgentTranscriptPane: View {
             }
 
         case .failed(let message):
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: SageDesign.Typography.bodySize))
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     if session.agent.canRetryFailure {
                         Button("Retry") {
                             stickToBottom = true
@@ -326,7 +326,7 @@ struct AgentTranscriptPane: View {
                 .textSelection(.enabled)
 
         case .assistantResponse:
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 if !event.content.isEmpty {
                     MarkdownContentView(markdown: event.content, collapsible: true)
                 }
@@ -398,7 +398,7 @@ private struct ThinkingStreamAccessory: View {
     let onStreamScroll: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if streaming.isActive {
                 StreamingContentView(text: streaming.text)
                     .transition(.opacity)
@@ -406,7 +406,7 @@ private struct ThinkingStreamAccessory: View {
                 RetryCountdownView(state: retry)
                     .transition(.opacity)
             } else {
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     ProgressView().controlSize(.small)
                     Text("Thinking…")
                         .font(.system(size: SageDesign.Typography.bodySize))

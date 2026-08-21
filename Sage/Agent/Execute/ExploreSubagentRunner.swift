@@ -105,8 +105,8 @@ enum ExploreSubagentRunner {
                 settings: settings
             )
             let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let calls = turn.toolCalls.map {
-                ToolCallRecord(id: $0.id, name: $0.name, argumentsJSON: $0.argumentsJSON)
+            let calls = turn.toolCalls.map { call in
+                ToolCallRecord(id: call.id, name: call.name, argumentsJSON: call.argumentsJSON)
             }
             events.append(
                 AgentEvent(kind: .assistantResponse, content: text, toolCalls: calls)
@@ -125,8 +125,8 @@ enum ExploreSubagentRunner {
                         } else {
                             nil
                         }
-                        let activeSkills = enabledSkills.filter {
-                            activatedSkillNames.contains($0.name)
+                        let activeSkills = enabledSkills.filter { skill in
+                            activatedSkillNames.contains(skill.name)
                         }
                         let hookDecision = await PreToolUseHookEvaluator.shared.evaluate(
                             toolName: call.name,

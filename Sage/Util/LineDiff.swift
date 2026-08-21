@@ -7,7 +7,7 @@ import Foundation
 
 /// Line-oriented diff ops (Myers O(ND)).
 nonisolated enum LineDiff {
-    enum Op: Equatable, Sendable {
+    enum Operation: Equatable, Sendable {
         case equal(String)
         case insert(String)
         case delete(String)
@@ -28,8 +28,8 @@ nonisolated enum LineDiff {
     static func stats(before: String, after: String) -> Stats {
         var insertions = 0
         var deletions = 0
-        for op in diff(before: before, after: after) {
-            switch op {
+        for operation in diff(before: before, after: after) {
+            switch operation {
             case .insert: insertions += 1
             case .delete: deletions += 1
             case .equal: break
@@ -38,24 +38,26 @@ nonisolated enum LineDiff {
         return Stats(insertions: insertions, deletions: deletions)
     }
 
-    static func diff(before: String, after: String) -> [Op] {
+    static func diff(before: String, after: String) -> [Operation] {
         diffLines(splitLines(before), splitLines(after))
     }
 
     /// Collapse long equal runs, keeping `context` lines at each edge.
-    static func withCollapsedContext(_ ops: [Op], context: Int = 3) -> [Op] {
-        guard context >= 0 else { return ops }
-        var result: [Op] = []
-        var i = 0
-        while i < ops.count {
-            guard case .equal = ops[i] else {
-                result.append(ops[i])
-                i += 1
+    static func withCollapsedContext(_ operations: [Operation], context: Int = 3) -> [Operation] {
+        guard context >= 0 else { return operations }
+        var result: [Operation] = []
+        var startIndex = 0
+        while startIndex < operations.count {
+            guard case .equal = operations[startIndex] else {
+                result.append(operations[startIndex])
+                startIndex += 1
                 continue
             }
-            var j = i
-            while j < ops.count, case .equal = ops[j] { j += 1 }
-            let run = Array(ops[i..<j])
+            var endIndex = startIndex
+            while endIndex < operations.count, case .equal = operations[endIndex] {
+                endIndex += 1
+            }
+            let run = Array(operations[startIndex..<endIndex])
             if run.count <= context * 2 + 1 {
                 result.append(contentsOf: run)
             } else {
@@ -63,100 +65,113 @@ nonisolated enum LineDiff {
                 result.append(.equal("⋯ \(run.count - context * 2) unchanged lines ⋯"))
                 result.append(contentsOf: run.suffix(context))
             }
-            i = j
+            startIndex = endIndex
         }
         return result
     }
 
     // MARK: - Myers
 
-    private static func diffLines(_ a: [String], _ b: [String]) -> [Op] {
-        let n = a.count
-        let m = b.count
-        if n == 0 { return b.map { .insert($0) } }
-        if m == 0 { return a.map { .delete($0) } }
+    private static func diffLines(_ beforeLines: [String], _ afterLines: [String]) -> [Operation] {
+        let beforeCount = beforeLines.count
+        let afterCount = afterLines.count
+        if beforeCount == 0 { return afterLines.map { .insert($0) } }
+        if afterCount == 0 { return beforeLines.map { .delete($0) } }
 
-        let maxD = n + m
-        let offset = maxD
-        var v = Array(repeating: 0, count: 2 * maxD + 1)
+        let maxDistance = beforeCount + afterCount
+        let offset = maxDistance
+        var frontier = Array(repeating: 0, count: 2 * maxDistance + 1)
         var trace: [[Int]] = []
 
-        for d in 0...maxD {
-            for k in stride(from: -d, through: d, by: 2) {
-                let idx = k + offset
-                var x: Int
-                if k == -d || (k != d && v[idx - 1] < v[idx + 1]) {
-                    x = v[idx + 1]
+        for distance in 0...maxDistance {
+            for diagonal in stride(from: -distance, through: distance, by: 2) {
+                let idx = diagonal + offset
+                var beforeIndex: Int
+                if diagonal == -distance || (diagonal != distance && frontier[idx - 1] < frontier[idx + 1]) {
+                    beforeIndex = frontier[idx + 1]
                 } else {
-                    x = v[idx - 1] + 1
+                    beforeIndex = frontier[idx - 1] + 1
                 }
-                var y = x - k
-                while x < n, y < m, a[x] == b[y] {
-                    x += 1
-                    y += 1
+                var afterIndex = beforeIndex - diagonal
+                while beforeIndex < beforeCount,
+                      afterIndex < afterCount,
+                      beforeLines[beforeIndex] == afterLines[afterIndex] {
+                    beforeIndex += 1
+                    afterIndex += 1
                 }
-                v[idx] = x
-                if x >= n, y >= m {
-                    trace.append(v)
-                    return backtrack(a: a, b: b, trace: trace, offset: offset)
+                frontier[idx] = beforeIndex
+                if beforeIndex >= beforeCount, afterIndex >= afterCount {
+                    trace.append(frontier)
+                    return backtrack(
+                        beforeLines: beforeLines,
+                        afterLines: afterLines,
+                        trace: trace,
+                        offset: offset
+                    )
                 }
             }
-            trace.append(v)
+            trace.append(frontier)
         }
 
-        return backtrack(a: a, b: b, trace: trace, offset: offset)
+        return backtrack(
+            beforeLines: beforeLines,
+            afterLines: afterLines,
+            trace: trace,
+            offset: offset
+        )
     }
 
     private static func backtrack(
-        a: [String],
-        b: [String],
+        beforeLines: [String],
+        afterLines: [String],
         trace: [[Int]],
         offset: Int
-    ) -> [Op] {
-        var x = a.count
-        var y = b.count
-        var ops: [Op] = []
+    ) -> [Operation] {
+        var beforeIndex = beforeLines.count
+        var afterIndex = afterLines.count
+        var operations: [Operation] = []
 
-        for d in stride(from: trace.count - 1, through: 0, by: -1) {
-            let v = trace[d]
-            let k = x - y
-            let prevK: Int
-            if d > 0 {
-                if k == -d || (k != d && v[k - 1 + offset] < v[k + 1 + offset]) {
-                    prevK = k + 1
+        for distance in stride(from: trace.count - 1, through: 0, by: -1) {
+            let frontier = trace[distance]
+            let diagonal = beforeIndex - afterIndex
+            let previousDiagonal: Int
+            if distance > 0 {
+                if diagonal == -distance
+                    || (diagonal != distance && frontier[diagonal - 1 + offset] < frontier[diagonal + 1 + offset]) {
+                    previousDiagonal = diagonal + 1
                 } else {
-                    prevK = k - 1
+                    previousDiagonal = diagonal - 1
                 }
             } else {
-                prevK = 0
+                previousDiagonal = 0
             }
-            let prevX = d > 0 ? v[prevK + offset] : 0
-            let prevY = prevX - prevK
+            let previousBeforeIndex = distance > 0 ? frontier[previousDiagonal + offset] : 0
+            let previousAfterIndex = previousBeforeIndex - previousDiagonal
 
-            while x > prevX, y > prevY {
-                ops.append(.equal(a[x - 1]))
-                x -= 1
-                y -= 1
+            while beforeIndex > previousBeforeIndex, afterIndex > previousAfterIndex {
+                operations.append(.equal(beforeLines[beforeIndex - 1]))
+                beforeIndex -= 1
+                afterIndex -= 1
             }
 
-            if d == 0 { break }
+            if distance == 0 { break }
 
-            if x == prevX {
-                ops.append(.insert(b[y - 1]))
-                y -= 1
+            if beforeIndex == previousBeforeIndex {
+                operations.append(.insert(afterLines[afterIndex - 1]))
+                afterIndex -= 1
             } else {
-                ops.append(.delete(a[x - 1]))
-                x -= 1
+                operations.append(.delete(beforeLines[beforeIndex - 1]))
+                beforeIndex -= 1
             }
         }
 
-        return ops.reversed()
+        return operations.reversed()
     }
 
     private static func splitLines(_ text: String) -> [String] {
         if text.isEmpty { return [] }
         var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        if text.hasSuffix("\n"), lines.last == "" {
+        if text.hasSuffix("\n"), lines.last?.isEmpty == true {
             lines.removeLast()
         }
         return lines

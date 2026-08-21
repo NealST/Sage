@@ -135,9 +135,9 @@ final class ToolImpactTests: XCTestCase {
     }
 
     func testMCPGroupsAppearOnlyAboveThresholdAndUnlockPerServer() {
-        let small = (0..<MCPToolGroupTool.groupingThreshold).map {
+        let small = (0..<MCPToolGroupTool.groupingThreshold).map { index in
             ToolDefinition(
-                name: "mcp__one__tool\($0)",
+                name: "mcp__one__tool\(index)",
                 description: "tool",
                 parameters: .schemaObject(properties: [:])
             )
@@ -147,9 +147,9 @@ final class ToolImpactTests: XCTestCase {
             small.count
         )
 
-        let large = (0...MCPToolGroupTool.groupingThreshold).map {
+        let large = (0...MCPToolGroupTool.groupingThreshold).map { index in
             ToolDefinition(
-                name: "mcp__one__tool\($0)",
+                name: "mcp__one__tool\(index)",
                 description: "tool",
                 parameters: .schemaObject(properties: [:])
             )

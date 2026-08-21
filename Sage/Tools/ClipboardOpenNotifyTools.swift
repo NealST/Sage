@@ -140,8 +140,8 @@ nonisolated struct OpenApplicationTool: AgentTool {
             guard let items = try? FileManager.default.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: nil, options: []
             ) else { continue }
-            if let match = items.first(where: {
-                $0.deletingPathExtension().lastPathComponent.lowercased() == lowered
+            if let match = items.first(where: { item in
+                item.deletingPathExtension().lastPathComponent.lowercased() == lowered
             }) {
                 return match
             }
@@ -172,8 +172,8 @@ nonisolated struct OpenURLTool: AgentTool {
         else {
             throw ToolError.invalidArguments("Expected http(s) or mailto URL, got: \(args.url)")
         }
-        let ok = await MainActor.run { NSWorkspace.shared.open(url) }
-        guard ok else { throw ToolError.operationFailed("Failed to open \(args.url)") }
+        let didOpen = await MainActor.run { NSWorkspace.shared.open(url) }
+        guard didOpen else { throw ToolError.operationFailed("Failed to open \(args.url)") }
         return "[OK] Opened \(args.url)"
     }
 }

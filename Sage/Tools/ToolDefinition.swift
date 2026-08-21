@@ -74,13 +74,11 @@ nonisolated enum ToolError: LocalizedError {
 
 nonisolated enum PathGuard: Sendable {
     /// Active sandbox for the current tool call (set by AgentRuntime via TaskLocal).
-    @TaskLocal
-    static var policy: Policy = .home
+    @TaskLocal static var policy: Policy = .home
 
     /// Additional **read-only** paths beyond the primary policy (e.g. activated skill dirs).
     /// Never consulted for write / mutate / shell-cwd resolution.
-    @TaskLocal
-    static var readAllowlist: [String] = []
+    @TaskLocal static var readAllowlist: [String] = []
 
     /// Whether a path is being resolved for reading or for mutation / cwd.
     enum Access: Sendable, Equatable {

@@ -69,8 +69,8 @@ private nonisolated struct FileNode: Identifiable, Sendable {
         ) else { return [] }
 
         return items
-            .sorted {
-                $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent)
+            .sorted { lhs, rhs in
+                lhs.lastPathComponent.localizedCaseInsensitiveCompare(rhs.lastPathComponent)
                     == .orderedAscending
             }
             .compactMap { url -> Self? in

@@ -10,7 +10,7 @@ import Foundation
 /// Confirm-resume / step runner / Stop / Cancel for a tool batch.
 enum ToolBatchExecutor {
     private enum WaveOutcome: Equatable {
-        case ok
+        case succeeded
         case paused
         case persistFailed
         case cancelled
@@ -43,7 +43,7 @@ enum ToolBatchExecutor {
             for wave in ToolBatchWave.partition(plan.steps) {
                 try Task.checkCancellation()
                 switch await runWave(wave, plan: &plan, services: services) {
-                case .ok:
+                case .succeeded:
                     try Task.checkCancellation()
                     continue
 
@@ -125,7 +125,7 @@ enum ToolBatchExecutor {
             }
         }
 
-        let ok = await services.commit(
+        let didCommit = await services.commit(
             appendEvents: [],
             deleteEventIDs: errorEventIDs
         ) { task in
@@ -133,7 +133,7 @@ enum ToolBatchExecutor {
                 task.pendingPrompt = nil
                 task.status = .active
         }
-        guard ok else { return nil }
+        guard didCommit else { return nil }
         services.planProgress.replace(plan)
         return plan
     }
@@ -243,9 +243,9 @@ enum ToolBatchExecutor {
         plan: inout AgentPlan,
         services: ExecuteServices
     ) async -> WaveOutcome {
-        guard plan.steps.indices.contains(index) else { return .ok }
+        guard plan.steps.indices.contains(index) else { return .succeeded }
         if shouldSkip(plan.steps[index], services: services) {
-            return .ok
+            return .succeeded
         }
 
         let step = plan.steps[index]
@@ -300,7 +300,7 @@ enum ToolBatchExecutor {
         var runnable = indices.filter { index in
             plan.steps.indices.contains(index) && !shouldSkip(plan.steps[index], services: services)
         }
-        guard !runnable.isEmpty else { return .ok }
+        guard !runnable.isEmpty else { return .succeeded }
 
         var approved: [Int] = []
         for index in runnable {
@@ -316,7 +316,7 @@ enum ToolBatchExecutor {
                     plan: &plan,
                     services: services
                 )
-                guard result == .ok else { return result }
+                guard result == .succeeded else { return result }
                 continue
             }
 
@@ -338,7 +338,7 @@ enum ToolBatchExecutor {
             approved.append(index)
         }
         runnable = approved
-        guard !runnable.isEmpty else { return .ok }
+        guard !runnable.isEmpty else { return .succeeded }
 
         for index in runnable {
             plan.steps[index].status = .running
@@ -390,7 +390,7 @@ enum ToolBatchExecutor {
                 continue
             }
             switch await applyOutcome(item.result, at: item.index, plan: &plan, services: services) {
-            case .ok:
+            case .succeeded:
                 continue
 
             case .paused:
@@ -403,7 +403,7 @@ enum ToolBatchExecutor {
                 cancelled = true
             }
         }
-        return cancelled ? .cancelled : .ok
+        return cancelled ? .cancelled : .succeeded
     }
 
     private static func shouldSkip(_ step: AgentStep, services: ExecuteServices) -> Bool {
@@ -412,8 +412,8 @@ enum ToolBatchExecutor {
             return true
         }
         if step.status == .failed {
-            return services.events.contains {
-                $0.kind == .toolResult && $0.toolCallID == step.toolCallID
+            return services.events.contains { event in
+                event.kind == .toolResult && event.toolCallID == step.toolCallID
             }
         }
         return false
@@ -494,7 +494,7 @@ enum ToolBatchExecutor {
            !resultEvent.content.hasPrefix("ERROR:") {
             services.activateSkill(named: name)
         }
-        return .ok
+        return .succeeded
     }
 
     private static func pauseForApproval(

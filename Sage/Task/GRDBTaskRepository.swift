@@ -25,15 +25,15 @@ actor GRDBTaskRepository: TaskRepository {
 
     func loadScopedWorkspace(projectID: UUID?) throws -> TaskWorkspaceSnapshot {
         let pool = try database()
-        return try pool.read { db in
-            try loadScopedWorkspace(projectID: projectID, database: db)
+        return try pool.read { database in
+            try loadScopedWorkspace(projectID: projectID, database: database)
         }
     }
 
-    private func loadScopedWorkspace(projectID: UUID?, database db: Database) throws -> TaskWorkspaceSnapshot {
+    private func loadScopedWorkspace(projectID: UUID?, database: Database) throws -> TaskWorkspaceSnapshot {
         let focusedProject: ProjectRecord?
         if let projectID {
-            focusedProject = try loadProject(id: projectID, database: db)
+            focusedProject = try loadProject(id: projectID, database: database)
         } else {
             focusedProject = nil
         }
@@ -41,7 +41,7 @@ actor GRDBTaskRepository: TaskRepository {
         let summaryRows: [Row]
         if let projectID {
             summaryRows = try Row.fetchAll(
-                db,
+                database,
                 sql: """
                 SELECT id, status, project_id, summary, topic, abstract, updated_at, origin_schedule_id
                 FROM tasks
@@ -54,7 +54,7 @@ actor GRDBTaskRepository: TaskRepository {
             )
         } else {
             summaryRows = try Row.fetchAll(
-                db,
+                database,
                 sql: """
                 SELECT id, status, project_id, summary, topic, abstract, updated_at, origin_schedule_id
                 FROM tasks
@@ -70,14 +70,14 @@ actor GRDBTaskRepository: TaskRepository {
             Self.taskSummary(from: row)
         }
 
-        let recentProjects = try loadRecentProjects(limit: 12, database: db)
+        let recentProjects = try loadRecentProjects(limit: 12, database: database)
 
         let preferredActiveID: UUID?
         if let project = focusedProject {
             preferredActiveID = project.lastActiveTaskID
         } else {
             let raw = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT last_general_task_id FROM app_state WHERE singleton = 1"
             )
             preferredActiveID = raw.flatMap(UUID.init(uuidString:))
@@ -86,20 +86,20 @@ actor GRDBTaskRepository: TaskRepository {
         let activeTask: TaskRecord?
         if let preferredActiveID,
            let row = try Row.fetchOne(
-            db,
+            database,
             sql: "SELECT * FROM tasks WHERE id = ?",
             arguments: [preferredActiveID.uuidString]
            ),
-           let loaded = try loadTask(from: row, database: db),
+           let loaded = try loadTask(from: row, database: database),
            loaded.projectID == projectID {
             activeTask = loaded
         } else if let first = recentSummaries.first,
                   let row = try Row.fetchOne(
-                    db,
+                    database,
                     sql: "SELECT * FROM tasks WHERE id = ?",
                     arguments: [first.id.uuidString]
                   ) {
-            activeTask = try loadTask(from: row, database: db)
+            activeTask = try loadTask(from: row, database: database)
         } else {
             activeTask = nil
         }
@@ -115,51 +115,51 @@ actor GRDBTaskRepository: TaskRepository {
 
     func loadProject(id: UUID) throws -> ProjectRecord? {
         let pool = try database()
-        return try pool.read { db in
-            try loadProject(id: id, database: db)
+        return try pool.read { database in
+            try loadProject(id: id, database: database)
         }
     }
 
     func listRecentProjects(limit: Int) throws -> [ProjectRecord] {
         let pool = try database()
-        return try pool.read { db in
-            try loadRecentProjects(limit: limit, database: db)
+        return try pool.read { database in
+            try loadRecentProjects(limit: limit, database: database)
         }
     }
 
     func loadTask(id: UUID) throws -> TaskRecord? {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             guard let row = try Row.fetchOne(
-                db,
+                database,
                 sql: "SELECT * FROM tasks WHERE id = ?",
                 arguments: [id.uuidString]
             ) else {
                 return nil
             }
-            return try loadTask(from: row, database: db, includeHistory: true)
+            return try loadTask(from: row, database: database, includeHistory: true)
         }
     }
 
     func loadTaskMetadata(id: UUID) throws -> TaskRecord? {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             guard let row = try Row.fetchOne(
-                db,
+                database,
                 sql: "SELECT * FROM tasks WHERE id = ?",
                 arguments: [id.uuidString]
             ) else {
                 return nil
             }
-            return try loadTask(from: row, database: db, includeHistory: false)
+            return try loadTask(from: row, database: database, includeHistory: false)
         }
     }
 
     func hasPendingPlan(taskID: UUID) throws -> Bool {
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             try Bool.fetchOne(
-                db,
+                database,
                 sql: "SELECT EXISTS (SELECT 1 FROM plans WHERE task_id = ?)",
                 arguments: [taskID.uuidString]
             ) ?? false
@@ -169,7 +169,7 @@ actor GRDBTaskRepository: TaskRepository {
     func filterTaskIDs(_ ids: [UUID], projectID: UUID?) throws -> [UUID] {
         guard !ids.isEmpty else { return [] }
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
             var sql = """
             SELECT id FROM tasks
@@ -182,7 +182,7 @@ actor GRDBTaskRepository: TaskRepository {
             } else {
                 sql += " AND project_id IS NULL"
             }
-            let found = try String.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+            let found = try String.fetchAll(database, sql: sql, arguments: StatementArguments(arguments))
             let allowed = Set(found)
             // Preserve caller order and drop duplicates.
             var result: [UUID] = []
@@ -200,7 +200,7 @@ actor GRDBTaskRepository: TaskRepository {
     ) throws -> [RelatedTaskContextSnippet] {
         guard !ids.isEmpty else { return [] }
         let pool = try database()
-        return try pool.read { db in
+        return try pool.read { database in
             let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
             var taskSQL = """
             SELECT id, project_id, summary, topic, abstract
@@ -216,7 +216,7 @@ actor GRDBTaskRepository: TaskRepository {
             }
 
             let taskRows = try Row.fetchAll(
-                db,
+                database,
                 sql: taskSQL,
                 arguments: StatementArguments(taskArgs)
             )
@@ -249,7 +249,7 @@ actor GRDBTaskRepository: TaskRepository {
             dialogueArgs.append(AgentEventKind.userInput.rawValue)
             dialogueArgs.append(AgentEventKind.assistantResponse.rawValue)
             let dialogueRows = try Row.fetchAll(
-                db,
+                database,
                 sql: dialogueSQL,
                 arguments: StatementArguments(dialogueArgs)
             )
@@ -313,8 +313,8 @@ actor GRDBTaskRepository: TaskRepository {
         result: String?
     ) throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE plan_steps
                 SET status = ?, result = ?
@@ -328,7 +328,7 @@ actor GRDBTaskRepository: TaskRepository {
                     taskID.uuidString,
                 ]
             )
-            try db.execute(
+            try database.execute(
                 sql: "UPDATE tasks SET updated_at = ?, status = ? WHERE id = ?",
                 arguments: [
                     Date.now.timeIntervalSince1970,
@@ -342,16 +342,16 @@ actor GRDBTaskRepository: TaskRepository {
     func saveTaskState(_ task: TaskRecord, setActive: Bool) throws {
         let pool = try database()
         // `pool.write` already opens a transaction — do not nest `inTransaction`.
-        try pool.write { db in
-            try upsertTask(task, database: db)
-            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
-            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-            try syncPendingPlan(task.pendingPlan, taskID: task.id, database: db)
+        try pool.write { database in
+            try upsertTask(task, database: database)
+            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: database)
+            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: database)
+            try syncPendingPlan(task.pendingPlan, taskID: task.id, database: database)
             if setActive {
                 try writeScopeActiveTask(
                     projectID: task.projectID,
                     taskID: task.id,
-                    database: db
+                    database: database
                 )
             }
         }
@@ -364,11 +364,11 @@ actor GRDBTaskRepository: TaskRepository {
         setActive: Bool
     ) throws {
         let pool = try database()
-        try pool.write { db in
-            try upsertTask(task, database: db)
-            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
-            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-            try syncPendingPlan(task.pendingPlan, taskID: task.id, database: db)
+        try pool.write { database in
+            try upsertTask(task, database: database)
+            try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: database)
+            try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: database)
+            try syncPendingPlan(task.pendingPlan, taskID: task.id, database: database)
 
             // Compute next sequence BEFORE deletions so we never reuse a
             // sequence value that was just freed (avoids UNIQUE constraint
@@ -376,7 +376,7 @@ actor GRDBTaskRepository: TaskRepository {
             var nextSequence: Int?
             if !appendEvents.isEmpty {
                 nextSequence = try Int.fetchOne(
-                    db,
+                    database,
                     sql: """
                     SELECT COALESCE(MAX(sequence), -1) + 1
                     FROM events
@@ -387,7 +387,7 @@ actor GRDBTaskRepository: TaskRepository {
             }
 
             for eventID in deleteEventIDs {
-                try db.execute(
+                try database.execute(
                     sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
                     arguments: [eventID.uuidString, task.id.uuidString]
                 )
@@ -399,7 +399,7 @@ actor GRDBTaskRepository: TaskRepository {
                         event,
                         taskID: task.id,
                         sequence: sequence,
-                        database: db
+                        database: database
                     )
                     sequence += 1
                 }
@@ -408,7 +408,7 @@ actor GRDBTaskRepository: TaskRepository {
                 try writeScopeActiveTask(
                     projectID: task.projectID,
                     taskID: task.id,
-                    database: db
+                    database: database
                 )
             }
         }
@@ -420,13 +420,13 @@ actor GRDBTaskRepository: TaskRepository {
         movedEventIDs: [UUID]
     ) throws {
         let pool = try database()
-        try pool.write { db in
-            try upsertTask(openingTask, database: db)
-            try replaceEntitiesIfNeeded(openingTask.entities, taskID: openingTask.id, database: db)
-            try replaceRelations(openingTask.relatedTaskIDs, taskID: openingTask.id, database: db)
+        try pool.write { database in
+            try upsertTask(openingTask, database: database)
+            try replaceEntitiesIfNeeded(openingTask.entities, taskID: openingTask.id, database: database)
+            try replaceRelations(openingTask.relatedTaskIDs, taskID: openingTask.id, database: database)
 
             for (sequence, eventID) in movedEventIDs.enumerated() {
-                try db.execute(
+                try database.execute(
                     sql: """
                     UPDATE events SET task_id = ?, sequence = ?
                     WHERE id = ? AND task_id = ?
@@ -441,7 +441,7 @@ actor GRDBTaskRepository: TaskRepository {
             }
 
             if openingTask.pendingPlan != nil {
-                try db.execute(
+                try database.execute(
                     sql: "UPDATE plans SET task_id = ? WHERE task_id = ?",
                     arguments: [openingTask.id.uuidString, closingTask.id.uuidString]
                 )
@@ -449,50 +449,50 @@ actor GRDBTaskRepository: TaskRepository {
 
             let keepIDs = Set(closingTask.events.map(\.id.uuidString))
             if closingTask.events.isEmpty {
-                try db.execute(
+                try database.execute(
                     sql: "DELETE FROM tasks WHERE id = ?",
                     arguments: [closingTask.id.uuidString]
                 )
             } else {
                 let leftover = try String.fetchAll(
-                    db,
+                    database,
                     sql: "SELECT id FROM events WHERE task_id = ?",
                     arguments: [closingTask.id.uuidString]
                 ).filter { !keepIDs.contains($0) }
                 for eventID in leftover {
-                    try db.execute(
+                    try database.execute(
                         sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
                         arguments: [eventID, closingTask.id.uuidString]
                     )
                 }
-                try upsertTask(closingTask, database: db)
-                try replaceRelations(closingTask.relatedTaskIDs, taskID: closingTask.id, database: db)
-                try syncPendingPlan(nil, taskID: closingTask.id, database: db)
+                try upsertTask(closingTask, database: database)
+                try replaceRelations(closingTask.relatedTaskIDs, taskID: closingTask.id, database: database)
+                try syncPendingPlan(nil, taskID: closingTask.id, database: database)
             }
 
-            try syncPendingPlan(openingTask.pendingPlan, taskID: openingTask.id, database: db)
+            try syncPendingPlan(openingTask.pendingPlan, taskID: openingTask.id, database: database)
             try writeScopeActiveTask(
                 projectID: openingTask.projectID,
                 taskID: openingTask.id,
-                database: db
+                database: database
             )
         }
     }
 
     func rememberScopeActiveTask(projectID: UUID?, taskID: UUID) throws {
         let pool = try database()
-        try pool.write { db in
-            try writeScopeActiveTask(projectID: projectID, taskID: taskID, database: db)
+        try pool.write { database in
+            try writeScopeActiveTask(projectID: projectID, taskID: taskID, database: database)
         }
     }
 
     private func writeScopeActiveTask(
         projectID: UUID?,
         taskID: UUID,
-        database db: Database
+        database: Database
     ) throws {
         if let projectID {
-            try db.execute(
+            try database.execute(
                 sql: """
                 UPDATE projects
                 SET last_active_task_id = ?, updated_at = ?
@@ -506,14 +506,14 @@ actor GRDBTaskRepository: TaskRepository {
             )
         } else {
             let active = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT active_task_id FROM app_state WHERE singleton = 1"
             )
             let focused = try String.fetchOne(
-                db,
+                database,
                 sql: "SELECT focused_project_id FROM app_state WHERE singleton = 1"
             )
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO app_state (
                     singleton, active_task_id, focused_project_id, last_general_task_id
@@ -534,8 +534,8 @@ actor GRDBTaskRepository: TaskRepository {
         }
 
         var configuration = Configuration()
-        configuration.prepareDatabase { db in
-            try db.execute(sql: "PRAGMA foreign_keys = ON")
+        configuration.prepareDatabase { database in
+            try database.execute(sql: "PRAGMA foreign_keys = ON")
         }
 
         let pool = try DatabasePool(
@@ -559,8 +559,8 @@ actor GRDBTaskRepository: TaskRepository {
         topicUpdatedAt: Date
     ) throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE tasks
                 SET topic = ?,
@@ -589,8 +589,8 @@ actor GRDBTaskRepository: TaskRepository {
         } else {
             json = nil
         }
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE tasks
                 SET working_memory_json = ?,
@@ -612,8 +612,8 @@ actor GRDBTaskRepository: TaskRepository {
             ? nil
             : (try? JSONEncoder().encode(items))
                 .flatMap { String(data: $0, encoding: .utf8) }
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE tasks
                 SET todo_list_json = ?,
@@ -635,8 +635,8 @@ actor GRDBTaskRepository: TaskRepository {
             ? nil
             : (try? JSONEncoder().encode(names.sorted()))
                 .flatMap { String(data: $0, encoding: .utf8) }
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: """
                 UPDATE tasks
                 SET unlocked_mcp_servers_json = ?,
@@ -654,8 +654,8 @@ actor GRDBTaskRepository: TaskRepository {
 
     func deleteTask(id: UUID) throws {
         let pool = try database()
-        try pool.write { db in
-            try db.execute(
+        try pool.write { database in
+            try database.execute(
                 sql: "DELETE FROM tasks WHERE id = ?",
                 arguments: [id.uuidString]
             )

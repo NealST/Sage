@@ -9,7 +9,7 @@ import Foundation
 import GRDB
 
 extension GRDBTaskRepository {
-    func upsertTask(_ task: TaskRecord, database db: Database) throws {
+    func upsertTask(_ task: TaskRecord, database: Database) throws {
         // COALESCE keeps an existing topic when a concurrent in-memory snapshot
         // still has nil (topic generation racing with commit/mutate).
         let activatedSkillsJSON: String? = task.activatedSkillNames.isEmpty
@@ -38,7 +38,7 @@ extension GRDBTaskRepository {
             : (try? JSONEncoder().encode(task.unlockedMCPServerNames.sorted()))
                 .flatMap { String(data: $0, encoding: .utf8) }
 
-        try db.execute(
+        try database.execute(
             sql: """
             INSERT INTO tasks (
                 id, status, project_id, summary, topic, abstract,
@@ -92,15 +92,15 @@ extension GRDBTaskRepository {
     func replaceEntitiesIfNeeded(
         _ entities: [TaskEntity],
         taskID: UUID,
-        database db: Database
+        database: Database
     ) throws {
         guard !entities.isEmpty else { return }
-        try db.execute(
+        try database.execute(
             sql: "DELETE FROM task_entities WHERE task_id = ?",
             arguments: [taskID.uuidString]
         )
         for entity in entities {
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO task_entities (id, task_id, kind, value)
                 VALUES (?, ?, ?, ?)
@@ -118,11 +118,11 @@ extension GRDBTaskRepository {
     func replaceRelations(
         _ relatedTaskIDs: [UUID],
         taskID: UUID,
-        database db: Database
+        database: Database
     ) throws {
         // Schema stores UUIDs as TEXT.
         let existingIDs = try String.fetchAll(
-            db,
+            database,
             sql: """
             SELECT target_task_id FROM task_relations
             WHERE source_task_id = ?
@@ -132,12 +132,12 @@ extension GRDBTaskRepository {
         ).compactMap(UUID.init(uuidString:))
         guard existingIDs != relatedTaskIDs else { return }
 
-        try db.execute(
+        try database.execute(
             sql: "DELETE FROM task_relations WHERE source_task_id = ?",
             arguments: [taskID.uuidString]
         )
         for (position, relatedID) in relatedTaskIDs.enumerated() {
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO task_relations (
                     source_task_id, target_task_id, position
@@ -156,10 +156,10 @@ extension GRDBTaskRepository {
     func syncPendingPlan(
         _ plan: AgentPlan?,
         taskID: UUID,
-        database db: Database
+        database: Database
     ) throws {
         guard let plan else {
-            try db.execute(
+            try database.execute(
                 sql: "DELETE FROM plans WHERE task_id = ?",
                 arguments: [taskID.uuidString]
             )
@@ -167,20 +167,20 @@ extension GRDBTaskRepository {
         }
 
         let existingPlanID = try String.fetchOne(
-            db,
+            database,
             sql: "SELECT id FROM plans WHERE task_id = ?",
             arguments: [taskID.uuidString]
         )
 
         if existingPlanID == plan.id.uuidString {
-            try db.execute(
+            try database.execute(
                 sql: "UPDATE plans SET summary = ? WHERE id = ?",
                 arguments: [plan.summary, plan.id.uuidString]
             )
 
             let existingStepIDs = Set(
                 try String.fetchAll(
-                    db,
+                    database,
                     sql: "SELECT id FROM plan_steps WHERE plan_id = ?",
                     arguments: [plan.id.uuidString]
                 )
@@ -189,7 +189,7 @@ extension GRDBTaskRepository {
             for (position, step) in plan.steps.enumerated() {
                 keepStepIDs.insert(step.id.uuidString)
                 if existingStepIDs.contains(step.id.uuidString) {
-                    try db.execute(
+                    try database.execute(
                         sql: """
                         UPDATE plan_steps
                         SET position = ?, tool_call_id = ?, tool_name = ?,
@@ -209,7 +209,7 @@ extension GRDBTaskRepository {
                         ]
                     )
                 } else {
-                    try db.execute(
+                    try database.execute(
                         sql: """
                         INSERT INTO plan_steps (
                             id, plan_id, position, tool_call_id, tool_name,
@@ -233,7 +233,7 @@ extension GRDBTaskRepository {
 
             let stale = existingStepIDs.subtracting(keepStepIDs)
             for stepID in stale {
-                try db.execute(
+                try database.execute(
                     sql: "DELETE FROM plan_steps WHERE id = ? AND plan_id = ?",
                     arguments: [stepID, plan.id.uuidString]
                 )
@@ -241,20 +241,20 @@ extension GRDBTaskRepository {
             return
         }
 
-        try replacePendingPlan(plan, taskID: taskID, database: db)
+        try replacePendingPlan(plan, taskID: taskID, database: database)
     }
 
     func replacePendingPlan(
         _ plan: AgentPlan,
         taskID: UUID,
-        database db: Database
+        database: Database
     ) throws {
-        try db.execute(
+        try database.execute(
             sql: "DELETE FROM plans WHERE task_id = ?",
             arguments: [taskID.uuidString]
         )
 
-        try db.execute(
+        try database.execute(
             sql: "INSERT INTO plans (id, task_id, summary) VALUES (?, ?, ?)",
             arguments: [
                 plan.id.uuidString,
@@ -263,7 +263,7 @@ extension GRDBTaskRepository {
             ]
         )
         for (position, step) in plan.steps.enumerated() {
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO plan_steps (
                     id, plan_id, position, tool_call_id, tool_name,
@@ -289,9 +289,9 @@ extension GRDBTaskRepository {
         _ event: AgentEvent,
         taskID: UUID,
         sequence: Int,
-        database db: Database
+        database: Database
     ) throws {
-        try db.execute(
+        try database.execute(
             sql: """
             INSERT INTO events (
                 id, task_id, sequence, kind, content, tool_call_id, protected, created_at
@@ -310,7 +310,7 @@ extension GRDBTaskRepository {
         )
 
         for (position, call) in (event.toolCalls ?? []).enumerated() {
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO event_tool_calls (
                     event_id, position, call_id, name, arguments_json
@@ -327,7 +327,7 @@ extension GRDBTaskRepository {
         }
 
         if let context = event.context {
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO event_contexts (event_id, confidence, reason)
                 VALUES (?, ?, ?)
@@ -339,7 +339,7 @@ extension GRDBTaskRepository {
                 ]
             )
             for (position, relatedID) in context.relatedTaskIDs.enumerated() {
-                try db.execute(
+                try database.execute(
                     sql: """
                     INSERT INTO event_context_tasks (
                         event_id, related_task_id, position
@@ -364,31 +364,31 @@ extension GRDBTaskRepository {
             return
         }
 
-        let didImport = try pool.write { db in
+        let didImport = try pool.write { database in
             let existingCount = try Int.fetchOne(
-                db,
+                database,
                 sql: "SELECT COUNT(*) FROM tasks"
             ) ?? 0
             guard existingCount == 0 else { return false }
 
             // Insert every task first so relation foreign keys are valid.
             for task in snapshot.tasks {
-                try upsertTask(task, database: db)
+                try upsertTask(task, database: database)
             }
             for task in snapshot.tasks {
-                try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: db)
-                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: db)
-                try syncPendingPlan(task.pendingPlan, taskID: task.id, database: db)
+                try replaceEntitiesIfNeeded(task.entities, taskID: task.id, database: database)
+                try replaceRelations(task.relatedTaskIDs, taskID: task.id, database: database)
+                try syncPendingPlan(task.pendingPlan, taskID: task.id, database: database)
                 for (sequence, event) in task.events.enumerated() {
                     try insertEvent(
                         event,
                         taskID: task.id,
                         sequence: sequence,
-                        database: db
+                        database: database
                     )
                 }
             }
-            try db.execute(
+            try database.execute(
                 sql: """
                 INSERT INTO app_state (singleton, active_task_id, focused_project_id)
                 VALUES (1, ?, NULL)

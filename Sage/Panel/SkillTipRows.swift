@@ -20,11 +20,11 @@ struct SkillSaveTipRow: View {
 
     var body: some View {
         SkillTipChrome.row {
-            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+            HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                 SkillTipChrome.icon(SageDesign.Symbol.skills)
 
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                    HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(bannerTitle)
                                 .font(.system(size: type.caption, weight: .medium))
@@ -37,7 +37,7 @@ struct SkillSaveTipRow: View {
                                 .lineLimit(2)
                         }
 
-                        Spacer(minLength: SageDesign.Spacing.sm)
+                        Spacer(minLength: SageDesign.Spacing.small)
 
                         Button(saveButtonTitle) {
                             onSave(suggestion.allowsScopeChoice
@@ -143,8 +143,8 @@ struct SkillChooseTipRow: View {
 
     var body: some View {
         SkillTipChrome.row {
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                     SkillTipChrome.icon(SageDesign.Symbol.skills)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Which skill should Sage use?")
@@ -162,7 +162,7 @@ struct SkillChooseTipRow: View {
                         Button {
                             Task { await session.agent.selectSkillActivation(named: candidate.name) }
                         } label: {
-                            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                            HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(candidate.name)
                                         .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
@@ -224,8 +224,8 @@ struct SkillConsolidateTipRow: View {
 
     var body: some View {
         SkillTipChrome.row {
-            VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                     SkillTipChrome.icon("arrow.triangle.merge")
                     VStack(alignment: .leading, spacing: 2) {
                         Text("These skills look overlapping")
@@ -235,7 +235,7 @@ struct SkillConsolidateTipRow: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer(minLength: SageDesign.Spacing.sm)
+                    Spacer(minLength: SageDesign.Spacing.small)
                     SkillTipChrome.dismissButton(action: onDismiss)
                 }
 
@@ -275,7 +275,7 @@ struct SkillConsolidateTipRow: View {
                     }
                 }
 
-                HStack(spacing: SageDesign.Spacing.sm) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Button("Merge") {
                         onMerge(suggestion.resolved(primaryPath: primaryPath))
                     }
@@ -313,11 +313,11 @@ struct SkillScheduleTipRow: View {
 
     var body: some View {
         SkillTipChrome.row {
-            HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+            HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                 SkillTipChrome.icon("clock")
 
-                VStack(alignment: .leading, spacing: SageDesign.Spacing.sm) {
-                    HStack(alignment: .top, spacing: SageDesign.Spacing.sm) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                    HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Schedule this?")
                                 .font(.system(size: type.caption, weight: .medium))
@@ -343,7 +343,7 @@ struct SkillScheduleTipRow: View {
                                 )
                         }
 
-                        Spacer(minLength: SageDesign.Spacing.sm)
+                        Spacer(minLength: SageDesign.Spacing.small)
 
                         Button(draft.runOnceNow ? "Save and run" : "Save") {
                             onSave(draft)
@@ -368,8 +368,8 @@ struct SkillScheduleTipRow: View {
 
                     if let wording = conversationWording, wording != draft.prompt {
                         Button("Use this conversation") {
-                            onUpdate {
-                                $0.prompt = wording
+                            onUpdate { draft in
+                                draft.prompt = wording
                             }
                         }
                         .font(.system(size: type.micro, weight: .medium))
