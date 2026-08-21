@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension ScheduleRecord {
+nonisolated extension ScheduleRecord {
     mutating func applyRun(
         _ result: ScheduleBeatResult,
         started: Date,
@@ -298,7 +298,7 @@ nonisolated struct ScheduleRunRecord: Identifiable, Sendable, Equatable {
     let outputExcerpt: String?
 }
 
-extension ScheduleRecord {
+nonisolated extension ScheduleRecord {
     /// Same order as SQL: next fire first, nulls last, then newest update.
     static func sortedForListing(_ records: [ScheduleRecord]) -> [ScheduleRecord] {
         records.sorted { lhs, rhs in

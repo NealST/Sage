@@ -9,8 +9,8 @@
 import SwiftUI
 
 struct SkillsManageView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.sageTypography) private var type
+    @Environment(AppState.self) var appState
+    @Environment(\.sageTypography) var type
 
     /// Pinned when opened from Settings so mid-edit key-window changes don't swap catalogs.
     var pinnedSession: AgentSession?
@@ -18,15 +18,15 @@ struct SkillsManageView: View {
     var onDone: (() -> Void)?
 
     var session: AgentSession { pinnedSession ?? appState.keySession }
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedPath: String?
-    @State private var skillPendingDelete: SkillRecord?
-    @State private var deleteError: String?
-    @State private var previewBody: String = ""
-    @State private var globalSkills: [SkillRecord] = []
-    @State private var projectSkills: [SkillRecord] = []
+    @Environment(\.dismiss) var dismiss
+    @State var selectedPath: String?
+    @State var skillPendingDelete: SkillRecord?
+    @State var deleteError: String?
+    @State var previewBody: String = ""
+    @State var globalSkills: [SkillRecord] = []
+    @State var projectSkills: [SkillRecord] = []
     /// Frontmatter description starts collapsed when long so the body stays visible.
-    @State private var descriptionExpanded = false
+    @State var descriptionExpanded = false
 
     var projectName: String {
         session.agent.state.focusedProject?.name ?? "This Project"

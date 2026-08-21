@@ -71,7 +71,7 @@ extension SkillsManageView {
 
     // MARK: - Detail
 
-    @ViewBuilder private var detailPane: some View {
+    @ViewBuilder var detailPane: some View {
         if let selected = selectedSkill {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: SageDesign.Spacing.small) {

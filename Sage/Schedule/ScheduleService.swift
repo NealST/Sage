@@ -48,7 +48,7 @@ final class ScheduleService {
         )
         self.trigger = ScheduleTrigger()
         self.trigger.onFire = { [weak self] in
-            await self?.scanDue()
+            Task { await self?.scanDue() }
         }
     }
 

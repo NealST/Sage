@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension ToolCallPresentation {
+nonisolated extension ToolCallPresentation {
     static func body(
         name: String,
         args: [String: JSONValue],

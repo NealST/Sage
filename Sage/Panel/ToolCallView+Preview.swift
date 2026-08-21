@@ -6,6 +6,7 @@
 import SwiftUI
 
 extension ToolCallView {
+    @ViewBuilder
     func fileEditPreview(path: String, content: String, language: String?) -> some View {
         if let payload = writePayload {
             UnifiedDiffView(
@@ -158,7 +159,7 @@ extension ToolCallView {
     }
 }
 
-private struct ToolCallHeaderButtonStyle: ButtonStyle {
+struct ToolCallHeaderButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {

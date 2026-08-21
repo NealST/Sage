@@ -20,10 +20,10 @@ struct ToolCallView: View {
     /// When true (plan awaiting confirmation), start expanded for file edits.
     var startExpandedIfFileEdit: Bool = false
 
-    @Environment(\.pathGuardPolicy) private var pathGuardPolicy
+    @Environment(\.pathGuardPolicy) var pathGuardPolicy
     @State private var expanded: Bool
     /// `nil` = still loading; `.absent` = no file; `.text` / `.unreadable` once loaded.
-    @State private var diskState: DiskBeforeState = .pending
+    @State var diskState: DiskBeforeState = .pending
 
     enum DiskBeforeState: Equatable {
         case pending

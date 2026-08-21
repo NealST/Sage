@@ -9,8 +9,8 @@ import SwiftUI
 /// Unified titlebar: identity · document · actions / view mode.
 /// One row with the traffic lights, not a second stacked toolbar.
 struct WorkspaceChromeView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(AgentSession.self) private var session
+    @Environment(AppState.self) var appState
+    @Environment(AgentSession.self) var session
     @Environment(\.sageTypography) private var type
 
     @Binding var gitBranch: String?
