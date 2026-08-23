@@ -6,7 +6,7 @@
 ## 核心问题
 
 1. **线程边界**：什么时候结束当前 task、开一条新的？
-2. **召回**：用户想接上旧工作怎么办？（本轮不做 Recent 点选，保留 `activateTask`）
+2. **召回**：用户想接上旧工作怎么办？（chrome 标题变成 Open Recent 式菜单；`activateTask` 显式切线程）
 3. **标题**：topic / abstract 只做展示，不驱动自动拆分。
 
 ## 设计决策
@@ -82,7 +82,7 @@ Plan（同一次调用：策略 + 线程判定 + skill 召回）
 |------|------|
 | `Sage/Task/TaskRoute.swift` | `CompositeTaskRouter`（仅 continuity） |
 | `Sage/Task/TaskContextResolver.swift` | 显式新鲜开始用语 |
-| `Sage/Task/TopicDrift.swift` | `TopicDriftOffer` + 标题辅助；判定在 Plan 模型 |
+| `Sage/Task/TopicDrift.swift` | `TopicDriftOffer` + `threadLabel`；判定只在 Plan 模型，没有词袋路由 |
 | `Sage/Agent/AgentTaskStore.swift` | `splitOffTurn`：原子剥离最后一轮 |
 | `Sage/Panel/TranscriptNoticeBar.swift` | 漂移提示 + 既有 context hint |
 | `Sage/Panel/WorkspaceChromeView.swift` | 当前线程标题（有其它 recents 时变成弹出菜单）+ Start Fresh |

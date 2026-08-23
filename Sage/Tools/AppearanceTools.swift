@@ -55,6 +55,7 @@ nonisolated struct ToggleAppearanceTool: AgentTool {
                     tell appearance preferences to set dark mode to true
                 end tell
                 """
+
         default: // toggle
             script = """
                 tell application "System Events"

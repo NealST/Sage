@@ -131,8 +131,12 @@ struct SkillSaveTipRow: View {
             return suggestion.allowsScopeChoice
                 ? scopeConsequence(for: resolvedScope)
                 : "Create a skill from this task"
-        case .enhance: return "Update existing experience with knowledge from this task"
-        case .merge: return "Merge overlapping skills into one"
+
+        case .enhance:
+            return "Update existing experience with knowledge from this task"
+
+        case .merge:
+            return "Merge overlapping skills into one"
         }
     }
 }

@@ -37,7 +37,22 @@ struct SageCodeBlockView: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 codeScroll
-                floatingChrome
+                if let languageLabel {
+                    Text(languageLabel)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 8)
+                        .opacity(chromeOpacity)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                copyButton
+                    .padding(.trailing, 10)
+                    .padding(.top, 8)
+                    .opacity(chromeOpacity)
             }
             if needsCollapse {
                 collapseControl
@@ -52,6 +67,8 @@ struct SageCodeBlockView: View {
                     lineWidth: 1
                 )
         }
+        .animation(SageDesign.Motion.contentCrossFade, value: hovering)
+        .animation(SageDesign.Motion.contentCrossFade, value: copied)
         .onHover { hovering = $0 }
     }
 
@@ -80,25 +97,6 @@ struct SageCodeBlockView: View {
         }
         // Trackpad / Magic Mouse still scroll; hide the fat always-visible bar.
         .scrollIndicators(.hidden)
-    }
-
-    /// Language caption + icon-only copy — GitHub-style hover affordance, SF chrome.
-    private var floatingChrome: some View {
-        HStack(alignment: .center, spacing: 8) {
-            if let languageLabel {
-                Text(languageLabel)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            copyButton
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 8)
-        .opacity(chromeOpacity)
-        .animation(SageDesign.Motion.contentCrossFade, value: hovering)
-        .animation(SageDesign.Motion.contentCrossFade, value: copied)
     }
 
     private var chromeOpacity: Double {

@@ -115,7 +115,6 @@ final class AgentTaskStore {
     @discardableResult
     func beginNewTask(relatedTo relatedTaskIDs: [UUID] = []) async -> UUID? {
         contextCompactor?.cancel()
-        let inheritedRelated = relatedTaskIDs
         if let closing = state.activeTask {
             let closed = await closeActiveTask(closing)
             if !closed { return nil }
@@ -129,7 +128,7 @@ final class AgentTaskStore {
         skillRecall?.clearTurnCache()
 
         return await createAndActivateTask(
-            relatedTo: Array(inheritedRelated.prefix(Self.maxRelatedTaskIDs))
+            relatedTo: Array(relatedTaskIDs.prefix(Self.maxRelatedTaskIDs))
         )
     }
 

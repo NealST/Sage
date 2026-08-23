@@ -160,7 +160,7 @@ PathGuard.Policy
 |--------|------|
 | **写**（`write_text_file`、`delete_file`、`create_directory`、`move`/`copy`/`rename` 的目标侧等） | 解析后物理路径必须在 **project root 内**（含 root 自身） |
 | **读**（`read_text_file`、`list_directory`、`search_files` 等） | 同上，默认仅 root 内 |
-| **Shell `working_directory`** | 若省略 → **root**；若提供 → 必须在 root 内 |
+| **Shell `working_directory`** | 若省略 → **root**；若提供 → 必须在 root 内。**命令字符串不受 PathGuard**（`cd` / 重定向可以离开 root）；Settings 与工具 description 已写明 |
 | **相对路径** | 相对 **project root** 解析（不是随意 cwd） |
 | **Symlink** | 解析后的真实路径必须仍在 root 内（防链出工程） |
 | **Open / Create 校验** | root 必须存在（Create 则创建后存在）、为目录、解析后位于 **家目录内**（继承 Sage 总安全底线） |

@@ -54,7 +54,8 @@ struct AgentTranscriptPane: View {
     @Environment(AppState.self) var appState
     @Environment(AgentSession.self) var session
     @Binding var stickToBottom: Bool
-    var onFailureAppear: () -> Void = {}
+    /// Mouse-down in the transcript — release composer focus so text selection can take first responder.
+    var onBeginReading: () -> Void = {}
 
     @State private var eventRevision = TranscriptEventRevision(count: 0, lastID: nil)
     @State private var toolIndex = ToolResultIndex.empty
@@ -82,6 +83,10 @@ struct AgentTranscriptPane: View {
                     }
                     .padding(SageDesign.Spacing.large)
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in onBeginReading() }
+                )
                 .onScrollGeometryChange(for: Bool.self) { geometry in
                     let threshold: CGFloat = 72
                     return geometry.contentOffset.y + geometry.containerSize.height

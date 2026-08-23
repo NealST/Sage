@@ -142,7 +142,6 @@ extension AgentTranscriptPane {
                 )
             }
         }
-        .onAppear(perform: onFailureAppear)
     }
 
     @ViewBuilder

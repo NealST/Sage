@@ -119,16 +119,12 @@ struct AgentWorkspaceView: View {
         }
         .onChange(of: session.agent.state.phase) { _, phase in
             switch phase {
-            case .awaitingConfirmation, .thinking, .executing:
-                isInputFocused = false
-
-            case .failed:
+            case .awaitingConfirmation, .thinking, .executing, .failed:
                 isInputFocused = false
 
             case .idle, .completed:
-                if projectTab == .task || !isProjectWindow {
-                    focusInputSoon()
-                }
+                // Stay put so the user can select and copy the reply.
+                break
             }
         }
     }
@@ -157,9 +153,9 @@ struct AgentWorkspaceView: View {
 
     private var taskPane: some View {
         VStack(spacing: 0) {
-            AgentTranscriptPane(
-                stickToBottom: $stickToBottom
-            ) { isInputFocused = false }
+            AgentTranscriptPane(stickToBottom: $stickToBottom) {
+                isInputFocused = false
+            }
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
             SkillTipsBanner()
                 .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)

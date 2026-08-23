@@ -9,7 +9,8 @@
 **已落地：**
 
 - **Agent Runtime**：Plan → Execute（ReAct）→ Review；`act` 策略确认一次；observe/answer 不能走副作用工具
-- **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是非阻塞提示，不是静默 resume
+- **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是 Plan 给出的非阻塞提示；chrome Recents 菜单显式切线程
+- **Transcript**：点回复时放开输入框焦点；窗口变 key 不抢焦点，便于选中复制
 - **主题**：从首条用户消息确定性截取 topic + abstract（无本地模型）
 - **流式**：SSE + transcript 增量渲染 + Stop
 - **多窗口**：General / Project 各一扇独立 session；共享 settings / MCP hub / skill 状态
@@ -256,4 +257,4 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ## 建议推进顺序
 
-未做项优先：`mcp.json` 导入、token 计数、`.sage`、无障碍补齐、事件触发。流式、Schedules、多窗口已经在主路径上。
+未做项优先：长线程 context 压缩、无障碍补齐、首次启动向导。`mcp.json`、token 计数、`.sage`、事件触发可以后做。流式、Schedules、多窗口、Recents 已经在主路径上。

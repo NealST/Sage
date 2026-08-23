@@ -74,7 +74,9 @@ enum ModelClientError: LocalizedError {
         case .httpStatus(let code, _):
             // 5xx = server error, 408 = request timeout
             return code >= 500 || code == 408
-        default: return false
+
+        default:
+            return false
         }
     }
 

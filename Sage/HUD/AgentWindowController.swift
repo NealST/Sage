@@ -22,6 +22,7 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
                 hide()
             } else {
                 focus(window)
+                requestComposerFocus()
             }
         } else {
             show()
@@ -39,13 +40,7 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         focus(window)
         appState.noteSessionBecameKey(session)
-
-        DispatchQueue.main.async { [session] in
-            NotificationCenter.default.post(
-                name: .sageFocusAgentInput,
-                object: session.id
-            )
-        }
+        requestComposerFocus()
     }
 
     /// Hiding never cancels a pending plan — only explicit Cancel does.
@@ -166,10 +161,18 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         appState.noteSessionBecameKey(session)
         NSApp.setActivationPolicy(.regular)
-        NotificationCenter.default.post(
-            name: .sageFocusAgentInput,
-            object: session.id
-        )
+        // Clicking the transcript to select text also makes the window key.
+        // Only the hotkey / show path requests composer focus.
+    }
+
+    /// Hotkey and first show — not every time the window becomes key.
+    private func requestComposerFocus() {
+        DispatchQueue.main.async { [session] in
+            NotificationCenter.default.post(
+                name: .sageFocusAgentInput,
+                object: session.id
+            )
+        }
     }
 }
 

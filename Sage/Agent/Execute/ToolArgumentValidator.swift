@@ -180,10 +180,18 @@ private extension JSONValue {
 
         case .number(let value):
             return value.isFinite && value.rounded(.towardZero) == value ? "integer" : "number"
-        case .bool: return "boolean"
-        case .object: return "object"
-        case .array: return "array"
-        case .null: return "null"
+
+        case .bool:
+            return "boolean"
+
+        case .object:
+            return "object"
+
+        case .array:
+            return "array"
+
+        case .null:
+            return "null"
         }
     }
 
