@@ -118,4 +118,27 @@ extension GRDBTaskRepository {
             )
         }
     }
+
+    func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) async throws {
+        let managed = candidates.filter {
+            $0.isEphemeralCopy && MessageAttachment.isManagedCopyURL($0.fileURL)
+        }
+        guard !managed.isEmpty else { return }
+        let pool = try database()
+        let referencedPaths = try await pool.read { database in
+            var paths = Set<String>()
+            for path in Set(managed.map(\.path)) {
+                let count = try Int.fetchOne(
+                    database,
+                    sql: "SELECT COUNT(*) FROM event_attachments WHERE path = ?",
+                    arguments: [path]
+                ) ?? 0
+                if count > 0 { paths.insert(path) }
+            }
+            return paths
+        }
+        MessageAttachment.deleteManagedCopies(
+            managed.filter { !referencedPaths.contains($0.path) }
+        )
+    }
 }

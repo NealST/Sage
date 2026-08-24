@@ -126,6 +126,8 @@ nonisolated protocol TaskRepository: Sendable {
     func updateUnlockedMCPServers(taskID: UUID, names: Set<String>) async throws
     /// Deletes a task and cascaded rows (events, plans, relations).
     func deleteTask(id: UUID) async throws
+    /// Deletes Sage-owned attachment files only when no persisted event references them.
+    func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) async throws
     /// Sets focus + active task together (enforces project/task scope invariant).
     func setFocus(projectID: UUID?, activeTaskID: UUID?) async throws
     /// Open an existing directory as a project (reuse by root_path). Does not change window focus.
@@ -153,4 +155,10 @@ nonisolated protocol TaskRepository: Sendable {
     func insertScheduleRun(_ run: ScheduleRunRecord) async throws
     /// Most recent run log for a schedule, if any.
     func latestScheduleRun(scheduleID: UUID) async throws -> ScheduleRunRecord?
+}
+
+extension TaskRepository {
+    func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) async throws {
+        _ = candidates
+    }
 }

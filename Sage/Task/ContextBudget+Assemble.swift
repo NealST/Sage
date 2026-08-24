@@ -54,7 +54,12 @@ nonisolated extension ContextBudget {
         let budget = layout.budget
         let latestUserID = layout.events.last { $0.kind == .userInput }?.id
         let withListings = layout.events.map { event in
-            event.embeddingAttachmentListing(includeImagePixels: event.id == latestUserID)
+            var copy = event.embeddingAttachmentListing(includeImagePixels: event.id == latestUserID)
+            if event.id != latestUserID {
+                // Historical images are represented by text stubs; do not reserve vision tokens.
+                copy.attachments.removeAll { $0.kind == .image }
+            }
+            return copy
         }
         let sanitized = sanitize(withListings).map { event in
             capToolResult(event, maxTokens: budget.maxToolResultTokens)

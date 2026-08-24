@@ -141,6 +141,9 @@ final class AgentModelGateway {
                 skillResult: skillResult
             )
         }
+        state.modelVisibleAttachmentEventIDs = Set(
+            assembly.events.filter { !$0.attachments.isEmpty }.map(\.id)
+        )
 
         return PreparedModelRequest(
             events: assembly.events,

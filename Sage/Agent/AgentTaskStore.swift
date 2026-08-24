@@ -79,7 +79,7 @@ final class AgentTaskStore {
                 setActive: setsScopeActive
             )
             adoptTaskInMemory(task)
-            MessageAttachment.deleteManagedCopies(deletedAttachments)
+            try? await taskRepository.pruneManagedAttachmentCopies(deletedAttachments)
             return true
         } catch {
             state.enterFailed(message: "Could not save task history: \(error.localizedDescription)")

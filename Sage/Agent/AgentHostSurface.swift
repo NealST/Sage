@@ -80,7 +80,10 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
                 skillHost: self,
                 activatedSkillNames: activatedSkillNames,
                 enabledSkills: enabledSkills,
-                extraReadAllowlist: MessageAttachment.readAllowlist(from: state.events)
+                extraReadAllowlist: MessageAttachment.readAllowlist(
+                    from: state.events,
+                    visibleEventIDs: state.modelVisibleAttachmentEventIDs
+                )
             )
         )
     }
@@ -119,7 +122,10 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
                     skillHost: self,
                     workPlanKind: state.activeTask?.workPlan?.kind,
                     modelSettings: settings.snapshot(for: .execute),
-                    extraReadAllowlist: MessageAttachment.readAllowlist(from: state.events)
+                    extraReadAllowlist: MessageAttachment.readAllowlist(
+                        from: state.events,
+                        visibleEventIDs: state.modelVisibleAttachmentEventIDs
+                    )
                 )
             )
         }

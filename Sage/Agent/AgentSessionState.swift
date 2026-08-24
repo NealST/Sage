@@ -49,6 +49,8 @@ final class AgentSessionState {
     let sessionAllowlist = SessionToolAllowlist()
     /// Unattended schedule replay skips the shell/MCP gate (no HUD operator).
     var skipsSessionToolGate = false
+    /// Attachment-bearing events retained in the most recently assembled model context.
+    var modelVisibleAttachmentEventIDs: Set<UUID> = []
     /// Round-limit or per-tool approval sitting in front of the execute loop.
     var pendingPrompt: AgentPendingPrompt?
 

@@ -12,8 +12,9 @@ nonisolated struct RunShellCommandTool: AgentTool {
             Execute a shell command via /bin/zsh -c and return its output (stdout + stderr combined). \
             Working directory must stay inside the active sandbox \
             (home ~/ in General; the project root when a Project is focused). \
-            Defaults to the sandbox root. In Project mode, filesystem writes are sandboxed to the \
-            project root and system temporary directories; attached paths outside the project remain read-only. \
+            Defaults to the sandbox root. In Project mode, home-directory reads are limited to the \
+            project and current model-visible attachments; writes are limited to the project and \
+            system temporary directories. Attached paths outside the project remain read-only. \
             Prefer file tools for reads and writes. \
             Default timeout is 30s (max 120s). \
             Output is capped at 50KB. Result format: "[exit N]\\n<output>". \
@@ -122,10 +123,18 @@ nonisolated struct RunShellCommandTool: AgentTool {
             return (URL(fileURLWithPath: "/bin/zsh"), ["-c", command])
         }
         let project = sandboxLiteral(root.resolvingSymlinksInPath().path)
+        let home = sandboxLiteral(PathGuard.resolvedHomePath)
+        let attachmentReadRules = PathGuard.readAllowlist
+            .map { sandboxLiteral(URL(fileURLWithPath: $0).resolvingSymlinksInPath().path) }
+            .map { "(allow file-read* (subpath \"\($0)\"))" }
+            .joined(separator: "\n")
         let profile = """
         (version 1)
         (allow default)
+        (deny file-read* (subpath "\(home)"))
         (deny file-write*)
+        (allow file-read* (subpath "\(project)"))
+        \(attachmentReadRules)
         (allow file-write* (subpath "\(project)"))
         (allow file-write* (subpath "/private/tmp"))
         (allow file-write* (subpath "/private/var/folders"))
@@ -134,7 +143,7 @@ nonisolated struct RunShellCommandTool: AgentTool {
         """
         return (
             URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
-            ["-p", profile, "/bin/zsh", "-c", command]
+            ["-p", profile, "/bin/zsh", "-f", "-c", command]
         )
     }
 
@@ -142,6 +151,8 @@ nonisolated struct RunShellCommandTool: AgentTool {
         value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
     }
 }
 

@@ -176,7 +176,7 @@ final class MessageAttachmentTests: XCTestCase {
         XCTAssertTrue(fitted?.content.contains("(file)") == true)
     }
 
-    func testReadAllowlistIsLimitedToRecentAttachmentTurns() throws {
+    func testReadAllowlistUsesOnlyModelVisibleAttachmentTurns() throws {
         let urls = try (0..<9).map { index in
             try makeHomeFile(name: "allow-\(index).txt")
         }
@@ -194,13 +194,17 @@ final class MessageAttachmentTests: XCTestCase {
                 ]
             )
         }
-        let allow = MessageAttachment.readAllowlist(from: events)
+        let visibleIDs = Set(events.suffix(8).map(\.id))
+        let allow = MessageAttachment.readAllowlist(
+            from: events,
+            visibleEventIDs: visibleIDs
+        )
         XCTAssertFalse(allow.contains(urls[0].path))
         XCTAssertTrue(allow.contains(urls[8].path))
     }
 
     func testDeletingManagedCopyRemovesOnlyManagedFile() throws {
-        let managed = try makeHomeFile(name: "managed-copy.txt")
+        let managed = try makeManagedInboxFile(name: "managed-copy.txt")
         let referenced = try makeHomeFile(name: "referenced-copy.txt")
         defer {
             try? FileManager.default.removeItem(at: managed)
@@ -221,6 +225,31 @@ final class MessageAttachmentTests: XCTestCase {
         ])
         XCTAssertFalse(FileManager.default.fileExists(atPath: managed.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: referenced.path))
+    }
+
+    func testManagedFlagCannotDeleteFileOutsideInbox() throws {
+        let outsideInbox = try makeHomeFile(name: "must-not-delete.txt")
+        defer { try? FileManager.default.removeItem(at: outsideInbox) }
+        MessageAttachment.deleteManagedCopies([
+            MessageAttachment(
+                kind: .file,
+                displayName: outsideInbox.lastPathComponent,
+                path: outsideInbox.path,
+                isEphemeralCopy: true
+            ),
+        ])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideInbox.path))
+    }
+
+    func testAttachedMarkerWithoutAttachmentsDoesNotBypassTruncation() {
+        let suffix = String(repeating: "not an attachment ", count: 100)
+        let event = AgentEvent(
+            kind: .userInput,
+            content: "hello\n\nAttached:\n\(suffix)"
+        )
+        let fitted = ContextBudget.fitUser(event, tokenBudget: 20)
+        XCTAssertTrue(fitted?.content.contains("user message truncated") == true)
+        XCTAssertLessThan(fitted?.content.utf8.count ?? .max, event.content.utf8.count)
     }
 
     func testPersistsAttachmentsOnUserEvent() async throws {
@@ -259,6 +288,53 @@ final class MessageAttachmentTests: XCTestCase {
         XCTAssertEqual(stored.first?.kind, .file)
     }
 
+    func testManagedCopyPruningWaitsForLastDatabaseReference() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SagePruneTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = GRDBTaskRepository(
+            databaseURL: directory.appendingPathComponent("sage.sqlite"),
+            legacyJSONURL: directory.appendingPathComponent("tasks.json")
+        )
+        let managed = try makeManagedInboxFile(name: "shared.png")
+        defer { try? FileManager.default.removeItem(at: managed) }
+        let attachment = MessageAttachment(
+            kind: .image,
+            displayName: "Image 1.png",
+            path: managed.path,
+            isEphemeralCopy: true
+        )
+        let first = AgentEvent(kind: .userInput, content: "one", attachments: [attachment])
+        let second = AgentEvent(kind: .userInput, content: "two", attachments: [attachment])
+        let task = TaskRecord()
+        try await repository.saveTaskState(task, setActive: true)
+        try await repository.mutateTask(
+            task,
+            appendEvents: [first, second],
+            deleteEventIDs: [],
+            setActive: true
+        )
+
+        try await repository.mutateTask(
+            task,
+            appendEvents: [],
+            deleteEventIDs: [first.id],
+            setActive: true
+        )
+        try await repository.pruneManagedAttachmentCopies([attachment])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: managed.path))
+
+        try await repository.mutateTask(
+            task,
+            appendEvents: [],
+            deleteEventIDs: [second.id],
+            setActive: true
+        )
+        try await repository.pruneManagedAttachmentCopies([attachment])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: managed.path))
+    }
+
     private func makeHomeFile(name: String) throws -> URL {
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/SageAttachmentTests", isDirectory: true)
@@ -293,6 +369,13 @@ final class MessageAttachmentTests: XCTestCase {
         bitmap.setColor(.systemBlue, atX: 1, y: 1)
         try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
             .write(to: url, options: .atomic)
+        return url.resolvingSymlinksInPath().standardizedFileURL
+    }
+
+    private func makeManagedInboxFile(name: String) throws -> URL {
+        let url = AppSupportPaths.attachmentsInbox(createIfNeeded: true)
+            .appendingPathComponent("\(UUID().uuidString)-\(name)")
+        try "managed".write(to: url, atomically: true, encoding: .utf8)
         return url.resolvingSymlinksInPath().standardizedFileURL
     }
 }

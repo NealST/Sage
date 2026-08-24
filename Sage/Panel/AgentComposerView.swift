@@ -5,6 +5,7 @@
 //  Composer + slash autocomplete — isolated from transcript / chrome observation.
 //
 
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -86,7 +87,9 @@ struct AgentComposerView: View {
             }
             .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
                 guard !blocksTyping else {
-                    session.attachmentHint = "Wait for Sage to finish before adding attachments."
+                    showPersistentAttachmentHint(
+                        "Wait for Sage to finish before adding attachments."
+                    )
                     return false
                 }
                 Task { await applyDrop(providers) }
@@ -140,6 +143,17 @@ struct AgentComposerView: View {
         .padding(.vertical, SageDesign.Spacing.medium)
         .animation(SageDesign.Motion.expandAnimation, value: session.draftAttachments.count)
         .animation(SageDesign.Motion.expandAnimation, value: session.attachmentHint)
+        .onChange(of: session.attachmentHint) { _, hint in
+            guard let hint else { return }
+            NSAccessibility.post(
+                element: NSApp as Any,
+                notification: .announcementRequested,
+                userInfo: [
+                    .announcement: hint,
+                    .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+                ]
+            )
+        }
     }
 
     private var attachButton: some View {
@@ -296,19 +310,22 @@ struct AgentComposerView: View {
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         guard !blocksSubmit else { return }
         if !attachments.isEmpty, trimmed.hasPrefix("/") {
-            session.attachmentHint = "Remove attachments before running a slash command."
+            showPersistentAttachmentHint("Remove attachments before running a slash command.")
             return
         }
         let unavailable = attachments.filter { !$0.isAvailable }
         if !unavailable.isEmpty {
             let names = unavailable.map(\.displayName).joined(separator: ", ")
-            session.attachmentHint = "Remove missing or unreadable attachments: \(names)."
+            showPersistentAttachmentHint(
+                "Remove missing or unreadable attachments: \(names)."
+            )
             return
         }
         stickToBottom = true
         slashSuggestions = []
+        isPreparingAttachments = true
+        let submissionRevision = session.beginAttachmentSubmission(attachments)
         Task {
-            isPreparingAttachments = true
             let failedImages = await Task.detached(priority: .userInitiated) {
                 attachments.filter {
                     $0.kind == .image && !AttachmentImageEncoder.canEncode($0.fileURL)
@@ -316,16 +333,25 @@ struct AgentComposerView: View {
             }.value
             guard failedImages.isEmpty else {
                 isPreparingAttachments = false
-                session.attachmentHint = "Couldn’t prepare for vision: "
+                session.finishAttachmentSubmission(
+                    attachments,
+                    accepted: false,
+                    startingRevision: submissionRevision
+                )
+                showPersistentAttachmentHint(
+                    "Couldn’t prepare for vision: "
                     + failedImages.map(\.displayName).joined(separator: ", ")
                     + "."
+                )
                 return
             }
             let accepted = await session.agent.submit(trimmed, attachments: attachments)
             isPreparingAttachments = false
-            if accepted {
-                session.resetComposer(discardManagedCopies: false)
-            }
+            session.finishAttachmentSubmission(
+                attachments,
+                accepted: accepted,
+                startingRevision: submissionRevision
+            )
         }
     }
 
@@ -340,11 +366,17 @@ struct AgentComposerView: View {
 
     private func handlePasteboard() -> Bool {
         guard !blocksTyping else { return false }
-        guard let outcome = AttachmentImport.fromPasteboard(into: session.draftAttachments) else {
-            return false
-        }
-        applyImport(outcome)
+        guard AttachmentImport.pasteboardHasNonTextPayload() else { return false }
+        Task { await applyPasteboard() }
         return true
+    }
+
+    private func applyPasteboard() async {
+        let revision = session.composerRevision
+        attachmentImportCount += 1
+        defer { attachmentImportCount -= 1 }
+        guard let outcome = await AttachmentImport.fromPasteboard(into: []) else { return }
+        mergeImportedOutcome(outcome, revision: revision)
     }
 
     private func applyDrop(_ providers: [NSItemProvider]) async {
@@ -356,6 +388,13 @@ struct AgentComposerView: View {
             providers,
             into: []
         )
+        mergeImportedOutcome(outcome, revision: revision)
+    }
+
+    private func mergeImportedOutcome(
+        _ outcome: AttachmentImportOutcome,
+        revision: UInt
+    ) {
         guard session.composerRevision == revision else {
             MessageAttachment.deleteManagedCopies(outcome.attachments)
             return
@@ -374,9 +413,9 @@ struct AgentComposerView: View {
 
     private func applyImport(_ outcome: AttachmentImportOutcome) {
         session.draftAttachments = outcome.attachments
+        attachmentHintGeneration &+= 1
         session.attachmentHint = outcome.hint
         if outcome.hint != nil {
-            attachmentHintGeneration &+= 1
             let generation = attachmentHintGeneration
             Task {
                 try? await Task.sleep(for: .seconds(4))
@@ -385,6 +424,11 @@ struct AgentComposerView: View {
                 }
             }
         }
+    }
+
+    private func showPersistentAttachmentHint(_ hint: String) {
+        attachmentHintGeneration &+= 1
+        session.attachmentHint = hint
     }
 
     private func selectAttachment(_ attachment: MessageAttachment) {

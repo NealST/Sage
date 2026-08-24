@@ -102,21 +102,31 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
 
     nonisolated static func readAllowlist(
         from events: [AgentEvent],
-        recentUserTurnLimit: Int = 8
+        visibleEventIDs: Set<UUID>? = nil
     ) -> [String] {
-        let recentUserEvents = events
-            .filter { $0.kind == .userInput && !$0.attachments.isEmpty }
-            .suffix(max(recentUserTurnLimit, 1))
+        let visibleEvents = events.filter { event in
+            event.kind == .userInput
+                && !event.attachments.isEmpty
+                && (visibleEventIDs?.contains(event.id) ?? true)
+        }
         return Array(
-            Set(recentUserEvents.flatMap(\.attachments).filter(\.isAvailable).map(\.readAllowlistPath))
+            Set(visibleEvents.flatMap(\.attachments).filter(\.isAvailable).map(\.readAllowlistPath))
         )
             .sorted()
     }
 
     nonisolated static func deleteManagedCopies(_ attachments: [Self]) {
-        for attachment in attachments where attachment.isEphemeralCopy {
+        for attachment in attachments
+            where attachment.isEphemeralCopy && isManagedCopyURL(attachment.fileURL) {
             try? FileManager.default.removeItem(at: attachment.fileURL)
         }
+    }
+
+    nonisolated static func isManagedCopyURL(_ url: URL) -> Bool {
+        let inbox = AppSupportPaths.attachmentsInbox(createIfNeeded: false)
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        let candidate = url.resolvingSymlinksInPath().standardizedFileURL.path
+        return candidate.hasPrefix(inbox + "/")
     }
 
     nonisolated static func deleteAllManagedCopies() {

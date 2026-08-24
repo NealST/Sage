@@ -31,13 +31,15 @@ enum AttachmentImport {
     static func fromPasteboard(
         _ pasteboard: NSPasteboard = .general,
         into existing: [MessageAttachment]
-    ) -> AttachmentImportOutcome? {
+    ) async -> AttachmentImportOutcome? {
         switch pasteboardKind(pasteboard) {
         case .files(let urls):
             return resolve(urls, into: existing)
 
-        case .image:
-            guard let attachment = persistPasteboardImage(pasteboard) else {
+        case .image(let data):
+            guard let attachment = await Task.detached(priority: .userInitiated, operation: {
+                persistImageData(data)
+            }).value else {
                 return AttachmentImportOutcome(attachments: existing, hint: unreadableHint)
             }
             return merge([.success(attachment)], into: existing)
@@ -95,7 +97,7 @@ enum AttachmentImport {
 
     private enum PasteboardKind {
         case files([URL])
-        case image
+        case image(Data)
         case text
     }
 
@@ -115,7 +117,13 @@ enum AttachmentImport {
         }
         let textIndex = types.firstIndex(of: .string)
         let imageIsPrimary = imageIndex.map { $0 < (textIndex ?? .max) } ?? false
-        if hasImage && (text.isEmpty || imageIsPrimary) { return .image }
+        if hasImage && (text.isEmpty || imageIsPrimary) {
+            if let data = pasteboard.data(forType: .png)
+                ?? pasteboard.data(forType: .tiff)
+                ?? NSImage(pasteboard: pasteboard)?.tiffRepresentation {
+                return .image(data)
+            }
+        }
         return .text
     }
 
@@ -246,18 +254,8 @@ enum AttachmentImport {
         }
     }
 
-    @MainActor
-    private static func persistPasteboardImage(_ pasteboard: NSPasteboard) -> MessageAttachment? {
-        guard let image = NSImage(pasteboard: pasteboard) else { return nil }
-        return persistImage(image)
-    }
-
-    @MainActor
-    private static func persistImage(_ image: NSImage) -> MessageAttachment? {
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:])
-        else { return nil }
+    nonisolated private static func persistImageData(_ data: Data) -> MessageAttachment? {
+        guard let png = AttachmentImageEncoder.pngData(from: data) else { return nil }
         let directory = AppSupportPaths.attachmentsInbox(createIfNeeded: true)
         let url = directory.appendingPathComponent("\(UUID().uuidString).png")
         do {
@@ -296,16 +294,14 @@ enum AttachmentImport {
 
     @MainActor
     private static func persistProviderImage(_ provider: NSItemProvider) async -> MessageAttachment? {
-        await withCheckedContinuation { continuation in
+        let data: Data? = await withCheckedContinuation { continuation in
             provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                guard let data, let image = NSImage(data: data) else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                Task { @MainActor in
-                    continuation.resume(returning: persistImage(image))
-                }
+                continuation.resume(returning: data)
             }
         }
+        guard let data else { return nil }
+        return await Task.detached(priority: .userInitiated) {
+            persistImageData(data)
+        }.value
     }
 }
