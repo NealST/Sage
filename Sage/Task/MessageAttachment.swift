@@ -44,20 +44,21 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
     }
 
     var promptLine: String {
+        let safePath = Self.sanitizePromptText(displayPath)
         switch kind {
         case .image:
-            return "- \(displayPath) (image)"
+            return "- \"\(safePath)\" (image)"
         case .file:
-            return "- \(displayPath) (file)"
+            return "- \"\(safePath)\" (file)"
         case .folder:
-            return "- \(displayPath) (folder)"
+            return "- \"\(safePath)\" (folder)"
         }
     }
 
     var historicalPromptLine: String {
         switch kind {
         case .image:
-            return "- [image: \(displayName)]"
+            return "- [image: \(Self.sanitizePromptText(displayName))]"
         case .file, .folder:
             return promptLine
         }
@@ -65,6 +66,14 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
 
     var displayPath: String {
         PathGuard.displayPath(path, policy: .home)
+    }
+
+    var isAvailable: Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
+            return false
+        }
+        return isDirectory.boolValue || FileManager.default.isReadableFile(atPath: path)
     }
 
     /// Exact file or folder path for `PathGuard.readAllowlist`.
@@ -85,14 +94,43 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
 
     nonisolated static func submitQuery(text: String, attachments: [Self]) -> String {
         if !text.isEmpty { return text }
-        let names = attachments.map(\.displayName)
+        let names = attachments.map { sanitizePromptText($0.displayName) }
         guard !names.isEmpty else { return "" }
         if names.count == 1 { return "Attached \(names[0])" }
         return "Attached \(names.joined(separator: ", "))"
     }
 
-    nonisolated static func readAllowlist(from events: [AgentEvent]) -> [String] {
-        events.flatMap(\.attachments).map(\.readAllowlistPath)
+    nonisolated static func readAllowlist(
+        from events: [AgentEvent],
+        recentUserTurnLimit: Int = 8
+    ) -> [String] {
+        let recentUserEvents = events
+            .filter { $0.kind == .userInput && !$0.attachments.isEmpty }
+            .suffix(max(recentUserTurnLimit, 1))
+        return Array(
+            Set(recentUserEvents.flatMap(\.attachments).filter(\.isAvailable).map(\.readAllowlistPath))
+        )
+            .sorted()
+    }
+
+    nonisolated static func deleteManagedCopies(_ attachments: [Self]) {
+        for attachment in attachments where attachment.isEphemeralCopy {
+            try? FileManager.default.removeItem(at: attachment.fileURL)
+        }
+    }
+
+    nonisolated static func deleteAllManagedCopies() {
+        let directory = AppSupportPaths.attachmentsInbox(createIfNeeded: false)
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    nonisolated static func sanitizePromptText(_ value: String) -> String {
+        value.unicodeScalars.map { scalar in
+            CharacterSet.controlCharacters.contains(scalar) ? " " : String(scalar)
+        }
+        .joined()
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     nonisolated static func kind(for url: URL) -> Kind {

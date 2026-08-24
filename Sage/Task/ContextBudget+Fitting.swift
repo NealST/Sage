@@ -14,8 +14,22 @@ nonisolated extension ContextBudget {
         let bytes = PromptBudget.utf8ByteCount(of: event)
         let maxBytes = tokenBudget * PromptBudget.bytesPerToken
         guard bytes > maxBytes else { return event }
-        event.content = utf8Prefix(event.content, maxBytes: maxBytes)
-            + "\n… [user message truncated to fit context budget]"
+        let notice = "\n… [user message truncated to fit context budget]"
+        let marker = "\n\nAttached:\n"
+        if let range = event.content.range(of: marker, options: .backwards) {
+            let listing = String(event.content[range.lowerBound...])
+            let prose = String(event.content[..<range.lowerBound])
+            let proseBudget = max(maxBytes - listing.utf8.count - notice.utf8.count, 0)
+            event.content = utf8Prefix(prose, maxBytes: proseBudget) + notice + listing
+        } else if event.content.hasPrefix("Attached:\n"), !event.attachments.isEmpty {
+            // Attachment-only turns keep their complete listing even under a tiny budget.
+            return event
+        } else {
+            event.content = utf8Prefix(
+                event.content,
+                maxBytes: max(maxBytes - notice.utf8.count, 0)
+            ) + notice
+        }
         return event
     }
 

@@ -12,8 +12,9 @@ nonisolated struct RunShellCommandTool: AgentTool {
             Execute a shell command via /bin/zsh -c and return its output (stdout + stderr combined). \
             Working directory must stay inside the active sandbox \
             (home ~/ in General; the project root when a Project is focused). \
-            Defaults to the sandbox root. The command string is not sandboxed — `cd`, redirects, and \
-            other paths can leave the working directory. Prefer file tools for reads and writes. \
+            Defaults to the sandbox root. In Project mode, filesystem writes are sandboxed to the \
+            project root and system temporary directories; attached paths outside the project remain read-only. \
+            Prefer file tools for reads and writes. \
             Default timeout is 30s (max 120s). \
             Output is capped at 50KB. Result format: "[exit N]\\n<output>". \
             Dangerous commands (rm -rf /, sudo, etc.) are blocked. \
@@ -100,9 +101,10 @@ nonisolated struct RunShellCommandTool: AgentTool {
         workingDirectory: URL,
         timeout: Int
     ) async throws -> (Int32, String) {
+        let invocation = shellInvocation(command: command)
         let result = try await ProcessRunner.run(
-            executable: URL(fileURLWithPath: "/bin/zsh"),
-            arguments: ["-c", command],
+            executable: invocation.executable,
+            arguments: invocation.arguments,
             currentDirectory: workingDirectory,
             timeout: .seconds(timeout)
         )
@@ -113,6 +115,33 @@ nonisolated struct RunShellCommandTool: AgentTool {
             )
         }
         return (result.exitCode, result.output)
+    }
+
+    private func shellInvocation(command: String) -> (executable: URL, arguments: [String]) {
+        guard case .project(let root) = PathGuard.policy else {
+            return (URL(fileURLWithPath: "/bin/zsh"), ["-c", command])
+        }
+        let project = sandboxLiteral(root.resolvingSymlinksInPath().path)
+        let profile = """
+        (version 1)
+        (allow default)
+        (deny file-write*)
+        (allow file-write* (subpath "\(project)"))
+        (allow file-write* (subpath "/private/tmp"))
+        (allow file-write* (subpath "/private/var/folders"))
+        (allow file-write* (literal "/dev/null"))
+        (allow file-write* (literal "/dev/tty"))
+        """
+        return (
+            URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+            ["-p", profile, "/bin/zsh", "-c", command]
+        )
+    }
+
+    private func sandboxLiteral(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 

@@ -14,9 +14,10 @@ nonisolated struct AttachmentImportOutcome: Sendable, Equatable {
 }
 
 enum AttachmentImport {
-    static let tooManyHint = "8 files at a time."
-    static let outsideHomeHint = "Sage can only use files in your home folder."
-    static let unreadableHint = "That file couldn’t be added."
+    nonisolated static let tooManyHint = "8 files at a time."
+    nonisolated static let outsideHomeHint = "Sage can only use files in your home folder."
+    nonisolated static let unreadableHint = "That file couldn’t be added."
+    nonisolated static let duplicateHint = "That item is already attached."
 
     /// Files and folders already on disk. Copies nothing.
     nonisolated static func resolve(
@@ -107,7 +108,14 @@ enum AttachmentImport {
             || pasteboard.types?.contains(.png) == true
         let text = pasteboard.string(forType: .string)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if hasImage && text.isEmpty { return .image }
+        let types = pasteboard.types ?? []
+        let imageIndex = types.firstIndex { type in
+            type == .tiff || type == .png
+                || UTType(type.rawValue)?.conforms(to: .image) == true
+        }
+        let textIndex = types.firstIndex(of: .string)
+        let imageIsPrimary = imageIndex.map { $0 < (textIndex ?? .max) } ?? false
+        if hasImage && (text.isEmpty || imageIsPrimary) { return .image }
         return .text
     }
 
@@ -126,6 +134,10 @@ enum AttachmentImport {
             let resolved = url.resolvingSymlinksInPath().standardizedFileURL
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory)
+            else {
+                return .failure(.unreadable)
+            }
+            guard isDirectory.boolValue || FileManager.default.isReadableFile(atPath: resolved.path)
             else {
                 return .failure(.unreadable)
             }
@@ -148,22 +160,78 @@ enum AttachmentImport {
     ) -> AttachmentImportOutcome {
         var next = existing
         var seen = Set(existing.map(\.path))
-        var hint: String?
+        var outsideHomeCount = 0
+        var unreadableCount = 0
+        var duplicateCount = 0
+        var overflowCount = 0
         for result in incoming {
-            if next.count >= MessageAttachment.maxCount {
-                hint = tooManyHint
-                break
-            }
             switch result {
-            case .success(let attachment):
-                guard seen.insert(attachment.path).inserted else { continue }
+            case .success(var attachment):
+                guard seen.insert(attachment.path).inserted else {
+                    duplicateCount += 1
+                    MessageAttachment.deleteManagedCopies([attachment])
+                    continue
+                }
+                guard next.count < MessageAttachment.maxCount else {
+                    overflowCount += 1
+                    MessageAttachment.deleteManagedCopies([attachment])
+                    continue
+                }
+                if attachment.isEphemeralCopy, attachment.kind == .image {
+                    attachment.displayName = nextManagedImageName(in: next)
+                }
                 next.append(attachment)
 
             case .failure(let error):
-                hint = error.hint
+                switch error {
+                case .outsideHome: outsideHomeCount += 1
+                case .unreadable: unreadableCount += 1
+                }
             }
         }
+        let hint = importHint(
+            overflow: overflowCount,
+            outsideHome: outsideHomeCount,
+            unreadable: unreadableCount,
+            duplicates: duplicateCount
+        )
         return AttachmentImportOutcome(attachments: next, hint: hint)
+    }
+
+    nonisolated private static func nextManagedImageName(
+        in attachments: [MessageAttachment]
+    ) -> String {
+        let names = Set(attachments.map(\.displayName))
+        var index = 1
+        while names.contains("Image \(index).png") { index += 1 }
+        return "Image \(index).png"
+    }
+
+    nonisolated private static func importHint(
+        overflow: Int,
+        outsideHome: Int,
+        unreadable: Int,
+        duplicates: Int
+    ) -> String? {
+        if overflow > 0, outsideHome == 0, unreadable == 0, duplicates == 0 {
+            return tooManyHint
+        }
+        if outsideHome > 0, overflow == 0, unreadable == 0, duplicates == 0 {
+            return outsideHomeHint
+        }
+        if unreadable > 0, overflow == 0, outsideHome == 0, duplicates == 0 {
+            return unreadableHint
+        }
+        if duplicates > 0, overflow == 0, outsideHome == 0, unreadable == 0 {
+            return duplicateHint
+        }
+        var reasons: [String] = []
+        if overflow > 0 { reasons.append("\(overflow) over the 8-file limit") }
+        if outsideHome > 0 { reasons.append("\(outsideHome) outside your home folder") }
+        if unreadable > 0 { reasons.append("\(unreadable) unreadable") }
+        if duplicates > 0 { reasons.append("\(duplicates) already attached") }
+        guard !reasons.isEmpty else { return nil }
+        return "Skipped " + reasons.joined(separator: ", ") + "."
     }
 
     enum ImportError: Error, Sendable {

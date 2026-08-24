@@ -6,7 +6,7 @@
 //  has files or a screenshot, so text paste still goes to the field.
 //
 
-import AppKit
+@preconcurrency import AppKit
 import SwiftUI
 
 struct ComposerPasteMonitor: NSViewRepresentable {
@@ -42,9 +42,9 @@ struct ComposerPasteMonitor: NSViewRepresentable {
 
         func start() {
             guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { @MainActor [weak self] event in
                 guard let self else { return event }
-                return MainActor.assumeIsolated { self.handle(event) }
+                return self.handle(event)
             }
         }
 
@@ -57,7 +57,8 @@ struct ComposerPasteMonitor: NSViewRepresentable {
 
         private func handle(_ event: NSEvent) -> NSEvent? {
             guard isEnabled else { return event }
-            guard event.modifierFlags.contains(.command) else { return event }
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard modifiers == .command else { return event }
             guard event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
             guard AttachmentImport.pasteboardHasNonTextPayload() else { return event }
             return onPaste() ? nil : event

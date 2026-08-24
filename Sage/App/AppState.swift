@@ -137,6 +137,9 @@ final class AppState {
 
         generalSession.resetComposer()
         let didErase = await generalSession.agent.eraseAllData()
+        if didErase {
+            MessageAttachment.deleteAllManagedCopies()
+        }
         await schedules.reload()
         keySession = generalSession
         makeKeyAndShow(generalSession)

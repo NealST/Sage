@@ -24,6 +24,7 @@ final class AgentSession: Identifiable {
     var draft: String = ""
     var draftAttachments: [MessageAttachment] = []
     var attachmentHint: String?
+    private(set) var composerRevision: UInt = 0
     let agent: AgentRuntime
     /// Skills catalog for this window's focus. MCP tools come from AppState's shared hub.
     let skillCatalog: SkillCatalog
@@ -44,10 +45,14 @@ final class AgentSession: Identifiable {
 
     var windowAutosaveName: String { kind.windowAutosaveName }
 
-    func resetComposer() {
+    func resetComposer(discardManagedCopies: Bool = true) {
+        if discardManagedCopies {
+            MessageAttachment.deleteManagedCopies(draftAttachments)
+        }
         draft = ""
         draftAttachments = []
         attachmentHint = nil
+        composerRevision &+= 1
     }
 
     init(

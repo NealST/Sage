@@ -16,9 +16,23 @@ final class QuickLookPresenter: NSResponder, QLPreviewPanelDataSource, QLPreview
     private weak var previousFirstResponder: NSResponder?
 
     func preview(url: URL) {
-        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
-        guard FileManager.default.fileExists(atPath: resolved.path) else { return }
-        urls = [resolved]
+        preview(urls: [url], selectedIndex: 0)
+    }
+
+    func preview(urls candidateURLs: [URL], selectedIndex: Int) {
+        let resolved = candidateURLs.map {
+            $0.resolvingSymlinksInPath().standardizedFileURL
+        }
+        guard resolved.indices.contains(selectedIndex),
+              FileManager.default.fileExists(atPath: resolved[selectedIndex].path)
+        else { return }
+        let available = resolved.filter {
+            FileManager.default.fileExists(atPath: $0.path)
+        }
+        guard !available.isEmpty else { return }
+        let selectedURL = resolved[selectedIndex]
+        urls = available
+        let previewIndex = available.firstIndex(of: selectedURL) ?? 0
 
         // Remember focus so we can restore it when Quick Look closes.
         if let window = NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible) {
@@ -29,6 +43,7 @@ final class QuickLookPresenter: NSResponder, QLPreviewPanelDataSource, QLPreview
 
         guard let panel = QLPreviewPanel.shared() else { return }
         panel.updateController()
+        panel.currentPreviewItemIndex = previewIndex
         if panel.isVisible {
             panel.reloadData()
         } else {

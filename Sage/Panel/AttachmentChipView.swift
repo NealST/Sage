@@ -16,6 +16,7 @@ struct AttachmentChipView: View {
     var onRemove: (() -> Void)?
 
     @Environment(\.sageTypography) private var type
+    @State private var previewImage: NSImage?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -28,6 +29,14 @@ struct AttachmentChipView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: 140, alignment: .leading)
+
+            if !attachment.isAvailable {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .help("File is no longer available")
+                    .accessibilityLabel("File missing")
+            }
 
             if showsRemove {
                 Button {
@@ -65,10 +74,25 @@ struct AttachmentChipView: View {
                 QuickLookPresenter.shared.preview(url: attachment.fileURL)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: showsRemove ? .contain : .combine)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint("Opens a Quick Look preview")
+        .accessibilityHint(
+            attachment.isAvailable
+                ? "Opens a Quick Look preview"
+                : "The file is no longer available"
+        )
         .accessibilityAddTraits(.isButton)
+        .task(id: attachment.path) {
+            guard attachment.kind == .image, attachment.isAvailable else {
+                previewImage = nil
+                return
+            }
+            let url = attachment.fileURL
+            let data = await Task.detached(priority: .utility) {
+                AttachmentImageEncoder.thumbnailData(for: url)
+            }.value
+            previewImage = data.flatMap(NSImage.init(data:))
+        }
     }
 
     private var accessibilityLabel: String {
@@ -83,8 +107,8 @@ struct AttachmentChipView: View {
 
     @ViewBuilder
     private var thumbnail: some View {
-        if attachment.kind == .image, let image = NSImage(contentsOf: attachment.fileURL) {
-            Image(nsImage: image)
+        if let previewImage {
+            Image(nsImage: previewImage)
                 .resizable()
                 .scaledToFill()
         } else {
@@ -110,8 +134,12 @@ struct AttachmentChipBar: View {
                         attachment: item,
                         showsRemove: showsRemove,
                         isSelected: item.id == selectedID,
-                        onSelect: { onSelect?(item) },
-                        onRemove: { onRemove?(item) }
+                        onSelect: onSelect.map { handler in
+                            { handler(item) }
+                        },
+                        onRemove: onRemove.map { handler in
+                            { handler(item) }
+                        }
                     )
                 }
             }

@@ -21,18 +21,46 @@ nonisolated enum AttachmentImageEncoder {
         return "data:image/jpeg;base64," + jpeg.base64EncodedString()
     }
 
+    static func canEncode(_ url: URL) -> Bool {
+        jpegData(for: url) != nil
+    }
+
+    static func thumbnailData(for url: URL) -> Data? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = thumbnail(from: source, maxDimension: 96)
+        else { return nil }
+        return encodeJPEG(image, quality: 0.72)
+    }
+
     static func jpegData(for url: URL) -> Data? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let dimensions = [2048, 1536, 1024, 768]
+        let qualities = [0.82, 0.68, 0.52, 0.40]
+        for dimension in dimensions {
+            guard let image = thumbnail(from: source, maxDimension: dimension) else { continue }
+            for quality in qualities {
+                if let data = encodeJPEG(image, quality: quality), data.count <= maxBytes {
+                    return data
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func thumbnail(
+        from source: CGImageSource,
+        maxDimension: Int
+    ) -> CGImage? {
         let options: [CFString: Any] = [
             kCGImageSourceShouldCache: false,
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-                ?? CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
-        else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
 
+    private static func encodeJPEG(_ image: CGImage, quality: Double) -> Data? {
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             data,
@@ -41,7 +69,7 @@ nonisolated enum AttachmentImageEncoder {
             nil
         ) else { return nil }
         let properties: [CFString: Any] = [
-            kCGImageDestinationLossyCompressionQuality: 0.82,
+            kCGImageDestinationLossyCompressionQuality: quality,
         ]
         CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }

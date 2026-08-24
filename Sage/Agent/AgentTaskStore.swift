@@ -58,9 +58,15 @@ final class AgentTaskStore {
         guard !state.isTornDown else { return false }
         guard var task = state.activeTask else { return false }
         mutate(&task)
+        let deletedAttachments: [MessageAttachment]
         if !deleteEventIDs.isEmpty {
             let deleteSet = Set(deleteEventIDs)
+            deletedAttachments = task.events
+                .filter { deleteSet.contains($0.id) }
+                .flatMap(\.attachments)
             task.events.removeAll { deleteSet.contains($0.id) }
+        } else {
+            deletedAttachments = []
         }
         task.events.append(contentsOf: appendEvents)
         task.activatedSkillNames = state.activatedSkillNames
@@ -73,6 +79,7 @@ final class AgentTaskStore {
                 setActive: setsScopeActive
             )
             adoptTaskInMemory(task)
+            MessageAttachment.deleteManagedCopies(deletedAttachments)
             return true
         } catch {
             state.enterFailed(message: "Could not save task history: \(error.localizedDescription)")

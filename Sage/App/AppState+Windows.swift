@@ -176,6 +176,7 @@ extension AppState {
         for id in projectIDs {
             await disposeProjectSession(projectID: id, revealGeneralIfKey: false)
         }
+        generalSession.resetComposer()
         await generalSession.agent.prepareForWindowClose()
     }
 
@@ -314,6 +315,7 @@ extension AppState {
     func disposeProjectSession(projectID: UUID, revealGeneralIfKey: Bool) async {
         guard let session = projectSessions[projectID] else { return }
         let wasKey = keySession.kind == .project(projectID)
+        session.resetComposer()
         await session.agent.prepareForWindowClose()
         windowControllers[.project(projectID)]?.destroy()
         windowControllers[.project(projectID)] = nil

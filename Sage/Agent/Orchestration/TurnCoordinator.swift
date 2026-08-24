@@ -102,7 +102,17 @@ final class TurnCoordinator {
     ) async -> Bool {
         let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
-        if !trimmed.isEmpty, let handled = await handleSlashIfNeeded(trimmed) { return handled }
+        guard attachments.allSatisfy(\.isAvailable) else {
+            state.enterFailed(
+                message: "One or more attachments are missing or unreadable. Remove them and try again."
+            )
+            return false
+        }
+        if attachments.isEmpty,
+           !trimmed.isEmpty,
+           let handled = await handleSlashIfNeeded(trimmed) {
+            return handled
+        }
         guard canAcceptNewUserTurn() else { return false }
 
         let query = MessageAttachment.submitQuery(text: trimmed, attachments: attachments)

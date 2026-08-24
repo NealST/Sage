@@ -94,17 +94,25 @@ nonisolated struct APIMessage: Encodable {
             }
         } else {
             // Strip write-file diff sidecars — keep model context lean.
-            let text = event.kind == .toolResult
+            var text = event.kind == .toolResult
                 ? WriteFileResultCodec.modelFacing(event.content)
                 : event.content
             let images: [APIContentPart]
             if includeImageParts, event.kind == .userInput {
-                images = event.attachments.compactMap { item in
-                    guard item.kind == .image,
-                          let url = AttachmentImageEncoder.dataURL(for: item.fileURL)
-                    else { return nil }
-                    return APIContentPart.image(url: url)
+                var encoded: [APIContentPart] = []
+                var unavailable: [String] = []
+                for item in event.attachments where item.kind == .image {
+                    if let url = AttachmentImageEncoder.dataURL(for: item.fileURL) {
+                        encoded.append(APIContentPart.image(url: url))
+                    } else {
+                        unavailable.append(item.displayName)
+                    }
                 }
+                if !unavailable.isEmpty {
+                    let notice = "[Vision unavailable for: \(unavailable.joined(separator: ", "))]"
+                    text = text.isEmpty ? notice : text + "\n\n" + notice
+                }
+                images = encoded
             } else {
                 images = []
             }

@@ -166,6 +166,9 @@ struct AgentTranscriptPane: View {
                     .font(.system(size: SageDesign.Typography.microSize))
                     .foregroundStyle(.tertiary)
             }
+            Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
+                .font(.system(size: SageDesign.Typography.microSize))
+                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, SageDesign.Spacing.large)

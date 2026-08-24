@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2620"
-   version = "1.7">
+   LastUpgradeVersion = "2660"
+   version = "1.8">
    <BuildAction
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES">
@@ -97,6 +97,7 @@
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
-      revealArchiveWithProduct = "YES">
+      revealArchiveWithProduct = "YES"
+      revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>

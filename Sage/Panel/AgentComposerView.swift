@@ -19,8 +19,10 @@ struct AgentComposerView: View {
 
     @State private var slashSuggestions: [ComposerSlashSuggestion] = []
     @State private var selectedSuggestionIndex: Int = 0
-    @State private var selectedAttachmentID: UUID?
     @State private var isDropTargeted = false
+    @State private var attachmentImportCount = 0
+    @State private var isPreparingAttachments = false
+    @State private var attachmentHintGeneration: UInt = 0
 
     var body: some View {
         @Bindable var session = session
@@ -34,7 +36,7 @@ struct AgentComposerView: View {
                 if !session.draftAttachments.isEmpty {
                     AttachmentChipBar(
                         attachments: session.draftAttachments,
-                        selectedID: selectedAttachmentID,
+                        selectedID: nil,
                         showsRemove: true,
                         onSelect: selectAttachment,
                         onRemove: removeAttachment
@@ -83,6 +85,10 @@ struct AgentComposerView: View {
                     )
             }
             .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
+                guard !blocksTyping else {
+                    session.attachmentHint = "Wait for Sage to finish before adding attachments."
+                    return false
+                }
                 Task { await applyDrop(providers) }
                 return true
             }
@@ -94,6 +100,7 @@ struct AgentComposerView: View {
                 Text(hint)
                     .font(.system(size: type.micro))
                     .foregroundStyle(.orange.opacity(0.95))
+                    .accessibilityLabel("Attachment notice: \(hint)")
                     .transition(.opacity)
             }
 
@@ -108,7 +115,11 @@ struct AgentComposerView: View {
                 }
 
                 Spacer(minLength: 0)
-                if case .awaitingConfirmation = session.agent.state.phase {
+                if attachmentImportCount > 0 {
+                    Label("Adding attachments…", systemImage: "arrow.down.circle")
+                        .font(.system(size: type.micro))
+                        .foregroundStyle(.secondary)
+                } else if case .awaitingConfirmation = session.agent.state.phase {
                     Label(pendingConfirmationHint, systemImage: SageDesign.Symbol.pending)
                         .font(.system(size: type.micro))
                         .foregroundStyle(.orange.opacity(0.95))
@@ -142,6 +153,8 @@ struct AgentComposerView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(blocksTyping || isPreparingAttachments)
+        .opacity(blocksTyping || isPreparingAttachments ? 0.45 : 1)
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .help("Add files to this message")
         .accessibilityLabel("Add files")
@@ -230,8 +243,10 @@ struct AgentComposerView: View {
         return "Press Return to send. Shift-Command-A adds files."
     }
 
-    private var blocksTyping: Bool { session.agent.blocksNewInput }
-    private var blocksSubmit: Bool { blocksTyping }
+    private var blocksTyping: Bool {
+        session.agent.blocksNewInput || isPreparingAttachments
+    }
+    private var blocksSubmit: Bool { blocksTyping || attachmentImportCount > 0 }
     private var canSubmit: Bool {
         !blocksSubmit && (
             !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -280,18 +295,42 @@ struct AgentComposerView: View {
         let attachments = session.draftAttachments
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         guard !blocksSubmit else { return }
+        if !attachments.isEmpty, trimmed.hasPrefix("/") {
+            session.attachmentHint = "Remove attachments before running a slash command."
+            return
+        }
+        let unavailable = attachments.filter { !$0.isAvailable }
+        if !unavailable.isEmpty {
+            let names = unavailable.map(\.displayName).joined(separator: ", ")
+            session.attachmentHint = "Remove missing or unreadable attachments: \(names)."
+            return
+        }
         stickToBottom = true
         slashSuggestions = []
         Task {
+            isPreparingAttachments = true
+            let failedImages = await Task.detached(priority: .userInitiated) {
+                attachments.filter {
+                    $0.kind == .image && !AttachmentImageEncoder.canEncode($0.fileURL)
+                }
+            }.value
+            guard failedImages.isEmpty else {
+                isPreparingAttachments = false
+                session.attachmentHint = "Couldn’t prepare for vision: "
+                    + failedImages.map(\.displayName).joined(separator: ", ")
+                    + "."
+                return
+            }
             let accepted = await session.agent.submit(trimmed, attachments: attachments)
+            isPreparingAttachments = false
             if accepted {
-                session.resetComposer()
-                selectedAttachmentID = nil
+                session.resetComposer(discardManagedCopies: false)
             }
         }
     }
 
     private func pickAttachments() {
+        guard !blocksTyping else { return }
         guard let outcome = AttachmentImport.pickFromOpenPanel(
             policy: pathGuardPolicy,
             into: session.draftAttachments
@@ -300,6 +339,7 @@ struct AgentComposerView: View {
     }
 
     private func handlePasteboard() -> Bool {
+        guard !blocksTyping else { return false }
         guard let outcome = AttachmentImport.fromPasteboard(into: session.draftAttachments) else {
             return false
         }
@@ -308,20 +348,39 @@ struct AgentComposerView: View {
     }
 
     private func applyDrop(_ providers: [NSItemProvider]) async {
+        guard !blocksTyping else { return }
+        let revision = session.composerRevision
+        attachmentImportCount += 1
+        defer { attachmentImportCount -= 1 }
         let outcome = await AttachmentImport.fromItemProviders(
             providers,
+            into: []
+        )
+        guard session.composerRevision == revision else {
+            MessageAttachment.deleteManagedCopies(outcome.attachments)
+            return
+        }
+        let merged = AttachmentImport.merge(
+            outcome.attachments.map { .success($0) },
             into: session.draftAttachments
         )
-        applyImport(outcome)
+        applyImport(
+            AttachmentImportOutcome(
+                attachments: merged.attachments,
+                hint: merged.hint ?? outcome.hint
+            )
+        )
     }
 
     private func applyImport(_ outcome: AttachmentImportOutcome) {
         session.draftAttachments = outcome.attachments
         session.attachmentHint = outcome.hint
         if outcome.hint != nil {
+            attachmentHintGeneration &+= 1
+            let generation = attachmentHintGeneration
             Task {
                 try? await Task.sleep(for: .seconds(4))
-                if session.attachmentHint == outcome.hint {
+                if attachmentHintGeneration == generation {
                     session.attachmentHint = nil
                 }
             }
@@ -329,15 +388,17 @@ struct AgentComposerView: View {
     }
 
     private func selectAttachment(_ attachment: MessageAttachment) {
-        selectedAttachmentID = attachment.id
-        QuickLookPresenter.shared.preview(url: attachment.fileURL)
+        guard let index = session.draftAttachments.firstIndex(where: { $0.id == attachment.id })
+        else { return }
+        QuickLookPresenter.shared.preview(
+            urls: session.draftAttachments.map(\.fileURL),
+            selectedIndex: index
+        )
     }
 
     private func removeAttachment(_ attachment: MessageAttachment) {
         session.draftAttachments.removeAll { $0.id == attachment.id }
-        if selectedAttachmentID == attachment.id {
-            selectedAttachmentID = nil
-        }
+        MessageAttachment.deleteManagedCopies([attachment])
         if session.draftAttachments.count < MessageAttachment.maxCount,
            session.attachmentHint == AttachmentImport.tooManyHint {
             session.attachmentHint = nil
@@ -345,11 +406,6 @@ struct AgentComposerView: View {
     }
 
     private func handleDeleteKey() -> KeyPress.Result {
-        if let selectedID = selectedAttachmentID,
-           let item = session.draftAttachments.first(where: { $0.id == selectedID }) {
-            removeAttachment(item)
-            return .handled
-        }
         if session.draft.isEmpty, let last = session.draftAttachments.last {
             removeAttachment(last)
             return .handled
