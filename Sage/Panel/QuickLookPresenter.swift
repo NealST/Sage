@@ -20,14 +20,14 @@ final class QuickLookPresenter: NSResponder, QLPreviewPanelDataSource, QLPreview
     }
 
     func preview(urls candidateURLs: [URL], selectedIndex: Int) {
-        let resolved = candidateURLs.map {
-            $0.resolvingSymlinksInPath().standardizedFileURL
+        let resolved = candidateURLs.map { candidateURL in
+            candidateURL.resolvingSymlinksInPath().standardizedFileURL
         }
         guard resolved.indices.contains(selectedIndex),
               FileManager.default.fileExists(atPath: resolved[selectedIndex].path)
         else { return }
-        let available = resolved.filter {
-            FileManager.default.fileExists(atPath: $0.path)
+        let available = resolved.filter { resolvedURL in
+            FileManager.default.fileExists(atPath: resolvedURL.path)
         }
         guard !available.isEmpty else { return }
         let selectedURL = resolved[selectedIndex]

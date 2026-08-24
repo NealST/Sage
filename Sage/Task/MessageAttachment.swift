@@ -48,8 +48,10 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
         switch kind {
         case .image:
             return "- \"\(safePath)\" (image)"
+
         case .file:
             return "- \"\(safePath)\" (file)"
+
         case .folder:
             return "- \"\(safePath)\" (folder)"
         }
@@ -59,6 +61,7 @@ nonisolated struct MessageAttachment: Identifiable, Codable, Sendable, Equatable
         switch kind {
         case .image:
             return "- [image: \(Self.sanitizePromptText(displayName))]"
+
         case .file, .folder:
             return promptLine
         }

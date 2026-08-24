@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A10GRDB000000000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A10GRDB000000000000000002 /* GRDB */; };
 		A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10MARKDOWN00000000000002 /* MarkdownUI */; };
+		A10MDENGINE0000000000001 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A10MDENGINE0000000000002 /* MarkdownEngine */; };
 		A10STSF00000000000000000 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = A10STSP00000000000000000 /* SwiftTreeSitter */; };
 		A10TSBASHF00000000000000 /* TreeSitterBash in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSBASHP00000000000000 /* TreeSitterBash */; };
 		A10TSCF00000000000000000 /* TreeSitterC in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSCP00000000000000000 /* TreeSitterC */; };
@@ -60,6 +61,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10MDENGINE0000000000001 /* MarkdownEngine in Frameworks */,
 				A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */,
 				A10GRDB000000000000000001 /* GRDB in Frameworks */,
 				A10STSF00000000000000000 /* SwiftTreeSitter in Frameworks */,
@@ -129,6 +131,7 @@
 			);
 			name = Sage;
 			packageProductDependencies = (
+				A10MDENGINE0000000000002 /* MarkdownEngine */,
 				A10MARKDOWN00000000000002 /* MarkdownUI */,
 				A10GRDB000000000000000002 /* GRDB */,
 				A10STSP00000000000000000 /* SwiftTreeSitter */,
@@ -204,6 +207,7 @@
 			mainGroup = 30ACE9CC3001EBF5006F8C54;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A10MDENGINE0000000000003 /* XCLocalSwiftPackageReference "ThirdParty/swift-markdown-engine" */,
 				A10MARKDOWN00000000000003 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 				A10GRDB000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				A10STSPKG000000000000000 /* XCRemoteSwiftPackageReference "swift-tree-sitter" */,
@@ -540,6 +544,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		A10MDENGINE0000000000003 /* XCLocalSwiftPackageReference "ThirdParty/swift-markdown-engine" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "ThirdParty/swift-markdown-engine";
+		};
 		A10TSCSSPKG0000000000000 /* XCLocalSwiftPackageReference "ThirdParty/tree-sitter-css" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "ThirdParty/tree-sitter-css";
@@ -687,6 +695,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10MARKDOWN00000000000003 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
+		};
+		A10MDENGINE0000000000002 /* MarkdownEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10MDENGINE0000000000003 /* XCLocalSwiftPackageReference "ThirdParty/swift-markdown-engine" */;
+			productName = MarkdownEngine;
 		};
 		A10STSP00000000000000000 /* SwiftTreeSitter */ = {
 			isa = XCSwiftPackageProductDependency;

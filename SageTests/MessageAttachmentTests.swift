@@ -1,8 +1,10 @@
-@testable import Sage
 import AppKit
+@testable import Sage
 import XCTest
 
-final class MessageAttachmentTests: XCTestCase {
+final class MessageAttachmentTests: XCTestCase {}
+
+extension MessageAttachmentTests {
     func testEventDecodesWithoutAttachments() throws {
         let event = AgentEvent(kind: .userInput, content: "hello")
         let encoded = try JSONEncoder().encode(event)
@@ -59,7 +61,7 @@ final class MessageAttachmentTests: XCTestCase {
         let event = AgentEvent(kind: .userInput, content: "", attachments: [shot])
         let topic = TopicGenerator.generate(from: [event])
         XCTAssertEqual(topic?.topic.isEmpty, false)
-        XCTAssertTrue(topic?.abstract.contains("shot.png") == true)
+        XCTAssertEqual(topic?.abstract.contains("shot.png"), true)
     }
 
     func testResolveRejectsPathsOutsideHomeAndCapsCount() throws {
@@ -171,11 +173,13 @@ final class MessageAttachmentTests: XCTestCase {
             attachments: [attachment]
         ).embeddingAttachmentListing(includeImagePixels: true)
         let fitted = ContextBudget.fitUser(event, tokenBudget: 80)
-        XCTAssertTrue(fitted?.content.contains("user message truncated") == true)
-        XCTAssertTrue(fitted?.content.contains("spec.pdf") == true)
-        XCTAssertTrue(fitted?.content.contains("(file)") == true)
+        XCTAssertEqual(fitted?.content.contains("user message truncated"), true)
+        XCTAssertEqual(fitted?.content.contains("spec.pdf"), true)
+        XCTAssertEqual(fitted?.content.contains("(file)"), true)
     }
+}
 
+extension MessageAttachmentTests {
     func testReadAllowlistUsesOnlyModelVisibleAttachmentTurns() throws {
         let urls = try (0..<9).map { index in
             try makeHomeFile(name: "allow-\(index).txt")
@@ -248,7 +252,7 @@ final class MessageAttachmentTests: XCTestCase {
             content: "hello\n\nAttached:\n\(suffix)"
         )
         let fitted = ContextBudget.fitUser(event, tokenBudget: 20)
-        XCTAssertTrue(fitted?.content.contains("user message truncated") == true)
+        XCTAssertEqual(fitted?.content.contains("user message truncated"), true)
         XCTAssertLessThan(fitted?.content.utf8.count ?? .max, event.content.utf8.count)
     }
 
@@ -334,8 +338,10 @@ final class MessageAttachmentTests: XCTestCase {
         try await repository.pruneManagedAttachmentCopies([attachment])
         XCTAssertFalse(FileManager.default.fileExists(atPath: managed.path))
     }
+}
 
-    private func makeHomeFile(name: String) throws -> URL {
+private extension MessageAttachmentTests {
+    func makeHomeFile(name: String) throws -> URL {
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/SageAttachmentTests", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -344,7 +350,7 @@ final class MessageAttachmentTests: XCTestCase {
         return url.resolvingSymlinksInPath().standardizedFileURL
     }
 
-    private func makeHomeImage(name: String) throws -> URL {
+    func makeHomeImage(name: String) throws -> URL {
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Caches/SageAttachmentTests", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -372,7 +378,7 @@ final class MessageAttachmentTests: XCTestCase {
         return url.resolvingSymlinksInPath().standardizedFileURL
     }
 
-    private func makeManagedInboxFile(name: String) throws -> URL {
+    func makeManagedInboxFile(name: String) throws -> URL {
         let url = AppSupportPaths.attachmentsInbox(createIfNeeded: true)
             .appendingPathComponent("\(UUID().uuidString)-\(name)")
         try "managed".write(to: url, atomically: true, encoding: .utf8)

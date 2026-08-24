@@ -17,14 +17,21 @@ nonisolated enum SkillWriter {
         case skillNotFound(String)
         case projectRootRequired
         case trashFailed(String)
+        case modifiedOnDisk
 
         var errorDescription: String? {
             switch self {
             case .invalidName(let name):
-                return "Invalid skill name: \(name). Must be 1-64 chars, lowercase alphanumeric and hyphens."
+                return """
+                Invalid skill name: \(name). \
+                Must be 1-64 chars, lowercase alphanumeric and hyphens.
+                """
 
             case .alreadyExists(let name):
-                return "Skill '\(name)' already exists. Use enhance to update it, or choose a different name."
+                return """
+                Skill '\(name)' already exists. \
+                Use enhance to update it, or choose a different name.
+                """
 
             case .directoryCreationFailed(let path):
                 return "Could not create skill directory at: \(path)"
@@ -40,8 +47,23 @@ nonisolated enum SkillWriter {
 
             case .trashFailed(let path):
                 return "Could not move skill to Trash: \(path)"
+
+            case .modifiedOnDisk:
+                return """
+                This skill changed on disk after you opened it. \
+                Reload it before saving so those changes are not overwritten.
+                """
             }
         }
+    }
+
+    struct Update: Sendable {
+        let description: String
+        let body: String
+        let license: String?
+        let compatibility: String?
+        let allowedTools: String?
+        let metadata: [String: String]
     }
 
     /// Creates a new skill in the global user directory or the focused project's `.sage/skills`.
@@ -130,6 +152,60 @@ nonisolated enum SkillWriter {
                 throw WriteError.writeFailed(skillFile.path)
             }
             return skillFile.path
+        }.value
+
+        await SkillRegistry.shared.invalidateCaches(forPath: writtenPath)
+        return writtenPath
+    }
+
+    /// Saves fields edited in the Skills manager while preserving frontmatter
+    /// keys Sage does not understand.
+    @discardableResult
+    static func updateSkill(
+        existingRecord: SkillRecord,
+        update: Update,
+        expectedModificationDate: Date?
+    ) async throws -> String {
+        let path = existingRecord.path
+        let name = existingRecord.name
+
+        let writtenPath = try await Task.detached(priority: .utility) {
+            let skillFile = URL(fileURLWithPath: path)
+            guard FileManager.default.fileExists(atPath: path) else {
+                throw WriteError.skillNotFound(name)
+            }
+
+            if let expectedModificationDate,
+               let values = try? skillFile.resourceValues(forKeys: [.contentModificationDateKey]),
+               let currentDate = values.contentModificationDate,
+               abs(currentDate.timeIntervalSince(expectedModificationDate)) > 0.001 {
+                throw WriteError.modifiedOnDisk
+            }
+
+            let originalText: String
+            do {
+                originalText = try String(contentsOf: skillFile, encoding: .utf8)
+            } catch {
+                throw WriteError.writeFailed(path)
+            }
+            let document = SkillMarkdown.Document(
+                originalText: originalText,
+                name: name,
+                description: update.description,
+                license: update.license,
+                compatibility: update.compatibility,
+                allowedTools: update.allowedTools,
+                metadata: update.metadata,
+                source: existingRecord.provenance,
+                body: update.body
+            )
+            let content = SkillMarkdown.renderDocument(document)
+            do {
+                try content.write(to: skillFile, atomically: true, encoding: .utf8)
+            } catch {
+                throw WriteError.writeFailed(path)
+            }
+            return path
         }.value
 
         await SkillRegistry.shared.invalidateCaches(forPath: writtenPath)

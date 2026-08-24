@@ -10,6 +10,7 @@ nonisolated extension GRDBTaskSchema {
     static func registerScheduleAndTaskMigrations(_ migrator: inout DatabaseMigrator) {
         registerScheduleTableMigrations(&migrator)
         registerTaskColumnMigrations(&migrator)
+        registerEventAttachmentMigration(&migrator)
     }
 
     static func registerScheduleTableMigrations(_ migrator: inout DatabaseMigrator) {
@@ -131,6 +132,9 @@ nonisolated extension GRDBTaskSchema {
                 sql: "ALTER TABLE tasks ADD COLUMN unlocked_mcp_servers_json TEXT;"
             )
         }
+    }
+
+    static func registerEventAttachmentMigration(_ migrator: inout DatabaseMigrator) {
         migrator.registerMigration("addEventAttachments") { database in
             try database.execute(sql: """
                 CREATE TABLE IF NOT EXISTS event_attachments (

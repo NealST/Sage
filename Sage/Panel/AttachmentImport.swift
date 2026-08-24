@@ -136,7 +136,9 @@ enum AttachmentImport {
         }
         return (pasteboard.propertyList(forType: .fileURL) as? [String] ?? []).compactMap(URL.init(string:))
     }
+}
 
+extension AttachmentImport {
     nonisolated static func candidates(from urls: [URL]) -> [Result<MessageAttachment, ImportError>] {
         urls.map { url in
             let resolved = url.resolvingSymlinksInPath().standardizedFileURL

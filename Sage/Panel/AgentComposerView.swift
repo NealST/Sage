@@ -11,19 +11,19 @@ import UniformTypeIdentifiers
 
 struct AgentComposerView: View {
     @Environment(AppState.self) private var appState
-    @Environment(AgentSession.self) private var session
-    @Environment(\.pathGuardPolicy) private var pathGuardPolicy
+    @Environment(AgentSession.self) var session
+    @Environment(\.pathGuardPolicy) var pathGuardPolicy
     @Environment(\.sageTypography) private var type
 
     @FocusState.Binding var isInputFocused: Bool
     @Binding var stickToBottom: Bool
 
-    @State private var slashSuggestions: [ComposerSlashSuggestion] = []
-    @State private var selectedSuggestionIndex: Int = 0
+    @State var slashSuggestions: [ComposerSlashSuggestion] = []
+    @State var selectedSuggestionIndex: Int = 0
     @State private var isDropTargeted = false
-    @State private var attachmentImportCount = 0
-    @State private var isPreparingAttachments = false
-    @State private var attachmentHintGeneration: UInt = 0
+    @State var attachmentImportCount = 0
+    @State var isPreparingAttachments = false
+    @State var attachmentHintGeneration: UInt = 0
 
     var body: some View {
         @Bindable var session = session
@@ -257,196 +257,15 @@ struct AgentComposerView: View {
         return "Press Return to send. Shift-Command-A adds files."
     }
 
-    private var blocksTyping: Bool {
+    var blocksTyping: Bool {
         session.agent.blocksNewInput || isPreparingAttachments
     }
-    private var blocksSubmit: Bool { blocksTyping || attachmentImportCount > 0 }
+    var blocksSubmit: Bool { blocksTyping || attachmentImportCount > 0 }
     private var canSubmit: Bool {
         !blocksSubmit && (
             !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !session.draftAttachments.isEmpty
         )
-    }
-
-    private func handleComposerSubmit() {
-        if applySelectedSuggestion() { return }
-        guard !blocksSubmit else { return }
-        submit()
-    }
-
-    @discardableResult
-    private func applySelectedSuggestion() -> Bool {
-        guard !slashSuggestions.isEmpty,
-              slashSuggestions.indices.contains(selectedSuggestionIndex)
-        else { return false }
-        applySuggestion(slashSuggestions[selectedSuggestionIndex])
-        return true
-    }
-
-    private func applySuggestion(_ suggestion: ComposerSlashSuggestion) {
-        session.draft = suggestion.insertDraft
-        slashSuggestions = []
-        if suggestion.submitOnSelect {
-            submit()
-        }
-    }
-
-    private func moveSuggestionSelection(by delta: Int) -> KeyPress.Result {
-        guard !slashSuggestions.isEmpty else { return .ignored }
-        let count = slashSuggestions.count
-        selectedSuggestionIndex = (selectedSuggestionIndex + delta + count) % count
-        return .handled
-    }
-
-    private func dismissSuggestionsIfNeeded() -> KeyPress.Result {
-        guard !slashSuggestions.isEmpty else { return .ignored }
-        withAnimation(.easeOut(duration: 0.15)) { slashSuggestions = [] }
-        return .handled
-    }
-
-    private func submit() {
-        let trimmed = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let attachments = session.draftAttachments
-        guard !trimmed.isEmpty || !attachments.isEmpty else { return }
-        guard !blocksSubmit else { return }
-        if !attachments.isEmpty, trimmed.hasPrefix("/") {
-            showPersistentAttachmentHint("Remove attachments before running a slash command.")
-            return
-        }
-        let unavailable = attachments.filter { !$0.isAvailable }
-        if !unavailable.isEmpty {
-            let names = unavailable.map(\.displayName).joined(separator: ", ")
-            showPersistentAttachmentHint(
-                "Remove missing or unreadable attachments: \(names)."
-            )
-            return
-        }
-        stickToBottom = true
-        slashSuggestions = []
-        isPreparingAttachments = true
-        let submissionRevision = session.beginAttachmentSubmission(attachments)
-        Task {
-            let failedImages = await Task.detached(priority: .userInitiated) {
-                attachments.filter {
-                    $0.kind == .image && !AttachmentImageEncoder.canEncode($0.fileURL)
-                }
-            }.value
-            guard failedImages.isEmpty else {
-                isPreparingAttachments = false
-                session.finishAttachmentSubmission(
-                    attachments,
-                    accepted: false,
-                    startingRevision: submissionRevision
-                )
-                showPersistentAttachmentHint(
-                    "Couldn’t prepare for vision: "
-                    + failedImages.map(\.displayName).joined(separator: ", ")
-                    + "."
-                )
-                return
-            }
-            let accepted = await session.agent.submit(trimmed, attachments: attachments)
-            isPreparingAttachments = false
-            session.finishAttachmentSubmission(
-                attachments,
-                accepted: accepted,
-                startingRevision: submissionRevision
-            )
-        }
-    }
-
-    private func pickAttachments() {
-        guard !blocksTyping else { return }
-        guard let outcome = AttachmentImport.pickFromOpenPanel(
-            policy: pathGuardPolicy,
-            into: session.draftAttachments
-        ) else { return }
-        applyImport(outcome)
-    }
-
-    private func handlePasteboard() -> Bool {
-        guard !blocksTyping else { return false }
-        guard AttachmentImport.pasteboardHasNonTextPayload() else { return false }
-        Task { await applyPasteboard() }
-        return true
-    }
-
-    private func applyPasteboard() async {
-        let revision = session.composerRevision
-        attachmentImportCount += 1
-        defer { attachmentImportCount -= 1 }
-        guard let outcome = await AttachmentImport.fromPasteboard(into: []) else { return }
-        mergeImportedOutcome(outcome, revision: revision)
-    }
-
-    private func applyDrop(_ providers: [NSItemProvider]) async {
-        guard !blocksTyping else { return }
-        let revision = session.composerRevision
-        attachmentImportCount += 1
-        defer { attachmentImportCount -= 1 }
-        let outcome = await AttachmentImport.fromItemProviders(
-            providers,
-            into: []
-        )
-        mergeImportedOutcome(outcome, revision: revision)
-    }
-
-    private func mergeImportedOutcome(
-        _ outcome: AttachmentImportOutcome,
-        revision: UInt
-    ) {
-        guard session.composerRevision == revision else {
-            MessageAttachment.deleteManagedCopies(outcome.attachments)
-            return
-        }
-        let merged = AttachmentImport.merge(
-            outcome.attachments.map { .success($0) },
-            into: session.draftAttachments
-        )
-        applyImport(
-            AttachmentImportOutcome(
-                attachments: merged.attachments,
-                hint: merged.hint ?? outcome.hint
-            )
-        )
-    }
-
-    private func applyImport(_ outcome: AttachmentImportOutcome) {
-        session.draftAttachments = outcome.attachments
-        attachmentHintGeneration &+= 1
-        session.attachmentHint = outcome.hint
-        if outcome.hint != nil {
-            let generation = attachmentHintGeneration
-            Task {
-                try? await Task.sleep(for: .seconds(4))
-                if attachmentHintGeneration == generation {
-                    session.attachmentHint = nil
-                }
-            }
-        }
-    }
-
-    private func showPersistentAttachmentHint(_ hint: String) {
-        attachmentHintGeneration &+= 1
-        session.attachmentHint = hint
-    }
-
-    private func selectAttachment(_ attachment: MessageAttachment) {
-        guard let index = session.draftAttachments.firstIndex(where: { $0.id == attachment.id })
-        else { return }
-        QuickLookPresenter.shared.preview(
-            urls: session.draftAttachments.map(\.fileURL),
-            selectedIndex: index
-        )
-    }
-
-    private func removeAttachment(_ attachment: MessageAttachment) {
-        session.draftAttachments.removeAll { $0.id == attachment.id }
-        MessageAttachment.deleteManagedCopies([attachment])
-        if session.draftAttachments.count < MessageAttachment.maxCount,
-           session.attachmentHint == AttachmentImport.tooManyHint {
-            session.attachmentHint = nil
-        }
     }
 
     private func handleDeleteKey() -> KeyPress.Result {
@@ -456,56 +275,4 @@ struct AgentComposerView: View {
         }
         return .ignored
     }
-
-    private func updateSkillSuggestions(_ draft: String) {
-        let lowered = draft.lowercased()
-        let next: [ComposerSlashSuggestion]
-        if lowered.hasPrefix("/schedule"), !lowered.hasPrefix("/schedule-") {
-            next = ScheduleCadenceParser.autocompleteInserts(forDraft: draft).map { insert in
-                ComposerSlashSuggestion(
-                    id: insert.id,
-                    title: "/schedule \(insert.insert)",
-                    description: insert.description,
-                    insertDraft: "/schedule \(insert.insert) ",
-                    submitOnSelect: false,
-                    systemImage: "clock"
-                )
-            }
-        } else if draft.hasPrefix("/"), !draft.contains(" ") {
-            let prefix = String(draft.dropFirst()).lowercased()
-            let available = session.agent.availableSlashCommandDefinitions
-            let filtered = prefix.isEmpty
-                ? available
-                : available.filter { $0.name.lowercased().hasPrefix(prefix) }
-            next = Array(filtered.prefix(6)).map { command in
-                let isSchedule = command.name == "schedule"
-                return ComposerSlashSuggestion(
-                    id: command.name,
-                    title: "/\(command.name)",
-                    description: command.description,
-                    insertDraft: isSchedule ? "/schedule " : "/\(command.name)",
-                    submitOnSelect: !isSchedule,
-                    systemImage: command.kind == .builtin ? "bookmark" : "sparkles"
-                )
-            }
-        } else {
-            next = []
-        }
-        withAnimation(.easeOut(duration: 0.15)) {
-            let resetIndex = slashSuggestions.isEmpty
-            slashSuggestions = next
-            if resetIndex || !next.indices.contains(selectedSuggestionIndex) {
-                selectedSuggestionIndex = 0
-            }
-        }
-    }
-}
-
-private struct ComposerSlashSuggestion: Identifiable, Equatable {
-    let id: String
-    let title: String
-    let description: String
-    let insertDraft: String
-    let submitOnSelect: Bool
-    let systemImage: String
 }

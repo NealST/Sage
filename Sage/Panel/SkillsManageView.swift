@@ -27,6 +27,10 @@ struct SkillsManageView: View {
     @State var projectSkills: [SkillRecord] = []
     /// Frontmatter description starts collapsed when long so the body stays visible.
     @State var descriptionExpanded = false
+    @State var editorDirty = false
+    @State var pendingSelectedPath: String?
+    @State var showDiscardAlert = false
+    @State var closeAfterDiscard = false
 
     var projectName: String {
         session.agent.state.focusedProject?.name ?? "This Project"
@@ -96,6 +100,24 @@ struct SkillsManageView: View {
             Button("OK", role: .cancel) { deleteError = nil }
         } message: {
             Text(deleteError ?? "")
+        }
+        .alert("Discard Unsaved Changes?", isPresented: $showDiscardAlert) {
+            Button("Cancel", role: .cancel) {
+                pendingSelectedPath = nil
+                closeAfterDiscard = false
+            }
+            Button("Discard Changes", role: .destructive) {
+                editorDirty = false
+                if closeAfterDiscard {
+                    closeAfterDiscard = false
+                    closeWindow()
+                } else {
+                    selectedPath = pendingSelectedPath
+                }
+                pendingSelectedPath = nil
+            }
+        } message: {
+            Text("Your edits to this skill have not been saved.")
         }
         .onAppear {
             Task {

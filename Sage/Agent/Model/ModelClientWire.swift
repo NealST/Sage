@@ -73,70 +73,107 @@ nonisolated struct APIMessage: Encodable {
         case toolCalls = "tool_calls"
     }
 
+    private struct Payload {
+        var textContent: String?
+        var contentParts: [APIContentPart]?
+        var toolCalls: [APIToolCall]?
+    }
+
     init(_ event: AgentEvent, includeImageParts: Bool = false) {
-        switch event.kind {
-        case .systemInstruction: role = "system"
-        case .userInput: role = "user"
-        case .assistantResponse: role = "assistant"
-        case .toolResult: role = "tool"
-        }
-        // OpenAI wants content null (or omitted) when tool_calls are present sometimes;
-        // empty string is widely accepted by compatible providers.
-        if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
-            textContent = event.content.isEmpty ? nil : event.content
-            contentParts = nil
-            self.toolCalls = toolCalls.map { call in
-                APIToolCall(
-                    id: call.id,
-                    type: "function",
-                    function: APIToolCallFunction(name: call.name, arguments: call.argumentsJSON)
-                )
-            }
-        } else {
-            // Strip write-file diff sidecars — keep model context lean.
-            var text = event.kind == .toolResult
-                ? WriteFileResultCodec.modelFacing(event.content)
-                : event.content
-            let images: [APIContentPart]
-            if includeImageParts, event.kind == .userInput {
-                var encoded: [APIContentPart] = []
-                var unavailable: [String] = []
-                for item in event.attachments where item.kind == .image {
-                    if let url = AttachmentImageEncoder.dataURL(for: item.fileURL) {
-                        encoded.append(APIContentPart.image(url: url))
-                    } else {
-                        unavailable.append(item.displayName)
-                    }
-                }
-                if !unavailable.isEmpty {
-                    let notice = "[Vision unavailable for: \(unavailable.joined(separator: ", "))]"
-                    text = text.isEmpty ? notice : text + "\n\n" + notice
-                }
-                images = encoded
-            } else {
-                images = []
-            }
-            if images.isEmpty {
-                textContent = text
-                contentParts = nil
-            } else {
-                textContent = nil
-                var parts: [APIContentPart] = []
-                if !text.isEmpty {
-                    parts.append(.text(text))
-                }
-                parts.append(contentsOf: images)
-                contentParts = parts
-            }
-            self.toolCalls = nil
-        }
+        role = Self.role(for: event.kind)
+        let payload = Self.payload(for: event, includeImageParts: includeImageParts)
+        textContent = payload.textContent
+        contentParts = payload.contentParts
+        toolCalls = payload.toolCalls
         toolCallID = event.toolCallID
     }
 
-    static func messages(from events: [AgentEvent]) -> [APIMessage] {
+    private static func role(for kind: AgentEventKind) -> String {
+        switch kind {
+        case .systemInstruction:
+            return "system"
+
+        case .userInput:
+            return "user"
+
+        case .assistantResponse:
+            return "assistant"
+
+        case .toolResult:
+            return "tool"
+        }
+    }
+
+    private static func payload(
+        for event: AgentEvent,
+        includeImageParts: Bool
+    ) -> Payload {
+        if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
+            return Payload(
+                textContent: event.content.isEmpty ? nil : event.content,
+                contentParts: nil,
+                toolCalls: toolCalls.map { call in
+                    APIToolCall(
+                        id: call.id,
+                        type: "function",
+                        function: APIToolCallFunction(name: call.name, arguments: call.argumentsJSON)
+                    )
+                }
+            )
+        }
+        return contentPayload(for: event, includeImageParts: includeImageParts)
+    }
+
+    private static func contentPayload(
+        for event: AgentEvent,
+        includeImageParts: Bool
+    ) -> Payload {
+        // Strip write-file diff sidecars — keep model context lean.
+        var text = event.kind == .toolResult
+            ? WriteFileResultCodec.modelFacing(event.content)
+            : event.content
+        let images: [APIContentPart]
+        if includeImageParts, event.kind == .userInput {
+            let encoded = encodedImages(from: event.attachments)
+            images = encoded.parts
+            if !encoded.unavailable.isEmpty {
+                let names = encoded.unavailable.joined(separator: ", ")
+                let notice = "[Vision unavailable for: \(names)]"
+                text = text.isEmpty ? notice : text + "\n\n" + notice
+            }
+        } else {
+            images = []
+        }
+        guard !images.isEmpty else {
+            return Payload(textContent: text, contentParts: nil, toolCalls: nil)
+        }
+        var parts: [APIContentPart] = []
+        if !text.isEmpty {
+            parts.append(.text(text))
+        }
+        parts.append(contentsOf: images)
+        return Payload(textContent: nil, contentParts: parts, toolCalls: nil)
+    }
+
+    private static func encodedImages(
+        from attachments: [MessageAttachment]
+    ) -> (parts: [APIContentPart], unavailable: [String]) {
+        var parts: [APIContentPart] = []
+        var unavailable: [String] = []
+        for item in attachments where item.kind == .image {
+            if let url = AttachmentImageEncoder.dataURL(for: item.fileURL) {
+                parts.append(.image(url: url))
+            } else {
+                unavailable.append(item.displayName)
+            }
+        }
+        return (parts, unavailable)
+    }
+
+    static func messages(from events: [AgentEvent]) -> [Self] {
         let latestUserID = events.last { $0.kind == .userInput }?.id
         return events.map { event in
-            APIMessage(event, includeImageParts: event.id == latestUserID)
+            Self(event, includeImageParts: event.id == latestUserID)
         }
     }
 

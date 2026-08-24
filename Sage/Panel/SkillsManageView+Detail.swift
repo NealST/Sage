@@ -9,7 +9,7 @@ extension SkillsManageView {
     // MARK: - Source list
 
     var skillList: some View {
-        List(selection: $selectedPath) {
+        List(selection: skillSelectionBinding) {
             if !globalSkills.isEmpty {
                 Section("Everywhere") {
                     ForEach(globalSkills) { skill in
@@ -100,38 +100,19 @@ extension SkillsManageView {
                 .padding(.horizontal, SageDesign.Spacing.extraLarge)
                 .padding(.vertical, SageDesign.Spacing.medium)
 
-                if !selected.description.isEmpty {
-                    skillDescriptionSection(selected.description)
-                }
-
                 Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
-                ScrollView {
-                    Group {
-                        if previewBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("No preview available.")
-                                .font(.system(size: type.caption))
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            MarkdownContentView(
-                                markdown: previewBody,
-                                collapsible: false,
-                                syntaxHighlighting: false
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                        }
+                SkillEditorPane(
+                    skill: selected,
+                    reloadSkills: {
+                        await appState.reloadSkillsAcrossSessions()
+                    },
+                    onDirtyChanged: { dirty in
+                        editorDirty = dirty
                     }
-                    .padding(.horizontal, SageDesign.Spacing.extraLarge)
-                    .padding(.vertical, SageDesign.Spacing.large)
-                }
+                )
             }
             .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
-            .task(id: selected.path) {
-                descriptionExpanded = false
-                previewBody = await SkillRegistry.shared.readBody(for: selected)
-            }
         } else {
             ContentUnavailableView(
                 "Select a Skill",
@@ -201,6 +182,15 @@ extension SkillsManageView {
     }
 
     func performDone() {
+        guard !editorDirty else {
+            closeAfterDiscard = true
+            showDiscardAlert = true
+            return
+        }
+        closeWindow()
+    }
+
+    func closeWindow() {
         if let onDone {
             onDone()
         } else {
@@ -246,6 +236,22 @@ extension SkillsManageView {
         let paths = Set((globalSkills + projectSkills).map(\.path))
         if let selectedPath, paths.contains(selectedPath) { return }
         selectedPath = globalSkills.first?.path ?? projectSkills.first?.path
+    }
+
+    var skillSelectionBinding: Binding<String?> {
+        Binding(
+            get: { selectedPath },
+            set: { requestedPath in
+                guard requestedPath != selectedPath else { return }
+                guard editorDirty else {
+                    selectedPath = requestedPath
+                    return
+                }
+                pendingSelectedPath = requestedPath
+                closeAfterDiscard = false
+                showDiscardAlert = true
+            }
+        )
     }
 
     func confirmDelete() {

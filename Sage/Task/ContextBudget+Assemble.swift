@@ -50,24 +50,16 @@ nonisolated extension ContextBudget {
         }
     }
 
+    struct PreparedTranscript {
+        var parts: PartitionedTranscript
+        var memoryAppendix: String
+    }
+
     static func prepareAssembly(_ layout: PromptLayout) -> PreparedAssembly {
         let budget = layout.budget
-        let latestUserID = layout.events.last { $0.kind == .userInput }?.id
-        let withListings = layout.events.map { event in
-            var copy = event.embeddingAttachmentListing(includeImagePixels: event.id == latestUserID)
-            if event.id != latestUserID {
-                // Historical images are represented by text stubs; do not reserve vision tokens.
-                copy.attachments.removeAll { $0.kind == .image }
-            }
-            return copy
-        }
-        let sanitized = sanitize(withListings).map { event in
-            capToolResult(event, maxTokens: budget.maxToolResultTokens)
-        }
-        let memory = layout.workingMemory?.validated(against: layout.events)
-        let activeMemory = (memory?.hasContent == true) ? memory : nil
-        let memoryAppendix = activeMemory?.promptAppendix ?? ""
-        let parts = partitionTranscript(sanitized, workingMemory: activeMemory, originalEvents: layout.events)
+        let transcript = prepareTranscript(layout)
+        let parts = transcript.parts
+        let memoryAppendix = transcript.memoryAppendix
         var slices = SystemSliceState(
             relatedMode: .full,
             skillsCatalog: layout.skillsCatalog,
@@ -104,6 +96,29 @@ nonisolated extension ContextBudget {
                 relatedMode: slices.relatedMode
             ),
             pinOverflow: remaining < pinTokens(user: parts.currentUser, latest: parts.latestTurn)
+        )
+    }
+
+    static func prepareTranscript(_ layout: PromptLayout) -> PreparedTranscript {
+        let latestUserID = layout.events.last { $0.kind == .userInput }?.id
+        let withListings = layout.events.map { event in
+            var copy = event.embeddingAttachmentListing(includeImagePixels: event.id == latestUserID)
+            if event.id != latestUserID {
+                // Historical images are represented by text stubs; do not reserve vision tokens.
+                copy.attachments.removeAll { $0.kind == .image }
+            }
+            return copy
+        }
+        let sanitized = sanitize(withListings).map { event in
+            capToolResult(event, maxTokens: layout.budget.maxToolResultTokens)
+        }
+        let memory = layout.workingMemory?.validated(against: layout.events)
+        let activeMemory = (memory?.hasContent == true) ? memory : nil
+        let memoryAppendix = activeMemory?.promptAppendix ?? ""
+        let parts = partitionTranscript(sanitized, workingMemory: activeMemory, originalEvents: layout.events)
+        return PreparedTranscript(
+            parts: parts,
+            memoryAppendix: memoryAppendix
         )
     }
 

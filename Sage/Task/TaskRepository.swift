@@ -158,7 +158,7 @@ nonisolated protocol TaskRepository: Sendable {
 }
 
 extension TaskRepository {
-    func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) async throws {
+    func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) throws {
         _ = candidates
     }
 }

@@ -105,8 +105,7 @@ struct AttachmentChipView: View {
         return "\(attachment.displayName), \(kind)"
     }
 
-    @ViewBuilder
-    private var thumbnail: some View {
+    @ViewBuilder private var thumbnail: some View {
         if let previewImage {
             Image(nsImage: previewImage)
                 .resizable()

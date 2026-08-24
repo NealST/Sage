@@ -11,7 +11,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 nonisolated enum AttachmentImageEncoder {
-    static let maxDimension: CGFloat = 2048
+    static let maxDimension: CGFloat = 2_048
     static let maxBytes = 4_000_000
     private static let cacheLimit = 12
     private static let cacheLock = NSLock()
@@ -38,7 +38,7 @@ nonisolated enum AttachmentImageEncoder {
 
     static func pngData(from sourceData: Data) -> Data? {
         guard let source = CGImageSourceCreateWithData(sourceData as CFData, nil),
-              let image = thumbnail(from: source, maxDimension: 4096)
+              let image = thumbnail(from: source, maxDimension: 4_096)
         else { return nil }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
@@ -62,7 +62,7 @@ nonisolated enum AttachmentImageEncoder {
         else { return 800 }
         var width = max(widthValue.doubleValue, 1)
         var height = max(heightValue.doubleValue, 1)
-        let longestScale = min(2048 / max(width, height), 1)
+        let longestScale = min(2_048 / max(width, height), 1)
         width *= longestScale
         height *= longestScale
         let shortestScale = min(768 / min(width, height), 1)
@@ -78,7 +78,7 @@ nonisolated enum AttachmentImageEncoder {
             return cached
         }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let dimensions = [2048, 1536, 1024, 768]
+        let dimensions = [2_048, 1_536, 1_024, 768]
         let qualities = [0.82, 0.68, 0.52, 0.40]
         for dimension in dimensions {
             guard let image = thumbnail(from: source, maxDimension: dimension) else { continue }

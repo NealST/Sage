@@ -1,10 +1,3 @@
-//
-//  SkillMarkdown.swift
-//  Sage
-//
-//  Shared SKILL.md frontmatter / name helpers used by SkillRegistry and SkillWriter.
-//
-
 import Foundation
 
 nonisolated enum SkillMarkdown {
@@ -89,6 +82,20 @@ nonisolated enum SkillMarkdown {
         var metadata: [String: String] = [:]
     }
 
+    struct Document: Sendable {
+        let originalText: String
+        let name: String
+        let description: String
+        let license: String?
+        let compatibility: String?
+        let allowedTools: String?
+        let metadata: [String: String]
+        let source: String?
+        let body: String
+    }
+}
+
+extension SkillMarkdown {
     /// Parses YAML frontmatter scalars, including `|` / `>` block values.
     static func parseFrontmatter(_ text: String) -> ParsedFrontmatter {
         guard let range = frontmatterRange(text) else { return ParsedFrontmatter() }
@@ -186,6 +193,120 @@ nonisolated enum SkillMarkdown {
         return lines.joined(separator: "\n") + trimmed + "\n"
     }
 
+    /// Renders an edited SKILL.md while preserving unrecognized top-level
+    /// frontmatter entries. Fields understood by Sage are replaced
+    /// deterministically so repeated saves do not accumulate duplicate keys.
+    static func renderDocument(_ document: Document) -> String {
+        var rebuilt = managedFrontmatter(for: document)
+        rebuilt.append(contentsOf: preservedFrontmatterLines(in: document.originalText))
+        rebuilt.append("---")
+        rebuilt.append("")
+
+        let trimmedBody = document.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedBody.isEmpty {
+            rebuilt.append(trimmedBody)
+            rebuilt.append("")
+        }
+        return rebuilt.joined(separator: "\n")
+    }
+
+    private static func preservedFrontmatterLines(in originalText: String) -> [String] {
+        var preserved: [String] = []
+        let trimmedOriginal = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let range = frontmatterRange(trimmedOriginal) else { return preserved }
+        let lines = frontmatterContentLines(in: trimmedOriginal, range: range)
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            guard let colon = trimmedLine.firstIndex(of: ":") else {
+                if !trimmedLine.isEmpty { preserved.append(line) }
+                index += 1
+                continue
+            }
+
+            let key = String(trimmedLine[..<colon]).trimmingCharacters(in: .whitespaces)
+            let isManaged = recognizedKeys.contains(key) || key == "metadata"
+            guard isManaged else {
+                preserved.append(line)
+                index += 1
+                continue
+            }
+
+            let value = String(trimmedLine[trimmedLine.index(after: colon)...])
+                .trimmingCharacters(in: .whitespaces)
+            if value == "|" || value == ">" {
+                _ = consumeYAMLBlockScalar(lines: lines, index: &index)
+            } else if key == "metadata", value.isEmpty {
+                skipNestedMetadata(lines: lines, index: &index)
+                continue
+            }
+            index += 1
+        }
+        return preserved
+    }
+
+    private static func managedFrontmatter(for document: Document) -> [String] {
+        var rebuilt = [
+            "---",
+            "name: \(document.name)",
+            "description: \(yamlScalar(document.description))",
+        ]
+        appendScalar("license", value: document.license, to: &rebuilt)
+        appendScalar("compatibility", value: document.compatibility, to: &rebuilt)
+        appendScalar("allowed-tools", value: document.allowedTools, to: &rebuilt)
+        appendScalar("source", value: document.source, to: &rebuilt)
+        if !document.metadata.isEmpty {
+            rebuilt.append("metadata:")
+            for key in document.metadata.keys.sorted() {
+                guard let value = document.metadata[key] else { continue }
+                rebuilt.append("  \(key): \(yamlScalar(value))")
+            }
+        }
+        return rebuilt
+    }
+
+    private static func frontmatterContentLines(
+        in text: String,
+        range: Range<String.Index>
+    ) -> [String] {
+        var lines = String(text[range])
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+        if lines.first?.trimmingCharacters(in: .whitespaces) == "---" {
+            lines.removeFirst()
+        }
+        if lines.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
+            lines.removeLast()
+        }
+        if lines.last?.trimmingCharacters(in: .whitespaces) == "---" {
+            lines.removeLast()
+        }
+        return lines
+    }
+
+    private static func skipNestedMetadata(lines: [String], index: inout Int) {
+        index += 1
+        while index < lines.count {
+            let nested = lines[index]
+            let isIndented = nested.hasPrefix("  ") || nested.hasPrefix("\t")
+            let isEmpty = nested.trimmingCharacters(in: .whitespaces).isEmpty
+            guard isIndented || isEmpty else { break }
+            index += 1
+        }
+    }
+
+    private static func appendScalar(_ key: String, value: String?, to lines: inout [String]) {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return
+        }
+        lines.append("\(key): \(yamlScalar(value))")
+    }
+}
+
+extension SkillMarkdown {
     private static func upsertFrontmatterFields(
         _ text: String,
         range: Range<String.Index>,

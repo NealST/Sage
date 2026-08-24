@@ -120,8 +120,8 @@ extension GRDBTaskRepository {
     }
 
     func pruneManagedAttachmentCopies(_ candidates: [MessageAttachment]) async throws {
-        let managed = candidates.filter {
-            $0.isEphemeralCopy && MessageAttachment.isManagedCopyURL($0.fileURL)
+        let managed = candidates.filter { attachment in
+            attachment.isEphemeralCopy && MessageAttachment.isManagedCopyURL(attachment.fileURL)
         }
         guard !managed.isEmpty else { return }
         let pool = try database()
