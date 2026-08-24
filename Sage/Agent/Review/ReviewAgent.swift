@@ -32,7 +32,8 @@ final class ReviewAgent {
 
     func evaluate() async throws -> ReviewVerdict {
         let plan = state.activeTask?.workPlan
-        let userText = state.events.last { $0.kind == .userInput }?.content ?? ""
+        let userText = state.events.last { $0.kind == .userInput }?
+            .modelFacingContent(includeImagePixels: false) ?? ""
         let planLine = plan.map { workPlan in
             "kind=\(workPlan.kind.rawValue); intent=\(workPlan.intent)\n\(workPlan.approach)"
         } ?? "(none)"

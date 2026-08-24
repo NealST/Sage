@@ -79,7 +79,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
                 pathGuardPolicy: state.pathGuardPolicy,
                 skillHost: self,
                 activatedSkillNames: activatedSkillNames,
-                enabledSkills: enabledSkills
+                enabledSkills: enabledSkills,
+                extraReadAllowlist: MessageAttachment.readAllowlist(from: state.events)
             )
         )
     }
@@ -117,7 +118,8 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
                     enabledSkills: enabledSkills,
                     skillHost: self,
                     workPlanKind: state.activeTask?.workPlan?.kind,
-                    modelSettings: settings.snapshot(for: .execute)
+                    modelSettings: settings.snapshot(for: .execute),
+                    extraReadAllowlist: MessageAttachment.readAllowlist(from: state.events)
                 )
             )
         }

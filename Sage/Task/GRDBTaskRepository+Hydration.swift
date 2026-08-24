@@ -171,6 +171,7 @@ extension GRDBTaskRepository {
             return id
         }
         let toolCallsByEvent = try loadToolCalls(forEventIDs: eventIDStrings, database: database)
+        let attachmentsByEvent = try loadAttachments(forEventIDs: eventIDStrings, database: database)
         let contextsByEvent = try loadContexts(forEventIDs: eventIDStrings, database: database)
 
         return rows.compactMap { row in
@@ -198,6 +199,7 @@ extension GRDBTaskRepository {
                 toolCalls: toolCalls.isEmpty ? nil : toolCalls,
                 context: contextsByEvent[idString],
                 protected: protectedValue,
+                attachments: attachmentsByEvent[idString] ?? [],
                 createdAt: Date(timeIntervalSince1970: row["created_at"])
             )
         }
@@ -227,6 +229,46 @@ extension GRDBTaskRepository {
                     id: row["call_id"],
                     name: row["name"],
                     argumentsJSON: row["arguments_json"]
+                )
+            )
+        }
+        return result
+    }
+
+    func loadAttachments(
+        forEventIDs eventIDs: [String],
+        database: Database
+    ) throws -> [String: [MessageAttachment]] {
+        guard !eventIDs.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: eventIDs.count).joined(separator: ", ")
+        let rows = try Row.fetchAll(
+            database,
+            sql: """
+            SELECT event_id, id, kind, display_name, path, is_ephemeral
+            FROM event_attachments
+            WHERE event_id IN (\(placeholders))
+            ORDER BY event_id, position
+            """,
+            arguments: StatementArguments(eventIDs)
+        )
+        var result: [String: [MessageAttachment]] = [:]
+        for row in rows {
+            let eventID: String = row["event_id"]
+            guard let kind = MessageAttachment.Kind(rawValue: row["kind"]) else { continue }
+            let idString: String = row["id"]
+            let ephemeral: Bool
+            if let flag = row["is_ephemeral"] as Int? {
+                ephemeral = flag != 0
+            } else {
+                ephemeral = false
+            }
+            result[eventID, default: []].append(
+                MessageAttachment(
+                    id: UUID(uuidString: idString) ?? UUID(),
+                    kind: kind,
+                    displayName: row["display_name"],
+                    path: row["path"],
+                    isEphemeralCopy: ephemeral
                 )
             )
         }

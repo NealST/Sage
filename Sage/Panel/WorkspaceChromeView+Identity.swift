@@ -127,7 +127,7 @@ extension WorkspaceChromeView {
     func selectRecentTask(_ id: UUID) {
         guard id != session.agent.state.activeTaskID else { return }
         projectTab = .task
-        session.draft = ""
+        session.resetComposer()
         Task { await session.agent.activateTask(id) }
     }
 

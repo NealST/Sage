@@ -18,4 +18,6 @@ struct ToolInvocationRequest {
     var skillHost: SkillToolHost
     var workPlanKind: WorkPlan.Kind?
     var modelSettings: ModelSettingsSnapshot?
+    /// Extra read-only paths (user attachments). Merged with skill dirs at dispatch.
+    var extraReadAllowlist: [String] = []
 }

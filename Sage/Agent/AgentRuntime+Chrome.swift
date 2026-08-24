@@ -263,8 +263,10 @@ extension AgentRuntime {
     }
 
     @discardableResult
-    func submit(_ userText: String) async -> Bool {
-        await operations.runAccepted { await self.turns.performSubmit(userText) }
+    func submit(_ userText: String, attachments: [MessageAttachment] = []) async -> Bool {
+        await operations.runAccepted {
+            await self.turns.performSubmit(userText, attachments: attachments)
+        }
     }
 
     func performScheduledRun(prompt: String, frozenPlan: WorkPlan?) async {

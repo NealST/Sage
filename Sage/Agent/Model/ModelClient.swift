@@ -198,7 +198,7 @@ actor ModelClient {
         let encodedBody = try JSONEncoder().encode(
             ChatCompletionRequest(
                 model: settings.model,
-                messages: events.map(APIMessage.init),
+                messages: APIMessage.messages(from: events),
                 tools: tools.isEmpty ? nil : tools.map(APITool.init),
                 toolChoice: tools.isEmpty ? nil : "auto",
                 stream: true,
@@ -241,7 +241,7 @@ actor ModelClient {
         let encodedBody = try JSONEncoder().encode(
             ChatCompletionRequest(
                 model: settings.model,
-                messages: events.map(APIMessage.init),
+                messages: APIMessage.messages(from: events),
                 tools: tools.isEmpty ? nil : tools.map(APITool.init),
                 toolChoice: resolvedChoice,
                 temperature: temperature

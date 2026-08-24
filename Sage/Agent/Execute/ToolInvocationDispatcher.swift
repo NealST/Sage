@@ -23,7 +23,7 @@ nonisolated enum ToolInvocationDispatcher {
         let allowlist = SkillToolExecutor.readAllowlist(
             activatedSkillNames: request.activatedSkillNames,
             enabledSkills: request.enabledSkills
-        )
+        ) + request.extraReadAllowlist
 
         return try await Self.invokeBuiltIn(
             named: request.name,
@@ -51,7 +51,8 @@ nonisolated enum ToolInvocationDispatcher {
                 settings: modelSettings,
                 tools: request.tools,
                 pathGuardPolicy: request.pathGuardPolicy,
-                skillHost: request.skillHost
+                skillHost: request.skillHost,
+                extraReadAllowlist: request.extraReadAllowlist
             )
         }
         if MCPToolGroupTool.isGroupTool(request.name) {

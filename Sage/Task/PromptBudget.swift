@@ -84,6 +84,10 @@ nonisolated struct PromptBudget: Sendable, Equatable {
                     + estimatedTokenCount(in: call.name)
             }
         }
+        let imageCount = event.attachments.count { $0.kind == .image }
+        if imageCount > 0 {
+            cost += imageCount * 800
+        }
         return cost
     }
 

@@ -96,33 +96,42 @@ final class TurnCoordinator {
     }
 
     /// Returns `true` once the user message was accepted into history (draft can clear).
-    func performSubmit(_ userText: String) async -> Bool {
+    func performSubmit(
+        _ userText: String,
+        attachments: [MessageAttachment] = []
+    ) async -> Bool {
         let trimmed = userText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        if let handled = await handleSlashIfNeeded(trimmed) { return handled }
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
+        if !trimmed.isEmpty, let handled = await handleSlashIfNeeded(trimmed) { return handled }
         guard canAcceptNewUserTurn() else { return false }
 
+        let query = MessageAttachment.submitQuery(text: trimmed, attachments: attachments)
         state.clearCompletedPhase()
         state.clearFailedPhase()
         resetTurn()
 
-        guard let routing = await routeSubmittedTurn(trimmed) else { return false }
+        guard let routing = await routeSubmittedTurn(query) else { return false }
         guard await taskStore.ensureActiveTask() else { return false }
         if let plan = state.activeTask?.pendingPlan {
             planProgress.replace(plan)
             state.enterAwaitingConfirmation()
             return false
         }
-        guard await persistSubmittedUserEvent(trimmed, route: routing.route) else { return false }
+        guard await persistSubmittedUserEvent(
+            trimmed,
+            attachments: attachments,
+            route: routing.route,
+            summary: query
+        ) else { return false }
         allowDriftOffer = !routing.beganNewThread
         state.enterThinking()
         state.lastAssistantText = nil
         streaming.clear()
         skillRecall.clearTurnCache()
 
-        let readyForModel = skillRecall.prepareSkillsForTurn(query: trimmed)
+        let readyForModel = skillRecall.prepareSkillsForTurn(query: query)
         guard readyForModel else { return true }
-        await presentWorkPlan(for: trimmed, autoConfirm: false)
+        await presentWorkPlan(for: query, autoConfirm: false)
         return true
     }
 
@@ -175,12 +184,19 @@ final class TurnCoordinator {
         return SubmitRouting(route: route, beganNewThread: beganNewThread)
     }
 
-    func persistSubmittedUserEvent(_ trimmed: String, route: TaskRoute) async -> Bool {
+    func persistSubmittedUserEvent(
+        _ trimmed: String,
+        attachments: [MessageAttachment] = [],
+        route: TaskRoute,
+        summary: String? = nil
+    ) async -> Bool {
         let userEvent = AgentEvent(
             kind: .userInput,
             content: trimmed,
-            context: route.eventContext
+            context: route.eventContext,
+            attachments: attachments
         )
+        let summaryText = summary ?? trimmed
         guard await taskStore.commit(
             appendEvents: [userEvent],
             deleteEventIDs: [],
@@ -188,7 +204,7 @@ final class TurnCoordinator {
                 task.status = .active
                 task.pendingPlan = nil
                 if task.summary == nil {
-                    task.summary = String(trimmed.prefix(160))
+                    task.summary = String(summaryText.prefix(160))
                 }
                 for relatedID in route.relatedTaskIDs
                     where relatedID != task.id && !task.relatedTaskIDs.contains(relatedID) {

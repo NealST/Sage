@@ -16,7 +16,7 @@ nonisolated enum TranscriptDigest {
         return slice.map { event in
             switch event.kind {
             case .userInput:
-                return "User: \(clip(event.content))"
+                return "User: \(clip(event.modelFacingContent(includeImagePixels: false)))"
 
             case .assistantResponse:
                 let tools = (event.toolCalls ?? []).map(\.name).joined(separator: ", ")

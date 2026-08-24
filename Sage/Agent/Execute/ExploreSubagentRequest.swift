@@ -16,4 +16,5 @@ struct ExploreSubagentRequest {
     var skillHost: SkillToolHost
     var activatedSkillNames: Set<String>
     var enabledSkills: [SkillRecord]
+    var extraReadAllowlist: [String] = []
 }

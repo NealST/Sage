@@ -65,7 +65,8 @@ struct ExecuteServices {
                     enabledSkills: enabled,
                     skillHost: skillHost,
                     workPlanKind: state.activeTask?.workPlan?.kind,
-                    modelSettings: modelSettings()
+                    modelSettings: modelSettings(),
+                    extraReadAllowlist: MessageAttachment.readAllowlist(from: state.events)
                 )
             )
         }

@@ -22,6 +22,8 @@ final class AgentSession: Identifiable {
 
     let kind: Kind
     var draft: String = ""
+    var draftAttachments: [MessageAttachment] = []
+    var attachmentHint: String?
     let agent: AgentRuntime
     /// Skills catalog for this window's focus. MCP tools come from AppState's shared hub.
     let skillCatalog: SkillCatalog
@@ -41,6 +43,12 @@ final class AgentSession: Identifiable {
     }
 
     var windowAutosaveName: String { kind.windowAutosaveName }
+
+    func resetComposer() {
+        draft = ""
+        draftAttachments = []
+        attachmentHint = nil
+    }
 
     init(
         kind: Kind,

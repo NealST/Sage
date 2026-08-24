@@ -39,6 +39,8 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
     var context: EventContext?
     /// When true, this event is exempt from context budget pruning (e.g., skill instructions).
     var protected: Bool
+    /// Files the user pinned on this turn. Empty for historical events decoded before attachments.
+    var attachments: [MessageAttachment]
     var createdAt: Date
 
     init(
@@ -49,6 +51,7 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         toolCalls: [ToolCallRecord]? = nil,
         context: EventContext? = nil,
         protected: Bool = false,
+        attachments: [MessageAttachment] = [],
         createdAt: Date = .now
     ) {
         self.id = id
@@ -58,6 +61,7 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         self.toolCalls = toolCalls
         self.context = context
         self.protected = protected
+        self.attachments = attachments
         self.createdAt = createdAt
     }
 
@@ -70,11 +74,25 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         toolCalls = try container.decodeIfPresent([ToolCallRecord].self, forKey: .toolCalls)
         context = try container.decodeIfPresent(EventContext.self, forKey: .context)
         protected = try container.decodeIfPresent(Bool.self, forKey: .protected) ?? false
+        attachments = (try? container.decode([MessageAttachment].self, forKey: .attachments)) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(toolCallID, forKey: .toolCallID)
+        try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+        try container.encodeIfPresent(context, forKey: .context)
+        try container.encode(protected, forKey: .protected)
+        try container.encode(attachments, forKey: .attachments)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case id, kind, content, toolCallID, toolCalls, context, protected, createdAt
+        case id, kind, content, toolCallID, toolCalls, context, protected, attachments, createdAt
     }
 }
 

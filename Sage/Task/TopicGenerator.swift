@@ -17,10 +17,10 @@ nonisolated struct TopicResult: Sendable, Equatable {
 enum TopicGenerator {
     /// Topic and abstract from the first user message.
     static func generate(from events: [AgentEvent]) -> TopicResult? {
-        guard let firstUser = events.first(where: { $0.kind == .userInput })?.content else {
+        guard let firstUser = events.first(where: { $0.kind == .userInput }) else {
             return nil
         }
-        return fromUserText(firstUser)
+        return fromUserText(firstUser.modelFacingContent(includeImagePixels: false))
     }
 
     /// Resume keeps the existing label unless the new input is clearly longer/more specific.

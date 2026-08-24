@@ -62,7 +62,8 @@ nonisolated struct ChatCompletionRequest: Encodable {
 
 nonisolated struct APIMessage: Encodable {
     let role: String
-    let content: String?
+    let textContent: String?
+    let contentParts: [APIContentPart]?
     let toolCallID: String?
     let toolCalls: [APIToolCall]?
 
@@ -72,7 +73,7 @@ nonisolated struct APIMessage: Encodable {
         case toolCalls = "tool_calls"
     }
 
-    init(_ event: AgentEvent) {
+    init(_ event: AgentEvent, includeImageParts: Bool = false) {
         switch event.kind {
         case .systemInstruction: role = "system"
         case .userInput: role = "user"
@@ -82,7 +83,8 @@ nonisolated struct APIMessage: Encodable {
         // OpenAI wants content null (or omitted) when tool_calls are present sometimes;
         // empty string is widely accepted by compatible providers.
         if let toolCalls = event.toolCalls, !toolCalls.isEmpty {
-            content = event.content.isEmpty ? nil : event.content
+            textContent = event.content.isEmpty ? nil : event.content
+            contentParts = nil
             self.toolCalls = toolCalls.map { call in
                 APIToolCall(
                     id: call.id,
@@ -92,13 +94,78 @@ nonisolated struct APIMessage: Encodable {
             }
         } else {
             // Strip write-file diff sidecars — keep model context lean.
-            content = event.kind == .toolResult
+            let text = event.kind == .toolResult
                 ? WriteFileResultCodec.modelFacing(event.content)
                 : event.content
+            let images: [APIContentPart]
+            if includeImageParts, event.kind == .userInput {
+                images = event.attachments.compactMap { item in
+                    guard item.kind == .image,
+                          let url = AttachmentImageEncoder.dataURL(for: item.fileURL)
+                    else { return nil }
+                    return APIContentPart.image(url: url)
+                }
+            } else {
+                images = []
+            }
+            if images.isEmpty {
+                textContent = text
+                contentParts = nil
+            } else {
+                textContent = nil
+                var parts: [APIContentPart] = []
+                if !text.isEmpty {
+                    parts.append(.text(text))
+                }
+                parts.append(contentsOf: images)
+                contentParts = parts
+            }
             self.toolCalls = nil
         }
         toolCallID = event.toolCallID
     }
+
+    static func messages(from events: [AgentEvent]) -> [APIMessage] {
+        let latestUserID = events.last { $0.kind == .userInput }?.id
+        return events.map { event in
+            APIMessage(event, includeImageParts: event.id == latestUserID)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(role, forKey: .role)
+        if let contentParts {
+            try container.encode(contentParts, forKey: .content)
+        } else {
+            try container.encodeIfPresent(textContent, forKey: .content)
+        }
+        try container.encodeIfPresent(toolCallID, forKey: .toolCallID)
+        try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+    }
+}
+
+nonisolated struct APIContentPart: Encodable, Sendable, Equatable {
+    var type: String
+    var text: String?
+    var imageURL: APIImageURL?
+
+    enum CodingKeys: String, CodingKey {
+        case type, text
+        case imageURL = "image_url"
+    }
+
+    static func text(_ text: String) -> Self {
+        Self(type: "text", text: text, imageURL: nil)
+    }
+
+    static func image(url: String) -> Self {
+        Self(type: "image_url", text: nil, imageURL: APIImageURL(url: url))
+    }
+}
+
+nonisolated struct APIImageURL: Encodable, Sendable, Equatable {
+    var url: String
 }
 
 nonisolated struct APIToolCall: Encodable {

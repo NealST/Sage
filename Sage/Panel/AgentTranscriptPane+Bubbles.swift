@@ -148,10 +148,21 @@ extension AgentTranscriptPane {
     func eventBubble(_ event: AgentEvent, toolIndex: ToolResultIndex) -> some View {
         switch event.kind {
         case .userInput:
-            Text(event.content)
-                .font(.system(size: SageDesign.Typography.inputSize))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                if !event.attachments.isEmpty {
+                    AttachmentChipBar(
+                        attachments: event.attachments,
+                        selectedID: nil,
+                        showsRemove: false
+                    )
+                }
+                if !event.content.isEmpty {
+                    Text(event.content)
+                        .font(.system(size: SageDesign.Typography.inputSize))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+            }
 
         case .assistantResponse:
             VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {

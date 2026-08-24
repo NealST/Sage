@@ -42,7 +42,8 @@ enum ExploreSubagentRunner {
         settings: ModelSettingsSnapshot,
         tools: ToolRegistry,
         pathGuardPolicy: PathGuard.Policy,
-        skillHost: SkillToolHost
+        skillHost: SkillToolHost,
+        extraReadAllowlist: [String] = []
     ) async throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let task = args.task.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -59,7 +60,8 @@ enum ExploreSubagentRunner {
                 pathGuardPolicy: pathGuardPolicy,
                 skillHost: skillHost,
                 activatedSkillNames: [],
-                enabledSkills: []
+                enabledSkills: [],
+                extraReadAllowlist: extraReadAllowlist
             )
         )
     }
@@ -155,7 +157,8 @@ enum ExploreSubagentRunner {
                     enabledSkills: request.enabledSkills,
                     skillHost: request.skillHost,
                     workPlanKind: .observe,
-                    modelSettings: nil
+                    modelSettings: nil,
+                    extraReadAllowlist: request.extraReadAllowlist
                 )
             )
         } catch is CancellationError {

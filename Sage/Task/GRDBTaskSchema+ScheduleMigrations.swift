@@ -131,6 +131,23 @@ nonisolated extension GRDBTaskSchema {
                 sql: "ALTER TABLE tasks ADD COLUMN unlocked_mcp_servers_json TEXT;"
             )
         }
+        migrator.registerMigration("addEventAttachments") { database in
+            try database.execute(sql: """
+                CREATE TABLE IF NOT EXISTS event_attachments (
+                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    position INTEGER NOT NULL,
+                    id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    is_ephemeral INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(event_id, position)
+                );
+
+                CREATE INDEX IF NOT EXISTS event_attachments_event
+                ON event_attachments(event_id, position);
+            """)
+        }
     }
 
     static func addColumnIfMissing(

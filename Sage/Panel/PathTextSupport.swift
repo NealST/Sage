@@ -26,9 +26,11 @@ enum PathTextSupport {
         }
     }()
 
-    static func isImagePath(_ path: String) -> Bool {
+    nonisolated static func isImagePath(_ path: String) -> Bool {
         let ext = (path as NSString).pathExtension.lowercased()
-        return imageExtensions.contains(ext)
+        return [
+            "png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "heic", "heif", "bmp", "ico",
+        ].contains(ext)
     }
 
     static func fileURL(

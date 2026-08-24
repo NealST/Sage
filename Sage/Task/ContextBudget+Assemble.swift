@@ -52,7 +52,11 @@ nonisolated extension ContextBudget {
 
     static func prepareAssembly(_ layout: PromptLayout) -> PreparedAssembly {
         let budget = layout.budget
-        let sanitized = sanitize(layout.events).map { event in
+        let latestUserID = layout.events.last { $0.kind == .userInput }?.id
+        let withListings = layout.events.map { event in
+            event.embeddingAttachmentListing(includeImagePixels: event.id == latestUserID)
+        }
+        let sanitized = sanitize(withListings).map { event in
             capToolResult(event, maxTokens: budget.maxToolResultTokens)
         }
         let memory = layout.workingMemory?.validated(against: layout.events)

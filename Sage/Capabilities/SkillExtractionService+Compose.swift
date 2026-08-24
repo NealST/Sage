@@ -72,6 +72,8 @@ extension SkillExtractionService {
             let contentPreview: String
             if event.kind == .toolResult && event.content.count > 500 {
                 contentPreview = String(event.content.prefix(500)) + "…[truncated]"
+            } else if event.kind == .userInput {
+                contentPreview = event.modelFacingContent(includeImagePixels: false)
             } else {
                 contentPreview = event.content
             }

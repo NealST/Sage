@@ -317,7 +317,29 @@ extension GRDBTaskRepository {
             ]
         )
         try insertEventToolCalls(event, database: database)
+        try insertEventAttachments(event, database: database)
         try insertEventContext(event, database: database)
+    }
+
+    func insertEventAttachments(_ event: AgentEvent, database: Database) throws {
+        for (position, attachment) in event.attachments.enumerated() {
+            try database.execute(
+                sql: """
+                INSERT INTO event_attachments (
+                    event_id, position, id, kind, display_name, path, is_ephemeral
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    event.id.uuidString,
+                    position,
+                    attachment.id.uuidString,
+                    attachment.kind.rawValue,
+                    attachment.displayName,
+                    attachment.path,
+                    attachment.isEphemeralCopy ? 1 : 0,
+                ]
+            )
+        }
     }
 
     func insertEventToolCalls(_ event: AgentEvent, database: Database) throws {

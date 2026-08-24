@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AgentComposerView: View {
     @Environment(AppState.self) private var appState
     @Environment(AgentSession.self) private var session
+    @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @Environment(\.sageTypography) private var type
 
     @FocusState.Binding var isInputFocused: Bool
@@ -17,6 +19,8 @@ struct AgentComposerView: View {
 
     @State private var slashSuggestions: [ComposerSlashSuggestion] = []
     @State private var selectedSuggestionIndex: Int = 0
+    @State private var selectedAttachmentID: UUID?
+    @State private var isDropTargeted = false
 
     var body: some View {
         @Bindable var session = session
@@ -26,31 +30,72 @@ struct AgentComposerView: View {
                 suggestionList
             }
 
-            HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
-                TextField(composerPlaceholder, text: $session.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: type.input))
-                    .lineLimit(1...5)
-                    .focused($isInputFocused)
-                    .disabled(blocksTyping)
-                    .onSubmit(handleComposerSubmit)
-                    .onChange(of: session.draft) { _, newValue in
-                        updateSkillSuggestions(newValue)
-                    }
-                    .onKeyPress(.upArrow) { moveSuggestionSelection(by: -1) }
-                    .onKeyPress(.downArrow) { moveSuggestionSelection(by: 1) }
-                    .onKeyPress(.escape) { dismissSuggestionsIfNeeded() }
-                    .accessibilityHint(composerAccessibilityHint)
+            VStack(alignment: .leading, spacing: 8) {
+                if !session.draftAttachments.isEmpty {
+                    AttachmentChipBar(
+                        attachments: session.draftAttachments,
+                        selectedID: selectedAttachmentID,
+                        showsRemove: true,
+                        onSelect: selectAttachment,
+                        onRemove: removeAttachment
+                    )
+                    .transition(.opacity)
+                }
 
-                if !session.draft.isEmpty && !blocksSubmit {
-                    Text(slashSuggestions.isEmpty ? "Submit ⏎" : "Select ⏎")
-                        .font(.system(size: type.micro, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
+                    attachButton
+
+                    TextField(composerPlaceholder, text: $session.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: type.input))
+                        .lineLimit(1...5)
+                        .focused($isInputFocused)
+                        .disabled(blocksTyping)
+                        .onSubmit(handleComposerSubmit)
+                        .onChange(of: session.draft) { _, newValue in
+                            updateSkillSuggestions(newValue)
+                        }
+                        .onKeyPress(.upArrow) { moveSuggestionSelection(by: -1) }
+                        .onKeyPress(.downArrow) { moveSuggestionSelection(by: 1) }
+                        .onKeyPress(.escape) { dismissSuggestionsIfNeeded() }
+                        .onKeyPress(.delete) { handleDeleteKey() }
+                        .accessibilityHint(composerAccessibilityHint)
+
+                    if canSubmit && slashSuggestions.isEmpty {
+                        Text("Submit ⏎")
+                            .font(.system(size: type.micro, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    } else if !slashSuggestions.isEmpty {
+                        Text("Select ⏎")
+                            .font(.system(size: type.micro, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .sagePanelBackground(cornerRadius: 12)
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        Color.accentColor.opacity(isDropTargeted ? 0.85 : 0),
+                        lineWidth: 1.5
+                    )
+            }
+            .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
+                Task { await applyDrop(providers) }
+                return true
+            }
+            .background {
+                ComposerPasteMonitor(isEnabled: isInputFocused, onPaste: handlePasteboard)
+            }
+
+            if let hint = session.attachmentHint {
+                Text(hint)
+                    .font(.system(size: type.micro))
+                    .foregroundStyle(.orange.opacity(0.95))
+                    .transition(.opacity)
+            }
 
             HStack(spacing: SageDesign.Spacing.small) {
                 Text(appState.settings.resolvedModel(for: .execute))
@@ -82,6 +127,24 @@ struct AgentComposerView: View {
         }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.medium)
+        .animation(SageDesign.Motion.expandAnimation, value: session.draftAttachments.count)
+        .animation(SageDesign.Motion.expandAnimation, value: session.attachmentHint)
+    }
+
+    private var attachButton: some View {
+        Button {
+            pickAttachments()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("a", modifiers: [.command, .shift])
+        .help("Add files to this message")
+        .accessibilityLabel("Add files")
     }
 
     private var suggestionList: some View {
@@ -147,6 +210,12 @@ struct AgentComposerView: View {
         if blocksTyping {
             return "Sage is working…"
         }
+        if isDropTargeted {
+            return "Add to this message"
+        }
+        if !session.draftAttachments.isEmpty {
+            return "Ask about these files…"
+        }
         return "Ask Sage…"
     }
 
@@ -158,11 +227,17 @@ struct AgentComposerView: View {
         if !slashSuggestions.isEmpty {
             return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
         }
-        return "Press Return to send"
+        return "Press Return to send. Shift-Command-A adds files."
     }
 
     private var blocksTyping: Bool { session.agent.blocksNewInput }
     private var blocksSubmit: Bool { blocksTyping }
+    private var canSubmit: Bool {
+        !blocksSubmit && (
+            !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !session.draftAttachments.isEmpty
+        )
+    }
 
     private func handleComposerSubmit() {
         if applySelectedSuggestion() { return }
@@ -202,16 +277,84 @@ struct AgentComposerView: View {
 
     private func submit() {
         let trimmed = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let attachments = session.draftAttachments
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         guard !blocksSubmit else { return }
         stickToBottom = true
         slashSuggestions = []
         Task {
-            let accepted = await session.agent.submit(trimmed)
+            let accepted = await session.agent.submit(trimmed, attachments: attachments)
             if accepted {
-                session.draft = ""
+                session.resetComposer()
+                selectedAttachmentID = nil
             }
         }
+    }
+
+    private func pickAttachments() {
+        guard let outcome = AttachmentImport.pickFromOpenPanel(
+            policy: pathGuardPolicy,
+            into: session.draftAttachments
+        ) else { return }
+        applyImport(outcome)
+    }
+
+    private func handlePasteboard() -> Bool {
+        guard let outcome = AttachmentImport.fromPasteboard(into: session.draftAttachments) else {
+            return false
+        }
+        applyImport(outcome)
+        return true
+    }
+
+    private func applyDrop(_ providers: [NSItemProvider]) async {
+        let outcome = await AttachmentImport.fromItemProviders(
+            providers,
+            into: session.draftAttachments
+        )
+        applyImport(outcome)
+    }
+
+    private func applyImport(_ outcome: AttachmentImportOutcome) {
+        session.draftAttachments = outcome.attachments
+        session.attachmentHint = outcome.hint
+        if outcome.hint != nil {
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                if session.attachmentHint == outcome.hint {
+                    session.attachmentHint = nil
+                }
+            }
+        }
+    }
+
+    private func selectAttachment(_ attachment: MessageAttachment) {
+        selectedAttachmentID = attachment.id
+        QuickLookPresenter.shared.preview(url: attachment.fileURL)
+    }
+
+    private func removeAttachment(_ attachment: MessageAttachment) {
+        session.draftAttachments.removeAll { $0.id == attachment.id }
+        if selectedAttachmentID == attachment.id {
+            selectedAttachmentID = nil
+        }
+        if session.draftAttachments.count < MessageAttachment.maxCount,
+           session.attachmentHint == AttachmentImport.tooManyHint {
+            session.attachmentHint = nil
+        }
+    }
+
+    private func handleDeleteKey() -> KeyPress.Result {
+        if let selectedID = selectedAttachmentID,
+           let item = session.draftAttachments.first(where: { $0.id == selectedID }) {
+            removeAttachment(item)
+            return .handled
+        }
+        if session.draft.isEmpty, let last = session.draftAttachments.last {
+            removeAttachment(last)
+            return .handled
+        }
+        return .ignored
     }
 
     private func updateSkillSuggestions(_ draft: String) {

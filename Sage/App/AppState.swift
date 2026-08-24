@@ -125,7 +125,7 @@ final class AppState {
     }
 
     func clearDraft() {
-        keySession.draft = ""
+        keySession.resetComposer()
     }
 
     @discardableResult
@@ -135,7 +135,7 @@ final class AppState {
             await disposeProjectSession(projectID: id, revealGeneralIfKey: false)
         }
 
-        generalSession.draft = ""
+        generalSession.resetComposer()
         let didErase = await generalSession.agent.eraseAllData()
         await schedules.reload()
         keySession = generalSession

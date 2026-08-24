@@ -132,7 +132,7 @@ struct WorkspaceChromeView: View {
         HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             if session.agent.canStartFresh {
                 Button {
-                    session.draft = ""
+                    session.resetComposer()
                     Task { await session.agent.startFresh() }
                 } label: {
                     Label("Start Fresh", systemImage: "plus")

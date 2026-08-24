@@ -36,11 +36,12 @@ final class SplitOffTurnTests: XCTestCase {
         XCTAssertTrue(saved)
         fixture.state.activatedSkillNames = ["swift-review"]
 
-        let result = try XCTUnwrap(await fixture.store.splitOffTurn(from: user2.id))
+        let split = await fixture.store.splitOffTurn(from: user2.id)
+        let result = try XCTUnwrap(split)
         XCTAssertTrue(result.needsModelTurn)
-        XCTAssertEqual(result?.userQuery, "Write a pre-commit hook")
-        XCTAssertNotEqual(result?.newTaskID, originalID)
-        XCTAssertEqual(fixture.state.activeTaskID, result?.newTaskID)
+        XCTAssertEqual(result.userQuery, "Write a pre-commit hook")
+        XCTAssertNotEqual(result.newTaskID, originalID)
+        XCTAssertEqual(fixture.state.activeTaskID, result.newTaskID)
         XCTAssertEqual(fixture.state.activeTask?.events.map(\.id), [user2.id])
         XCTAssertEqual(fixture.state.activeTask?.activatedSkillNames ?? [], [])
         XCTAssertEqual(fixture.state.activatedSkillNames, [])
@@ -58,26 +59,28 @@ final class SplitOffTurnTests: XCTestCase {
         let created = await fixture.store.createAndActivateTask(relatedTo: [])
         let originalID = try XCTUnwrap(created)
         let user = AgentEvent(kind: .userInput, content: "hello")
-        XCTAssertTrue(await fixture.store.commit(appendEvents: [user], deleteEventIDs: []))
+        let didCommit = await fixture.store.commit(appendEvents: [user], deleteEventIDs: [])
+        XCTAssertTrue(didCommit)
 
         let result = await fixture.store.splitOffTurn(from: user.id)
         XCTAssertEqual(result?.newTaskID, fixture.state.activeTaskID)
         XCTAssertEqual(fixture.state.activeTask?.events.map(\.id), [user.id])
-        XCTAssertNil(try await fixture.repository.loadTask(id: originalID))
+        let deleted = try await fixture.repository.loadTask(id: originalID)
+        XCTAssertNil(deleted)
     }
 
     func testSplitOffTurnReturnsNilForUnknownEvent() async throws {
         let fixture = try makeStore()
         let created = await fixture.store.createAndActivateTask(relatedTo: [])
         let originalID = try XCTUnwrap(created)
-        XCTAssertTrue(
-            await fixture.store.commit(
-                appendEvents: [AgentEvent(kind: .userInput, content: "stay")],
-                deleteEventIDs: []
-            )
+        let didCommit = await fixture.store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "stay")],
+            deleteEventIDs: []
         )
+        XCTAssertTrue(didCommit)
 
-        XCTAssertNil(await fixture.store.splitOffTurn(from: UUID()))
+        let missing = await fixture.store.splitOffTurn(from: UUID())
+        XCTAssertNil(missing)
         XCTAssertEqual(fixture.state.activeTaskID, originalID)
     }
 
@@ -89,14 +92,13 @@ final class SplitOffTurnTests: XCTestCase {
         let assistant1 = AgentEvent(kind: .assistantResponse, content: "Sorted.")
         let user2 = AgentEvent(kind: .userInput, content: "Write a pre-commit hook")
         let assistant2 = AgentEvent(kind: .assistantResponse, content: "Here is a hook.")
-        XCTAssertTrue(
-            await runtime.taskStore.commit(
-                appendEvents: [user1, assistant1, user2, assistant2],
-                deleteEventIDs: []
-            ) { task in
-                task.topic = "整理 Downloads"
-            }
-        )
+        let didCommit = await runtime.taskStore.commit(
+            appendEvents: [user1, assistant1, user2, assistant2],
+            deleteEventIDs: []
+        ) { task in
+            task.topic = "整理 Downloads"
+        }
+        XCTAssertTrue(didCommit)
 
         runtime.turns.latestUserEventID = user2.id
         runtime.turns.applyThreadOffer(from: Self.offerPlan)
@@ -117,7 +119,8 @@ final class SplitOffTurnTests: XCTestCase {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         let user = AgentEvent(kind: .userInput, content: "整理 Downloads")
-        XCTAssertTrue(await runtime.taskStore.commit(appendEvents: [user], deleteEventIDs: []))
+        let didCommit = await runtime.taskStore.commit(appendEvents: [user], deleteEventIDs: [])
+        XCTAssertTrue(didCommit)
         runtime.turns.latestUserEventID = user.id
         runtime.turns.applyThreadOffer(from: Self.offerPlan)
         XCTAssertNil(runtime.state.topicDriftOffer)
@@ -133,7 +136,8 @@ final class SplitOffTurnTests: XCTestCase {
             AgentEvent(kind: .userInput, content: "Write a pre-commit hook"),
             AgentEvent(kind: .assistantResponse, content: "Here is a hook."),
         ]
-        XCTAssertTrue(await runtime.taskStore.commit(appendEvents: events, deleteEventIDs: []))
+        let didCommit = await runtime.taskStore.commit(appendEvents: events, deleteEventIDs: [])
+        XCTAssertTrue(didCommit)
         runtime.turns.latestUserEventID = events[2].id
         runtime.turns.applyThreadOffer(from: Self.offerPlan)
         XCTAssertEqual(runtime.state.topicDriftOffer?.taskID, originalID)
