@@ -14,7 +14,7 @@ final class CapabilityStore {
     private(set) var mcpTools: [MCPToolInfo] = []
 
     private let store: MCPConfigStore
-    private var clients: [String: MCPStdioClient] = [:]
+    var clients: [String: MCPStdioClient] = [:]
     private var reconnectTasks: [String: Task<Void, Never>] = [:]
     /// Per-server serial queue so rapid enable/disable/delete cannot interleave connect/disconnect.
     private var serverOperations: [String: Task<Void, Never>] = [:]
@@ -115,7 +115,7 @@ final class CapabilityStore {
         }
     }
 
-    func connect(serverID: String) async {
+    func connect(serverID: String, writableRoots: [URL] = []) async {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
@@ -132,7 +132,7 @@ final class CapabilityStore {
         else { return }
 
         let config = mcpServers[stillIndexed]
-        let client = MCPStdioClient(config: config)
+        let client = MCPStdioClient(config: config, writableRoots: writableRoots)
 
         await client.setOnProcessExit { [weak self] exitedServerID in
             await self?.handleServerProcessExit(serverID: exitedServerID)
@@ -230,34 +230,6 @@ final class CapabilityStore {
             await self.enqueueServerOperation(serverID: serverID) {
                 await self.connect(serverID: serverID)
             }.value
-        }
-    }
-
-    func callMCPTool(qualifiedName: String, argumentsJSON: String) async throws -> String {
-        guard qualifiedName.hasPrefix("mcp__") else {
-            throw MCPStdioClient.ClientError.invalidResponse("Not an MCP tool")
-        }
-        let rest = String(qualifiedName.dropFirst(5))
-        guard let sep = rest.range(of: "__") else {
-            throw MCPStdioClient.ClientError.invalidResponse("Malformed MCP tool name")
-        }
-        let serverName = String(rest[..<sep.lowerBound])
-        let toolName = String(rest[sep.upperBound...])
-        guard let server = mcpServers.first(where: { $0.name == serverName && $0.enabled }),
-              let client = clients[server.id]
-        else {
-            throw MCPStdioClient.ClientError.notRunning
-        }
-        return try await client.callTool(name: toolName, argumentsJSON: argumentsJSON)
-    }
-
-    func mcpToolDefinitions() -> [ToolDefinition] {
-        mcpTools.map { tool in
-            ToolDefinition(
-                name: tool.qualifiedName,
-                description: "[\(tool.serverName)] \(tool.description)",
-                parameters: tool.inputSchema
-            )
         }
     }
 

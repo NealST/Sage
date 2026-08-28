@@ -53,6 +53,16 @@ struct ExecuteServices {
         let policy = state.pathGuardPolicy
         let activated = skillHost.activatedSkillNames
         let enabled = skillHost.enabledSkills
+        let authorization = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: enabled,
+            mcpTools: mcp?.mcpTools ?? []
+        )
+        let mcpWriteRoots = authorization?.principal.hasPrefix("mcp:") == true
+            ? authorization?.roots.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? []
+            : []
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(
                 ToolInvocationRequest(
@@ -66,6 +76,7 @@ struct ExecuteServices {
                     skillHost: skillHost,
                     workPlanKind: state.activeTask?.workPlan?.kind,
                     modelSettings: modelSettings(),
+                    mcpWriteRoots: mcpWriteRoots,
                     extraReadAllowlist: MessageAttachment.readAllowlist(
                         from: state.events,
                         visibleEventIDs: state.modelVisibleAttachmentEventIDs
@@ -77,6 +88,16 @@ struct ExecuteServices {
 
     func evaluatePreToolUse(name: String, argumentsJSON: String) async -> PreToolUseDecision {
         await preToolUseDecision(name, argumentsJSON)
+    }
+
+    func requiresAuthorization(name: String, argumentsJSON: String) -> Bool {
+        SessionToolAllowlist.needsGate(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: state.pathGuardPolicy,
+            skills: skillHost.enabledSkills,
+            mcpTools: mcp?.mcpTools ?? []
+        )
     }
 
     func loadSkillName(from argumentsJSON: String) -> String? {

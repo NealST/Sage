@@ -9,6 +9,7 @@ struct SettingsPrivacySection: View {
     var eraseMessage: String?
     var isBusy: Bool
     var onErase: () -> Void
+    @State private var authorizationRefresh = 0
 
     var body: some View {
         SettingsFormChrome.section("Privacy") {
@@ -25,7 +26,9 @@ struct SettingsPrivacySection: View {
                     Text(
                         """
                         File tools stay in your home folder, or the project root when a Project is focused. \
-                        Shell commands can still cd or redirect outside that folder.
+                        Shell, Skill, schedule, and MCP processes run in a default-deny macOS sandbox. \
+                        Normal reads are automatic; sensitive reads and local writes require \
+                        just-in-time approval. Shell network and protected-metadata access are also gated.
                         """
                     )
                     .font(.system(size: SageDesign.Typography.microSize))
@@ -34,6 +37,33 @@ struct SettingsPrivacySection: View {
                 }
 
                 Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .sagePanelBackground(cornerRadius: 10)
+
+            HStack(spacing: SageDesign.Spacing.medium) {
+                Image(systemName: "checkmark.shield")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Long-term permissions")
+                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                    Text(longTermPermissionSummary)
+                        .font(.system(size: SageDesign.Typography.microSize))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button("Revoke all") {
+                    ToolAuthorizationGrantStore.shared.removeAllLongTermGrants()
+                    authorizationRefresh += 1
+                }
+                .controlSize(.small)
+                .disabled(ToolAuthorizationGrantStore.shared.longTermGrantCount == 0)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -68,5 +98,11 @@ struct SettingsPrivacySection: View {
             .padding(.vertical, 11)
             .sagePanelBackground(cornerRadius: 10)
         }
+    }
+
+    private var longTermPermissionSummary: String {
+        _ = authorizationRefresh
+        let count = ToolAuthorizationGrantStore.shared.longTermGrantCount
+        return count == 1 ? "1 permission is active." : "\(count) permissions are active."
     }
 }

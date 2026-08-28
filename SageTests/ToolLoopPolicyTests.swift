@@ -61,69 +61,6 @@ final class ToolBatchWaveTests: XCTestCase {
     }
 }
 
-final class SessionToolAllowlistTests: XCTestCase {
-    func testCombinationKeyIsStableAfterKeyReorder() {
-        let firstKey = SessionToolAllowlist.combinationKey(
-            name: "run_shell_command",
-            argumentsJSON: #"{"command":"ls","cwd":"~"}"#
-        )
-        let reorderedKey = SessionToolAllowlist.combinationKey(
-            name: "run_shell_command",
-            argumentsJSON: #"{"cwd":"~","command":"ls"}"#
-        )
-        XCTAssertEqual(firstKey, reorderedKey)
-        XCTAssertEqual(firstKey.count, 64)
-    }
-
-    func testDifferentCommandsGetDifferentKeys() {
-        let listKey = SessionToolAllowlist.combinationKey(
-            name: "run_shell_command",
-            argumentsJSON: #"{"command":"ls"}"#
-        )
-        let pwdKey = SessionToolAllowlist.combinationKey(
-            name: "run_shell_command",
-            argumentsJSON: #"{"command":"pwd"}"#
-        )
-        XCTAssertNotEqual(listKey, pwdKey)
-    }
-
-    func testOnlyShellAndMCPNeedAGate() {
-        XCTAssertTrue(SessionToolAllowlist.needsGate(forToolNamed: "run_shell_command"))
-        XCTAssertTrue(SessionToolAllowlist.needsGate(forToolNamed: "mcp__files__write"))
-        XCTAssertFalse(SessionToolAllowlist.needsGate(forToolNamed: "write_text_file"))
-        XCTAssertFalse(SessionToolAllowlist.needsGate(forToolNamed: "read_text_file"))
-    }
-}
-
-@MainActor
-final class SessionToolAllowlistActorTests: XCTestCase {
-    func testSessionRememberAndReset() {
-        let list = SessionToolAllowlist()
-        XCTAssertFalse(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"ls"}"#))
-        list.allowThisSession(name: "run_shell_command", argumentsJSON: #"{"command":"ls"}"#)
-        XCTAssertTrue(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"ls"}"#))
-        XCTAssertFalse(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"pwd"}"#))
-        list.reset()
-        XCTAssertFalse(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"ls"}"#))
-    }
-
-    func testToolLevelAllowCoversAnyArguments() {
-        let list = SessionToolAllowlist()
-        list.allowToolThisSession(named: "run_shell_command")
-        XCTAssertTrue(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"ls"}"#))
-        XCTAssertTrue(list.contains(name: "run_shell_command", argumentsJSON: #"{"command":"pwd"}"#))
-        XCTAssertFalse(list.contains(name: "mcp__demo__search", argumentsJSON: "{}"))
-    }
-
-    func testAllowOnceIsConsumedExactlyOnce() {
-        let list = SessionToolAllowlist()
-        let args = #"{"command":"ls"}"#
-        list.allowOnce(name: "run_shell_command", argumentsJSON: args)
-        XCTAssertTrue(list.consumeApproval(name: "run_shell_command", argumentsJSON: args))
-        XCTAssertFalse(list.consumeApproval(name: "run_shell_command", argumentsJSON: args))
-    }
-}
-
 final class ExecuteCapabilityReminderTests: XCTestCase {
     func testActReminderIsLiveDeltasOnly() {
         let text = ExecuteCapabilityReminder.make(

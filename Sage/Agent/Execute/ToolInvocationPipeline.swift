@@ -10,10 +10,6 @@ import Foundation
 nonisolated enum ToolInvocationPipeline {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
-        try ToolInvocationDispatcher.assertMutatingToolsAllowed(
-            for: request.name,
-            workPlanKind: request.workPlanKind
-        )
         try SkillToolPolicy.assertToolAllowed(
             request.name,
             activatedSkillNames: request.activatedSkillNames,
@@ -24,6 +20,11 @@ nonisolated enum ToolInvocationPipeline {
             for: request.name,
             tools: request.tools,
             mcp: request.mcp
+        )
+        try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+            for: request.name,
+            workPlanKind: request.workPlanKind,
+            requiresConfirmation: definition.requiresConfirmation
         )
         try ToolArgumentValidator.validate(
             argumentsJSON: request.argumentsJSON,

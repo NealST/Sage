@@ -17,6 +17,11 @@ nonisolated struct RunShellCommandTool: AgentTool {
             system temporary directories. Attached paths outside the project remain read-only. \
             Prefer file tools for reads and writes. \
             Default timeout is 30s (max 120s). \
+            File writes are denied unless allow_writes is explicitly true; when enabled, writes are \
+            limited to working_directory and require authorization. \
+            Network access is denied unless allow_network is explicitly true; requesting it is part of the \
+            approval-scoped invocation. \
+            Writes to .git, .sage, and .agents are denied unless allow_protected_metadata_writes is explicitly true. \
             Output is capped at 50KB. Result format: "[exit N]\\n<output>". \
             Dangerous commands (rm -rf /, sudo, etc.) are blocked. \
             Use for: git, grep, find, python, node, brew, make, and other CLI tools.
@@ -28,6 +33,24 @@ nonisolated struct RunShellCommandTool: AgentTool {
                     "Working directory inside the active sandbox. Defaults to sandbox root (~/ or project root)."
                 ),
                 "timeout_seconds": .intProperty("Timeout in seconds (1–120, default 30)."),
+                "allow_writes": .boolProperty(
+                    """
+                    Allow this command to modify files under working_directory. Defaults to false \
+                    and requires write authorization.
+                    """
+                ),
+                "allow_network": .boolProperty(
+                    "Allow this command to access the network. Defaults to false and requires separate approval."
+                ),
+                "allow_protected_metadata_writes": .boolProperty(
+                    "Allow writes to .git, .sage, or .agents. Defaults to false and requires separate approval."
+                ),
+                "sensitive_read_path": .stringProperty(
+                    """
+                    Sensitive directory to read for this command, such as ~/.ssh. Omit unless needed; \
+                    access requires separate authorization.
+                    """
+                ),
             ],
             required: ["command"]
         )
@@ -37,6 +60,20 @@ nonisolated struct RunShellCommandTool: AgentTool {
         let command: String
         let workingDirectory: String?
         let timeoutSeconds: Int?
+        let allowWrites: Bool?
+        let allowNetwork: Bool?
+        let allowProtectedMetadataWrites: Bool?
+        let sensitiveReadPath: String?
+    }
+
+    private struct ExecutionRequest {
+        let command: String
+        let workingDirectory: URL
+        let timeout: Int
+        let allowWrites: Bool
+        let allowNetwork: Bool
+        let allowProtectedMetadataWrites: Bool
+        let allowedSensitiveReadRoots: [URL]
     }
 
     private static let maxOutputBytes = 50_000
@@ -54,7 +91,7 @@ nonisolated struct RunShellCommandTool: AgentTool {
         // Resolve working directory (sandbox root when omitted)
         let workDir: URL
         if let dir = args.workingDirectory {
-            workDir = try PathGuard.resolveAllowed(dir)
+            workDir = try PathGuard.resolveAllowed(dir, access: .read)
         } else {
             workDir = PathGuard.policy.defaultWorkingDirectory
         }
@@ -73,11 +110,16 @@ nonisolated struct RunShellCommandTool: AgentTool {
         let timeout = min(max(requestedTimeout, 1), 120)
 
         // Execute asynchronously
-        let (exitCode, output) = try await executeCommand(
+        let request = ExecutionRequest(
             command: command,
             workingDirectory: workDir,
-            timeout: timeout
+            timeout: timeout,
+            allowWrites: args.allowWrites ?? false,
+            allowNetwork: args.allowNetwork ?? false,
+            allowProtectedMetadataWrites: args.allowProtectedMetadataWrites ?? false,
+            allowedSensitiveReadRoots: try allowedSensitiveRoots(for: args.sensitiveReadPath)
         )
+        let (exitCode, output) = try await executeCommand(request)
 
         // Format result
         let truncated = output.count > Self.maxOutputBytes
@@ -97,62 +139,46 @@ nonisolated struct RunShellCommandTool: AgentTool {
         return "[exit \(exitCode)]\n\(displayOutput)"
     }
 
-    private func executeCommand(
-        command: String,
-        workingDirectory: URL,
-        timeout: Int
-    ) async throws -> (Int32, String) {
-        let invocation = shellInvocation(command: command)
+    private func executeCommand(_ request: ExecutionRequest) async throws -> (Int32, String) {
+        let configuration = ExecutionSandboxConfiguration.shell(
+            policy: PathGuard.policy,
+            readAllowlist: PathGuard.readAllowlist,
+            writeRoot: request.workingDirectory,
+            allowsWrites: request.allowWrites,
+            allowsNetwork: request.allowNetwork,
+            allowsProtectedMetadataWrites: request.allowProtectedMetadataWrites,
+            allowedSensitiveReadRoots: request.allowedSensitiveReadRoots
+        )
+        let invocation = ExecutionSandbox.wrap(
+            executable: URL(fileURLWithPath: "/bin/zsh"),
+            arguments: ["-f", "-c", request.command],
+            configuration: configuration,
+            auditComponent: "interactive_shell"
+        )
         let result = try await ProcessRunner.run(
             executable: invocation.executable,
             arguments: invocation.arguments,
-            currentDirectory: workingDirectory,
-            timeout: .seconds(timeout)
+            currentDirectory: request.workingDirectory,
+            timeout: .seconds(request.timeout)
         )
         if result.timedOut {
             return (
                 result.exitCode,
-                result.output + "\n… (command timed out after \(timeout)s)"
+                result.output + "\n… (command timed out after \(request.timeout)s)"
             )
         }
         return (result.exitCode, result.output)
     }
 
-    private func shellInvocation(command: String) -> (executable: URL, arguments: [String]) {
-        guard case .project(let root) = PathGuard.policy else {
-            return (URL(fileURLWithPath: "/bin/zsh"), ["-c", command])
+    private func allowedSensitiveRoots(for rawPath: String?) throws -> [URL] {
+        guard let rawPath else { return [] }
+        let url = try PathGuard.resolveAllowed(rawPath, access: .read)
+        guard let root = SensitiveResourcePolicy.containingRoot(for: url) else {
+            throw ToolError.invalidArguments(
+                "sensitive_read_path must identify a protected sensitive directory."
+            )
         }
-        let project = sandboxLiteral(root.resolvingSymlinksInPath().path)
-        let home = sandboxLiteral(PathGuard.resolvedHomePath)
-        let attachmentReadRules = PathGuard.readAllowlist
-            .map { sandboxLiteral(URL(fileURLWithPath: $0).resolvingSymlinksInPath().path) }
-            .map { "(allow file-read* (subpath \"\($0)\"))" }
-            .joined(separator: "\n")
-        let profile = """
-        (version 1)
-        (allow default)
-        (deny file-read* (subpath "\(home)"))
-        (deny file-write*)
-        (allow file-read* (subpath "\(project)"))
-        \(attachmentReadRules)
-        (allow file-write* (subpath "\(project)"))
-        (allow file-write* (subpath "/private/tmp"))
-        (allow file-write* (subpath "/private/var/folders"))
-        (allow file-write* (literal "/dev/null"))
-        (allow file-write* (literal "/dev/tty"))
-        """
-        return (
-            URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
-            ["-p", profile, "/bin/zsh", "-f", "-c", command]
-        )
-    }
-
-    private func sandboxLiteral(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
+        return [root]
     }
 }
 

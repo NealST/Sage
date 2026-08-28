@@ -142,6 +142,9 @@ nonisolated enum PathGuard: Sendable {
         guard isInsideHome(path) else {
             throw ToolError.pathNotAllowed(raw, policy: policy)
         }
+        if access == .write, isProtectedWritePath(path, policy: policy) {
+            throw ToolError.pathNotAllowed(raw, policy: policy)
+        }
 
         switch policy {
         case .home:

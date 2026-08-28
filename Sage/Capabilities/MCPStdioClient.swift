@@ -16,6 +16,7 @@ import Foundation
 /// Reconnection logic lives in `CapabilityStore` (coordination layer).
 actor MCPStdioClient {
     let config: MCPServerConfig
+    let writableRoots: [URL]
     var process: Process?
     var stdinPipe: Pipe?
     var stdoutPipe: Pipe?
@@ -37,13 +38,10 @@ actor MCPStdioClient {
     /// True while a graceful disconnect is in progress — suppresses exit callback.
     var isDisconnecting = false
 
-    /// Parent-process keys MCP children may inherit. API keys and other secrets stay out.
-    nonisolated static let inheritedEnvironmentKeys: Set<String> = [
-        "PATH", "HOME", "USER", "LOGNAME", "SHELL",
-        "TMPDIR", "TMP", "TEMP",
-        "LANG", "LC_ALL", "LC_CTYPE",
-        "SSH_AUTH_SOCK",
-    ]
+    init(config: MCPServerConfig, writableRoots: [URL] = []) {
+        self.config = config
+        self.writableRoots = writableRoots
+    }
 
     enum ClientError: LocalizedError {
         case notRunning
@@ -59,10 +57,6 @@ actor MCPStdioClient {
             case .pingTimeout: return "MCP server did not respond to ping"
             }
         }
-    }
-
-    init(config: MCPServerConfig) {
-        self.config = config
     }
 
     func setOnProcessExit(_ callback: @escaping @Sendable (String) async -> Void) {
@@ -162,8 +156,11 @@ actor MCPStdioClient {
             cont.resume(throwing: ClientError.notRunning)
         }
         pending.removeAll()
-        if process?.isRunning == true {
-            process?.terminate()
+        if let process {
+            ProcessRunner.unregisterExternal(process)
+            if process.isRunning {
+                ProcessRunner.terminateExternal(process)
+            }
         }
         process = nil
         stdinPipe = nil

@@ -73,7 +73,7 @@ nonisolated struct DeleteFileTool: AgentTool {
                 )
             }
         }
-        try FileManager.default.removeItem(at: url)
+        try SafeFileIO.removeItem(at: url, isDirectory: isDir.boolValue)
         return "[OK] Deleted \(PathGuard.displayPath(url.path))"
     }
 }

@@ -89,8 +89,9 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         if kind == .act {
             lines.append("Follow this plan. Use tools as needed.")
             lines.append("""
-            File tools do not need re-approval. Shell commands and MCP tools still pause \
-            the first time that exact call appears in this task.
+            Normal local reads run without another prompt. Sensitive reads and local file mutations \
+            pause for just-in-time authorization. Shell commands are read-only unless `allow_writes` \
+            is true; request it only when the command must modify its working directory.
             """)
         } else {
             lines.append(

@@ -49,10 +49,10 @@ struct ToolApprovalCard: View {
             HStack(spacing: SageDesign.Spacing.small) {
                 Spacer(minLength: 0)
 
-                Button(toolSessionTitle, action: onAllowTool)
+                Button("Always allow", action: onAllowTool)
                     .controlSize(.regular)
 
-                Button("Allow this call", action: onAllowSession)
+                Button("Allow for this task", action: onAllowSession)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.regular)
@@ -65,20 +65,10 @@ struct ToolApprovalCard: View {
     }
 
     private var subtitle: String {
-        if toolName.hasPrefix("mcp__") {
-            return """
-            MCP tools stay gated after the work plan. Allow this exact call, remember this MCP tool \
-            for the rest of the task, or skip it.
-            """
-        }
-        return """
-        Shell commands stay gated after the work plan. Allow this exact command, remember any shell \
-        for the rest of the task, or skip it.
         """
-    }
-
-    private var toolSessionTitle: String {
-        toolName.hasPrefix("mcp__") ? "Allow this MCP tool" : "Allow any shell"
+        This call needs permission to read protected data or modify local content. \
+        Allow it once, for this task, or until you revoke the permission.
+        """
     }
 
     private var commandPreview: String? {

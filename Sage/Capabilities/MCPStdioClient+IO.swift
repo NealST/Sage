@@ -21,25 +21,22 @@ extension MCPStdioClient {
         let stdout = Pipe()
         let stderr = Pipe()
 
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [config.command] + config.args
+        let invocation = ExecutionSandbox.wrap(
+            executable: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [config.command] + config.args,
+            configuration: .mcpServer(writableRoots: writableRoots),
+            auditComponent: "mcp_server"
+        )
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = stderr
 
-        var environment: [String: String] = [:]
-        let parent = ProcessInfo.processInfo.environment
-        for key in Self.inheritedEnvironmentKeys {
-            if let value = parent[key] {
-                environment[key] = value
-            }
-        }
-        for (key, value) in config.env {
-            environment[key] = value
-        }
-        process.environment = environment
+        process.environment = ChildProcessEnvironment.sanitized(overrides: config.env)
 
         try process.run()
+        ProcessRunner.registerExternal(process)
         self.process = process
         self.stdinPipe = stdin
         self.stdoutPipe = stdout
@@ -286,12 +283,32 @@ extension MCPStdioClient {
                 description = name
             }
             let schema = tool["inputSchema"] ?? .object(["type": .string("object"), "properties": .object([:])])
+            let annotations: [String: JSONValue]
+            if case .object(let values) = tool["annotations"] {
+                annotations = values
+            } else {
+                annotations = [:]
+            }
+            let readOnlyHint: Bool?
+            if case .bool(let value) = annotations["readOnlyHint"] {
+                readOnlyHint = value
+            } else {
+                readOnlyHint = nil
+            }
+            let localWriteHint: Bool
+            if case .bool(let value) = annotations["localWriteHint"] {
+                localWriteHint = value
+            } else {
+                localWriteHint = false
+            }
             return MCPToolInfo(
                 serverID: config.id,
                 serverName: config.name,
                 name: name,
                 description: description,
-                inputSchema: schema
+                inputSchema: schema,
+                readOnlyHint: readOnlyHint,
+                localWriteHint: localWriteHint
             )
         }
     }

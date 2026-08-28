@@ -52,7 +52,10 @@ extension ToolBatchExecutor {
             nil
         }
         let requiresApproval = hookReason != nil
-            || SessionToolAllowlist.needsGate(forToolNamed: step.toolName)
+            || services.requiresAuthorization(
+                name: step.toolName,
+                argumentsJSON: step.argumentsJSON
+            )
         if requiresApproval,
            !services.isToolApproved(step.toolName, step.argumentsJSON) {
             return await pauseForApproval(
@@ -158,7 +161,10 @@ extension ToolBatchExecutor {
             nil
         }
         let requiresApproval = hookReason != nil
-            || SessionToolAllowlist.needsGate(forToolNamed: step.toolName)
+            || services.requiresAuthorization(
+                name: step.toolName,
+                argumentsJSON: step.argumentsJSON
+            )
         if requiresApproval,
            !services.isToolApproved(step.toolName, step.argumentsJSON) {
             return .halt(

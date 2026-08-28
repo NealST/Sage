@@ -67,7 +67,8 @@ nonisolated enum ToolInvocationDispatcher {
             }
             return try await mcp.callMCPTool(
                 qualifiedName: request.name,
-                argumentsJSON: request.argumentsJSON
+                argumentsJSON: request.argumentsJSON,
+                temporaryWriteRoots: request.mcpWriteRoots
             )
         }
         if SkillToolExecutor.isSkillTool(request.name) {
@@ -86,10 +87,13 @@ nonisolated enum ToolInvocationDispatcher {
     /// backstop. A missing plan is treated as non-act.
     static func assertMutatingToolsAllowed(
         for name: String,
-        workPlanKind: WorkPlan.Kind?
+        workPlanKind: WorkPlan.Kind?,
+        requiresConfirmation: Bool? = nil
     ) throws {
         guard workPlanKind != .act else { return }
-        guard ToolDefinition.requiresConfirmation(forToolNamed: name) else { return }
+        let requiresConfirmation = requiresConfirmation
+            ?? ToolDefinition.requiresConfirmation(forToolNamed: name)
+        guard requiresConfirmation else { return }
         let planLabel = switch workPlanKind {
         case .observe:
             "an observe plan (read/list/search only)"

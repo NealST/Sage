@@ -57,14 +57,7 @@ nonisolated struct ReadTextFileTool: AgentTool {
     }
 
     static func readEntireFile(at url: URL) throws -> String {
-        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-        let fileSize = (attrs[.size] as? Int) ?? 0
-        guard fileSize <= maxBytes else {
-            throw ToolError.operationFailed(
-                "File too large (\(fileSize) bytes). Use line_start/line_end to read a section."
-            )
-        }
-        let data = try Data(contentsOf: url)
+        let data = try SafeFileIO.readData(at: url, maxBytes: maxBytes)
         guard let text = String(data: data, encoding: .utf8) else {
             throw ToolError.operationFailed("File is not valid UTF-8 text")
         }
@@ -72,10 +65,8 @@ nonisolated struct ReadTextFileTool: AgentTool {
     }
 
     static func readLineRange(at url: URL, path: String, start: Int?, end: Int?) throws -> String {
-        guard let handle = FileHandle(forReadingAtPath: url.path) else {
-            throw ToolError.operationFailed("Cannot open file: \(path)")
-        }
-        defer { handle.closeFile() }
+        let handle = try SafeFileIO.openForReading(at: url)
+        defer { try? handle.close() }
         let startLine = max((start ?? 1), 1)
         let endLine = end ?? Int.max
         guard startLine <= endLine else {
@@ -143,13 +134,12 @@ nonisolated struct WriteTextFileTool: AgentTool {
         // Capture before contents for UI diff; omit when missing/unreadable/non-UTF8.
         let before: String? = {
             guard existed else { return nil }
-            return try? String(contentsOf: url, encoding: .utf8)
+            guard let data = try? SafeFileIO.readData(at: url, maxBytes: 1_048_576) else {
+                return nil
+            }
+            return String(data: data, encoding: .utf8)
         }()
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try args.content.write(to: url, atomically: true, encoding: .utf8)
+        try SafeFileIO.atomicWrite(Data(args.content.utf8), to: url)
         return WriteFileResultCodec.makeResult(
             path: PathGuard.displayPath(url.path),
             created: !existed,
@@ -279,8 +269,8 @@ nonisolated struct SearchFilesTool: AgentTool {
         into results: inout [String]
     ) throws {
         guard fileSize <= maxFileSize else { return }
-        guard let handle = FileHandle(forReadingAtPath: allowed.path) else { return }
-        defer { handle.closeFile() }
+        let handle = try SafeFileIO.openForReading(at: allowed)
+        defer { try? handle.close() }
         var lineNumber = 0
         try UTF8LineStreamer.forEachLine(handle: handle, strict: false) { line in
             lineNumber += 1

@@ -234,10 +234,8 @@ final class TurnCoordinator {
         resetTurn()
         keepWorkPlanAfterComplete = true
         allowDriftOffer = false
-        state.skipsSessionToolGate = true
         defer {
             keepWorkPlanAfterComplete = false
-            state.skipsSessionToolGate = false
         }
 
         let userEvent = AgentEvent(kind: .userInput, content: prompt, protected: true)

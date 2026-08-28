@@ -47,8 +47,6 @@ final class AgentSessionState {
     var didBootstrap = false
     /// Exact shell / MCP invocations approved for the current task.
     let sessionAllowlist = SessionToolAllowlist()
-    /// Unattended schedule replay skips the shell/MCP gate (no HUD operator).
-    var skipsSessionToolGate = false
     /// Attachment-bearing events retained in the most recently assembled model context.
     var modelVisibleAttachmentEventIDs: Set<UUID> = []
     /// Round-limit or per-tool approval sitting in front of the execute loop.
@@ -72,6 +70,14 @@ final class AgentSessionState {
             return .project(root: focusedProject.rootURL)
         }
         return .home
+    }
+
+    /// Scheduled runs share grants across their ephemeral task records.
+    var authorizationScopeID: String {
+        if let scheduleID = activeTask?.originScheduleID {
+            return "schedule:\(scheduleID.uuidString)"
+        }
+        return "task:\(activeTaskID?.uuidString ?? "unbound")"
     }
 
     var focusTitle: String {
@@ -109,7 +115,6 @@ final class AgentSessionState {
         forceFreshOnNextSubmit = false
         reviewFeedback = nil
         pendingPrompt = nil
-        skipsSessionToolGate = false
     }
 
     func clearTokenUsage() {

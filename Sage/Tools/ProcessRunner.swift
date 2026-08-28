@@ -34,12 +34,14 @@ nonisolated enum ProcessRunner {
         executable: URL,
         arguments: [String],
         currentDirectory: URL?,
-        timeout: Duration?
+        timeout: Duration?,
+        environment: [String: String] = ChildProcessEnvironment.sanitized()
     ) async throws -> ProcessRunResult {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
         process.currentDirectoryURL = currentDirectory
+        process.environment = environment
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -53,7 +55,6 @@ nonisolated enum ProcessRunner {
             }
         }
 
-        register(process)
         defer {
             pipe.fileHandleForReading.readabilityHandler = nil
             unregister(process)
@@ -61,6 +62,8 @@ nonisolated enum ProcessRunner {
 
         do {
             try process.run()
+            establishProcessGroup(for: process)
+            register(process)
         } catch {
             throw ToolError.operationFailed(
                 "Failed to start process: \(error.localizedDescription)"
@@ -80,19 +83,12 @@ nonisolated enum ProcessRunner {
         }
 
         try Task.checkCancellation()
-
-        let data = buffer.data
-        var output = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .ascii)
-            ?? "(binary output, \(data.count) bytes)"
-        if buffer.didTruncate {
-            output += "\n… (process output capped at \(maxCapturedBytes) bytes)"
-        }
-
-        return ProcessRunResult(
-            exitCode: process.terminationStatus,
-            output: output,
-            timedOut: timedOut
+        return makeResult(
+            process: process,
+            buffer: buffer,
+            timedOut: timedOut,
+            executable: executable,
+            arguments: arguments
         )
     }
 
@@ -118,7 +114,51 @@ nonisolated enum ProcessRunner {
         }
     }
 
+    /// Adopts a long-lived process (for example an MCP server) into the shared
+    /// lifecycle registry after it has started.
+    static func registerExternal(_ process: Process) {
+        establishProcessGroup(for: process)
+        register(process)
+    }
+
+    static func unregisterExternal(_ process: Process) {
+        unregister(process)
+    }
+
+    static func terminateExternal(_ process: Process) {
+        terminate(process)
+    }
+
     // MARK: - Internals
+
+    private static func makeResult(
+        process: Process,
+        buffer: LockedDataBuffer,
+        timedOut: Bool,
+        executable: URL,
+        arguments: [String]
+    ) -> ProcessRunResult {
+        let data = buffer.data
+        var output = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .ascii)
+            ?? "(binary output, \(data.count) bytes)"
+        if buffer.didTruncate {
+            output += "\n… (process output capped at \(maxCapturedBytes) bytes)"
+        }
+        if process.terminationStatus != 0,
+           executable.lastPathComponent == "sandbox-exec",
+           output.localizedCaseInsensitiveContains("operation not permitted") {
+            SecurityAuditLogger.sandboxDenied(
+                executable: arguments.dropFirst(2).first ?? "(unknown)",
+                exitCode: process.terminationStatus
+            )
+        }
+        return ProcessRunResult(
+            exitCode: process.terminationStatus,
+            output: output,
+            timedOut: timedOut
+        )
+    }
 
     private static func waitForExit(process: Process, timeout: Duration?) async throws -> Bool {
         try await withThrowingTaskGroup(of: Bool.self) { group in
@@ -165,12 +205,30 @@ nonisolated enum ProcessRunner {
 
     private static func terminate(_ process: Process) {
         guard process.isRunning else { return }
-        process.terminate()
+        let pid = process.processIdentifier
+        if pid > 0 {
+            // Processes are moved into their own group immediately after
+            // launch. Signalling the negative pid also terminates descendants.
+            _ = kill(-pid, SIGTERM)
+        }
+        if process.isRunning {
+            process.terminate()
+        }
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 5) {
             if process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
+                let pid = process.processIdentifier
+                if pid > 0 {
+                    _ = kill(-pid, SIGKILL)
+                    _ = kill(pid, SIGKILL)
+                }
             }
         }
+    }
+
+    private static func establishProcessGroup(for process: Process) {
+        let pid = process.processIdentifier
+        guard pid > 0 else { return }
+        _ = setpgid(pid, pid)
     }
 }
 

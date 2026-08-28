@@ -18,6 +18,8 @@ struct ToolInvocationRequest {
     var skillHost: SkillToolHost
     var workPlanKind: WorkPlan.Kind?
     var modelSettings: ModelSettingsSnapshot?
+    /// Temporary write roots granted for this MCP invocation.
+    var mcpWriteRoots: [URL] = []
     /// Extra read-only paths (user attachments). Merged with skill dirs at dispatch.
     var extraReadAllowlist: [String] = []
 }

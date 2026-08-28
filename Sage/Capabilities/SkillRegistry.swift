@@ -192,6 +192,10 @@ actor SkillRegistry {
         guard let description = parsed.scalars["description"], !description.isEmpty else {
             return nil
         }
+        var metadata = parsed.metadata
+        if let requiredSecrets = parsed.scalars["required-secrets"], !requiredSecrets.isEmpty {
+            metadata["required-secrets"] = requiredSecrets
+        }
         return SkillRecord(
             name: name,
             description: description,
@@ -200,7 +204,7 @@ actor SkillRegistry {
             scope: scope,
             license: parsed.scalars["license"],
             compatibility: parsed.scalars["compatibility"],
-            metadata: parsed.metadata.isEmpty ? nil : parsed.metadata,
+            metadata: metadata.isEmpty ? nil : metadata,
             allowedTools: parsed.scalars["allowed-tools"],
             provenance: parsed.scalars["source"]
         )

@@ -42,6 +42,14 @@ nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
             .map(SkillToolPolicy.canonicalizeToolName)
             .filter { !$0.isEmpty }
     }
+
+    /// Secret environment variable names requested through `required-secrets`.
+    var requiredSecretNames: [String] {
+        (metadata?["required-secrets"] ?? "")
+            .split { $0.isWhitespace || $0.isNewline || $0 == "," }
+            .map(String.init)
+            .filter(SkillSecretStore.isValidEnvironmentName)
+    }
 }
 
 /// Where a skill is stored and recalled from.
@@ -173,6 +181,8 @@ nonisolated struct MCPToolInfo: Identifiable, Sendable, Equatable {
     var name: String
     var description: String
     var inputSchema: JSONValue
+    var readOnlyHint: Bool?
+    var localWriteHint = false
 
     var qualifiedName: String {
         "mcp__\(serverName)__\(name)"

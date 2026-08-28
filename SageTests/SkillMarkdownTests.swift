@@ -2,6 +2,21 @@
 import XCTest
 
 final class SkillMarkdownTests: XCTestCase {
+    func testParsesTopLevelRequiredSecrets() {
+        let parsed = SkillMarkdown.parseFrontmatter(
+            """
+            ---
+            name: demo
+            description: Demo
+            required-secrets: GITHUB_TOKEN, NPM_TOKEN
+            ---
+            Body
+            """
+        )
+
+        XCTAssertEqual(parsed.scalars["required-secrets"], "GITHUB_TOKEN, NPM_TOKEN")
+    }
+
     func testValidSkillNames() {
         XCTAssertTrue(SkillMarkdown.isValidSkillName("ok-name"))
         XCTAssertTrue(SkillMarkdown.isValidSkillName("a1"))

@@ -27,15 +27,30 @@ extension AgentRuntime {
 
     func confirmToolApproval(scope: SessionToolApprovalScope) async {
         guard case .toolApproval(_, let name, let args, _) = state.pendingPrompt else { return }
+        let key = SessionToolAllowlist.combinationKey(name: name, argumentsJSON: args)
+        SecurityAuditLogger.approval(toolName: name, scope: scope, key: key)
         switch scope {
         case .once:
             state.sessionAllowlist.allowOnce(name: name, argumentsJSON: args)
 
-        case .session:
-            state.sessionAllowlist.allowThisSession(name: name, argumentsJSON: args)
+        case .task:
+            state.sessionAllowlist.allowThisTask(
+                name: name,
+                argumentsJSON: args,
+                policy: state.pathGuardPolicy,
+                scopeID: state.authorizationScopeID,
+                skills: host.enabledSkills,
+                mcpTools: mcpHub?.mcpTools ?? []
+            )
 
-        case .tool:
-            state.sessionAllowlist.allowToolThisSession(named: name)
+        case .always:
+            state.sessionAllowlist.allowLongTerm(
+                name: name,
+                argumentsJSON: args,
+                policy: state.pathGuardPolicy,
+                skills: host.enabledSkills,
+                mcpTools: mcpHub?.mcpTools ?? []
+            )
         }
         _ = await operations.run {
             await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
@@ -43,7 +58,11 @@ extension AgentRuntime {
     }
 
     func skipToolApproval() async {
-        guard case .toolApproval(let callID, _, _, _) = state.pendingPrompt else { return }
+        guard case .toolApproval(let callID, let name, let args, _) = state.pendingPrompt else { return }
+        SecurityAuditLogger.approvalDenied(
+            toolName: name,
+            key: SessionToolAllowlist.combinationKey(name: name, argumentsJSON: args)
+        )
         guard var plan = planProgress.plan ?? state.activeTask?.pendingPlan,
               let index = plan.steps.firstIndex(where: { $0.toolCallID == callID })
         else {

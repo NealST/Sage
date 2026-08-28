@@ -33,6 +33,22 @@ extension PathGuard {
         resolvedPath == resolvedHomePath || resolvedPath.hasPrefix(resolvedHomePath + "/")
     }
 
+    nonisolated static func isProtectedWritePath(_ resolvedPath: String, policy: Policy) -> Bool {
+        let rootPath: String
+        switch policy {
+        case .home:
+            rootPath = resolvedHomePath
+
+        case .project(let root):
+            rootPath = root.resolvingSymlinksInPath().path
+        }
+        let protectedNames = [".git", ".sage", ".agents"]
+        return protectedNames.contains { name in
+            let protectedPath = rootPath + "/" + name
+            return resolvedPath == protectedPath || resolvedPath.hasPrefix(protectedPath + "/")
+        }
+    }
+
     /// Formats a filesystem path for tool results and UI.
     /// - Project: relative to root when inside (`.` for the root itself); otherwise tilde / absolute.
     /// - Home: tilde-shortened under `~`; otherwise absolute.

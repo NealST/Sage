@@ -191,11 +191,23 @@ extension SkillToolExecutor {
         let argv = try scriptArgvTokens(from: args.arguments)
         let timeout = max(args.timeoutSeconds ?? 30, 1)
         let launch = try await scriptLaunch(scriptURL: scriptURL, interpreter: args.interpreter, argv: argv)
-        let run = try await ProcessRunner.run(
+        let secretEnvironment = try SkillSecretStore.environment(for: skill)
+        let configuration = ExecutionSandboxConfiguration.skillScript(
+            policy: PathGuard.policy,
+            skillDirectory: skillDir
+        )
+        let invocation = ExecutionSandbox.wrap(
             executable: launch.executable,
             arguments: launch.arguments,
+            configuration: configuration,
+            auditComponent: "skill_script"
+        )
+        let run = try await ProcessRunner.run(
+            executable: invocation.executable,
+            arguments: invocation.arguments,
             currentDirectory: skillDir,
-            timeout: .seconds(timeout)
+            timeout: .seconds(timeout),
+            environment: ChildProcessEnvironment.sanitized(overrides: secretEnvironment)
         )
         return formatScriptRun(run, timeout: timeout)
     }

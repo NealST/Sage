@@ -123,10 +123,13 @@ extension AgentRuntime {
             },
             isToolApproved: { [weak self] name, args in
                 guard let self else { return false }
-                if self.state.skipsSessionToolGate { return true }
                 return self.state.sessionAllowlist.consumeApproval(
                     name: name,
-                    argumentsJSON: args
+                    argumentsJSON: args,
+                    policy: self.state.pathGuardPolicy,
+                    scopeID: self.state.authorizationScopeID,
+                    skills: self.host.enabledSkills,
+                    mcpTools: self.mcpHub?.mcpTools ?? []
                 )
             },
             pauseForToolApproval: { [weak self] _ in
@@ -163,12 +166,6 @@ extension AgentRuntime {
             projectRoot: state.focusedProject?.rootURL,
             activatedSkills: activated
         )
-        if state.skipsSessionToolGate,
-           case .ask(let reason) = decision {
-            return .deny(
-                "Scheduled runs cannot satisfy an interactive PreToolUse approval: \(reason)"
-            )
-        }
         return decision
     }
 
@@ -296,7 +293,7 @@ extension AgentRuntime {
             await confirmToolRoundLimit()
 
         case .toolApproval:
-            await confirmToolApproval(scope: .session)
+            await confirmToolApproval(scope: .task)
 
         case .none:
             break

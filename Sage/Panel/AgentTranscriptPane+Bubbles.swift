@@ -97,8 +97,8 @@ extension AgentTranscriptPane {
                     toolName: name,
                     argumentsJSON: args,
                     onAllowOnce: { Task { await session.agent.confirmToolApproval(scope: .once) } },
-                    onAllowSession: { Task { await session.agent.confirmToolApproval(scope: .session) } },
-                    onAllowTool: { Task { await session.agent.confirmToolApproval(scope: .tool) } },
+                    onAllowSession: { Task { await session.agent.confirmToolApproval(scope: .task) } },
+                    onAllowTool: { Task { await session.agent.confirmToolApproval(scope: .always) } },
                     onSkip: { Task { await session.agent.skipToolApproval() } }
                 )
             }

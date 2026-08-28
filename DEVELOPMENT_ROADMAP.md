@@ -15,7 +15,7 @@
 - **流式**：SSE + transcript 增量渲染 + Stop
 - **多窗口**：General / Project 各一扇独立 session；共享 settings / MCP hub / skill 状态
 - **Schedules**：间隔 / 日历式定时；agent 与 script；从完成时刻算下次间隔；退出时 disarm
-- **MCP**：stdio client、重连/心跳、Settings 启用开关、full-trust 文案（无 PathGuard）
+- **MCP**：stdio client、重连/心跳、Settings 启用开关；进程使用环境白名单与默认拒绝 Seatbelt（只读 home、临时目录写入、允许网络）
 - **Skills**：目录附录 + `load_skill` 渐进披露；`allowed-tools` 需显式声明 `run_skill_script` / `save_skill`；不是 embedding 语义匹配器
 - **Settings**：API Key（Keychain fail-closed）、分角色模型、MCP / Skills / Login Item
 - **工具**：文件、shell（cwd 沙盒、命令字符串可 `cd`）、剪贴板、AX、截图、提醒等

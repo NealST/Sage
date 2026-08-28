@@ -13,45 +13,109 @@ import Foundation
 @MainActor
 final class SessionToolAllowlist {
     private var oneShotKeys: Set<String> = []
-    private var keys: Set<String> = []
-    private var toolNames: Set<String> = []
+    private let grantStore: ToolAuthorizationGrantStore
 
-    /// Shell and MCP can still change the Mac after the work plan is approved.
-    nonisolated static func needsGate(forToolNamed name: String) -> Bool {
-        name == "run_shell_command" || name.hasPrefix("mcp__")
+    init(grantStore: ToolAuthorizationGrantStore = .shared) {
+        self.grantStore = grantStore
     }
 
-    func contains(name: String, argumentsJSON: String) -> Bool {
-        guard Self.needsGate(forToolNamed: name) else { return true }
-        if toolNames.contains(name) { return true }
+    nonisolated static func needsGate(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) -> Bool {
+        ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) != nil
+    }
+
+    func contains(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        scopeID: String,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) -> Bool {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) else { return true }
         let key = Self.combinationKey(name: name, argumentsJSON: argumentsJSON)
-        return keys.contains(key) || oneShotKeys.contains(key)
+        return oneShotKeys.contains(key) || grantStore.contains(requirement, scopeID: scopeID)
     }
 
     /// Returns approval and consumes an Allow Once grant exactly once.
-    func consumeApproval(name: String, argumentsJSON: String) -> Bool {
-        if toolNames.contains(name) { return true }
+    func consumeApproval(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        scopeID: String,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) -> Bool {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) else { return true }
         let key = Self.combinationKey(name: name, argumentsJSON: argumentsJSON)
-        if keys.contains(key) { return true }
-        return oneShotKeys.remove(key) != nil
+        if oneShotKeys.remove(key) != nil { return true }
+        return grantStore.contains(requirement, scopeID: scopeID)
     }
 
     func allowOnce(name: String, argumentsJSON: String) {
         oneShotKeys.insert(Self.combinationKey(name: name, argumentsJSON: argumentsJSON))
     }
 
-    func allowThisSession(name: String, argumentsJSON: String) {
-        keys.insert(Self.combinationKey(name: name, argumentsJSON: argumentsJSON))
+    func allowThisTask(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        scopeID: String,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) else { return }
+        grantStore.allowForTask(requirement, scopeID: scopeID)
     }
 
-    func allowToolThisSession(named name: String) {
-        toolNames.insert(name)
+    func allowLongTerm(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) else { return }
+        grantStore.allowLongTerm(requirement)
     }
 
     func reset() {
         oneShotKeys.removeAll()
-        keys.removeAll()
-        toolNames.removeAll()
     }
 
     /// SHA-256 of tool name + canonical JSON so approval is exact without storing secrets.
@@ -79,9 +143,9 @@ enum SessionToolApprovalScope: Equatable, Sendable {
     /// Run this invocation only; the next matching call pauses again.
     case once
     /// Remember this exact tool + arguments for the rest of the task.
-    case session
-    /// Remember this tool name with any arguments for the rest of the task.
-    case tool
+    case task
+    /// Remember this resource grant until the user revokes it in Settings.
+    case always
 }
 
 nonisolated private let sha256HexDigits: [Character] = Array("0123456789abcdef")

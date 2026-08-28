@@ -39,7 +39,7 @@ nonisolated struct MoveFileTool: AgentTool {
             source: source,
             destination: try PathGuard.resolveAllowed(args.destination)
         )
-        try FileManager.default.moveItem(at: source, to: destination)
+        try SafeFileIO.moveItem(at: source, to: destination)
         return "[OK] Moved to \(PathGuard.displayPath(destination.path))"
     }
 }
@@ -75,7 +75,7 @@ nonisolated struct RenameFileTool: AgentTool {
         }
         let destination = source.deletingLastPathComponent().appendingPathComponent(args.newName)
         _ = try PathGuard.resolveAllowed(destination.path)
-        try FileManager.default.moveItem(at: source, to: destination)
+        try SafeFileIO.moveItem(at: source, to: destination)
         return "[OK] Renamed to \(PathGuard.displayPath(destination.path))"
     }
 }
@@ -117,7 +117,14 @@ nonisolated struct CopyFileTool: AgentTool {
             source: source,
             destination: destination
         )
-        try FileManager.default.copyItem(at: source, to: finalDestination)
+        let values = try source.resourceValues(forKeys: [.isRegularFileKey])
+        if values.isRegularFile == true {
+            try SafeFileIO.copyRegularFile(at: source, to: finalDestination)
+        } else {
+            // Directory trees are revalidated per enumerated child by their
+            // dedicated copy implementation in a future hardening pass.
+            try FileManager.default.copyItem(at: source, to: finalDestination)
+        }
         return "[OK] Copied to \(PathGuard.displayPath(finalDestination.path))"
     }
 }

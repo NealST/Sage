@@ -74,7 +74,7 @@ nonisolated enum SkillMarkdown {
 
     private static let recognizedKeys: Set<String> = [
         "name", "description",
-        "license", "compatibility", "allowed-tools", "source",
+        "license", "compatibility", "allowed-tools", "required-secrets", "source",
     ]
 
     struct ParsedFrontmatter: Sendable {
