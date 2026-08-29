@@ -12,7 +12,8 @@ import Foundation
 /// Reset when the window switches tasks (`beginNewTask` / `activateTask`).
 @MainActor
 final class SessionToolAllowlist {
-    private var oneShotKeys: Set<String> = []
+    private var capabilityOneShotKeys: Set<String> = []
+    private var hookOneShotKeys: Set<String> = []
     private let grantStore: ToolAuthorizationGrantStore
 
     init(grantStore: ToolAuthorizationGrantStore = .shared) {
@@ -50,8 +51,13 @@ final class SessionToolAllowlist {
             skills: skills,
             mcpTools: mcpTools
         ) else { return true }
-        let key = Self.combinationKey(name: name, argumentsJSON: argumentsJSON)
-        return oneShotKeys.contains(key) || grantStore.contains(requirement, scopeID: scopeID)
+        let key = Self.capabilityKey(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            requirement: requirement
+        )
+        return capabilityOneShotKeys.contains(key)
+            || grantStore.contains(requirement, scopeID: scopeID)
     }
 
     /// Returns approval and consumes an Allow Once grant exactly once.
@@ -70,13 +76,108 @@ final class SessionToolAllowlist {
             skills: skills,
             mcpTools: mcpTools
         ) else { return true }
-        let key = Self.combinationKey(name: name, argumentsJSON: argumentsJSON)
-        if oneShotKeys.remove(key) != nil { return true }
+        let key = Self.capabilityKey(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            requirement: requirement
+        )
+        if capabilityOneShotKeys.remove(key) != nil { return true }
         return grantStore.contains(requirement, scopeID: scopeID)
     }
 
-    func allowOnce(name: String, argumentsJSON: String) {
-        oneShotKeys.insert(Self.combinationKey(name: name, argumentsJSON: argumentsJSON))
+    func allowCapabilityOnce(
+        name: String,
+        argumentsJSON: String,
+        policy: PathGuard.Policy,
+        skills: [SkillRecord] = [],
+        mcpTools: [MCPToolInfo] = []
+    ) {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: policy,
+            skills: skills,
+            mcpTools: mcpTools
+        ) else { return }
+        capabilityOneShotKeys.insert(
+            Self.capabilityKey(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                requirement: requirement
+            )
+        )
+    }
+
+    func containsHookApproval(
+        name: String,
+        argumentsJSON: String,
+        hookIdentity: String,
+        scopeID: String
+    ) -> Bool {
+        let key = Self.hookApprovalKey(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            hookIdentity: hookIdentity
+        )
+        return hookOneShotKeys.contains(key)
+            || grantStore.containsInvocation(key, scopeID: scopeID)
+    }
+
+    func consumeHookApproval(
+        name: String,
+        argumentsJSON: String,
+        hookIdentity: String,
+        scopeID: String
+    ) -> Bool {
+        let key = Self.hookApprovalKey(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            hookIdentity: hookIdentity
+        )
+        if hookOneShotKeys.remove(key) != nil { return true }
+        return grantStore.containsInvocation(key, scopeID: scopeID)
+    }
+
+    func allowHookOnce(name: String, argumentsJSON: String, hookIdentity: String) {
+        hookOneShotKeys.insert(
+            Self.hookApprovalKey(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                hookIdentity: hookIdentity
+            )
+        )
+    }
+
+    func allowHookForTask(
+        name: String,
+        argumentsJSON: String,
+        hookIdentity: String,
+        scopeID: String
+    ) {
+        grantStore.allowInvocationForTask(
+            Self.hookApprovalKey(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                hookIdentity: hookIdentity
+            ),
+            scopeID: scopeID
+        )
+    }
+
+    func allowHookLongTerm(
+        name: String,
+        argumentsJSON: String,
+        hookIdentity: String,
+        label: String
+    ) {
+        grantStore.allowInvocationLongTerm(
+            Self.hookApprovalKey(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                hookIdentity: hookIdentity
+            ),
+            label: label
+        )
     }
 
     func allowThisTask(
@@ -115,13 +216,23 @@ final class SessionToolAllowlist {
     }
 
     func reset() {
-        oneShotKeys.removeAll()
+        capabilityOneShotKeys.removeAll()
+        hookOneShotKeys.removeAll()
     }
 
     /// SHA-256 of tool name + canonical JSON so approval is exact without storing secrets.
     nonisolated static func combinationKey(name: String, argumentsJSON: String) -> String {
         let payload = name + "\n" + normalizeJSON(argumentsJSON)
         return SHA256.hash(data: Data(payload.utf8)).hexString
+    }
+
+    nonisolated static func hookApprovalKey(
+        name: String,
+        argumentsJSON: String,
+        hookIdentity: String
+    ) -> String {
+        let invocationKey = combinationKey(name: name, argumentsJSON: argumentsJSON)
+        return SHA256.hash(data: Data("\(hookIdentity)\n\(invocationKey)".utf8)).hexString
     }
 
     nonisolated static func normalizeJSON(_ raw: String) -> String {
@@ -136,6 +247,16 @@ final class SessionToolAllowlist {
               let text = String(data: normalized, encoding: .utf8)
         else { return trimmed }
         return text
+    }
+
+    nonisolated private static func capabilityKey(
+        name: String,
+        argumentsJSON: String,
+        requirement: ToolAuthorizationRequirement
+    ) -> String {
+        combinationKey(name: name, argumentsJSON: argumentsJSON)
+            + "\n"
+            + requirement.stableKey
     }
 }
 

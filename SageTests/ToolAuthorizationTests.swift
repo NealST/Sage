@@ -68,6 +68,152 @@ final class SessionToolAllowlistTests: XCTestCase {
         )
     }
 
+    func testSensitiveCopySeparatesReadSourceFromWriteDestination() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "copy_file",
+            argumentsJSON: """
+            {"source":"~/.ssh/id_ed25519","destination":"~/Documents/key.backup"}
+            """,
+            policy: .home
+        )
+
+        XCTAssertEqual(
+            requirement?.roots(for: .sensitiveRead),
+            [FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh").path]
+        )
+        XCTAssertEqual(
+            requirement?.roots(for: .localWrite),
+            [FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents").path]
+        )
+    }
+
+    func testRecursiveSearchFromHomeRequiresProtectedDescendantAuthorization() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "search_files",
+            argumentsJSON: #"{"path":"~","name_pattern":"*"}"#,
+            policy: .home
+        )
+
+        let protectedRoots = Set(SensitiveResourcePolicy.roots.map { root in
+            root.standardizedFileURL.resolvingSymlinksInPath().path
+        })
+        XCTAssertEqual(Set(requirement?.roots(for: .sensitiveRead) ?? []), protectedRoots)
+    }
+
+    func testRenameRejectsPathComponentsBeforeApproval() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "rename_file",
+            argumentsJSON: #"{"path":"~/Documents/note.txt","new_name":"../escaped.txt"}"#,
+            policy: .home
+        )
+
+        XCTAssertNotNil(requirement?.validationError)
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [])
+    }
+
+    func testMoveAuthorizesResolvedSourceAndDestinationDirectories() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "move_file",
+            argumentsJSON: #"{"source":"~/.ssh/id_ed25519","destination":"~/Documents/key"}"#,
+            policy: .home
+        )
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let expectedWrites = [
+            home.appendingPathComponent(".ssh").path,
+            home.appendingPathComponent("Documents").path,
+        ].sorted()
+
+        XCTAssertEqual(requirement?.roots(for: .localWrite), expectedWrites)
+        XCTAssertEqual(
+            requirement?.roots(for: .sensitiveRead),
+            [home.appendingPathComponent(".ssh").path]
+        )
+    }
+
+    func testInvalidShellWorkingDirectoryDoesNotCreateBroadGrant() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "run_shell_command",
+            argumentsJSON: #"{"command":"touch x","working_directory":"/tmp","allow_writes":true}"#,
+            policy: .home
+        )
+
+        XCTAssertNotNil(requirement?.validationError)
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [])
+    }
+
+    func testNestedMetadataIsProtected() {
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Projects/App")
+        let nestedGit = root.appendingPathComponent("Vendor/Package/.git/config").path
+
+        XCTAssertTrue(
+            PathGuard.isProtectedWritePath(nestedGit, policy: .project(root: root))
+        )
+    }
+
+    func testMCPDirectoryGrantDoesNotWidenToParent() {
+        let tool = mcpTool(name: "write", readOnly: false, localWrite: true)
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: tool.qualifiedName,
+            argumentsJSON: #"{"options":{"directory":"~/Documents/Exports"}}"#,
+            policy: .home,
+            mcpTools: [tool]
+        )
+
+        let expected = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/Exports").path
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [expected])
+    }
+
+    func testMCPInfersLocalWriteWithoutCustomHint() {
+        let tool = mcpTool(name: "write", readOnly: false, localWrite: false)
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: tool.qualifiedName,
+            argumentsJSON: #"{"path":"~/Documents/note.txt"}"#,
+            policy: .home,
+            mcpTools: [tool]
+        )
+
+        let expected = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents").path
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [expected])
+    }
+
+    func testRelocatingProtectedRootFailsClosed() {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: "move_file",
+            argumentsJSON: #"{"source":"~/.ssh","destination":"~/Documents/stolen-ssh"}"#,
+            policy: .home
+        )
+
+        XCTAssertNotNil(requirement?.validationError)
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [])
+    }
+
+    func testUnknownMCPWriteScopeDoesNotFallBackToHome() {
+        let tool = mcpTool(name: "write", readOnly: false, localWrite: true)
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: tool.qualifiedName,
+            argumentsJSON: #"{"content":"hello"}"#,
+            policy: .home,
+            mcpTools: [tool]
+        )
+
+        XCTAssertEqual(requirement?.roots(for: .localWrite), [])
+    }
+
+    func testSaveSkillRequiresLocalWriteAuthorization() {
+        XCTAssertTrue(
+            SessionToolAllowlist.needsGate(
+                name: "save_skill",
+                argumentsJSON: """
+                {"action":"create","name":"demo","description":"Demo","body":"Body"}
+                """,
+                policy: .home
+            )
+        )
+    }
+
     private func mcpTool(name: String, readOnly: Bool, localWrite: Bool) -> MCPToolInfo {
         MCPToolInfo(
             serverID: "server",
@@ -111,7 +257,11 @@ final class SessionToolAllowlistActorTests: XCTestCase {
         await MainActor.run {
             let list = makeAllowlist()
             let args = #"{"command":"curl example.com","allow_network":true}"#
-            list.allowOnce(name: "run_shell_command", argumentsJSON: args)
+            list.allowCapabilityOnce(
+                name: "run_shell_command",
+                argumentsJSON: args,
+                policy: .home
+            )
             XCTAssertTrue(list.consumeApproval(
                 name: "run_shell_command",
                 argumentsJSON: args,
@@ -122,6 +272,44 @@ final class SessionToolAllowlistActorTests: XCTestCase {
                 name: "run_shell_command",
                 argumentsJSON: args,
                 policy: .home,
+                scopeID: "task-a"
+            ))
+        }
+    }
+
+    func testHookApprovalIsIndependentFromCapabilityApproval() async {
+        await MainActor.run {
+            let list = makeAllowlist()
+            let args = #"{"path":"~/Documents"}"#
+
+            XCTAssertTrue(list.contains(
+                name: "list_directory",
+                argumentsJSON: args,
+                policy: .home,
+                scopeID: "task-a"
+            ))
+            XCTAssertFalse(list.containsHookApproval(
+                name: "list_directory",
+                argumentsJSON: args,
+                hookIdentity: "hook-a",
+                scopeID: "task-a"
+            ))
+
+            list.allowHookOnce(
+                name: "list_directory",
+                argumentsJSON: args,
+                hookIdentity: "hook-a"
+            )
+            XCTAssertTrue(list.consumeHookApproval(
+                name: "list_directory",
+                argumentsJSON: args,
+                hookIdentity: "hook-a",
+                scopeID: "task-a"
+            ))
+            XCTAssertFalse(list.consumeHookApproval(
+                name: "list_directory",
+                argumentsJSON: args,
+                hookIdentity: "hook-a",
                 scopeID: "task-a"
             ))
         }

@@ -74,6 +74,14 @@ enum KeychainStore {
         deleteDataProtectionItem(account: account)
     }
 
+    static func deleteAccounts(withPrefix prefix: String) {
+        let accounts = accounts(withPrefix: prefix, dataProtection: false)
+            + accounts(withPrefix: prefix, dataProtection: true)
+        for account in Set(accounts) {
+            delete(account: account)
+        }
+    }
+
     // MARK: - Private
 
     private static func deleteDataProtectionItem(account: String) {
@@ -107,6 +115,37 @@ enum KeychainStore {
             return nil
         }
         return value
+    }
+
+    private static func accounts(withPrefix prefix: String, dataProtection: Bool) -> [String] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        if dataProtection {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else {
+            return []
+        }
+        let items: [[String: Any]]
+        if let values = result as? [[String: Any]] {
+            items = values
+        } else if let value = result as? [String: Any] {
+            items = [value]
+        } else {
+            return []
+        }
+        return items.compactMap { item in
+            guard let account = item[kSecAttrAccount as String] as? String,
+                  account.hasPrefix(prefix) else {
+                return nil
+            }
+            return account
+        }
     }
 
     enum KeychainError: LocalizedError {

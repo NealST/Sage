@@ -16,6 +16,8 @@ struct UnifiedDiffView: View {
     var statsOverride: LineDiff.Stats?
     /// Collapsed height budget (line count) before “Show more”.
     var collapsedLineLimit: Int = 24
+    /// Hide the path row when the parent already named the file.
+    var showsPathHeader: Bool = true
 
     @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @State private var expanded = false
@@ -38,22 +40,24 @@ struct UnifiedDiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-            HStack(spacing: 6) {
-                if let path {
-                    Image(systemName: created ? "doc.badge.plus" : "doc.text")
-                        .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
-                    Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
-                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
-                        .textSelection(.enabled)
-                        .lineLimit(2)
+            if showsPathHeader {
+                HStack(spacing: 6) {
+                    if let path {
+                        Image(systemName: created ? "doc.badge.plus" : "doc.text")
+                            .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
+                        Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
+                            .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Text(headerLabel)
+                        .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
-                Text(headerLabel)
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
-                    .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
 
             if created, before == nil || before?.isEmpty == true {
                 // Pure create — show after as insertions without a confusing empty left side.

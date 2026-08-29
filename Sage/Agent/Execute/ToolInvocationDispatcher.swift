@@ -24,13 +24,22 @@ nonisolated enum ToolInvocationDispatcher {
             activatedSkillNames: request.activatedSkillNames,
             enabledSkills: request.enabledSkills
         ) + request.extraReadAllowlist
+        let authorization = ToolAuthorizationPolicy.requirement(
+            name: request.name,
+            argumentsJSON: request.argumentsJSON,
+            policy: request.pathGuardPolicy,
+            skills: request.authorizationSkills ?? request.enabledSkills,
+            mcpTools: request.mcp?.mcpTools ?? []
+        )
 
         return try await Self.invokeBuiltIn(
             named: request.name,
             tool: tool,
             argumentsJSON: request.argumentsJSON,
             pathGuardPolicy: request.pathGuardPolicy,
-            allowlist: allowlist
+            allowlist: allowlist,
+            sensitiveReadRoots: authorization?.roots(for: .sensitiveRead) ?? [],
+            writeRoots: authorization?.roots(for: .localWrite) ?? []
         )
     }
 
@@ -68,7 +77,8 @@ nonisolated enum ToolInvocationDispatcher {
             return try await mcp.callMCPTool(
                 qualifiedName: request.name,
                 argumentsJSON: request.argumentsJSON,
-                temporaryWriteRoots: request.mcpWriteRoots
+                temporaryWriteRoots: request.mcpWriteRoots,
+                allowsProtectedMetadataWrites: request.mcpAllowsProtectedMetadataWrites
             )
         }
         if SkillToolExecutor.isSkillTool(request.name) {
@@ -133,19 +143,29 @@ nonisolated enum ToolInvocationDispatcher {
         tool: any AgentTool,
         argumentsJSON: String,
         pathGuardPolicy: PathGuard.Policy,
-        allowlist: [String]
+        allowlist: [String],
+        sensitiveReadRoots: [String],
+        writeRoots: [String]
     ) async throws -> String {
         if mainActorToolNames.contains(name) {
             return try await PathGuard.$policy.withValue(pathGuardPolicy) {
                 try await PathGuard.$readAllowlist.withValue(allowlist) {
-                    try await tool.call(argumentsJSON: argumentsJSON)
+                    try await PathGuard.$sensitiveReadAllowlist.withValue(sensitiveReadRoots) {
+                        try await PathGuard.$writeAllowlist.withValue(writeRoots) {
+                            try await tool.call(argumentsJSON: argumentsJSON)
+                        }
+                    }
                 }
             }
         }
         return try await Task.detached(priority: .userInitiated) {
             try await PathGuard.$policy.withValue(pathGuardPolicy) {
                 try await PathGuard.$readAllowlist.withValue(allowlist) {
-                    try await tool.call(argumentsJSON: argumentsJSON)
+                    try await PathGuard.$sensitiveReadAllowlist.withValue(sensitiveReadRoots) {
+                        try await PathGuard.$writeAllowlist.withValue(writeRoots) {
+                            try await tool.call(argumentsJSON: argumentsJSON)
+                        }
+                    }
                 }
             }
         }.value

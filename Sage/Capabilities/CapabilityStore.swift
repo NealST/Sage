@@ -7,6 +7,31 @@
 
 import Foundation
 
+actor MCPServerCallCoordinator {
+    private var activeServerIDs: Set<String> = []
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+
+    func acquire(serverID: String) async {
+        guard activeServerIDs.contains(serverID) else {
+            activeServerIDs.insert(serverID)
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters[serverID, default: []].append(continuation)
+        }
+    }
+
+    func release(serverID: String) {
+        if var queued = waiters[serverID], !queued.isEmpty {
+            let next = queued.removeFirst()
+            waiters[serverID] = queued.isEmpty ? nil : queued
+            next.resume()
+        } else {
+            activeServerIDs.remove(serverID)
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class CapabilityStore {
@@ -18,6 +43,7 @@ final class CapabilityStore {
     private var reconnectTasks: [String: Task<Void, Never>] = [:]
     /// Per-server serial queue so rapid enable/disable/delete cannot interleave connect/disconnect.
     private var serverOperations: [String: Task<Void, Never>] = [:]
+    let callCoordinator = MCPServerCallCoordinator()
 
     private static let maxReconnectAttempts = 3
     private static let reconnectBaseDelay: TimeInterval = 1.0
@@ -35,8 +61,16 @@ final class CapabilityStore {
 
     func reloadMCPConfigs() async {
         var loaded = await store.loadServers()
+        var seenNames = Set<String>()
         loaded = loaded.map { server in
             var copy = server
+            let normalizedName = server.name.lowercased()
+            guard seenNames.insert(normalizedName).inserted else {
+                copy.enabled = false
+                copy.status = .error
+                copy.statusMessage = "MCP server names must be unique."
+                return copy
+            }
             if let existing = mcpServers.first(where: { $0.id == server.id }) {
                 copy.status = server.enabled ? existing.status : .disabled
                 copy.statusMessage = existing.statusMessage
@@ -49,7 +83,9 @@ final class CapabilityStore {
         mcpServers = loaded
     }
 
-    func addMCPServer(_ server: MCPServerConfig) {
+    @discardableResult
+    func addMCPServer(_ server: MCPServerConfig) -> Bool {
+        guard isUniqueServerName(server.name, excluding: nil) else { return false }
         mcpServers.append(server)
         persistMCP()
         if server.enabled {
@@ -57,10 +93,15 @@ final class CapabilityStore {
                 await self?.connect(serverID: server.id)
             }
         }
+        return true
     }
 
-    func updateMCPServer(_ server: MCPServerConfig) {
-        guard let index = mcpServers.firstIndex(where: { $0.id == server.id }) else { return }
+    @discardableResult
+    func updateMCPServer(_ server: MCPServerConfig) -> Bool {
+        guard let index = mcpServers.firstIndex(where: { $0.id == server.id }),
+              isUniqueServerName(server.name, excluding: server.id) else {
+            return false
+        }
         let wasEnabled = mcpServers[index].enabled
         mcpServers[index].command = server.command
         mcpServers[index].args = server.args
@@ -77,6 +118,7 @@ final class CapabilityStore {
                 await self?.disconnect(serverID: server.id)
             }
         }
+        return true
     }
 
     func deleteMCPServer(_ id: String) {
@@ -115,7 +157,11 @@ final class CapabilityStore {
         }
     }
 
-    func connect(serverID: String, writableRoots: [URL] = []) async {
+    func connect(
+        serverID: String,
+        writableRoots: [URL] = [],
+        allowsProtectedMetadataWrites: Bool = false
+    ) async {
         guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
         guard mcpServers[index].enabled else { return }
 
@@ -132,7 +178,11 @@ final class CapabilityStore {
         else { return }
 
         let config = mcpServers[stillIndexed]
-        let client = MCPStdioClient(config: config, writableRoots: writableRoots)
+        let client = MCPStdioClient(
+            config: config,
+            writableRoots: writableRoots,
+            allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
+        )
 
         await client.setOnProcessExit { [weak self] exitedServerID in
             await self?.handleServerProcessExit(serverID: exitedServerID)
@@ -153,7 +203,11 @@ final class CapabilityStore {
                 group.cancelAll()
                 return result
             }
-            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else {
+                await client.disconnect()
+                clients[serverID] = nil
+                return
+            }
             mcpServers[idx].status = .connected
             mcpServers[idx].toolCount = tools.count
             mcpServers[idx].statusMessage = nil
@@ -162,14 +216,22 @@ final class CapabilityStore {
             mcpTools.removeAll { $0.serverID == serverID }
             mcpTools.append(contentsOf: tools)
         } catch {
-            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
             let stderrLines = await client.stderrLog
+            await client.disconnect()
+            clients[serverID] = nil
+            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
             mcpServers[idx].status = .error
             mcpServers[idx].statusMessage = stderrLines.last ?? error.localizedDescription
             mcpServers[idx].toolCount = 0
             mcpServers[idx].recentLogs = stderrLines
             mcpTools.removeAll { $0.serverID == serverID }
-            clients[serverID] = nil
+        }
+    }
+
+    private func isUniqueServerName(_ name: String, excluding serverID: String?) -> Bool {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return !normalized.isEmpty && !mcpServers.contains { server in
+            server.id != serverID && server.name.lowercased() == normalized
         }
     }
 

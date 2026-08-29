@@ -7,74 +7,6 @@
 
 import Foundation
 
-nonisolated enum ToolAuthorizationCapability: String, Codable, Hashable, Sendable {
-    case sensitiveRead
-    case localWrite
-    case network
-    case protectedMetadataWrite
-    case secretUse
-}
-
-nonisolated struct ToolAuthorizationRequirement: Codable, Hashable, Sendable {
-    var capabilities: Set<ToolAuthorizationCapability>
-    var roots: [String]
-    var principal: String
-
-    var stableKey: String {
-        let capabilities = capabilities.map(\.rawValue).sorted().joined(separator: ",")
-        return [principal, capabilities, roots.sorted().joined(separator: "\n")]
-            .joined(separator: "\n")
-    }
-
-    func isCovered(by grant: ToolAuthorizationGrant) -> Bool {
-        guard principal == grant.principal,
-              capabilities.isSubset(of: grant.capabilities) else {
-            return false
-        }
-        if capabilities.contains(.secretUse) {
-            return Set(roots).isSubset(of: Set(grant.roots))
-        }
-        return roots.allSatisfy { requiredRoot in
-            grant.roots.contains { grantedRoot in
-                requiredRoot == grantedRoot || requiredRoot.hasPrefix(grantedRoot + "/")
-            }
-        }
-    }
-}
-
-nonisolated struct ToolAuthorizationGrant: Codable, Hashable, Sendable {
-    var capabilities: Set<ToolAuthorizationCapability>
-    var roots: [String]
-    var principal: String
-}
-
-nonisolated enum SensitiveResourcePolicy {
-    private static let relativeRoots = [
-        ".ssh",
-        ".gnupg",
-        ".aws",
-        ".azure",
-        ".kube",
-        ".config/gcloud",
-        "Library/Keychains",
-        "Library/Application Support/Google/Chrome",
-        "Library/Application Support/Firefox",
-    ]
-
-    static let roots: [URL] = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return relativeRoots.map { home.appendingPathComponent($0, isDirectory: true) }
-    }()
-
-    static func containingRoot(for url: URL) -> URL? {
-        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
-        return roots.first { root in
-            let rootPath = root.standardizedFileURL.resolvingSymlinksInPath().path
-            return path == rootPath || path.hasPrefix(rootPath + "/")
-        }
-    }
-}
-
 nonisolated enum ToolAuthorizationPolicy {
     private static let readToolNames: Set<String> = [
         "list_directory",
@@ -112,10 +44,16 @@ nonisolated enum ToolAuthorizationPolicy {
         if name == "run_skill_script" {
             return skillSecretRequirement(arguments: arguments, skills: skills)
         }
+        if name == "save_skill" {
+            return saveSkillWriteRequirement(
+                arguments: arguments,
+                policy: policy,
+                skills: skills
+            )
+        }
         if name.hasPrefix("mcp__"),
-           let tool = mcpTools.first(where: { $0.qualifiedName == name }),
-           tool.localWriteHint {
-            return mcpWriteRequirement(tool: tool, arguments: arguments, policy: policy)
+           let tool = mcpTools.first(where: { $0.qualifiedName == name }) {
+            return mcpRequirement(tool: tool, arguments: arguments, policy: policy)
         }
         return nil
     }
@@ -126,13 +64,24 @@ nonisolated enum ToolAuthorizationPolicy {
         policy: PathGuard.Policy
     ) -> ToolAuthorizationRequirement? {
         guard let rawPath = arguments["path"] as? String,
-              let url = try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read),
-              let sensitiveRoot = SensitiveResourcePolicy.containingRoot(for: url) else {
+              let url = try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read) else {
             return nil
         }
+        let roots: [URL]
+        if name == "search_files"
+            || name == "list_directory" && (arguments["depth"] as? Int ?? 1) > 1 {
+            roots = SensitiveResourcePolicy.intersectingRoots(for: url)
+        } else {
+            roots = SensitiveResourcePolicy.containingRoot(for: url).map { [$0] } ?? []
+        }
+        guard !roots.isEmpty else { return nil }
         return ToolAuthorizationRequirement(
-            capabilities: [.sensitiveRead],
-            roots: [normalized(sensitiveRoot)],
+            resources: [
+                ToolAuthorizationResource(
+                    capability: .sensitiveRead,
+                    roots: roots.map(normalized).sorted()
+                ),
+            ],
             principal: "native-file-tools"
         )
     }
@@ -142,16 +91,9 @@ nonisolated enum ToolAuthorizationPolicy {
         arguments: [String: Any],
         policy: PathGuard.Policy
     ) -> ToolAuthorizationRequirement {
-        let rawPaths = writePaths(name: name, arguments: arguments)
-        let roots = rawPaths.compactMap { rawPath -> String? in
-            guard let url = try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read) else {
-                return nil
-            }
-            return normalized(writeRoot(name: name, url: url))
-        }
+        let resources = fileWriteResources(name: name, arguments: arguments, policy: policy)
         return ToolAuthorizationRequirement(
-            capabilities: [.localWrite],
-            roots: roots.isEmpty ? [policy.defaultWorkingDirectory.path] : Array(Set(roots)).sorted(),
+            resources: resources,
             principal: "native-file-tools"
         )
     }
@@ -160,35 +102,45 @@ nonisolated enum ToolAuthorizationPolicy {
         arguments: [String: Any],
         policy: PathGuard.Policy
     ) -> ToolAuthorizationRequirement? {
-        var capabilities: Set<ToolAuthorizationCapability> = []
+        var resources: [ToolAuthorizationResource] = []
+        let rawDirectory = arguments["working_directory"] as? String
+        let resolvedDirectory = rawDirectory.flatMap { rawPath in
+            try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read)
+        }
+        let directory = resolvedDirectory ?? policy.defaultWorkingDirectory
+        let hasInvalidDirectory = rawDirectory != nil && resolvedDirectory == nil
         if boolValue(arguments["allow_writes"]) {
-            capabilities.insert(.localWrite)
+            resources.append(
+                ToolAuthorizationResource(
+                    capability: .localWrite,
+                    roots: hasInvalidDirectory ? [] : [normalized(directory)]
+                )
+            )
         }
         if boolValue(arguments["allow_network"]) {
-            capabilities.insert(.network)
+            resources.append(ToolAuthorizationResource(capability: .network, roots: []))
         }
         if boolValue(arguments["allow_protected_metadata_writes"]) {
-            capabilities.insert(.protectedMetadataWrite)
+            resources.append(
+                ToolAuthorizationResource(
+                    capability: .protectedMetadataWrite,
+                    roots: hasInvalidDirectory ? [] : [normalized(directory)]
+                )
+            )
         }
-        var roots: [String] = []
         if let rawPath = arguments["sensitive_read_path"] as? String,
            let url = try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read),
            let sensitiveRoot = SensitiveResourcePolicy.containingRoot(for: url) {
-            capabilities.insert(.sensitiveRead)
-            roots.append(normalized(sensitiveRoot))
+            resources.append(
+                ToolAuthorizationResource(
+                    capability: .sensitiveRead,
+                    roots: [normalized(sensitiveRoot)]
+                )
+            )
         }
-        guard !capabilities.isEmpty else { return nil }
-        let rawDirectory = arguments["working_directory"] as? String
-        let directory = rawDirectory.flatMap { rawPath in
-            try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read)
-        } ?? policy.defaultWorkingDirectory
-        if capabilities.contains(.localWrite)
-            || capabilities.contains(.protectedMetadataWrite) {
-            roots.append(normalized(directory))
-        }
+        guard !resources.isEmpty else { return nil }
         return ToolAuthorizationRequirement(
-            capabilities: capabilities,
-            roots: Array(Set(roots)).sorted(),
+            resources: resources,
             principal: "shell"
         )
     }
@@ -199,57 +151,50 @@ nonisolated enum ToolAuthorizationPolicy {
     ) -> ToolAuthorizationRequirement? {
         guard let skillName = arguments["skill_name"] as? String,
               let skill = skills.first(where: { $0.name == skillName }),
+              let scriptPath = arguments["script_path"] as? String,
               !skill.requiredSecretNames.isEmpty else {
             return nil
         }
         return ToolAuthorizationRequirement(
-            capabilities: [.secretUse],
-            roots: skill.requiredSecretNames.sorted(),
-            principal: "skill:\(skill.id)"
+            resources: [
+                ToolAuthorizationResource(
+                    capability: .secretUse,
+                    roots: skill.requiredSecretNames.sorted()
+                ),
+            ],
+            principal: "skill:\(skill.id):\(skillExecutionFingerprint(skill, scriptPath: scriptPath))"
         )
     }
 
-    private static func mcpWriteRequirement(
-        tool: MCPToolInfo,
+    private static func saveSkillWriteRequirement(
         arguments: [String: Any],
-        policy: PathGuard.Policy
+        policy: PathGuard.Policy,
+        skills: [SkillRecord]
     ) -> ToolAuthorizationRequirement {
-        let roots = arguments.compactMap { key, value -> String? in
-            let lowercased = key.lowercased()
-            guard lowercased.contains("path")
-                    || lowercased.contains("directory")
-                    || lowercased.contains("destination")
-                    || lowercased == "root",
-                  let rawPath = value as? String,
-                  let url = try? PathGuard.resolveAllowed(rawPath, policy: policy, access: .read) else {
-                return nil
-            }
-            return normalized(url.deletingLastPathComponent())
+        let name = arguments["name"] as? String ?? "unknown-skill"
+        let action = arguments["action"] as? String
+        let root: URL
+        if action == "enhance",
+           let existing = skills.first(where: { $0.name == name }) {
+            root = URL(fileURLWithPath: existing.path).deletingLastPathComponent()
+        } else if arguments["scope"] as? String == "global" || isHomePolicy(policy) {
+            root = SkillPaths.userSkillsDirectory()
+                .appendingPathComponent(name, isDirectory: true)
+        } else {
+            root = SkillPaths.projectSageSkillsDirectory(
+                root: policy.defaultWorkingDirectory
+            )
+            .appendingPathComponent(name, isDirectory: true)
         }
         return ToolAuthorizationRequirement(
-            capabilities: [.localWrite],
-            roots: roots.isEmpty
-                ? [normalized(policy.defaultWorkingDirectory)]
-                : Array(Set(roots)).sorted(),
-            principal: "mcp:\(tool.serverID)"
+            resources: [
+                ToolAuthorizationResource(
+                    capability: .localWrite,
+                    roots: [normalized(root)]
+                ),
+            ],
+            principal: "skill-writer"
         )
-    }
-
-    private static func writePaths(name: String, arguments: [String: Any]) -> [String] {
-        switch name {
-        case "move_file", "copy_file":
-            return ["source", "destination"].compactMap { arguments[$0] as? String }
-
-        case "rename_file":
-            return [arguments["path"] as? String].compactMap { $0 }
-
-        default:
-            return [arguments["path"] as? String].compactMap { $0 }
-        }
-    }
-
-    private static func writeRoot(name: String, url: URL) -> URL {
-        name == "create_directory" ? url : url.deletingLastPathComponent()
     }
 
     private static func decodeObject(_ raw: String) -> [String: Any] {
@@ -264,79 +209,5 @@ nonisolated enum ToolAuthorizationPolicy {
     private static func boolValue(_ value: Any?) -> Bool {
         if let value = value as? Bool { return value }
         return (value as? NSNumber)?.boolValue ?? false
-    }
-
-    private static func normalized(_ url: URL) -> String {
-        url.standardizedFileURL.resolvingSymlinksInPath().path
-    }
-}
-
-@MainActor
-final class ToolAuthorizationGrantStore {
-    private struct Snapshot: Codable {
-        var taskGrants: [String: [ToolAuthorizationGrant]]
-        var longTermGrants: [ToolAuthorizationGrant]
-    }
-
-    static let shared = ToolAuthorizationGrantStore()
-
-    private let defaults: UserDefaults
-    private let storageKey = "sage.tool-authorization-grants.v1"
-    private var taskGrants: [String: [ToolAuthorizationGrant]]
-    private var longTermGrants: [ToolAuthorizationGrant]
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let data = defaults.data(forKey: storageKey),
-           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
-            taskGrants = snapshot.taskGrants
-            longTermGrants = snapshot.longTermGrants
-        } else {
-            taskGrants = [:]
-            longTermGrants = []
-        }
-    }
-
-    func contains(_ requirement: ToolAuthorizationRequirement, scopeID: String) -> Bool {
-        longTermGrants.contains { requirement.isCovered(by: $0) }
-            || taskGrants[scopeID, default: []].contains { requirement.isCovered(by: $0) }
-    }
-
-    func allowForTask(_ requirement: ToolAuthorizationRequirement, scopeID: String) {
-        append(requirement, to: &taskGrants[scopeID, default: []])
-        persist()
-    }
-
-    func allowLongTerm(_ requirement: ToolAuthorizationRequirement) {
-        append(requirement, to: &longTermGrants)
-        persist()
-    }
-
-    var longTermGrantCount: Int {
-        longTermGrants.count
-    }
-
-    func removeAllLongTermGrants() {
-        longTermGrants.removeAll()
-        persist()
-    }
-
-    private func append(
-        _ requirement: ToolAuthorizationRequirement,
-        to grants: inout [ToolAuthorizationGrant]
-    ) {
-        let grant = ToolAuthorizationGrant(
-            capabilities: requirement.capabilities,
-            roots: requirement.roots,
-            principal: requirement.principal
-        )
-        guard !grants.contains(grant) else { return }
-        grants.append(grant)
-    }
-
-    private func persist() {
-        let snapshot = Snapshot(taskGrants: taskGrants, longTermGrants: longTermGrants)
-        guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        defaults.set(data, forKey: storageKey)
     }
 }

@@ -41,6 +41,8 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
     var protected: Bool
     /// Files the user pinned on this turn. Empty for historical events decoded before attachments.
     var attachments: [MessageAttachment]
+    /// Completed-turn net workspace changes. Review-only until finalize.
+    var workspaceChanges: WorkspaceChangeSet?
     var createdAt: Date
 
     init(
@@ -52,6 +54,7 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         context: EventContext? = nil,
         protected: Bool = false,
         attachments: [MessageAttachment] = [],
+        workspaceChanges: WorkspaceChangeSet? = nil,
         createdAt: Date = .now
     ) {
         self.id = id
@@ -62,6 +65,7 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         self.context = context
         self.protected = protected
         self.attachments = attachments
+        self.workspaceChanges = workspaceChanges
         self.createdAt = createdAt
     }
 
@@ -75,6 +79,10 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         context = try container.decodeIfPresent(EventContext.self, forKey: .context)
         protected = try container.decodeIfPresent(Bool.self, forKey: .protected) ?? false
         attachments = (try? container.decode([MessageAttachment].self, forKey: .attachments)) ?? []
+        workspaceChanges = try container.decodeIfPresent(
+            WorkspaceChangeSet.self,
+            forKey: .workspaceChanges
+        )
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 
@@ -88,11 +96,13 @@ nonisolated struct AgentEvent: Identifiable, Codable, Sendable, Equatable {
         try container.encodeIfPresent(context, forKey: .context)
         try container.encode(protected, forKey: .protected)
         try container.encode(attachments, forKey: .attachments)
+        try container.encodeIfPresent(workspaceChanges, forKey: .workspaceChanges)
         try container.encode(createdAt, forKey: .createdAt)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, content, toolCallID, toolCalls, context, protected, attachments, createdAt
+        case id, kind, content, toolCallID, toolCalls, context, protected
+        case attachments, workspaceChanges, createdAt
     }
 }
 

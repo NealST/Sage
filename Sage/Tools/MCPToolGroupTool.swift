@@ -21,7 +21,7 @@ nonisolated enum MCPToolGroupTool {
     ) -> [ToolDefinition] {
         guard tools.count > groupingThreshold else { return tools }
 
-        let groups = Dictionary(grouping: tools) { serverName(fromQualifiedTool: $0.name) ?? "" }
+        let groups = Dictionary(grouping: tools) { serverIdentity(fromQualifiedTool: $0.name) ?? "" }
         var result: [ToolDefinition] = []
         for server in groups.keys.sorted() where !server.isEmpty {
             let definitions = groups[server] ?? []
@@ -63,11 +63,11 @@ nonisolated enum MCPToolGroupTool {
         name: String,
         availableTools: [ToolDefinition]
     ) async throws -> String {
-        guard let server = serverName(fromGroupTool: name) else {
+        guard let server = serverIdentity(fromGroupTool: name) else {
             throw ToolError.invalidArguments("Malformed MCP group tool name.")
         }
         let tools = availableTools.filter { tool in
-            serverName(fromQualifiedTool: tool.name) == server
+            serverIdentity(fromQualifiedTool: tool.name) == server
         }
         guard !tools.isEmpty else {
             throw ToolError.operationFailed("MCP server '\(server)' has no available tools.")
@@ -87,11 +87,19 @@ nonisolated enum MCPToolGroupTool {
         return "Unlocked MCP server '\(server)' for this task:\n\(toolNames)"
     }
 
-    static func serverName(fromQualifiedTool name: String) -> String? {
+    static func serverIdentity(fromQualifiedTool name: String) -> String? {
         guard name.hasPrefix("mcp__") else { return nil }
         let rest = name.dropFirst(5)
         guard let separator = rest.range(of: "__") else { return nil }
         return String(rest[..<separator.lowerBound])
+    }
+
+    static func serverName(fromQualifiedTool name: String) -> String? {
+        serverIdentity(fromQualifiedTool: name)
+    }
+
+    static func serverIdentity(fromGroupTool name: String) -> String? {
+        serverName(fromGroupTool: name)
     }
 
     static func serverName(fromGroupTool name: String) -> String? {

@@ -66,6 +66,7 @@ final class ExecuteAgent {
     }
 
     func start() async {
+        state.workspaceChanges.beginIfNeeded(replaying: state.events)
         await runModelTurn(includeTools: true)
     }
 

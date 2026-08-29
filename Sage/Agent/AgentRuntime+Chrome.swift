@@ -123,13 +123,22 @@ extension AgentRuntime {
             },
             isToolApproved: { [weak self] name, args in
                 guard let self else { return false }
-                return self.state.sessionAllowlist.consumeApproval(
+                return self.state.sessionAllowlist.contains(
                     name: name,
                     argumentsJSON: args,
                     policy: self.state.pathGuardPolicy,
                     scopeID: self.state.authorizationScopeID,
-                    skills: self.host.enabledSkills,
+                    skills: self.host.catalogSkills,
                     mcpTools: self.mcpHub?.mcpTools ?? []
+                )
+            },
+            isHookApproved: { [weak self] name, args, hookIdentity in
+                guard let self else { return false }
+                return self.state.sessionAllowlist.containsHookApproval(
+                    name: name,
+                    argumentsJSON: args,
+                    hookIdentity: hookIdentity,
+                    scopeID: self.state.authorizationScopeID
                 )
             },
             pauseForToolApproval: { [weak self] _ in

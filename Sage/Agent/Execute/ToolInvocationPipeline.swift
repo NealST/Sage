@@ -10,25 +10,23 @@ import Foundation
 nonisolated enum ToolInvocationPipeline {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
-        try SkillToolPolicy.assertToolAllowed(
-            request.name,
-            activatedSkillNames: request.activatedSkillNames,
-            enabledSkills: request.enabledSkills
+        let definition = try validateForAuthorization(request)
+        try await assertHookAuthorized(request)
+        try assertCapabilityAuthorized(request)
+        let authorization = ToolAuthorizationPolicy.requirement(
+            name: request.name,
+            argumentsJSON: request.argumentsJSON,
+            policy: request.pathGuardPolicy,
+            skills: request.authorizationSkills ?? request.enabledSkills,
+            mcpTools: request.mcp?.mcpTools ?? []
         )
-
-        let definition = try definition(
-            for: request.name,
-            tools: request.tools,
-            mcp: request.mcp
-        )
+        let writesLocally = authorization?.capabilities.contains { capability in
+            capability == .localWrite || capability == .protectedMetadataWrite
+        } == true
         try ToolInvocationDispatcher.assertMutatingToolsAllowed(
             for: request.name,
             workPlanKind: request.workPlanKind,
-            requiresConfirmation: definition.requiresConfirmation
-        )
-        try ToolArgumentValidator.validate(
-            argumentsJSON: request.argumentsJSON,
-            against: definition.parameters
+            requiresConfirmation: definition.requiresConfirmation || writesLocally
         )
 
         let timeout = timeoutDuration(for: request.name)
@@ -53,6 +51,38 @@ nonisolated enum ToolInvocationPipeline {
         return capToolResult(result)
     }
 
+    @MainActor
+    static func validateForAuthorization(
+        _ request: ToolInvocationRequest
+    ) throws -> ToolDefinition {
+        try SkillToolPolicy.assertToolAllowed(
+            request.name,
+            activatedSkillNames: request.activatedSkillNames,
+            enabledSkills: request.enabledSkills
+        )
+
+        let definition = try definition(
+            for: request.name,
+            tools: request.tools,
+            mcp: request.mcp
+        )
+        try ToolArgumentValidator.validate(
+            argumentsJSON: request.argumentsJSON,
+            against: definition.parameters
+        )
+        let authorization = ToolAuthorizationPolicy.requirement(
+            name: request.name,
+            argumentsJSON: request.argumentsJSON,
+            policy: request.pathGuardPolicy,
+            skills: request.authorizationSkills ?? request.enabledSkills,
+            mcpTools: request.mcp?.mcpTools ?? []
+        )
+        if let validationError = authorization?.validationError {
+            throw ToolError.invalidArguments(validationError)
+        }
+        return definition
+    }
+
     static func timeoutDuration(for name: String) -> Duration {
         if name.hasPrefix("mcp__")
             || name == ExploreSubagentTool.name
@@ -64,6 +94,61 @@ nonisolated enum ToolInvocationPipeline {
             return .seconds(130)
         }
         return toolExecutionTimeout
+    }
+
+    @MainActor
+    private static func assertHookAuthorized(
+        _ request: ToolInvocationRequest
+    ) async throws {
+        let projectRoot: URL? = if case .project(let root) = request.pathGuardPolicy {
+            root
+        } else {
+            nil
+        }
+        let activatedSkills = request.enabledSkills.filter { skill in
+            request.activatedSkillNames.contains(skill.name)
+        }
+        let decision = await PreToolUseHookEvaluator.shared.evaluate(
+            toolName: request.name,
+            argumentsJSON: request.argumentsJSON,
+            projectRoot: projectRoot,
+            activatedSkills: activatedSkills
+        )
+        switch decision {
+        case .allow:
+            return
+
+        case .deny(let reason):
+            throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
+
+        case .ask(let approval):
+            let key = SessionToolAllowlist.hookApprovalKey(
+                name: request.name,
+                argumentsJSON: request.argumentsJSON,
+                hookIdentity: approval.identity
+            )
+            guard request.hookEvidence?.invocationKey == key else {
+                throw ToolError.operationFailed(
+                    "PreToolUse hook requires interactive approval: \(approval.reason)"
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private static func assertCapabilityAuthorized(
+        _ request: ToolInvocationRequest
+    ) throws {
+        guard let requirement = ToolAuthorizationPolicy.requirement(
+            name: request.name,
+            argumentsJSON: request.argumentsJSON,
+            policy: request.pathGuardPolicy,
+            skills: request.authorizationSkills ?? request.enabledSkills,
+            mcpTools: request.mcp?.mcpTools ?? []
+        ) else { return }
+        guard request.authorizationEvidence?.requirementKey == requirement.stableKey else {
+            throw ToolError.operationFailed("This tool call requires authorization.")
+        }
     }
 
     @MainActor

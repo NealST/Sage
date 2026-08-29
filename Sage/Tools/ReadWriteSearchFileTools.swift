@@ -194,6 +194,7 @@ nonisolated struct SearchFilesTool: AgentTool {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let effectivePath = try PathGuard.defaultExplorationPath(args.path)
         let rootURL = try PathGuard.resolveAllowed(effectivePath, access: .read)
+        try PathGuard.assertSensitiveReadAllowed(rootURL)
         guard FileManager.default.fileExists(atPath: rootURL.path) else {
             throw ToolError.operationFailed(
                 "Directory does not exist: \(effectivePath). Use list_directory to verify the path."

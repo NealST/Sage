@@ -37,8 +37,8 @@ nonisolated enum SafeFileIO {
 
     static func atomicWrite(_ data: Data, to url: URL) throws {
         let parent = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        let directoryDescriptor = try openDirectory(parent, access: .write)
+        try PathGuard.assertWriteAllowed(parent)
+        let directoryDescriptor = try createDirectoryTree(to: parent)
         defer { Darwin.close(directoryDescriptor) }
 
         let fileName = url.lastPathComponent
@@ -119,13 +119,9 @@ nonisolated enum SafeFileIO {
     static func copyRegularFile(at source: URL, to destination: URL) throws {
         let sourceHandle = try openForReading(at: source)
         defer { try? sourceHandle.close() }
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let destinationDirectory = try openDirectory(
-            destination.deletingLastPathComponent(),
-            access: .write
+        try PathGuard.assertWriteAllowed(destination.deletingLastPathComponent())
+        let destinationDirectory = try createDirectoryTree(
+            to: destination.deletingLastPathComponent(),
         )
         defer { Darwin.close(destinationDirectory) }
         let destinationName = destination.lastPathComponent
@@ -161,7 +157,7 @@ nonisolated enum SafeFileIO {
         shouldRemoveDestination = false
     }
 
-    private static func verifyDescriptor(_ descriptor: Int32, access: PathGuard.Access) throws {
+    static func verifyDescriptor(_ descriptor: Int32, access: PathGuard.Access) throws {
         var pathBuffer = [CChar](repeating: 0, count: Int(PATH_MAX))
         let result = pathBuffer.withUnsafeMutableBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return Int32(-1) }
@@ -171,10 +167,17 @@ nonisolated enum SafeFileIO {
             throw posixError(operation: "verify opened path", path: "(descriptor)")
         }
         let openedPath = String(cString: pathBuffer)
-        _ = try PathGuard.resolveAllowed(openedPath, access: access)
+        let openedURL = try PathGuard.resolveAllowed(openedPath, access: access)
+        switch access {
+        case .read:
+            try PathGuard.assertSensitiveReadAllowed(openedURL)
+
+        case .write:
+            try PathGuard.assertWriteAllowed(openedURL)
+        }
     }
 
-    private static func openDirectory(_ url: URL, access: PathGuard.Access) throws -> Int32 {
+    static func openDirectory(_ url: URL, access: PathGuard.Access) throws -> Int32 {
         let resolved = try PathGuard.resolveAllowed(url.path, access: access)
         let descriptor = Darwin.open(
             resolved.path,
@@ -192,7 +195,7 @@ nonisolated enum SafeFileIO {
         }
     }
 
-    private static func validateFileName(_ fileName: String) throws {
+    static func validateFileName(_ fileName: String) throws {
         guard !fileName.isEmpty,
               fileName != ".",
               fileName != "..",
@@ -219,7 +222,7 @@ nonisolated enum SafeFileIO {
         }
     }
 
-    private static func posixError(operation: String, path: String) -> ToolError {
+    static func posixError(operation: String, path: String) -> ToolError {
         let message = String(cString: strerror(errno))
         return .operationFailed("Could not \(operation) \(path): \(message)")
     }

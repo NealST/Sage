@@ -24,6 +24,7 @@ struct ExecuteServices {
     let continueTurn: (ModelTurn) async -> Void
     let preToolUseDecision: (String, String) async -> PreToolUseDecision
     let isToolApproved: (String, String) -> Bool
+    let isHookApproved: (String, String, String) -> Bool
     let pauseForToolApproval: (AgentStep) async -> Void
     let pauseForToolRoundLimit: () async -> Void
 
@@ -50,40 +51,107 @@ struct ExecuteServices {
     }
 
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
-        let policy = state.pathGuardPolicy
-        let activated = skillHost.activatedSkillNames
-        let enabled = skillHost.enabledSkills
-        let authorization = ToolAuthorizationPolicy.requirement(
+        let hookDecision = await evaluatePreToolUse(name: name, argumentsJSON: argumentsJSON)
+        let hookApproval: PreToolUseApproval?
+        switch hookDecision {
+        case .allow:
+            hookApproval = nil
+
+        case .deny(let reason):
+            throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
+
+        case .ask(let approval):
+            guard state.sessionAllowlist.containsHookApproval(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                hookIdentity: approval.identity,
+                scopeID: state.authorizationScopeID
+            ) else {
+                throw ToolError.operationFailed(
+                    "PreToolUse hook requires interactive approval: \(approval.reason)"
+                )
+            }
+            hookApproval = approval
+        }
+        let authorization = try authorizationForInvocation(
             name: name,
-            argumentsJSON: argumentsJSON,
-            policy: policy,
-            skills: enabled,
-            mcpTools: mcp?.mcpTools ?? []
+            argumentsJSON: argumentsJSON
         )
-        let mcpWriteRoots = authorization?.principal.hasPrefix("mcp:") == true
-            ? authorization?.roots.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? []
+        let hookEvidence: ToolInvocationHookEvidence?
+        if let hookApproval {
+            guard state.sessionAllowlist.consumeHookApproval(
+                name: name,
+                argumentsJSON: argumentsJSON,
+                hookIdentity: hookApproval.identity,
+                scopeID: state.authorizationScopeID
+            ) else {
+                throw ToolError.operationFailed("The safety hook approval is no longer available.")
+            }
+            hookEvidence = ToolInvocationHookEvidence(
+                invocationKey: SessionToolAllowlist.hookApprovalKey(
+                    name: name,
+                    argumentsJSON: argumentsJSON,
+                    hookIdentity: hookApproval.identity
+                )
+            )
+        } else {
+            hookEvidence = nil
+        }
+        let mcpWriteRoots = authorization.requirement?.principal.hasPrefix("mcp:") == true
+            ? authorization.requirement?.roots(for: .localWrite).map { root in
+                URL(fileURLWithPath: root, isDirectory: true)
+            } ?? []
             : []
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(
-                ToolInvocationRequest(
+                invocationRequest(
                     name: name,
                     argumentsJSON: argumentsJSON,
-                    tools: tools,
-                    mcp: mcp,
-                    pathGuardPolicy: policy,
-                    activatedSkillNames: activated,
-                    enabledSkills: enabled,
-                    skillHost: skillHost,
-                    workPlanKind: state.activeTask?.workPlan?.kind,
-                    modelSettings: modelSettings(),
+                    authorizationEvidence: authorization.evidence,
+                    hookEvidence: hookEvidence,
                     mcpWriteRoots: mcpWriteRoots,
-                    extraReadAllowlist: MessageAttachment.readAllowlist(
-                        from: state.events,
-                        visibleEventIDs: state.modelVisibleAttachmentEventIDs
-                    )
+                    mcpAllowsProtectedMetadataWrites: authorization.requirement?
+                        .capabilities.contains(.protectedMetadataWrite) == true
                 )
             )
         }
+    }
+
+    private func authorizationForInvocation(
+        name: String,
+        argumentsJSON: String
+    ) throws -> (
+        requirement: ToolAuthorizationRequirement?,
+        evidence: ToolInvocationAuthorizationEvidence?
+    ) {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: state.pathGuardPolicy,
+            skills: skillHost.catalogSkills,
+            mcpTools: mcp?.mcpTools ?? []
+        )
+        guard let requirement else { return (nil, nil) }
+        guard state.sessionAllowlist.consumeApproval(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: state.pathGuardPolicy,
+            scopeID: state.authorizationScopeID,
+            skills: skillHost.catalogSkills,
+            mcpTools: mcp?.mcpTools ?? []
+        ) else {
+            throw ToolError.operationFailed("This tool call requires authorization.")
+        }
+        return (
+            requirement,
+            ToolInvocationAuthorizationEvidence(requirementKey: requirement.stableKey)
+        )
+    }
+
+    func validateToolInvocation(name: String, argumentsJSON: String) throws {
+        _ = try ToolInvocationPipeline.validateForAuthorization(
+            invocationRequest(name: name, argumentsJSON: argumentsJSON)
+        )
     }
 
     func evaluatePreToolUse(name: String, argumentsJSON: String) async -> PreToolUseDecision {
@@ -119,5 +187,36 @@ struct ExecuteServices {
     func failDuringExecution(plan: AgentPlan, message: String) async {
         planProgress.update(plan)
         await taskStore.failDuringExecution(plan: plan, message: message)
+    }
+
+    private func invocationRequest(
+        name: String,
+        argumentsJSON: String,
+        authorizationEvidence: ToolInvocationAuthorizationEvidence? = nil,
+        hookEvidence: ToolInvocationHookEvidence? = nil,
+        mcpWriteRoots: [URL] = [],
+        mcpAllowsProtectedMetadataWrites: Bool = false
+    ) -> ToolInvocationRequest {
+        ToolInvocationRequest(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            tools: tools,
+            mcp: mcp,
+            pathGuardPolicy: state.pathGuardPolicy,
+            activatedSkillNames: skillHost.activatedSkillNames,
+            enabledSkills: skillHost.enabledSkills,
+            authorizationSkills: skillHost.catalogSkills,
+            skillHost: skillHost,
+            workPlanKind: state.activeTask?.workPlan?.kind,
+            modelSettings: modelSettings(),
+            authorizationEvidence: authorizationEvidence,
+            hookEvidence: hookEvidence,
+            mcpWriteRoots: mcpWriteRoots,
+            mcpAllowsProtectedMetadataWrites: mcpAllowsProtectedMetadataWrites,
+            extraReadAllowlist: MessageAttachment.readAllowlist(
+                from: state.events,
+                visibleEventIDs: state.modelVisibleAttachmentEventIDs
+            )
+        )
     }
 }

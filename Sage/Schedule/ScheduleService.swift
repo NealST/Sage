@@ -153,6 +153,9 @@ final class ScheduleService {
         publishQueue()
         do {
             try await taskRepository.deleteSchedule(id: id)
+            ToolAuthorizationGrantStore.shared.removeTaskGrants(
+                scopeID: "schedule:\(id.uuidString)"
+            )
             lastError = nil
             forget(id)
             return true
@@ -182,6 +185,9 @@ final class ScheduleService {
                 lastError = "That schedule is gone."
                 return false
             }
+            ToolAuthorizationGrantStore.shared.removeTaskGrants(
+                scopeID: "schedule:\(id.uuidString)"
+            )
             lastError = nil
             return true
         } catch {

@@ -9,6 +9,8 @@ struct ToolApprovalCard: View {
     let title: String
     let toolName: String
     let argumentsJSON: String
+    var authorizationSummary: String?
+    var authorizationPrompt: String?
     var onAllowOnce: () -> Void
     var onAllowSession: () -> Void
     var onAllowTool: () -> Void
@@ -26,6 +28,14 @@ struct ToolApprovalCard: View {
                 .font(.system(size: SageDesign.Typography.captionSize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let authorizationSummary, !authorizationSummary.isEmpty {
+                Text(authorizationSummary)
+                    .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let preview = commandPreview {
                 Text(preview)
@@ -65,8 +75,15 @@ struct ToolApprovalCard: View {
     }
 
     private var subtitle: String {
-        """
-        This call needs permission to read protected data or modify local content. \
+        let lead: String
+        if let prompt = authorizationPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            lead = prompt
+        } else {
+            lead = "This call needs permission for a gated action."
+        }
+        return """
+        \(lead) \
         Allow it once, for this task, or until you revoke the permission.
         """
     }

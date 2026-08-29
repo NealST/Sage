@@ -33,36 +33,8 @@ extension ToolBatchExecutor {
         }
 
         let step = plan.steps[index]
-        let hookDecision = await services.evaluatePreToolUse(
-            name: step.toolName,
-            argumentsJSON: step.argumentsJSON
-        )
-        if case .deny(let reason) = hookDecision {
-            return await applyOutcome(
-                .failure("Blocked by PreToolUse hook: \(reason)"),
-                at: index,
-                plan: &plan,
-                services: services
-            )
-        }
-
-        let hookReason: String? = if case .ask(let reason) = hookDecision {
-            reason
-        } else {
-            nil
-        }
-        let requiresApproval = hookReason != nil
-            || services.requiresAuthorization(
-                name: step.toolName,
-                argumentsJSON: step.argumentsJSON
-            )
-        if requiresApproval,
-           !services.isToolApproved(step.toolName, step.argumentsJSON) {
-            return await pauseForApproval(
-                approvalStep(step, hookReason: hookReason),
-                plan: plan,
-                services: services
-            )
+        if let blocked = await gateSerialStep(step, at: index, plan: &plan, services: services) {
+            return blocked
         }
 
         plan.steps[index].status = .running
@@ -77,6 +49,47 @@ extension ToolBatchExecutor {
 
         let outcome = await invoke(step, services: services)
         return await applyOutcome(outcome, at: index, plan: &plan, services: services)
+    }
+
+    private static func gateSerialStep(
+        _ step: AgentStep,
+        at index: Int,
+        plan: inout AgentPlan,
+        services: ExecuteServices
+    ) async -> WaveOutcome? {
+        if let validationError = validationError(for: step, services: services) {
+            return await applyOutcome(
+                .failure(validationError),
+                at: index,
+                plan: &plan,
+                services: services
+            )
+        }
+        let hookDecision = await services.evaluatePreToolUse(
+            name: step.toolName,
+            argumentsJSON: step.argumentsJSON
+        )
+        if case .deny(let reason) = hookDecision {
+            return await applyOutcome(
+                .failure("Blocked by PreToolUse hook: \(reason)"),
+                at: index,
+                plan: &plan,
+                services: services
+            )
+        }
+        let hookApproval: PreToolUseApproval? = if case .ask(let approval) = hookDecision {
+            approval
+        } else {
+            nil
+        }
+        if isApprovalMissing(for: step, hookApproval: hookApproval, services: services) {
+            return await pauseForApproval(
+                approvalStep(step, hookReason: hookApproval?.reason),
+                plan: plan,
+                services: services
+            )
+        }
+        return nil
     }
 
     static func runParallelSteps(
@@ -142,6 +155,15 @@ extension ToolBatchExecutor {
         services: ExecuteServices
     ) async -> ParallelStepPrep {
         let step = plan.steps[index]
+        if let validationError = validationError(for: step, services: services) {
+            let result = await applyOutcome(
+                .failure(validationError),
+                at: index,
+                plan: &plan,
+                services: services
+            )
+            return result == .succeeded ? .skipped : .halt(result)
+        }
         let hookDecision = await services.evaluatePreToolUse(
             name: step.toolName,
             argumentsJSON: step.argumentsJSON
@@ -155,21 +177,19 @@ extension ToolBatchExecutor {
             )
             return result == .succeeded ? .skipped : .halt(result)
         }
-        let hookReason: String? = if case .ask(let reason) = hookDecision {
-            reason
+        let hookApproval: PreToolUseApproval? = if case .ask(let approval) = hookDecision {
+            approval
         } else {
             nil
         }
-        let requiresApproval = hookReason != nil
-            || services.requiresAuthorization(
-                name: step.toolName,
-                argumentsJSON: step.argumentsJSON
-            )
-        if requiresApproval,
-           !services.isToolApproved(step.toolName, step.argumentsJSON) {
+        if isApprovalMissing(
+            for: step,
+            hookApproval: hookApproval,
+            services: services
+        ) {
             return .halt(
                 await pauseForApproval(
-                    approvalStep(step, hookReason: hookReason),
+                    approvalStep(step, hookReason: hookApproval?.reason),
                     plan: plan,
                     services: services
                 )
@@ -300,32 +320,14 @@ extension ToolBatchExecutor {
         services: ExecuteServices
     ) async -> WaveOutcome {
         let step = plan.steps[index]
-        let resultEvent: AgentEvent
-        switch outcome {
-        case .success(let result):
-            plan.steps[index].status = .succeeded
-            plan.steps[index].result = result
-            let isSkillContext = step.toolName == "load_skill"
-                || step.toolName == "load_skill_resource"
-            resultEvent = AgentEvent(
-                kind: .toolResult,
-                content: result,
-                toolCallID: step.toolCallID,
-                protected: isSkillContext
-            )
-
-        case .cancelled:
-            plan.steps[index].status = .pending
+        guard let resultEvent = resultEvent(
+            for: outcome,
+            step: step,
+            at: index,
+            plan: &plan,
+            services: services
+        ) else {
             return .cancelled
-
-        case .failure(let message):
-            plan.steps[index].status = .failed
-            plan.steps[index].result = message
-            resultEvent = AgentEvent(
-                kind: .toolResult,
-                content: "ERROR: \(message)",
-                toolCallID: step.toolCallID
-            )
         }
 
         services.planProgress.update(plan)
@@ -353,44 +355,43 @@ extension ToolBatchExecutor {
         return .succeeded
     }
 
-    static func pauseForApproval(
-        _ step: AgentStep,
-        plan: AgentPlan,
+    private static func resultEvent(
+        for outcome: StepCallResult,
+        step: AgentStep,
+        at index: Int,
+        plan: inout AgentPlan,
         services: ExecuteServices
-    ) async -> WaveOutcome {
-        let prompt = AgentPendingPrompt.toolApproval(
-            toolCallID: step.toolCallID,
-            toolName: step.toolName,
-            argumentsJSON: step.argumentsJSON,
-            title: step.title
-        )
-        guard await services.commit(
-            appendEvents: [],
-            deleteEventIDs: [],
-            mutate: { task in
-                task.pendingPlan = plan
-                task.pendingPrompt = prompt
-                task.status = .awaitingApproval
-            }
-        ) else {
-            await services.failDuringExecution(
-                plan: plan,
-                message: "Could not save progress. Retry to continue remaining steps."
+    ) -> AgentEvent? {
+        switch outcome {
+        case .success(let result):
+            plan.steps[index].status = .succeeded
+            plan.steps[index].result = result
+            services.state.workspaceChanges.record(
+                toolName: step.toolName,
+                argumentsJSON: step.argumentsJSON,
+                result: result
             )
-            return .persistFailed
-        }
-        services.planProgress.replace(plan)
-        await services.pauseForToolApproval(step)
-        return .paused
-    }
+            let isSkillContext = step.toolName == "load_skill"
+                || step.toolName == "load_skill_resource"
+            return AgentEvent(
+                kind: .toolResult,
+                content: result,
+                toolCallID: step.toolCallID,
+                protected: isSkillContext
+            )
 
-    static func approvalStep(
-        _ step: AgentStep,
-        hookReason: String?
-    ) -> AgentStep {
-        guard let hookReason else { return step }
-        var copy = step
-        copy.title = "\(hookReason)\n\(step.title)"
-        return copy
+        case .cancelled:
+            plan.steps[index].status = .pending
+            return nil
+
+        case .failure(let message):
+            plan.steps[index].status = .failed
+            plan.steps[index].result = message
+            return AgentEvent(
+                kind: .toolResult,
+                content: "ERROR: \(message)",
+                toolCallID: step.toolCallID
+            )
+        }
     }
 }

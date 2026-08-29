@@ -23,7 +23,6 @@ nonisolated enum SkillSecretStore {
             if let stored = KeychainStore.get(account: account) {
                 environment[name] = stored
             } else if let inherited = parent[name], !inherited.isEmpty {
-                try KeychainStore.set(inherited, account: account)
                 environment[name] = inherited
             } else {
                 missing.append(name)
@@ -41,7 +40,39 @@ nonisolated enum SkillSecretStore {
         return environment
     }
 
+    static func hasStoredSecret(_ variable: String, for skill: SkillRecord) -> Bool {
+        KeychainStore.get(account: accountName(skillID: skill.id, variable: variable)) != nil
+    }
+
+    static func setSecret(_ value: String, variable: String, for skill: SkillRecord) throws {
+        guard skill.requiredSecretNames.contains(variable),
+              isValidEnvironmentName(variable),
+              !value.isEmpty else {
+            throw ToolError.invalidArguments("Invalid or empty Skill secret.")
+        }
+        try KeychainStore.set(
+            value,
+            account: accountName(skillID: skill.id, variable: variable)
+        )
+    }
+
+    static func removeSecret(_ variable: String, for skill: SkillRecord) {
+        KeychainStore.delete(account: accountName(skillID: skill.id, variable: variable))
+    }
+
+    static func removeAllSecrets(for skill: SkillRecord) {
+        KeychainStore.deleteAccounts(withPrefix: accountPrefix(skillID: skill.id))
+    }
+
+    static func removeAllSecrets() {
+        KeychainStore.deleteAccounts(withPrefix: "skill-secret|")
+    }
+
     private static func accountName(skillID: String, variable: String) -> String {
-        "skill-secret|\(skillID)|\(variable)"
+        accountPrefix(skillID: skillID) + variable
+    }
+
+    private static func accountPrefix(skillID: String) -> String {
+        "skill-secret|\(skillID)|"
     }
 }

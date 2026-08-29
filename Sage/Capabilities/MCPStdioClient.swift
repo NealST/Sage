@@ -17,6 +17,7 @@ import Foundation
 actor MCPStdioClient {
     let config: MCPServerConfig
     let writableRoots: [URL]
+    let allowsProtectedMetadataWrites: Bool
     var process: Process?
     var stdinPipe: Pipe?
     var stdoutPipe: Pipe?
@@ -38,9 +39,14 @@ actor MCPStdioClient {
     /// True while a graceful disconnect is in progress — suppresses exit callback.
     var isDisconnecting = false
 
-    init(config: MCPServerConfig, writableRoots: [URL] = []) {
+    init(
+        config: MCPServerConfig,
+        writableRoots: [URL] = [],
+        allowsProtectedMetadataWrites: Bool = false
+    ) {
         self.config = config
         self.writableRoots = writableRoots
+        self.allowsProtectedMetadataWrites = allowsProtectedMetadataWrites
     }
 
     enum ClientError: LocalizedError {

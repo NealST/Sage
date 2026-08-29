@@ -175,7 +175,12 @@ struct MCPManageView: View {
                 .textFieldStyle(.roundedBorder)
             TextField("Arguments (space-separated)", text: $draftArgs)
                 .textFieldStyle(.roundedBorder)
-            Text("The command runs as you, with no PathGuard. Only add servers you trust.")
+            if hasDuplicateDraftName {
+                Text("Server names must be unique.")
+                    .font(.system(size: type.micro))
+                    .foregroundStyle(.red)
+            }
+            Text("The command runs in Sage's process sandbox. Only add servers you trust.")
                 .font(.system(size: type.micro))
                 .foregroundStyle(.secondary)
             Text("Example: npx  ·  -y @modelcontextprotocol/server-filesystem /Users/you")
@@ -196,7 +201,7 @@ struct MCPManageView: View {
                         enabled: true
                     )
                     guard !server.name.isEmpty, !server.command.isEmpty else { return }
-                    appState.mcpHub.addMCPServer(server)
+                    guard appState.mcpHub.addMCPServer(server) else { return }
                     draftName = ""
                     draftCommand = ""
                     draftArgs = ""
@@ -204,11 +209,19 @@ struct MCPManageView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty
-                    || draftCommand.trimmingCharacters(in: .whitespaces).isEmpty)
+                    || draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
+                    || hasDuplicateDraftName)
             }
         }
         .padding()
         .frame(width: 420)
+    }
+
+    private var hasDuplicateDraftName: Bool {
+        let normalized = draftName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return appState.mcpHub.mcpServers.contains { server in
+            server.name.lowercased() == normalized
+        }
     }
 
     private func refreshToolsIndex() {

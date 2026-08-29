@@ -30,6 +30,7 @@ nonisolated struct MoveFileTool: AgentTool {
     func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let source = try PathGuard.resolveAllowed(args.source)
+        try FileTransferDestination.assertNotRelocatingProtectedRoot(source)
         guard FileManager.default.fileExists(atPath: source.path) else {
             throw ToolError.operationFailed(
                 "Source does not exist: \(args.source). Use list_directory to verify the path."
@@ -67,7 +68,15 @@ nonisolated struct RenameFileTool: AgentTool {
 
     func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
+        guard !args.newName.isEmpty,
+              args.newName != ".",
+              args.newName != "..",
+              !args.newName.contains("/"),
+              !args.newName.contains("\0") else {
+            throw ToolError.invalidArguments("new_name must be a single file or folder name.")
+        }
         let source = try PathGuard.resolveAllowed(args.path)
+        try FileTransferDestination.assertNotRelocatingProtectedRoot(source)
         guard FileManager.default.fileExists(atPath: source.path) else {
             throw ToolError.operationFailed(
                 "File does not exist: \(args.path). Use list_directory to verify the path."
@@ -117,13 +126,16 @@ nonisolated struct CopyFileTool: AgentTool {
             source: source,
             destination: destination
         )
-        let values = try source.resourceValues(forKeys: [.isRegularFileKey])
+        try FileTransferDestination.assertNotRelocatingProtectedRoot(source)
+        let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey])
         if values.isRegularFile == true {
             try SafeFileIO.copyRegularFile(at: source, to: finalDestination)
+        } else if values.isDirectory == true {
+            try SafeFileIO.copyDirectory(at: source, to: finalDestination)
         } else {
-            // Directory trees are revalidated per enumerated child by their
-            // dedicated copy implementation in a future hardening pass.
-            try FileManager.default.copyItem(at: source, to: finalDestination)
+            throw ToolError.operationFailed(
+                "Only regular files and directories can be copied."
+            )
         }
         return "[OK] Copied to \(PathGuard.displayPath(finalDestination.path))"
     }

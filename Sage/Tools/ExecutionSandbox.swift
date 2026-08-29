@@ -25,7 +25,7 @@ nonisolated struct ExecutionSandboxConfiguration: Sendable, Equatable {
         policy: PathGuard.Policy,
         readAllowlist: [String],
         writeRoot: URL? = nil,
-        allowsWrites: Bool = true,
+        allowsWrites: Bool = false,
         allowsNetwork: Bool,
         allowsProtectedMetadataWrites: Bool = false,
         allowedSensitiveReadRoots: [URL] = []
@@ -36,24 +36,33 @@ nonisolated struct ExecutionSandboxConfiguration: Sendable, Equatable {
                     == sensitiveRoot.standardizedFileURL.resolvingSymlinksInPath().path
             }
         }
+        let protectedSensitiveWriteRoots = protectedReadRoots
         switch policy {
         case .home:
             let home = FileManager.default.homeDirectoryForCurrentUser
+            let writableRoot = writeRoot ?? home
             return Self(
                 readableRoots: [home],
-                writableRoots: allowsWrites ? [writeRoot ?? home] : [],
+                writableRoots: allowsWrites ? [writableRoot] : [],
                 protectedReadRoots: protectedReadRoots,
-                protectedWriteRoots: allowsProtectedMetadataWrites ? [] : policyWriteProtectedRoots(root: home),
+                protectedWriteRoots: allowsProtectedMetadataWrites
+                    ? protectedSensitiveWriteRoots
+                    : protectedRoots(policyRoot: home, writableRoot: writableRoot)
+                        + protectedSensitiveWriteRoots,
                 allowsNetwork: allowsNetwork
             )
 
         case .project(let root):
             let home = FileManager.default.homeDirectoryForCurrentUser
+            let writableRoot = writeRoot ?? root
             return Self(
                 readableRoots: [root] + readAllowlist.map { URL(fileURLWithPath: $0) },
-                writableRoots: allowsWrites ? [writeRoot ?? root] : [],
+                writableRoots: allowsWrites ? [writableRoot] : [],
                 protectedReadRoots: [home] + protectedReadRoots,
-                protectedWriteRoots: allowsProtectedMetadataWrites ? [] : policyWriteProtectedRoots(root: root),
+                protectedWriteRoots: allowsProtectedMetadataWrites
+                    ? protectedSensitiveWriteRoots
+                    : protectedRoots(policyRoot: root, writableRoot: writableRoot)
+                        + protectedSensitiveWriteRoots,
                 allowsNetwork: allowsNetwork
             )
         }
@@ -72,15 +81,28 @@ nonisolated struct ExecutionSandboxConfiguration: Sendable, Equatable {
         return configuration
     }
 
-    static func mcpServer(writableRoots: [URL] = []) -> Self {
+    static func mcpServer(
+        writableRoots: [URL] = [],
+        allowsProtectedMetadataWrites: Bool = false
+    ) -> Self {
         let home = FileManager.default.homeDirectoryForCurrentUser
+        let metadataRoots = allowsProtectedMetadataWrites
+            ? []
+            : writableRoots.flatMap(policyWriteProtectedRoots)
+                + writableRoots.filter(isProtectedMetadataPath)
         return Self(
             readableRoots: [home],
             writableRoots: writableRoots,
             protectedReadRoots: SensitiveResourcePolicy.roots,
-            protectedWriteRoots: writableRoots.flatMap(policyWriteProtectedRoots),
+            protectedWriteRoots: SensitiveResourcePolicy.roots
+                + metadataRoots,
             allowsNetwork: true
         )
+    }
+
+    private static func isProtectedMetadataPath(_ root: URL) -> Bool {
+        let protectedNames: Set<String> = [".git", ".sage", ".agents"]
+        return !protectedNames.isDisjoint(with: root.standardizedFileURL.pathComponents)
     }
 
     private static func policyWriteProtectedRoots(root: URL) -> [URL] {
@@ -89,6 +111,11 @@ nonisolated struct ExecutionSandboxConfiguration: Sendable, Equatable {
             ".sage",
             ".agents",
         ].map { root.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    private static func protectedRoots(policyRoot: URL, writableRoot: URL) -> [URL] {
+        policyWriteProtectedRoots(root: policyRoot)
+            + policyWriteProtectedRoots(root: writableRoot)
     }
 }
 
@@ -191,6 +218,7 @@ nonisolated enum ExecutionSandbox {
         rules.append(contentsOf: protectedWriteRoots.map { root in
             "(deny file-write* (subpath \"\(sandboxLiteral(root.path))\"))"
         })
+        rules.append(contentsOf: nestedMetadataDenyRules(protectedWriteRoots: protectedWriteRoots))
         rules.append(contentsOf: readableRoots.map { root in
             "(allow file-read* (subpath \"\(sandboxLiteral(root.path))\"))"
         })
@@ -204,8 +232,6 @@ nonisolated enum ExecutionSandbox {
     private static func temporaryWritableRoots() -> [URL] {
         [
             URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
-            URL(fileURLWithPath: "/private/tmp", isDirectory: true),
-            URL(fileURLWithPath: "/private/var/folders", isDirectory: true),
         ]
     }
 
@@ -230,6 +256,18 @@ nonisolated enum ExecutionSandbox {
         return roots.compactMap { root in
             let normalized = root.standardizedFileURL.resolvingSymlinksInPath()
             return seen.insert(normalized.path).inserted ? normalized : nil
+        }
+    }
+
+    private static func nestedMetadataDenyRules(protectedWriteRoots: [URL]) -> [String] {
+        let names: Set<String> = [".git", ".sage", ".agents"]
+        let protectsMetadata = protectedWriteRoots.contains { root in
+            names.contains(root.lastPathComponent)
+        }
+        guard protectsMetadata else { return [] }
+        return names.map { name in
+            let escaped = name.replacingOccurrences(of: ".", with: "\\.")
+            return "(deny file-write* (regex #\"/\(escaped)(/|$)\"))"
         }
     }
 

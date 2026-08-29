@@ -25,7 +25,8 @@ nonisolated struct CreateDirectoryTool: AgentTool {
     func call(argumentsJSON: String) throws -> String {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let url = try PathGuard.resolveAllowed(args.path)
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try PathGuard.assertWriteAllowed(url)
+        try SafeFileIO.createDirectory(at: url)
         return "[OK] Created \(PathGuard.displayPath(url.path))"
     }
 }

@@ -30,13 +30,14 @@ final class ReviewAgent {
         self.modelGateway = modelGateway
     }
 
-    func evaluate() async throws -> ReviewVerdict {
+    func evaluate(draft: String, changes: WorkspaceChangeSet) async throws -> ReviewVerdict {
         let plan = state.activeTask?.workPlan
         let userText = state.events.last { $0.kind == .userInput }?
             .modelFacingContent(includeImagePixels: false) ?? ""
         let planLine = plan.map { workPlan in
             "kind=\(workPlan.kind.rawValue); intent=\(workPlan.intent)\n\(workPlan.approach)"
         } ?? "(none)"
+        let reply = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let brief = """
         User request:
         \(userText)
@@ -44,8 +45,11 @@ final class ReviewAgent {
         Work plan:
         \(planLine)
 
-        What happened:
-        \(TranscriptDigest.make(from: state.events))
+        Execute reply:
+        \(reply.isEmpty ? "(none)" : String(reply.prefix(1_500)))
+
+        Workspace changes:
+        \(changes.reviewBrief(maxChars: 12_000))
         """
         let raw = try await modelGateway.completeUnstreamed(
             system: Self.systemPrompt,
@@ -57,8 +61,8 @@ final class ReviewAgent {
 
     static let systemPrompt = """
     You are Sage's reviewer. You do not call tools and you do not execute anything.
-    Compare the user's request and the work plan against what the execute agent actually did.
-    Output JSON only — no markdown fence, no prose.
+    Compare the user's request and the work plan against the execute reply and the \
+    net workspace changes since work started. Output JSON only — no markdown fence, no prose.
 
     Schema:
     {
@@ -71,9 +75,10 @@ final class ReviewAgent {
     - revise: a concrete gap remains that another execute pass can fix
 
     Rules:
-    - Judge outcomes, not whether specific tools were used.
+    - Judge the resulting workspace and the execute reply, not which tools were used.
     - Do not ask for a larger scope than the plan.
     - If the execute agent already said it is blocked (permissions, missing file), accept and do not loop.
+    - "No workspace files changed" is valid when the plan was observation or the reply is the deliverable.
     - Write feedback in the same language the user used.
     """
 

@@ -10,6 +10,14 @@ import Foundation
 /// Resolves copy/move destination: if `destination` is an existing directory, appends
 /// `source.lastPathComponent`; refuses an existing final path; creates parent directories.
 nonisolated enum FileTransferDestination {
+    static func assertNotRelocatingProtectedRoot(_ source: URL) throws {
+        guard !SensitiveResourcePolicy.wouldRelocateProtectedRoot(source: source) else {
+            throw ToolError.operationFailed(
+                "Protected locations such as ~/.ssh cannot be moved, renamed, or copied."
+            )
+        }
+    }
+
     static func prepare(source: URL, destination: URL) throws -> URL {
         var destination = destination
         var isDir: ObjCBool = false
@@ -24,10 +32,7 @@ nonisolated enum FileTransferDestination {
                 """
             )
         }
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        try SafeFileIO.createDirectory(at: destination.deletingLastPathComponent())
         return destination
     }
 }

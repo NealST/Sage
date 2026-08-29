@@ -80,6 +80,12 @@ nonisolated enum PathGuard: Sendable {
     /// Never consulted for write / mutate / shell-cwd resolution.
     @TaskLocal static var readAllowlist: [String] = []
 
+    /// Sensitive roots approved for this exact invocation.
+    @TaskLocal static var sensitiveReadAllowlist: [String] = []
+
+    /// Local mutation roots approved for this exact invocation.
+    @TaskLocal static var writeAllowlist: [String] = []
+
     /// Whether a path is being resolved for reading or for mutation / cwd.
     enum Access: Sendable, Equatable {
         case read
@@ -166,7 +172,13 @@ nonisolated enum PathGuard: Sendable {
     /// Resolved URL when `url` stays inside the current sandbox for `access`.
     /// Directory walks use this so symlink targets outside the project or home are skipped.
     nonisolated static func resolveEnumeratedURL(_ url: URL, access: Access = .read) -> URL? {
-        try? resolveAllowed(url.path, access: access)
+        guard let resolved = try? resolveAllowed(url.path, access: access) else {
+            return nil
+        }
+        if access == .read, !isSensitiveReadAllowed(resolved) {
+            return nil
+        }
+        return resolved
     }
 
     /// Check if a resolved path falls under any read-allowlisted directory.

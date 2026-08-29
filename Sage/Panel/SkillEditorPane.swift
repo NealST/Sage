@@ -150,6 +150,8 @@ extension SkillEditorPane {
                 .padding(.top, SageDesign.Spacing.small)
             }
             .font(.system(size: type.caption))
+
+            SkillSecretsEditor(skill: skill)
         }
         .padding(.horizontal, SageDesign.Spacing.extraLarge)
         .padding(.vertical, SageDesign.Spacing.medium)

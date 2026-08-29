@@ -42,6 +42,32 @@ struct SettingsPrivacySection: View {
             .padding(.vertical, 11)
             .sagePanelBackground(cornerRadius: 10)
 
+            if !longTermPermissionSummaries.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(longTermPermissionSummaries) { grant in
+                        HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(grant.title)
+                                    .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                                Text(grant.detail)
+                                    .font(.system(size: SageDesign.Typography.microSize, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                            Spacer()
+                            Button("Revoke") {
+                                ToolAuthorizationGrantStore.shared.removeLongTermGrant(id: grant.id)
+                                authorizationRefresh += 1
+                            }
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                    }
+                }
+                .sagePanelBackground(cornerRadius: 10)
+            }
+
             HStack(spacing: SageDesign.Spacing.medium) {
                 Image(systemName: "checkmark.shield")
                     .font(.system(size: 14, weight: .medium))
@@ -104,5 +130,10 @@ struct SettingsPrivacySection: View {
         _ = authorizationRefresh
         let count = ToolAuthorizationGrantStore.shared.longTermGrantCount
         return count == 1 ? "1 permission is active." : "\(count) permissions are active."
+    }
+
+    private var longTermPermissionSummaries: [ToolAuthorizationGrantSummary] {
+        _ = authorizationRefresh
+        return ToolAuthorizationGrantStore.shared.longTermGrantSummaries
     }
 }

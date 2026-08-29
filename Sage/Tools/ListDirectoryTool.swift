@@ -43,6 +43,7 @@ nonisolated struct ListDirectoryTool: AgentTool {
         let args = try decodeToolArgs(argumentsJSON, as: Args.self)
         let effectivePath = try PathGuard.defaultExplorationPath(args.path)
         let url = try PathGuard.resolveAllowed(effectivePath, access: .read)
+        try PathGuard.assertSensitiveReadAllowed(url)
 
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw ToolError.operationFailed("Directory does not exist: \(effectivePath)")

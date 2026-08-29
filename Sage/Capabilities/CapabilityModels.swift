@@ -3,6 +3,7 @@
 //  Sage
 //
 
+import CryptoKit
 import Foundation
 
 nonisolated struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
@@ -163,6 +164,16 @@ nonisolated struct MCPServerConfig: Identifiable, Codable, Sendable, Equatable {
         try container.encode(env, forKey: .env)
         try container.encode(enabled, forKey: .enabled)
     }
+
+    var authorizationFingerprint: String {
+        let environment = env.keys.sorted().map { key in
+            "\(key)=\(env[key, default: ""])"
+        }
+        let payload = ([id, command] + args + environment).joined(separator: "\u{0}")
+        return SHA256.hash(data: Data(payload.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
 }
 
 nonisolated struct MCPFileSnapshot: Codable, Sendable {
@@ -183,8 +194,9 @@ nonisolated struct MCPToolInfo: Identifiable, Sendable, Equatable {
     var inputSchema: JSONValue
     var readOnlyHint: Bool?
     var localWriteHint = false
+    var serverAuthorizationFingerprint = ""
 
     var qualifiedName: String {
-        "mcp__\(serverName)__\(name)"
+        "mcp__\(serverID)__\(name)"
     }
 }

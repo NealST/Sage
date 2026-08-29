@@ -27,11 +27,58 @@ extension AgentRuntime {
 
     func confirmToolApproval(scope: SessionToolApprovalScope) async {
         guard case .toolApproval(_, let name, let args, _) = state.pendingPrompt else { return }
+        let hookDecision = await preToolUseDecision(name: name, argumentsJSON: args)
+        if case .deny(let reason) = hookDecision {
+            await failToolApproval(reason: "Blocked by PreToolUse hook: \(reason)")
+            return
+        }
+        await recordToolApproval(
+            scope: scope,
+            name: name,
+            argumentsJSON: args,
+            hookApproval: {
+                if case .ask(let approval) = hookDecision { return approval }
+                return nil
+            }()
+        )
+    }
+
+    private func recordToolApproval(
+        scope: SessionToolApprovalScope,
+        name: String,
+        argumentsJSON args: String,
+        hookApproval: PreToolUseApproval?
+    ) async {
         let key = SessionToolAllowlist.combinationKey(name: name, argumentsJSON: args)
         SecurityAuditLogger.approval(toolName: name, scope: scope, key: key)
+        recordCapabilityApproval(scope: scope, name: name, argumentsJSON: args)
+        if let hookApproval {
+            recordHookApproval(
+                scope: scope,
+                name: name,
+                argumentsJSON: args,
+                approval: hookApproval
+            )
+        }
+        _ = await operations.run {
+            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+        }
+    }
+
+    private func recordCapabilityApproval(
+        scope: SessionToolApprovalScope,
+        name: String,
+        argumentsJSON args: String
+    ) {
         switch scope {
         case .once:
-            state.sessionAllowlist.allowOnce(name: name, argumentsJSON: args)
+            state.sessionAllowlist.allowCapabilityOnce(
+                name: name,
+                argumentsJSON: args,
+                policy: state.pathGuardPolicy,
+                skills: host.catalogSkills,
+                mcpTools: mcpHub?.mcpTools ?? []
+            )
 
         case .task:
             state.sessionAllowlist.allowThisTask(
@@ -39,7 +86,7 @@ extension AgentRuntime {
                 argumentsJSON: args,
                 policy: state.pathGuardPolicy,
                 scopeID: state.authorizationScopeID,
-                skills: host.enabledSkills,
+                skills: host.catalogSkills,
                 mcpTools: mcpHub?.mcpTools ?? []
             )
 
@@ -48,16 +95,49 @@ extension AgentRuntime {
                 name: name,
                 argumentsJSON: args,
                 policy: state.pathGuardPolicy,
-                skills: host.enabledSkills,
+                skills: host.catalogSkills,
                 mcpTools: mcpHub?.mcpTools ?? []
             )
         }
-        _ = await operations.run {
-            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+    }
+
+    private func recordHookApproval(
+        scope: SessionToolApprovalScope,
+        name: String,
+        argumentsJSON args: String,
+        approval: PreToolUseApproval
+    ) {
+        switch scope {
+        case .once:
+            state.sessionAllowlist.allowHookOnce(
+                name: name,
+                argumentsJSON: args,
+                hookIdentity: approval.identity
+            )
+
+        case .task:
+            state.sessionAllowlist.allowHookForTask(
+                name: name,
+                argumentsJSON: args,
+                hookIdentity: approval.identity,
+                scopeID: state.authorizationScopeID
+            )
+
+        case .always:
+            state.sessionAllowlist.allowHookLongTerm(
+                name: name,
+                argumentsJSON: args,
+                hookIdentity: approval.identity,
+                label: approval.reason
+            )
         }
     }
 
     func skipToolApproval() async {
+        await failToolApproval(reason: "User skipped this tool.")
+    }
+
+    private func failToolApproval(reason: String) async {
         guard case .toolApproval(let callID, let name, let args, _) = state.pendingPrompt else { return }
         SecurityAuditLogger.approvalDenied(
             toolName: name,
@@ -71,17 +151,17 @@ extension AgentRuntime {
                     appendEvents: [],
                     deleteEventIDs: []
                 ) { task in
-                        task.pendingPrompt = nil
+                    task.pendingPrompt = nil
                 }
             }
             return
         }
         plan.steps[index].status = .failed
-        plan.steps[index].result = "User skipped this tool."
+        plan.steps[index].result = reason
         let planToCommit = plan
         let event = AgentEvent(
             kind: .toolResult,
-            content: "ERROR: User skipped this tool. Continue with the remaining work or pick another approach.",
+            content: "ERROR: \(reason) Continue with the remaining work or pick another approach.",
             toolCallID: callID
         )
         planProgress.update(planToCommit)

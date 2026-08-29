@@ -24,7 +24,10 @@ extension MCPStdioClient {
         let invocation = ExecutionSandbox.wrap(
             executable: URL(fileURLWithPath: "/usr/bin/env"),
             arguments: [config.command] + config.args,
-            configuration: .mcpServer(writableRoots: writableRoots),
+            configuration: .mcpServer(
+                writableRoots: writableRoots,
+                allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
+            ),
             auditComponent: "mcp_server"
         )
         process.executableURL = invocation.executable
@@ -237,15 +240,28 @@ extension MCPStdioClient {
             "params": params,
         ])
 
-        return try await withCheckedThrowingContinuation { cont in
-            pending[id] = cont
-            do {
-                try write(payload, to: stdinPipe)
-            } catch {
-                pending.removeValue(forKey: id)
-                cont.resume(throwing: error)
+        try Task.checkCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { cont in
+                if Task.isCancelled {
+                    cont.resume(throwing: CancellationError())
+                    return
+                }
+                pending[id] = cont
+                do {
+                    try write(payload, to: stdinPipe)
+                } catch {
+                    pending.removeValue(forKey: id)
+                    cont.resume(throwing: error)
+                }
             }
+        } onCancel: {
+            Task { await self.cancelPendingRequest(id: id) }
         }
+    }
+
+    private func cancelPendingRequest(id: Int) {
+        pending.removeValue(forKey: id)?.resume(throwing: CancellationError())
     }
 
     func notify(method: String, params: JSONValue) throws {
@@ -308,7 +324,8 @@ extension MCPStdioClient {
                 description: description,
                 inputSchema: schema,
                 readOnlyHint: readOnlyHint,
-                localWriteHint: localWriteHint
+                localWriteHint: localWriteHint,
+                serverAuthorizationFingerprint: config.authorizationFingerprint
             )
         }
     }

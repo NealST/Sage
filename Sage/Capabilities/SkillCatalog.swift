@@ -108,6 +108,7 @@ final class SkillCatalog {
         let write = Task { @MainActor in
             await previous?.value
             try await SkillWriter.trashSkill(atSkillMarkdownPath: path)
+            SkillSecretStore.removeAllSecrets(for: skill)
             self.skills.removeAll { $0.path == path }
             await self.store.remove(keys: [path, name])
         }

@@ -15,6 +15,8 @@ extension ScheduleRunner {
         let configuration = ExecutionSandboxConfiguration.shell(
             policy: policy,
             readAllowlist: [],
+            writeRoot: cwd,
+            allowsWrites: true,
             allowsNetwork: false
         )
         let invocation = ExecutionSandbox.wrap(

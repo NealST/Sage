@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// Intent + written plan produced by the plan sub-agent. The user confirms this,
-/// then the execution agent ReActs until the task is done.
+/// Intent + written plan from the plan sub-agent.
+/// `answer` is streamed prose. `act` confirms, then execute. `observe` skips confirm.
 nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
     enum Kind: String, Codable, Sendable {
         /// Reply from context — no Mac changes.
@@ -39,6 +39,8 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
     var threadLabel: String?
     /// Catalog names the plan model wants loaded before execute.
     var skillNames: [String]
+    /// User-facing reply when `kind == .answer`. Skips execute and review.
+    var reply: String?
 
     init(
         id: UUID = UUID(),
@@ -48,7 +50,8 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         sideEffects: String? = nil,
         threadAdvice: ThreadAdvice = .continueThread,
         threadLabel: String? = nil,
-        skillNames: [String] = []
+        skillNames: [String] = [],
+        reply: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -58,6 +61,7 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         self.threadAdvice = threadAdvice
         self.threadLabel = threadLabel?.nilIfEmpty
         self.skillNames = skillNames
+        self.reply = kind == .answer ? reply?.nilIfEmpty : nil
     }
 
     init(from decoder: Decoder) throws {
@@ -76,9 +80,19 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         threadAdvice = (try? container.decode(ThreadAdvice.self, forKey: .threadAdvice)) ?? .continueThread
         threadLabel = try container.decodeIfPresent(String.self, forKey: .threadLabel)?.nilIfEmpty
         skillNames = (try? container.decode([String].self, forKey: .skillNames)) ?? []
+        let decodedReply = try container.decodeIfPresent(String.self, forKey: .reply)?.nilIfEmpty
+        reply = kind == .answer ? decodedReply : nil
     }
 
     var requiresConfirmation: Bool { kind == .act }
+
+    /// Reply that can be shown immediately — no execute loop.
+    var directReply: String? {
+        guard kind == .answer else { return nil }
+        if let reply { return reply }
+        let planned = approach.trimmingCharacters(in: .whitespacesAndNewlines)
+        return planned.isEmpty ? nil : planned
+    }
 
     /// Injected into the execution agent's system prompt after the plan is accepted.
     var promptAppendix: String {
@@ -125,10 +139,11 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
         try container.encode(threadAdvice, forKey: .threadAdvice)
         try container.encodeIfPresent(threadLabel, forKey: .threadLabel)
         try container.encode(skillNames, forKey: .skillNames)
+        try container.encodeIfPresent(reply, forKey: .reply)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, intent, approach, sideEffects
-        case threadAdvice, threadLabel, skillNames
+        case threadAdvice, threadLabel, skillNames, reply
     }
 }

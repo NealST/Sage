@@ -149,6 +149,9 @@ final class AgentTaskStore {
         do {
             if closing.events.isEmpty {
                 try await taskRepository.deleteTask(id: closing.id)
+                ToolAuthorizationGrantStore.shared.removeTaskGrants(
+                    scopeID: "task:\(closing.id.uuidString)"
+                )
                 state.removeSummary(id: closing.id)
             } else {
                 if closing.status == .active || closing.status == .awaitingApproval {

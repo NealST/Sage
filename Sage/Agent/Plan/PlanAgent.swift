@@ -27,7 +27,8 @@ final class PlanAgent {
         skillAppendix: String,
         allowedSkillNames: [String]
     ) async throws -> WorkPlan {
-        let raw = try await modelGateway.completeUnstreamed(
+        var adapter = PlanStreamAdapter()
+        let raw = try await modelGateway.streamCustom(
             system: Self.systemPrompt,
             user: Self.proposeUserPrompt(
                 userText: userText,
@@ -35,8 +36,29 @@ final class PlanAgent {
                 skillAppendix: skillAppendix
             ),
             role: .plan
+        ) { chunk in
+            if let visible = adapter.ingest(chunk) {
+                modelGateway.streaming.publish(visible)
+            }
+        }
+        return adoptProposal(
+            adapter.finish(),
+            raw: raw,
+            userText: userText,
+            allowed: Set(allowedSkillNames)
         )
-        let allowed = Set(allowedSkillNames)
+    }
+
+    private func adoptProposal(
+        _ outcome: PlanStreamAdapter.Outcome,
+        raw: String,
+        userText: String,
+        allowed: Set<String>
+    ) -> WorkPlan {
+        if case .answer(let text) = outcome, let plan = Self.parsePlain(text) {
+            modelGateway.streaming.flush(text)
+            return plan
+        }
         let plan = Self.parse(raw) ?? Self.fallback(for: userText)
         return WorkPlan(
             id: plan.id,
@@ -46,7 +68,8 @@ final class PlanAgent {
             sideEffects: plan.sideEffects,
             threadAdvice: plan.threadAdvice,
             threadLabel: plan.threadLabel,
-            skillNames: plan.skillNames.filter { allowed.contains($0) }
+            skillNames: plan.skillNames.filter { allowed.contains($0) },
+            reply: plan.reply
         )
     }
 
@@ -69,36 +92,41 @@ final class PlanAgent {
     }
 
     static let systemPrompt = """
-    You are Sage's planner. You do not call tools and you do not execute anything.
-    Read the user's request and output a work plan as JSON only — no markdown fence around the JSON, no extra prose.
+    You are Sage's planner. You do not call tools and you do not execute.
 
-    Schema:
+    Two output forms — pick one. The first token decides:
+
+    1) Direct reply, when no Mac access is needed (greeting, joke, explanation, follow-up from context):
+    Write the user-facing answer as markdown. No JSON, no preamble, no "kind".
+
+    2) Work plan, when you must read or change the Mac:
+    JSON only. First character is `{`. No markdown fence, no prose before the JSON.
     {
-      "kind": "answer" | "observe" | "act",
+      "kind": "observe" | "act",
       "intent": "one sentence: what the user wants",
-      "approach": "markdown document",
+      "approach": "markdown plan",
       "side_effects": "what may change on the Mac, or null",
       "thread": "continue" | "offer_fresh",
       "thread_label": "short name of the current thread if offering, else null",
       "skills": ["exact catalog names to load, or []"]
     }
 
-    kind:
-    - answer: you can reply from conversation context; no need to touch the Mac
-    - observe: need to read, list, or inspect; no lasting change. Mutating tools are rejected at runtime.
-    - act: will create, edit, delete, run a command, change the clipboard, notify, or otherwise mutate
+    Prefer (1) whenever tools are unnecessary. Do not invent an observe or act plan for chitchat.
 
-    approach is the written plan for solving this task — not a checklist of tool calls.
-    Use markdown. Cover the considerations that matter, for example:
+    kind:
+    - observe: read, list, or inspect; no lasting change. Mutating tools are rejected at runtime.
+    - act: create, edit, delete, run a command, change the clipboard, notify, or otherwise mutate
+
+    approach is the written plan — not a checklist of tool calls. Use markdown. Cover:
     - how you read the request and what “done” looks like
     - constraints, what to leave alone, and why
     - tradeoffs or the path you are choosing
     - risks or uncertainty
-    Keep it short enough to confirm at a glance (about a half page, not an essay).
+    Keep it short enough to confirm at a glance (about a half page).
     Never write tool names or JSON arguments.
 
     - side_effects is required for act, null otherwise.
-    - Write intent and approach in the same language the user used.
+    - Write the reply, intent, and approach in the same language the user used.
 
     thread:
     - continue unless the latest request is clearly a different goal from the current thread
@@ -125,94 +153,6 @@ final class PlanAgent {
     persist true only when the work produced a reusable procedure someone would want again.
     Skip one-off answers, trivial lookups, failed or abandoned work, and things already covered by an existing skill.
     """
-
-    nonisolated static func fallback(for userText: String) -> WorkPlan {
-        WorkPlan(
-            kind: .act,
-            intent: String(userText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)),
-            approach: """
-            ## 理解
-            按用户这句话完成最小必要改动。
-
-            ## 约束
-            不扩大范围，不改无关文件。
-
-            ## 路径
-            先看清现状，再做最小修改。
-            """,
-            sideEffects: "May read or change files in the current workspace."
-        )
-    }
-
-    nonisolated static func parse(_ raw: String?) -> WorkPlan? {
-        guard let object = ModelJSON.object(from: raw) else { return nil }
-        guard let kindRaw = object["kind"] as? String,
-              let kind = WorkPlan.Kind(rawValue: kindRaw),
-              let intent = (object["intent"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !intent.isEmpty
-        else { return nil }
-
-        let approach: String
-        if let text = object["approach"] as? String {
-            approach = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        } else if let items = object["approach"] as? [String] {
-            approach = items
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .map { "- \($0)" }
-                .joined(separator: "\n")
-        } else {
-            approach = ""
-        }
-
-        let sideEffects: String?
-        if let value = object["side_effects"] as? String {
-            sideEffects = value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        } else {
-            sideEffects = nil
-        }
-
-        let threadAdvice = WorkPlan.ThreadAdvice(
-            rawValue: (object["thread"] as? String) ?? "continue"
-        ) ?? .continueThread
-        let threadLabel = (object["thread_label"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
-        let skillNames = ((object["skills"] as? [String]) ?? [])
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        return WorkPlan(
-            kind: kind,
-            intent: intent,
-            approach: approach,
-            sideEffects: kind == .act ? (sideEffects ?? "May change files or system state.") : nil,
-            threadAdvice: threadAdvice,
-            threadLabel: threadLabel,
-            skillNames: skillNames
-        )
-    }
-
-    nonisolated static func parsePersist(_ raw: String?) -> SkillPersistAdvice? {
-        guard let object = ModelJSON.object(from: raw) else { return nil }
-        if let persist = object["persist"] as? Bool {
-            return SkillPersistAdvice(persist: persist)
-        }
-        if let persist = object["persist"] as? String {
-            switch persist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            case "true", "yes", "1":
-                return SkillPersistAdvice(persist: true)
-
-            case "false", "no", "0":
-                return SkillPersistAdvice(persist: false)
-
-            default:
-                return nil
-            }
-        }
-        return nil
-    }
 
     private func threadContext() -> String {
         guard let task = state.activeTask else { return "No current thread." }

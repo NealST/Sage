@@ -51,6 +51,8 @@ final class AgentSessionState {
     var modelVisibleAttachmentEventIDs: Set<UUID> = []
     /// Round-limit or per-tool approval sitting in front of the execute loop.
     var pendingPrompt: AgentPendingPrompt?
+    /// Net file mutations for the current execute→review cycle.
+    let workspaceChanges = TurnChangeSet()
 
     var events: [AgentEvent] {
         activeTask?.events ?? []
@@ -115,6 +117,7 @@ final class AgentSessionState {
         forceFreshOnNextSubmit = false
         reviewFeedback = nil
         pendingPrompt = nil
+        workspaceChanges.reset()
     }
 
     func clearTokenUsage() {

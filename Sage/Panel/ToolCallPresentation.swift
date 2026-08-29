@@ -91,8 +91,13 @@ nonisolated enum ToolCallPresentation {
             return title
         }
         if name.hasPrefix("mcp__") {
-            let lastSegment = name.split(separator: "__").last.map(String.init)
-            return lastSegment?.replacingOccurrences(of: "_", with: " ") ?? name
+            let segments = name.split(separator: "__").map(String.init)
+            guard segments.count >= 3 else { return name }
+            let tool = segments
+                .dropFirst(2)
+                .joined(separator: "__")
+                .replacingOccurrences(of: "_", with: " ")
+            return "MCP \(tool)"
         }
         return name.replacingOccurrences(of: "_", with: " ")
     }

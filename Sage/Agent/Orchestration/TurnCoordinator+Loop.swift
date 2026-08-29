@@ -6,7 +6,7 @@
 import Foundation
 
 extension TurnCoordinator {
-    /// Plan sub-agent. Confirm only when the strategy will change the Mac.
+    /// Plan classifies intent. `answer` replies immediately; `act` confirms first.
     func presentWorkPlan(for userText: String, autoConfirm: Bool) async {
         do {
             try Task.checkCancellation()
@@ -33,6 +33,10 @@ extension TurnCoordinator {
                 return
             }
             planApproved = true
+            if let reply = workPlan.directReply {
+                await finalizeAssistantText(reply, considerPersist: false)
+                return
+            }
             await activateRecalledSkills(from: workPlan)
             await execute.start()
         } catch is CancellationError {
@@ -133,7 +137,10 @@ extension TurnCoordinator {
             if !draft.isEmpty {
                 streaming.flush(draft)
             }
-            let verdict = try await reviewer.evaluate()
+            let verdict = try await reviewer.evaluate(
+                draft: draft,
+                changes: state.workspaceChanges.snapshot()
+            )
             try Task.checkCancellation()
 
             if verdict.decision == .accept || reviewRounds >= ReviewAgent.maxRevisions {
@@ -166,8 +173,16 @@ extension TurnCoordinator {
         let alreadyConsidered = state.activeTask?.skillPersistConsidered == true
         let settledID = state.activeTaskID
         let settledPlan = state.activeTask?.workPlan
+        let changes = state.workspaceChanges.snapshot()
+        let settledChanges = changes.isEmpty ? nil : changes
         guard await taskStore.commit(
-            appendEvents: [AgentEvent(kind: .assistantResponse, content: reply)],
+            appendEvents: [
+                AgentEvent(
+                    kind: .assistantResponse,
+                    content: reply,
+                    workspaceChanges: settledChanges
+                ),
+            ],
             deleteEventIDs: [],
             mutate: { task in
                 task.status = .completed
@@ -182,6 +197,7 @@ extension TurnCoordinator {
 
         streaming.clear()
         state.reviewFeedback = nil
+        state.workspaceChanges.reset()
         state.clearPendingPrompt()
         state.lastAssistantText = reply
         state.enterCompleted(summary: reply)
@@ -234,5 +250,6 @@ extension TurnCoordinator {
         planApproved = false
         reviewRounds = 0
         state.reviewFeedback = nil
+        state.workspaceChanges.reset()
     }
 }

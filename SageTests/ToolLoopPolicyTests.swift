@@ -233,7 +233,11 @@ final class PreToolUseHookEvaluatorTests: XCTestCase {
             projectRoot: root,
             activatedSkills: []
         )
-        XCTAssertEqual(asked, .ask("Review shell [hooks.json]"))
+        guard case .ask(let approval) = asked else {
+            return XCTFail("Expected an ask decision")
+        }
+        XCTAssertEqual(approval.reason, "Review shell [hooks.json]")
+        XCTAssertFalse(approval.identity.isEmpty)
 
         let allowed = await evaluator.evaluate(
             toolName: "read_text_file",

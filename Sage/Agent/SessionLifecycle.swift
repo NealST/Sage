@@ -104,6 +104,8 @@ final class SessionLifecycle {
 
         do {
             try await taskRepository.eraseAllData()
+            ToolAuthorizationGrantStore.shared.removeAllGrants()
+            SkillSecretStore.removeAllSecrets()
             state.activeTask = nil
             state.activeTaskID = nil
             state.focusedProject = nil

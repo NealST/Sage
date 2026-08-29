@@ -5,11 +5,17 @@
 //  Declarative, read-only hook rules loaded from project and activated skills.
 //
 
+import CryptoKit
 import Foundation
+
+nonisolated struct PreToolUseApproval: Sendable, Equatable {
+    var reason: String
+    var identity: String
+}
 
 nonisolated enum PreToolUseDecision: Sendable, Equatable {
     case allow
-    case ask(String)
+    case ask(PreToolUseApproval)
     case deny(String)
 }
 
@@ -45,8 +51,7 @@ actor PreToolUseHookEvaluator {
     static let shared = PreToolUseHookEvaluator()
 
     private struct CachedFile {
-        var modificationDate: Date?
-        var size: UInt64?
+        var contentDigest: String
         var result: Result<[PreToolUseHookRule], HookLoadError>
     }
 
@@ -83,7 +88,12 @@ actor PreToolUseHookEvaluator {
             return .deny(message(for: denied.rule, source: denied.source))
         }
         if let asked = matching.first(where: { $0.rule.action == .ask }) {
-            return .ask(message(for: asked.rule, source: asked.source))
+            return .ask(
+                PreToolUseApproval(
+                    reason: message(for: asked.rule, source: asked.source),
+                    identity: approvalIdentity(rule: asked.rule, source: asked.source)
+                )
+            )
         }
         return .allow
     }
@@ -112,23 +122,18 @@ actor PreToolUseHookEvaluator {
     private func rules(
         at url: URL
     ) -> Result<[PreToolUseHookRule], HookLoadError> {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        guard attributes != nil else {
+        guard let data = try? Data(contentsOf: url) else {
             cache.removeValue(forKey: url)
             return .success([])
         }
-
-        let modificationDate = attributes?[.modificationDate] as? Date
-        let size = (attributes?[.size] as? NSNumber)?.uint64Value
+        let contentDigest = SHA256.hash(data: data).hexString
         if let cached = cache[url],
-           cached.modificationDate == modificationDate,
-           cached.size == size {
+           cached.contentDigest == contentDigest {
             return cached.result
         }
 
         let result: Result<[PreToolUseHookRule], HookLoadError>
         do {
-            let data = try Data(contentsOf: url)
             let config = try JSONDecoder().decode(PreToolUseHookConfig.self, from: data)
             result = .success(config.preToolUse)
         } catch {
@@ -139,8 +144,7 @@ actor PreToolUseHookEvaluator {
             )
         }
         cache[url] = CachedFile(
-            modificationDate: modificationDate,
-            size: size,
+            contentDigest: contentDigest,
             result: result
         )
         return result
@@ -152,6 +156,18 @@ actor PreToolUseHookEvaluator {
             .nilIfEmpty
             ?? "Matched PreToolUse rule '\(rule.tool)'."
         return "\(reason) [\(source.lastPathComponent)]"
+    }
+
+    private func approvalIdentity(rule: PreToolUseHookRule, source: URL) -> String {
+        let encodedRule = (try? JSONEncoder().encode(rule)) ?? Data()
+        var payload = Data(source.standardizedFileURL.path.utf8)
+        payload.append(0)
+        payload.append(encodedRule)
+        if let content = try? Data(contentsOf: source) {
+            payload.append(0)
+            payload.append(content)
+        }
+        return SHA256.hash(data: payload).hexString
     }
 }
 
@@ -197,5 +213,11 @@ private extension PreToolUseHookRule {
         default:
             return nil
         }
+    }
+}
+
+private extension SHA256.Digest {
+    nonisolated var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
     }
 }

@@ -9,14 +9,40 @@ extension CapabilityStore {
     func callMCPTool(
         qualifiedName: String,
         argumentsJSON: String,
-        temporaryWriteRoots: [URL] = []
+        temporaryWriteRoots: [URL] = [],
+        allowsProtectedMetadataWrites: Bool = false
     ) async throws -> String {
         let target = try mcpToolTarget(qualifiedName)
         guard let server = mcpServers.first(where: { server in
-            server.name == target.serverName && server.enabled
+            server.id == target.serverID && server.enabled
         }) else {
             throw MCPStdioClient.ClientError.notRunning
         }
+        await callCoordinator.acquire(serverID: server.id)
+        do {
+            try Task.checkCancellation()
+            let result = try await callMCPTool(
+                target: target,
+                server: server,
+                argumentsJSON: argumentsJSON,
+                temporaryWriteRoots: temporaryWriteRoots,
+                allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
+            )
+            await callCoordinator.release(serverID: server.id)
+            return result
+        } catch {
+            await callCoordinator.release(serverID: server.id)
+            throw error
+        }
+    }
+
+    private func callMCPTool(
+        target: (serverID: String, toolName: String),
+        server: MCPServerConfig,
+        argumentsJSON: String,
+        temporaryWriteRoots: [URL],
+        allowsProtectedMetadataWrites: Bool
+    ) async throws -> String {
         if temporaryWriteRoots.isEmpty {
             guard let client = clients[server.id] else {
                 throw MCPStdioClient.ClientError.notRunning
@@ -27,7 +53,11 @@ extension CapabilityStore {
             )
         }
 
-        await connect(serverID: server.id, writableRoots: temporaryWriteRoots)
+        await connect(
+            serverID: server.id,
+            writableRoots: temporaryWriteRoots,
+            allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
+        )
         guard let writableClient = clients[server.id] else {
             throw MCPStdioClient.ClientError.notRunning
         }
@@ -50,13 +80,13 @@ extension CapabilityStore {
                 name: tool.qualifiedName,
                 description: "[\(tool.serverName)] \(tool.description)",
                 parameters: tool.inputSchema,
-                requiresConfirmation: tool.readOnlyHint != true
+                requiresConfirmation: tool.localWriteHint || tool.readOnlyHint == false
             )
         }
     }
 
     private func mcpToolTarget(_ qualifiedName: String) throws -> (
-        serverName: String,
+        serverID: String,
         toolName: String
     ) {
         guard qualifiedName.hasPrefix("mcp__") else {
@@ -66,9 +96,13 @@ extension CapabilityStore {
         guard let separator = rest.range(of: "__") else {
             throw MCPStdioClient.ClientError.invalidResponse("Malformed MCP tool name")
         }
-        return (
-            String(rest[..<separator.lowerBound]),
-            String(rest[separator.upperBound...])
-        )
+        let serverID = String(rest[..<separator.lowerBound])
+        let toolName = String(rest[separator.upperBound...])
+        guard mcpTools.contains(where: { tool in
+            tool.serverID == serverID && tool.name == toolName
+        }) || mcpServers.contains(where: { $0.id == serverID }) else {
+            throw MCPStdioClient.ClientError.invalidResponse("Unknown MCP tool")
+        }
+        return (serverID, toolName)
     }
 }

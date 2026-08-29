@@ -190,8 +190,10 @@ enum ExploreSubagentRunner {
         case .allow:
             return
 
-        case .ask(let reason):
-            throw ToolError.operationFailed("PreToolUse hook requires parent approval: \(reason)")
+        case .ask(let approval):
+            throw ToolError.operationFailed(
+                "PreToolUse hook requires parent approval: \(approval.reason)"
+            )
 
         case .deny(let reason):
             throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")

@@ -19,6 +19,14 @@ final class ReviewAgentTests: XCTestCase {
         XCTAssertEqual(verdict?.decision, .accept)
     }
 
+    func testChangeSetBriefIsTheReviewEvidence() {
+        var book = WorkspaceChangeBook()
+        book.applyWrite(path: "Install.md", before: nil, after: "## Install\n", created: true)
+        let brief = book.snapshot().reviewBrief(maxChars: 1_000)
+        XCTAssertTrue(brief.contains("Install.md"))
+        XCTAssertFalse(brief.contains("read_text_file"))
+    }
+
     func testDigestKeepsUserAndTools() {
         let events = [
             AgentEvent(kind: .userInput, content: "补一下安装说明"),

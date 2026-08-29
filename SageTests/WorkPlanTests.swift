@@ -19,7 +19,40 @@ final class WorkPlanTests: XCTestCase {
         XCTAssertEqual(plan?.sideEffects, "会改 README.md")
         XCTAssertEqual(plan?.requiresConfirmation, true)
         XCTAssertEqual(plan?.promptAppendix.contains("Confirmed work plan"), true)
-        XCTAssertEqual(plan?.promptAppendix.contains("Shell commands and MCP tools"), true)
+        XCTAssertEqual(plan?.promptAppendix.contains("Sensitive reads and local file mutations"), true)
+    }
+
+    func testAnswerReplySkipsExecute() {
+        let plan = PlanAgent.parse("""
+        {
+          "kind": "answer",
+          "intent": "回一句闲话",
+          "approach": "",
+          "reply": "哈哈，今天也挺好的。",
+          "side_effects": null
+        }
+        """)
+        XCTAssertEqual(plan?.kind, .answer)
+        XCTAssertEqual(plan?.reply, "哈哈，今天也挺好的。")
+        XCTAssertEqual(plan?.directReply, "哈哈，今天也挺好的。")
+        XCTAssertNotEqual(plan?.requiresConfirmation, true)
+    }
+
+    func testAnswerDirectReplyFallsBackToApproach() {
+        let plan = PlanAgent.parse("""
+        {"kind":"answer","intent":"解释这个报错","approach":"根据上下文说明。","side_effects":null}
+        """)
+        XCTAssertEqual(plan?.directReply, "根据上下文说明。")
+        XCTAssertNil(plan?.reply)
+    }
+
+    func testActHasNoDirectReply() {
+        let plan = PlanAgent.parse("""
+        {"kind":"act","intent":"改 README","approach":"只补一节。","side_effects":"会改 README"}
+        """)
+        XCTAssertNil(plan?.directReply)
+        XCTAssertNil(plan?.reply)
+        XCTAssertEqual(plan?.requiresConfirmation, true)
     }
 
     func testAcceptsLegacyApproachArray() {

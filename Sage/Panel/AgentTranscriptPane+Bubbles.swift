@@ -91,21 +91,42 @@ extension AgentTranscriptPane {
             }
 
         case .toolApproval:
-            if case .toolApproval(_, let name, let args, let title) = session.agent.state.pendingPrompt {
-                ToolApprovalCard(
-                    title: title,
-                    toolName: name,
-                    argumentsJSON: args,
-                    onAllowOnce: { Task { await session.agent.confirmToolApproval(scope: .once) } },
-                    onAllowSession: { Task { await session.agent.confirmToolApproval(scope: .task) } },
-                    onAllowTool: { Task { await session.agent.confirmToolApproval(scope: .always) } },
-                    onSkip: { Task { await session.agent.skipToolApproval() } }
-                )
-            }
+            toolApprovalChrome()
 
         case .none:
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    func toolApprovalChrome() -> some View {
+        if case .toolApproval(_, let name, let args, let title) = session.agent.state.pendingPrompt {
+            let requirement = authorizationRequirement(name: name, argumentsJSON: args)
+            ToolApprovalCard(
+                title: title,
+                toolName: name,
+                argumentsJSON: args,
+                authorizationSummary: requirement?.userFacingSummary,
+                authorizationPrompt: requirement?.userFacingPrompt,
+                onAllowOnce: { Task { await session.agent.confirmToolApproval(scope: .once) } },
+                onAllowSession: { Task { await session.agent.confirmToolApproval(scope: .task) } },
+                onAllowTool: { Task { await session.agent.confirmToolApproval(scope: .always) } },
+                onSkip: { Task { await session.agent.skipToolApproval() } }
+            )
+        }
+    }
+
+    func authorizationRequirement(
+        name: String,
+        argumentsJSON: String
+    ) -> ToolAuthorizationRequirement? {
+        ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: session.agent.state.pathGuardPolicy,
+            skills: session.agent.host.catalogSkills,
+            mcpTools: appState.mcpHub.mcpTools
+        )
     }
 
     func failureAccessory(_ message: String) -> some View {
@@ -168,6 +189,9 @@ extension AgentTranscriptPane {
             VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 if !event.content.isEmpty {
                     MarkdownContentView(markdown: event.content, collapsible: true)
+                }
+                if let changes = event.workspaceChanges, !changes.isEmpty {
+                    WorkspaceChangesView(changes: changes)
                 }
                 if let calls = event.toolCalls, !calls.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {

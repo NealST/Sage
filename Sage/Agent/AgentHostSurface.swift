@@ -100,9 +100,9 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         case .allow:
             break
 
-        case .ask(let reason):
+        case .ask(let approval):
             throw ToolError.operationFailed(
-                "PreToolUse hook requires interactive approval: \(reason)"
+                "PreToolUse hook requires interactive approval: \(approval.reason)"
             )
 
         case .deny(let reason):

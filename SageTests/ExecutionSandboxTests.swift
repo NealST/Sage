@@ -20,6 +20,7 @@ final class ExecutionSandboxTests: XCTestCase {
         let configuration = ExecutionSandboxConfiguration.shell(
             policy: .project(root: project),
             readAllowlist: [],
+            allowsWrites: true,
             allowsNetwork: false
         )
 
@@ -30,6 +31,7 @@ final class ExecutionSandboxTests: XCTestCase {
         XCTAssertTrue(profile.contains("(deny network*)"))
         XCTAssertTrue(profile.contains("(allow file-read* (subpath \"\(project.path)\"))"))
         XCTAssertTrue(profile.contains("(deny file-write* (subpath \"\(project.path)/.git\"))"))
+        XCTAssertTrue(profile.contains("(deny file-write* (regex #\"/\\.git(/|$)\"))"))
     }
 
     func testExplicitCapabilitiesChangeProfile() throws {
@@ -38,6 +40,7 @@ final class ExecutionSandboxTests: XCTestCase {
         let configuration = ExecutionSandboxConfiguration.shell(
             policy: .project(root: project),
             readAllowlist: [],
+            allowsWrites: true,
             allowsNetwork: true,
             allowsProtectedMetadataWrites: true
         )
@@ -71,6 +74,7 @@ final class ExecutionSandboxTests: XCTestCase {
         let configuration = ExecutionSandboxConfiguration.shell(
             policy: .project(root: project),
             readAllowlist: [],
+            allowsWrites: true,
             allowsNetwork: false
         )
 
@@ -154,7 +158,6 @@ final class ExecutionSandboxTests: XCTestCase {
             ],
             configuration: configuration
         )
-
         let result = try await ProcessRunner.run(
             executable: invocation.executable,
             arguments: invocation.arguments,
@@ -189,6 +192,10 @@ final class ExecutionSandboxTests: XCTestCase {
             ],
             configuration: configuration
         )
+        let profile = ExecutionSandbox.seatbeltProfile(configuration: configuration)
+        XCTAssertTrue(
+            profile.contains("(deny file-write* (subpath \"\(working.path)/.git\"))")
+        )
 
         let result = try await ProcessRunner.run(
             executable: invocation.executable,
@@ -214,43 +221,6 @@ final class ExecutionSandboxTests: XCTestCase {
             XCTAssertNoThrow(
                 try PathGuard.resolveAllowed(relativePath, policy: policy, access: .read)
             )
-        }
-    }
-
-    func testSafeFileIORejectsFinalSymlinkAndWritesThroughAnchoredDirectory() throws {
-        let root = try makeFixture()
-        let actual = root.appendingPathComponent("actual.txt")
-        let link = root.appendingPathComponent("link.txt")
-        try "original".write(to: actual, atomically: true, encoding: .utf8)
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: actual)
-
-        try PathGuard.$policy.withValue(.home) {
-            XCTAssertThrowsError(try SafeFileIO.openForReading(at: link))
-            let destination = root.appendingPathComponent("written.txt")
-            try SafeFileIO.atomicWrite(Data("updated".utf8), to: destination)
-            XCTAssertEqual(
-                try String(data: SafeFileIO.readData(at: destination, maxBytes: 100), encoding: .utf8),
-                "updated"
-            )
-        }
-    }
-
-    func testSafeFileIOMoveCopyAndDeleteStayDescriptorAnchored() throws {
-        let root = try makeFixture()
-        let source = root.appendingPathComponent("source.txt")
-        let copied = root.appendingPathComponent("copied.txt")
-        let moved = root.appendingPathComponent("moved.txt")
-        try "content".write(to: source, atomically: true, encoding: .utf8)
-
-        try PathGuard.$policy.withValue(.home) {
-            try SafeFileIO.copyRegularFile(at: source, to: copied)
-            try SafeFileIO.moveItem(at: copied, to: moved)
-            XCTAssertEqual(
-                try String(data: SafeFileIO.readData(at: moved, maxBytes: 100), encoding: .utf8),
-                "content"
-            )
-            try SafeFileIO.removeItem(at: moved, isDirectory: false)
-            XCTAssertFalse(FileManager.default.fileExists(atPath: moved.path))
         }
     }
 

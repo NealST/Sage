@@ -33,19 +33,51 @@ extension PathGuard {
         resolvedPath == resolvedHomePath || resolvedPath.hasPrefix(resolvedHomePath + "/")
     }
 
+    nonisolated static func assertSensitiveReadAllowed(_ url: URL) throws {
+        guard isSensitiveReadAllowed(url) else {
+            throw ToolError.operationFailed(
+                "Reading this protected location requires sensitive-read authorization."
+            )
+        }
+    }
+
+    nonisolated static func isSensitiveReadAllowed(_ url: URL) -> Bool {
+        guard let protectedRoot = SensitiveResourcePolicy.containingRoot(for: url) else {
+            return true
+        }
+        let protectedPath = protectedRoot.standardizedFileURL.resolvingSymlinksInPath().path
+        return sensitiveReadAllowlist.contains { authorizedRoot in
+            protectedPath == authorizedRoot || protectedPath.hasPrefix(authorizedRoot + "/")
+        }
+    }
+
+    nonisolated static func assertWriteAllowed(_ url: URL) throws {
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let allowed = writeAllowlist.contains { root in
+            path == root || path.hasPrefix(root + "/")
+        }
+        guard allowed else {
+            throw ToolError.operationFailed(
+                "The resolved destination is outside this invocation's authorized write scope."
+            )
+        }
+    }
+
     nonisolated static func isProtectedWritePath(_ resolvedPath: String, policy: Policy) -> Bool {
-        let rootPath: String
+        let protectedNames = [".git", ".sage", ".agents"]
+        let components = URL(fileURLWithPath: resolvedPath).standardizedFileURL.pathComponents
+        return protectedNames.contains { components.contains($0) }
+            && isInsidePolicy(resolvedPath, policy: policy)
+    }
+
+    private static func isInsidePolicy(_ path: String, policy: Policy) -> Bool {
         switch policy {
         case .home:
-            rootPath = resolvedHomePath
+            return isInsideHome(path)
 
         case .project(let root):
-            rootPath = root.resolvingSymlinksInPath().path
-        }
-        let protectedNames = [".git", ".sage", ".agents"]
-        return protectedNames.contains { name in
-            let protectedPath = rootPath + "/" + name
-            return resolvedPath == protectedPath || resolvedPath.hasPrefix(protectedPath + "/")
+            let rootPath = root.resolvingSymlinksInPath().path
+            return path == rootPath || path.hasPrefix(rootPath + "/")
         }
     }
 
