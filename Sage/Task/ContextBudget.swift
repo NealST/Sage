@@ -16,7 +16,7 @@ nonisolated struct PromptLayout: Sendable {
     var workPlanAppendix: String = ""
     var todoAppendix: String = ""
     var workingMemory: TaskWorkingMemory?
-    var reviewFeedback: String = ""
+    var followUpAppendix: String = ""
     var skillsCatalog: String = ""
     var relatedSnippets: [RelatedTaskContextSnippet] = []
     var events: [AgentEvent] = []

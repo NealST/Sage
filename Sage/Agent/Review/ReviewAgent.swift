@@ -46,9 +46,6 @@ final class ReviewAgent {
         let brief = Self.brief(
             userText: state.events.last { $0.kind == .userInput }?
                 .modelFacingContent(includeImagePixels: false) ?? "",
-            plan: state.activeTask?.workPlan,
-            draft: draft,
-            turnDigest: TranscriptDigest.makeCurrentTurn(from: state.events),
             changes: changes
         )
         var lastDetail = "The reviewer returned unusable output."

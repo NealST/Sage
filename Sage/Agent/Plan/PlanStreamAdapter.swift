@@ -22,6 +22,9 @@ nonisolated struct PlanStreamAdapter: Sendable {
     private var kind = Kind.undecided
     private(set) var raw = ""
 
+    /// Hidden JSON plan — reserve the work-plan card instead of streaming tokens.
+    var isEnvelope: Bool { kind == .envelope }
+
     mutating func ingest(_ chunk: String) -> String? {
         raw += chunk
         if kind == .undecided {

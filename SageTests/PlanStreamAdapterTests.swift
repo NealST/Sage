@@ -11,7 +11,9 @@ final class PlanStreamAdapterTests: XCTestCase {
 
     func testJSONStaysHidden() {
         var adapter = PlanStreamAdapter()
+        XCTAssertFalse(adapter.isEnvelope)
         XCTAssertNil(adapter.ingest("{"))
+        XCTAssertTrue(adapter.isEnvelope)
         XCTAssertNil(adapter.ingest(#""kind":"act"}"#))
         XCTAssertEqual(adapter.finish(), .envelope(#"{"kind":"act"}"#))
     }
@@ -26,6 +28,7 @@ final class PlanStreamAdapterTests: XCTestCase {
     func testFencedJSONIsEnvelope() {
         var adapter = PlanStreamAdapter()
         XCTAssertNil(adapter.ingest("```json\n{\"kind\":\"act\"}"))
+        XCTAssertTrue(adapter.isEnvelope)
         XCTAssertEqual(
             adapter.finish(),
             .envelope("```json\n{\"kind\":\"act\"}")
@@ -49,5 +52,19 @@ final class PlanStreamAdapterTests: XCTestCase {
 
     func testParsePlainRejectsJSON() {
         XCTAssertNil(PlanAgent.parsePlain(#"{"kind":"act","intent":"改"}"#))
+    }
+
+    func testProseIsNotEnvelope() {
+        var adapter = PlanStreamAdapter()
+        _ = adapter.ingest("哈")
+        XCTAssertFalse(adapter.isEnvelope)
+    }
+
+    func testLeadingWhitespaceIsNotEnvelopeUntilJSON() {
+        var adapter = PlanStreamAdapter()
+        XCTAssertNil(adapter.ingest("  \n"))
+        XCTAssertFalse(adapter.isEnvelope)
+        XCTAssertNil(adapter.ingest("{"))
+        XCTAssertTrue(adapter.isEnvelope)
     }
 }

@@ -24,13 +24,7 @@ nonisolated enum ToolInvocationDispatcher {
             activatedSkillNames: request.activatedSkillNames,
             enabledSkills: request.enabledSkills
         ) + request.extraReadAllowlist
-        let authorization = ToolAuthorizationPolicy.requirement(
-            name: request.name,
-            argumentsJSON: request.argumentsJSON,
-            policy: request.pathGuardPolicy,
-            skills: request.authorizationSkills ?? request.enabledSkills,
-            mcpTools: request.mcp?.mcpTools ?? []
-        )
+        let authorization = request.resolvingAuthorization().authorization
 
         return try await Self.invokeBuiltIn(
             named: request.name,

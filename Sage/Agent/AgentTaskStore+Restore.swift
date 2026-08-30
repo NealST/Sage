@@ -14,8 +14,12 @@ extension AgentTaskStore {
             return
         }
         restoreBaseState(from: task)
-        if restorePendingPrompt(from: task) { return }
+        if restorePendingPrompt(from: task) {
+            onActiveTaskChanged?()
+            return
+        }
         await restorePendingPlan(from: task)
+        onActiveTaskChanged?()
     }
 
     func restoreBaseState(from task: TaskRecord) {

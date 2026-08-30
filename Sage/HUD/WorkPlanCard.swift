@@ -14,6 +14,40 @@ struct WorkPlanCard: View {
     var onStop: (() -> Void)?
 
     var body: some View {
+        WorkPlanCardBody(
+            plan: plan,
+            actions: isExecuting
+                ? .executing(onStop: onStop)
+                : .confirm(onConfirm: onConfirm, onCancel: onCancel)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Plan")
+    }
+}
+
+/// Same layout as `WorkPlanCard`, redacted with the system placeholder treatment.
+struct WorkPlanCardSkeleton: View {
+    var body: some View {
+        WorkPlanCardBody(plan: .skeletonPlaceholder, actions: .placeholder)
+            .redacted(reason: .placeholder)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Preparing plan")
+            .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+private enum WorkPlanCardActions {
+    case confirm(onConfirm: () -> Void, onCancel: () -> Void)
+    case executing(onStop: (() -> Void)?)
+    case placeholder
+}
+
+private struct WorkPlanCardBody: View {
+    let plan: WorkPlan
+    let actions: WorkPlanCardActions
+
+    var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.intent)
                 .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
@@ -44,34 +78,80 @@ struct WorkPlanCard: View {
                     .padding(.top, 2)
             }
 
-            if isExecuting {
-                HStack(spacing: SageDesign.Spacing.small) {
-                    Spacer(minLength: 0)
-                    if let onStop {
-                        Button("Stop", role: .cancel, action: onStop)
-                            .keyboardShortcut(.cancelAction)
-                            .controlSize(.regular)
-                    }
-                }
-                .padding(.top, SageDesign.Spacing.extraSmall)
-            } else {
-                HStack(spacing: SageDesign.Spacing.small) {
-                    Button("Cancel", role: .cancel, action: onCancel)
-                        .keyboardShortcut(.cancelAction)
-                        .controlSize(.regular)
-
-                    Spacer(minLength: 0)
-
-                    Button("Run", action: onConfirm)
-                        .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.regular)
-                }
-                .padding(.top, SageDesign.Spacing.extraSmall)
-            }
+            actionRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Plan")
     }
+
+    @ViewBuilder
+    private var actionRow: some View {
+        switch actions {
+        case .executing(let onStop):
+            HStack(spacing: SageDesign.Spacing.small) {
+                Spacer(minLength: 0)
+                if let onStop {
+                    Button("Stop", role: .cancel, action: onStop)
+                        .keyboardShortcut(.cancelAction)
+                        .controlSize(.regular)
+                }
+            }
+            .padding(.top, SageDesign.Spacing.extraSmall)
+
+        case .confirm(let onConfirm, let onCancel):
+            confirmRow(onConfirm: onConfirm, onCancel: onCancel, shortcuts: true)
+
+        case .placeholder:
+            confirmRow(onConfirm: {}, onCancel: {}, shortcuts: false)
+        }
+    }
+
+    private func confirmRow(
+        onConfirm: @escaping () -> Void,
+        onCancel: @escaping () -> Void,
+        shortcuts: Bool
+    ) -> some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            if shortcuts {
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                    .controlSize(.regular)
+            } else {
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .controlSize(.regular)
+            }
+
+            Spacer(minLength: 0)
+
+            if shortcuts {
+                Button("Run", action: onConfirm)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+            } else {
+                Button("Run", action: onConfirm)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+            }
+        }
+        .padding(.top, SageDesign.Spacing.extraSmall)
+    }
+}
+
+private extension WorkPlan {
+    /// Typical act card: intent, markdown approach, side effects, Cancel / Run.
+    static let skeletonPlaceholder = WorkPlan(
+        kind: .act,
+        intent: "Preparing a plan for this request",
+        approach: """
+        ## Understanding
+        Review the request and what done looks like.
+
+        ## Constraints
+        Leave unrelated files and settings alone.
+
+        ## Path
+        Inspect first, then make the change and check the result.
+        """,
+        sideEffects: "May change files on this Mac"
+    )
 }

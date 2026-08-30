@@ -83,7 +83,7 @@ final class ExecuteAgent {
         if hasUnexecutedPendingBatch {
             guard await discardUnexecutedPendingBatch() else { return }
         } else {
-            guard await persistClearedPendingPrompt() else { return }
+            guard await taskStore.clearPendingPrompt() else { return }
         }
         await runModelTurn(includeTools: false)
     }
@@ -182,18 +182,6 @@ final class ExecuteAgent {
             }
         ) else { return false }
         return true
-    }
-
-    private func persistClearedPendingPrompt() async -> Bool {
-        guard state.pendingPrompt != nil || state.activeTask?.pendingPrompt != nil else {
-            return true
-        }
-        return await taskStore.commit(
-            appendEvents: [],
-            deleteEventIDs: []
-        ) { task in
-                task.pendingPrompt = nil
-        }
     }
 
     private func runModelTurn(includeTools: Bool) async {

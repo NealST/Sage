@@ -23,6 +23,20 @@ protocol SkillToolHost: AnyObject {
         instructions: String?,
         activatedSkillNames: Set<String>
     ) async throws -> String
+    /// Evidence for a child call if this session already approved the same requirement.
+    func inheritedAuthorizationEvidence(
+        name: String,
+        argumentsJSON: String
+    ) -> ToolInvocationAuthorizationEvidence?
+}
+
+extension SkillToolHost {
+    func inheritedAuthorizationEvidence(
+        name: String,
+        argumentsJSON: String
+    ) -> ToolInvocationAuthorizationEvidence? {
+        nil
+    }
 }
 
 /// Create vs enhance for `save_skill` tool arguments.

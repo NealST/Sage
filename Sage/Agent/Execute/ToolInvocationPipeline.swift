@@ -10,17 +10,11 @@ import Foundation
 nonisolated enum ToolInvocationPipeline {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
+        let request = request.resolvingAuthorization()
         let definition = try validateForAuthorization(request)
         try await assertHookAuthorized(request)
         try assertCapabilityAuthorized(request)
-        let authorization = ToolAuthorizationPolicy.requirement(
-            name: request.name,
-            argumentsJSON: request.argumentsJSON,
-            policy: request.pathGuardPolicy,
-            skills: request.authorizationSkills ?? request.enabledSkills,
-            mcpTools: request.mcp?.mcpTools ?? []
-        )
-        let writesLocally = authorization?.capabilities.contains { capability in
+        let writesLocally = request.authorization?.capabilities.contains { capability in
             capability == .localWrite || capability == .protectedMetadataWrite
         } == true
         try ToolInvocationDispatcher.assertMutatingToolsAllowed(
@@ -55,6 +49,7 @@ nonisolated enum ToolInvocationPipeline {
     static func validateForAuthorization(
         _ request: ToolInvocationRequest
     ) throws -> ToolDefinition {
+        let request = request.resolvingAuthorization()
         try SkillToolPolicy.assertToolAllowed(
             request.name,
             activatedSkillNames: request.activatedSkillNames,
@@ -70,14 +65,7 @@ nonisolated enum ToolInvocationPipeline {
             argumentsJSON: request.argumentsJSON,
             against: definition.parameters
         )
-        let authorization = ToolAuthorizationPolicy.requirement(
-            name: request.name,
-            argumentsJSON: request.argumentsJSON,
-            policy: request.pathGuardPolicy,
-            skills: request.authorizationSkills ?? request.enabledSkills,
-            mcpTools: request.mcp?.mcpTools ?? []
-        )
-        if let validationError = authorization?.validationError {
+        if let validationError = request.authorization?.validationError {
             throw ToolError.invalidArguments(validationError)
         }
         return definition
@@ -108,12 +96,16 @@ nonisolated enum ToolInvocationPipeline {
         let activatedSkills = request.enabledSkills.filter { skill in
             request.activatedSkillNames.contains(skill.name)
         }
-        let decision = await PreToolUseHookEvaluator.shared.evaluate(
-            toolName: request.name,
-            argumentsJSON: request.argumentsJSON,
-            projectRoot: projectRoot,
-            activatedSkills: activatedSkills
-        )
+        let decision = if let hookDecision = request.hookDecision {
+            hookDecision
+        } else {
+            await PreToolUseHookEvaluator.shared.evaluate(
+                toolName: request.name,
+                argumentsJSON: request.argumentsJSON,
+                projectRoot: projectRoot,
+                activatedSkills: activatedSkills
+            )
+        }
         switch decision {
         case .allow:
             return
@@ -139,13 +131,7 @@ nonisolated enum ToolInvocationPipeline {
     private static func assertCapabilityAuthorized(
         _ request: ToolInvocationRequest
     ) throws {
-        guard let requirement = ToolAuthorizationPolicy.requirement(
-            name: request.name,
-            argumentsJSON: request.argumentsJSON,
-            policy: request.pathGuardPolicy,
-            skills: request.authorizationSkills ?? request.enabledSkills,
-            mcpTools: request.mcp?.mcpTools ?? []
-        ) else { return }
+        guard let requirement = request.resolvingAuthorization().authorization else { return }
         guard request.authorizationEvidence?.requirementKey == requirement.stableKey else {
             throw ToolError.operationFailed("This tool call requires authorization.")
         }

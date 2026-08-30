@@ -7,7 +7,7 @@ import Foundation
 
 extension TurnCoordinator {
     /// Plan classifies intent. `answer` replies immediately; `act` confirms first.
-    func presentWorkPlan(for userText: String, autoConfirm: Bool) async {
+    func presentWorkPlan(for userText: String) async {
         do {
             try Task.checkCancellation()
             let catalogNames = (skillCatalog()?.enabledSkills ?? []).map(\.name)
@@ -16,6 +16,7 @@ extension TurnCoordinator {
                 skillAppendix: skillRecall.cachedResult?.text ?? "",
                 allowedSkillNames: catalogNames
             )
+            streaming.setReservingWorkPlan(false)
             try Task.checkCancellation()
             guard await taskStore.commit(
                 appendEvents: [],
@@ -28,7 +29,7 @@ extension TurnCoordinator {
 
             applyThreadOffer(from: workPlan)
 
-            if workPlan.requiresConfirmation, !autoConfirm {
+            if workPlan.requiresConfirmation {
                 state.enterAwaitingConfirmation()
                 return
             }
@@ -49,29 +50,42 @@ extension TurnCoordinator {
     }
 
     func performRetry() async {
-        if let plan = state.activeTask?.pendingPlan ?? planProgress.plan {
+        switch retryPath() {
+        case .retryToolBatch:
+            guard let plan = state.activeTask?.pendingPlan ?? planProgress.plan else { return }
             planProgress.replace(plan)
             await executeToolBatch?(true)
-            return
+
+        case .confirmWorkPlan:
+            state.enterAwaitingConfirmation()
+
+        case .resumeModelTurn:
+            await runModelTurn()
+
+        case .none:
+            if !settings.isConfigured {
+                state.enterFailed(message: ModelClientError.notConfigured.localizedDescription)
+            }
+        }
+    }
+
+    /// Where Retry should resume. `nil` means nothing to do (or not configured).
+    func retryPath() -> TurnRetryPath? {
+        if state.activeTask?.pendingPlan != nil || planProgress.hasPlan {
+            return .retryToolBatch
         }
         if state.activeTask?.workPlan?.requiresConfirmation == true, !planApproved {
-            state.enterAwaitingConfirmation()
-            return
+            return .confirmWorkPlan
         }
-
-        guard settings.isConfigured else {
-            state.enterFailed(message: ModelClientError.notConfigured.localizedDescription)
-            return
-        }
-        guard !state.events.isEmpty else { return }
-
-        await execute.start()
+        guard settings.isConfigured else { return nil }
+        guard !state.events.isEmpty else { return nil }
+        return .resumeModelTurn
     }
 
     func runModelTurn() async {
         if state.activeTask?.workPlan == nil,
            let userText = state.events.last(where: { $0.kind == .userInput })?.content {
-            await presentWorkPlan(for: userText, autoConfirm: false)
+            await presentWorkPlan(for: userText)
             return
         }
         await execute.start()
@@ -91,7 +105,7 @@ extension TurnCoordinator {
 
     func extendAndContinueToolRounds() async {
         execute.extendToolBatchLimit()
-        guard await persistClearedPendingPrompt() else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
         await execute.continueWithTools()
     }
 
@@ -101,19 +115,6 @@ extension TurnCoordinator {
 
     func pauseForToolRoundLimit() async {
         await execute.pauseForToolRoundLimit()
-    }
-
-    @discardableResult
-    func persistClearedPendingPrompt() async -> Bool {
-        guard state.pendingPrompt != nil || state.activeTask?.pendingPrompt != nil else {
-            return true
-        }
-        return await taskStore.commit(
-            appendEvents: [],
-            deleteEventIDs: []
-        ) { task in
-                task.pendingPrompt = nil
-        }
     }
 
     func startExecution() async {
@@ -164,13 +165,13 @@ extension TurnCoordinator {
 
     func retryFailedReview() async {
         guard case .reviewFailed(let draft, _) = state.pendingPrompt else { return }
-        guard await persistClearedPendingPrompt() else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
         await reviewAndFinish(draft)
     }
 
     func acceptFailedReview() async {
         guard case .reviewFailed(let draft, _) = state.pendingPrompt else { return }
-        guard await persistClearedPendingPrompt() else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
         state.reviewFeedback = nil
         await finalizeAssistantText(draft, considerPersist: true)
     }
@@ -181,14 +182,21 @@ extension TurnCoordinator {
             content: turn.text,
             attachments: turn.attachments
         )
+        let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: state.events)
         guard await taskStore.commit(
             appendEvents: [event],
-            deleteEventIDs: [],
+            deleteEventIDs: retractIDs,
             mutate: { task in
                 task.status = .active
+                task.pendingPlan = nil
+                task.pendingPrompt = nil
             }
         ) else { return false }
-        state.reviewFeedback = turn.text
+        state.clearPendingPrompt()
+        latestUserEventID = event.id
+        state.steerInstruction = turn.text
+        reviewRounds = 0
+        execute.resetLoop()
         return true
     }
 
@@ -196,7 +204,7 @@ extension TurnCoordinator {
         state.turnInput.pendingSteer = nil
         if state.activeTask?.workPlan == nil {
             let text = state.events.last { $0.kind == .userInput }?.content ?? ""
-            await presentWorkPlan(for: text, autoConfirm: false)
+            await presentWorkPlan(for: text)
             return
         }
         planApproved = true
@@ -245,6 +253,7 @@ extension TurnCoordinator {
 
         streaming.clear()
         state.reviewFeedback = nil
+        state.steerInstruction = nil
         state.workspaceChanges.reset()
         state.clearPendingPrompt()
         state.lastAssistantText = reply
@@ -298,6 +307,45 @@ extension TurnCoordinator {
         planApproved = false
         reviewRounds = 0
         state.reviewFeedback = nil
+        state.steerInstruction = nil
         state.workspaceChanges.reset()
+        if let id = state.activeTaskID {
+            turnLoopByTask[id] = TurnLoopState()
+            turnLoopTaskID = id
+        }
     }
+
+    /// Load loop flags for the window’s current task. Stashes the previous thread.
+    func adoptActiveTask() {
+        let newID = state.activeTaskID
+        if turnLoopTaskID == newID { return }
+        if let oldID = turnLoopTaskID {
+            turnLoopByTask[oldID] = TurnLoopState(
+                planApproved: planApproved,
+                reviewRounds: reviewRounds
+            )
+        }
+        turnLoopTaskID = newID
+        let stored = newID.flatMap { turnLoopByTask[$0] } ?? TurnLoopState()
+        planApproved = stored.planApproved
+        reviewRounds = stored.reviewRounds
+        execute.resetLoop()
+        latestUserEventID = state.events.last { $0.kind == .userInput }?.id
+    }
+
+    func dropTurnLoop(for id: UUID) {
+        turnLoopByTask.removeValue(forKey: id)
+        if turnLoopTaskID == id {
+            turnLoopTaskID = nil
+            planApproved = false
+            reviewRounds = 0
+            execute.resetLoop()
+        }
+    }
+}
+
+enum TurnRetryPath: Equatable {
+    case retryToolBatch
+    case confirmWorkPlan
+    case resumeModelTurn
 }

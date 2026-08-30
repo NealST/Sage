@@ -30,10 +30,18 @@ final class TurnCoordinator {
     weak var slashHost: SlashCommandHost?
     var executeToolBatch: ((Bool) async -> Void)?
     var handleStop: ((AgentPlan?) async -> Void)?
-    /// User approved a side-effect work plan this turn.
+    /// User approved a side-effect work plan this turn. Scoped to `turnLoopTaskID`.
     var planApproved = false
     var reviewRounds = 0
     var latestUserEventID: UUID?
+    /// In-memory loop flags keyed by task, so switching threads does not leak them.
+    var turnLoopByTask: [UUID: TurnLoopState] = [:]
+    var turnLoopTaskID: UUID?
+
+    struct TurnLoopState: Equatable {
+        var planApproved = false
+        var reviewRounds = 0
+    }
     var allowDriftOffer = true
     /// Scheduled runs keep WorkPlan on the task so the recipe can be frozen.
     var keepWorkPlanAfterComplete = false
@@ -141,7 +149,7 @@ final class TurnCoordinator {
 
         let readyForModel = skillRecall.prepareSkillsForTurn(query: query)
         guard readyForModel else { return true }
-        await presentWorkPlan(for: query, autoConfirm: false)
+        await presentWorkPlan(for: query)
         return true
     }
 
@@ -268,6 +276,6 @@ final class TurnCoordinator {
         }
 
         _ = skillRecall.prepareSkillsForTurn(query: prompt)
-        await presentWorkPlan(for: prompt, autoConfirm: false)
+        await presentWorkPlan(for: prompt)
     }
 }

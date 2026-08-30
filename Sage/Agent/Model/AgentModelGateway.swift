@@ -198,8 +198,21 @@ final class AgentModelGateway {
         return turn.content ?? ""
     }
 
-    func reviewFeedbackAppendix() -> String {
-        guard let feedback = state.reviewFeedback?.trimmingCharacters(in: .whitespacesAndNewlines),
+    func followUpAppendix() -> String {
+        Self.followUpAppendix(
+            reviewFeedback: state.reviewFeedback,
+            steerInstruction: state.steerInstruction
+        )
+    }
+
+    static func followUpAppendix(reviewFeedback: String?, steerInstruction: String?) -> String {
+        [reviewFeedbackAppendix(reviewFeedback), steerAppendix(steerInstruction)]
+            .filter { !$0.isEmpty }
+            .joined()
+    }
+
+    static func reviewFeedbackAppendix(_ feedback: String?) -> String {
+        guard let feedback = feedback?.trimmingCharacters(in: .whitespacesAndNewlines),
               !feedback.isEmpty
         else { return "" }
         return """
@@ -208,6 +221,19 @@ final class AgentModelGateway {
         ## Follow-up
         Address this, then finish:
         \(feedback)
+        """
+    }
+
+    static func steerAppendix(_ instruction: String?) -> String {
+        guard let instruction = instruction?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !instruction.isEmpty
+        else { return "" }
+        return """
+
+
+        ## Redirect
+        The user redirected this turn. Follow this instead of the previous execute path:
+        \(instruction)
         """
     }
 }

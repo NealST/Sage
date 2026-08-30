@@ -28,7 +28,7 @@ extension AgentModelGateway {
                 workPlanAppendix: state.activeTask?.workPlan?.promptAppendix ?? "",
                 todoAppendix: ManageTodoListTool.promptAppendix(state.activeTask?.todos ?? []),
                 workingMemory: workingMemory,
-                reviewFeedback: reviewFeedbackAppendix(),
+                followUpAppendix: followUpAppendix(),
                 skillsCatalog: skillResult?.text ?? "",
                 relatedSnippets: await relatedContextSnippets(),
                 events: state.events

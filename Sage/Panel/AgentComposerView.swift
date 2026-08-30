@@ -143,6 +143,25 @@ struct AgentComposerView: View {
         .padding(.vertical, SageDesign.Spacing.medium)
         .animation(SageDesign.Motion.expandAnimation, value: session.draftAttachments.count)
         .animation(SageDesign.Motion.expandAnimation, value: session.attachmentHint)
+        .confirmationDialog(
+            "Sage is still working",
+            isPresented: turnInterruptPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Add to Queue") {
+                session.agent.queueTurnInterrupt()
+            }
+            Button("Redirect Now") {
+                Task { await session.agent.steerTurnInterrupt() }
+            }
+            Button("Cancel", role: .cancel) {
+                restoreTurnInterruptDraft()
+            }
+        } message: {
+            Text(
+                "Add this message to the queue, or redirect the current turn now."
+            )
+        }
         .onChange(of: session.attachmentHint) { _, hint in
             guard let hint else { return }
             NSAccessibility.post(

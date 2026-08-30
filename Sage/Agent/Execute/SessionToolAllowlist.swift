@@ -51,6 +51,15 @@ final class SessionToolAllowlist {
             skills: skills,
             mcpTools: mcpTools
         ) else { return true }
+        return contains(requirement, name: name, argumentsJSON: argumentsJSON, scopeID: scopeID)
+    }
+
+    func contains(
+        _ requirement: ToolAuthorizationRequirement,
+        name: String,
+        argumentsJSON: String,
+        scopeID: String
+    ) -> Bool {
         let key = Self.capabilityKey(
             name: name,
             argumentsJSON: argumentsJSON,
@@ -76,6 +85,20 @@ final class SessionToolAllowlist {
             skills: skills,
             mcpTools: mcpTools
         ) else { return true }
+        return consumeApproval(
+            requirement,
+            name: name,
+            argumentsJSON: argumentsJSON,
+            scopeID: scopeID
+        )
+    }
+
+    func consumeApproval(
+        _ requirement: ToolAuthorizationRequirement,
+        name: String,
+        argumentsJSON: String,
+        scopeID: String
+    ) -> Bool {
         let key = Self.capabilityKey(
             name: name,
             argumentsJSON: argumentsJSON,

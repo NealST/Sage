@@ -51,11 +51,52 @@ struct ExecuteServices {
     }
 
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
+        let request = try await preparedInvocation(name: name, argumentsJSON: argumentsJSON)
+        return try await taskStore.withActiveTaskContext {
+            try await ToolInvocationDispatcher.execute(request)
+        }
+    }
+
+    private func preparedInvocation(
+        name: String,
+        argumentsJSON: String
+    ) async throws -> ToolInvocationRequest {
         let hookDecision = await evaluatePreToolUse(name: name, argumentsJSON: argumentsJSON)
-        let hookApproval: PreToolUseApproval?
+        let hookEvidence = try consumeHookEvidence(
+            hookDecision,
+            name: name,
+            argumentsJSON: argumentsJSON
+        )
+        let authorization = try authorizationForInvocation(
+            name: name,
+            argumentsJSON: argumentsJSON
+        )
+        let mcpWriteRoots = authorization.requirement?.principal.hasPrefix("mcp:") == true
+            ? authorization.requirement?.roots(for: .localWrite).map { root in
+                URL(fileURLWithPath: root, isDirectory: true)
+            } ?? []
+            : []
+        return invocationRequest(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            authorization: authorization.requirement,
+            authorizationEvidence: authorization.evidence,
+            hookDecision: hookDecision,
+            hookEvidence: hookEvidence,
+            mcpWriteRoots: mcpWriteRoots,
+            mcpAllowsProtectedMetadataWrites: authorization.requirement?
+                .capabilities.contains(.protectedMetadataWrite) == true
+        )
+    }
+
+    private func consumeHookEvidence(
+        _ hookDecision: PreToolUseDecision,
+        name: String,
+        argumentsJSON: String
+    ) throws -> ToolInvocationHookEvidence? {
         switch hookDecision {
         case .allow:
-            hookApproval = nil
+            return nil
 
         case .deny(let reason):
             throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
@@ -71,47 +112,19 @@ struct ExecuteServices {
                     "PreToolUse hook requires interactive approval: \(approval.reason)"
                 )
             }
-            hookApproval = approval
-        }
-        let authorization = try authorizationForInvocation(
-            name: name,
-            argumentsJSON: argumentsJSON
-        )
-        let hookEvidence: ToolInvocationHookEvidence?
-        if let hookApproval {
             guard state.sessionAllowlist.consumeHookApproval(
                 name: name,
                 argumentsJSON: argumentsJSON,
-                hookIdentity: hookApproval.identity,
+                hookIdentity: approval.identity,
                 scopeID: state.authorizationScopeID
             ) else {
                 throw ToolError.operationFailed("The safety hook approval is no longer available.")
             }
-            hookEvidence = ToolInvocationHookEvidence(
+            return ToolInvocationHookEvidence(
                 invocationKey: SessionToolAllowlist.hookApprovalKey(
                     name: name,
                     argumentsJSON: argumentsJSON,
-                    hookIdentity: hookApproval.identity
-                )
-            )
-        } else {
-            hookEvidence = nil
-        }
-        let mcpWriteRoots = authorization.requirement?.principal.hasPrefix("mcp:") == true
-            ? authorization.requirement?.roots(for: .localWrite).map { root in
-                URL(fileURLWithPath: root, isDirectory: true)
-            } ?? []
-            : []
-        return try await taskStore.withActiveTaskContext {
-            try await ToolInvocationDispatcher.execute(
-                invocationRequest(
-                    name: name,
-                    argumentsJSON: argumentsJSON,
-                    authorizationEvidence: authorization.evidence,
-                    hookEvidence: hookEvidence,
-                    mcpWriteRoots: mcpWriteRoots,
-                    mcpAllowsProtectedMetadataWrites: authorization.requirement?
-                        .capabilities.contains(.protectedMetadataWrite) == true
+                    hookIdentity: approval.identity
                 )
             )
         }
@@ -133,12 +146,10 @@ struct ExecuteServices {
         )
         guard let requirement else { return (nil, nil) }
         guard state.sessionAllowlist.consumeApproval(
+            requirement,
             name: name,
             argumentsJSON: argumentsJSON,
-            policy: state.pathGuardPolicy,
-            scopeID: state.authorizationScopeID,
-            skills: skillHost.catalogSkills,
-            mcpTools: mcp?.mcpTools ?? []
+            scopeID: state.authorizationScopeID
         ) else {
             throw ToolError.operationFailed("This tool call requires authorization.")
         }
@@ -192,7 +203,9 @@ struct ExecuteServices {
     private func invocationRequest(
         name: String,
         argumentsJSON: String,
+        authorization: ToolAuthorizationRequirement? = nil,
         authorizationEvidence: ToolInvocationAuthorizationEvidence? = nil,
+        hookDecision: PreToolUseDecision? = nil,
         hookEvidence: ToolInvocationHookEvidence? = nil,
         mcpWriteRoots: [URL] = [],
         mcpAllowsProtectedMetadataWrites: Bool = false
@@ -209,7 +222,10 @@ struct ExecuteServices {
             skillHost: skillHost,
             workPlanKind: state.activeTask?.workPlan?.kind,
             modelSettings: modelSettings(),
+            authorization: authorization,
+            didResolveAuthorization: true,
             authorizationEvidence: authorizationEvidence,
+            hookDecision: hookDecision,
             hookEvidence: hookEvidence,
             mcpWriteRoots: mcpWriteRoots,
             mcpAllowsProtectedMetadataWrites: mcpAllowsProtectedMetadataWrites,

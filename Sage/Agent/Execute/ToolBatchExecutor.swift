@@ -168,6 +168,7 @@ enum ToolBatchExecutor {
 
     static func handleStop(plan: AgentPlan?, services: ExecuteServices) async {
         if services.state.turnInput.pendingSteer != nil {
+            // Redirect: persistSteerTurn retracts the batch after cancel. Do not fail the task.
             services.clearStream()
             return
         }

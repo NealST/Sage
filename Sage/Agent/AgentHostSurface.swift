@@ -109,26 +109,52 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
             throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
         }
 
-        return try await taskStore.withActiveTaskContext {
-            try await ToolInvocationDispatcher.execute(
-                ToolInvocationRequest(
-                    name: name,
-                    argumentsJSON: argumentsJSON,
-                    tools: tools,
-                    mcp: mcpHub,
-                    pathGuardPolicy: state.pathGuardPolicy,
-                    activatedSkillNames: activatedSkillNames,
-                    enabledSkills: enabledSkills,
-                    skillHost: self,
-                    workPlanKind: state.activeTask?.workPlan?.kind,
-                    modelSettings: settings.snapshot(for: .execute),
-                    extraReadAllowlist: MessageAttachment.readAllowlist(
-                        from: state.events,
-                        visibleEventIDs: state.modelVisibleAttachmentEventIDs
-                    )
-                )
+        var request = ToolInvocationRequest(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            tools: tools,
+            mcp: mcpHub,
+            pathGuardPolicy: state.pathGuardPolicy,
+            activatedSkillNames: activatedSkillNames,
+            enabledSkills: enabledSkills,
+            authorizationSkills: catalogSkills,
+            skillHost: self,
+            workPlanKind: state.activeTask?.workPlan?.kind,
+            modelSettings: settings.snapshot(for: .execute),
+            hookDecision: hookDecision,
+            extraReadAllowlist: MessageAttachment.readAllowlist(
+                from: state.events,
+                visibleEventIDs: state.modelVisibleAttachmentEventIDs
             )
+        ).resolvingAuthorization()
+        request.authorizationEvidence = inheritedAuthorizationEvidence(
+            name: name,
+            argumentsJSON: argumentsJSON
+        )
+        return try await taskStore.withActiveTaskContext {
+            try await ToolInvocationDispatcher.execute(request)
         }
+    }
+
+    func inheritedAuthorizationEvidence(
+        name: String,
+        argumentsJSON: String
+    ) -> ToolInvocationAuthorizationEvidence? {
+        let requirement = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: state.pathGuardPolicy,
+            skills: catalogSkills,
+            mcpTools: mcpHub?.mcpTools ?? []
+        )
+        guard let requirement else { return nil }
+        guard state.sessionAllowlist.contains(
+            requirement,
+            name: name,
+            argumentsJSON: argumentsJSON,
+            scopeID: state.authorizationScopeID
+        ) else { return nil }
+        return ToolInvocationAuthorizationEvidence(requirementKey: requirement.stableKey)
     }
 
     // MARK: - SlashCommandHost

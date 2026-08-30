@@ -27,8 +27,13 @@ struct ToolInvocationRequest {
     var skillHost: SkillToolHost
     var workPlanKind: WorkPlan.Kind?
     var modelSettings: ModelSettingsSnapshot?
+    /// Precomputed requirement. Set via `resolvingAuthorization()` so policy is not re-derived.
+    var authorization: ToolAuthorizationRequirement?
+    var didResolveAuthorization = false
     /// Proof that the session consumed or matched a capability grant for this exact requirement.
     var authorizationEvidence: ToolInvocationAuthorizationEvidence?
+    /// When set, the pipeline skips a second PreToolUse evaluation.
+    var hookDecision: PreToolUseDecision?
     /// Proof that an exact invocation was approved after a PreToolUse hook returned `.ask`.
     var hookEvidence: ToolInvocationHookEvidence?
     /// Temporary write roots granted for this MCP invocation.
@@ -37,4 +42,18 @@ struct ToolInvocationRequest {
     var mcpAllowsProtectedMetadataWrites = false
     /// Extra read-only paths (user attachments). Merged with skill dirs at dispatch.
     var extraReadAllowlist: [String] = []
+
+    func resolvingAuthorization() -> Self {
+        guard !didResolveAuthorization else { return self }
+        var copy = self
+        copy.authorization = ToolAuthorizationPolicy.requirement(
+            name: name,
+            argumentsJSON: argumentsJSON,
+            policy: pathGuardPolicy,
+            skills: authorizationSkills ?? enabledSkills,
+            mcpTools: mcp?.mcpTools ?? []
+        )
+        copy.didResolveAuthorization = true
+        return copy
+    }
 }

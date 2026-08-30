@@ -38,6 +38,8 @@ final class AgentSessionState {
     var forceFreshOnNextSubmit = false
     /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
     var reviewFeedback: String?
+    /// Mid-turn redirect from the user. Distinct from review feedback.
+    var steerInstruction: String?
     /// Skills already loaded via `load_skill` / slash activation in this task.
     var activatedSkillNames: Set<String> = []
     /// Set when the owning window is closing — blocks further DB commits.
@@ -118,6 +120,7 @@ final class AgentSessionState {
         contextHint = nil
         forceFreshOnNextSubmit = false
         reviewFeedback = nil
+        steerInstruction = nil
         pendingPrompt = nil
         workspaceChanges.reset()
     }

@@ -9,12 +9,14 @@ import Foundation
 final class StreamingPlayback {
     private(set) var text: String = ""
     private(set) var thinking: String = ""
+    /// Plan JSON is hidden; hold the work-plan card's seat until it lands.
+    private(set) var isReservingWorkPlan = false
     /// Coarse scroll trigger: `lineCount * 1000 + lengthBucket` (bucket = utf16 count / 80).
     private(set) var scrollThrottleKey: Int = 0
 
     private var lineCount = 1
 
-    var isActive: Bool { !text.isEmpty || !thinking.isEmpty }
+    var isActive: Bool { !text.isEmpty || !thinking.isEmpty || isReservingWorkPlan }
 
     func apply(_ text: String) {
         updateLineCount(for: text)
@@ -27,9 +29,15 @@ final class StreamingPlayback {
         bumpScrollKey(for: text)
     }
 
+    func setReservingWorkPlan(_ reserved: Bool) {
+        guard isReservingWorkPlan != reserved else { return }
+        isReservingWorkPlan = reserved
+    }
+
     func clear() {
         text = ""
         thinking = ""
+        isReservingWorkPlan = false
         lineCount = 1
         scrollThrottleKey = 0
     }

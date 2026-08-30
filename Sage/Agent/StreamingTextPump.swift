@@ -34,6 +34,10 @@ final class StreamingTextPump {
         playback?.applyThinking(text)
     }
 
+    func setReservingWorkPlan(_ reserved: Bool) {
+        playback?.setReservingWorkPlan(reserved)
+    }
+
     func clear() {
         publishTask?.cancel()
         publishTask = nil

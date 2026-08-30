@@ -19,6 +19,10 @@ final class AgentTaskStore {
     /// Scheduled runner: persist the spawned task without moving last-active.
     var suppressScopeActivePointer = false
     var onTaskFailed: ((UUID, String) async -> Void)?
+    /// Fired after this window’s active task identity changes.
+    var onActiveTaskChanged: (() -> Void)?
+    /// Fired when the previous thread is archived or deleted.
+    var onTaskClosed: ((UUID) -> Void)?
 
     var setsScopeActive: Bool { !suppressScopeActivePointer }
 
@@ -88,6 +92,16 @@ final class AgentTaskStore {
     }
 
     @discardableResult
+    func clearPendingPrompt() async -> Bool {
+        guard state.pendingPrompt != nil || state.activeTask?.pendingPrompt != nil else {
+            return true
+        }
+        return await commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.pendingPrompt = nil
+        }
+    }
+
+    @discardableResult
     func createAndActivateTask(relatedTo relatedTaskIDs: [UUID]) async -> UUID? {
         guard !state.isTornDown else { return nil }
         contextCompactor?.cancel()
@@ -106,6 +120,7 @@ final class AgentTaskStore {
             state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
+            onActiveTaskChanged?()
             return task.id
         } catch {
             state.enterFailed(message: "Could not create task storage: \(error.localizedDescription)")
@@ -177,6 +192,7 @@ final class AgentTaskStore {
             state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
+            onTaskClosed?(closing.id)
             return true
         } catch {
             state.enterFailed(
@@ -210,6 +226,7 @@ final class AgentTaskStore {
             state.activatedSkillNames = []
             state.sessionAllowlist.reset()
             skillRecall?.clearTurnCache()
+            onActiveTaskChanged?()
             return task.id
         } catch {
             state.enterFailed(message: "Could not create scheduled task: \(error.localizedDescription)")

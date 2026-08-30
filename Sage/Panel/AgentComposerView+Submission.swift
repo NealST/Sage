@@ -24,13 +24,18 @@ extension AgentComposerView {
         }
     }
 
+    var turnInterruptPresented: Binding<Bool> {
+        Binding(
+            get: { session.agent.state.turnInput.hasOffer },
+            set: { presented in
+                if !presented, session.agent.state.turnInput.hasOffer {
+                    restoreTurnInterruptDraft()
+                }
+            }
+        )
+    }
+
     var composerPlaceholder: String {
-        if session.agent.state.turnInput.hasOffer {
-            return "Choose Queue or Correct above…"
-        }
-        if session.agent.state.isBusy {
-            return "Send to queue or correct this turn…"
-        }
         if session.agent.state.hasPendingPlan {
             return "Finish the pending plan first…"
         }
@@ -46,9 +51,16 @@ extension AgentComposerView {
         return "Ask Sage…"
     }
 
+    func restoreTurnInterruptDraft() {
+        guard let offer = session.agent.state.turnInput.offer else { return }
+        session.draft = offer.text
+        session.draftAttachments = offer.attachments
+        session.agent.dismissTurnInterrupt()
+    }
+
     var composerAccessibilityHint: String {
         if session.agent.state.isBusy {
-            return "Press Return to queue this message or correct the current turn"
+            return "Press Return to send. Sage will ask whether to queue or redirect."
         }
         if session.agent.state.hasPendingPlan {
             return "Run, cancel, or retry the pending plan before sending"

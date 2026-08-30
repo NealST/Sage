@@ -145,22 +145,26 @@ enum ExploreSubagentRunner {
             return "ERROR: Explore subagent cannot call '\(call.name)'."
         }
         do {
-            try await enforceExploreHook(call, request: request)
-            return try await ToolInvocationPipeline.execute(
-                ToolInvocationRequest(
-                    name: call.name,
-                    argumentsJSON: call.argumentsJSON,
-                    tools: request.tools,
-                    mcp: nil,
-                    pathGuardPolicy: request.pathGuardPolicy,
-                    activatedSkillNames: request.activatedSkillNames,
-                    enabledSkills: request.enabledSkills,
-                    skillHost: request.skillHost,
-                    workPlanKind: .observe,
-                    modelSettings: nil,
-                    extraReadAllowlist: request.extraReadAllowlist
-                )
+            let hookDecision = try await enforceExploreHook(call, request: request)
+            var invocation = ToolInvocationRequest(
+                name: call.name,
+                argumentsJSON: call.argumentsJSON,
+                tools: request.tools,
+                mcp: nil,
+                pathGuardPolicy: request.pathGuardPolicy,
+                activatedSkillNames: request.activatedSkillNames,
+                enabledSkills: request.enabledSkills,
+                skillHost: request.skillHost,
+                workPlanKind: .observe,
+                modelSettings: nil,
+                hookDecision: hookDecision,
+                extraReadAllowlist: request.extraReadAllowlist
+            ).resolvingAuthorization()
+            invocation.authorizationEvidence = request.skillHost.inheritedAuthorizationEvidence(
+                name: call.name,
+                argumentsJSON: call.argumentsJSON
             )
+            return try await ToolInvocationPipeline.execute(invocation)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -171,7 +175,7 @@ enum ExploreSubagentRunner {
     static func enforceExploreHook(
         _ call: ToolCallProposal,
         request: ExploreSubagentRequest
-    ) async throws {
+    ) async throws -> PreToolUseDecision {
         let projectRoot: URL? = if case .project(let root) = request.pathGuardPolicy {
             root
         } else {
@@ -188,7 +192,7 @@ enum ExploreSubagentRunner {
         )
         switch hookDecision {
         case .allow:
-            return
+            return hookDecision
 
         case .ask(let approval):
             throw ToolError.operationFailed(

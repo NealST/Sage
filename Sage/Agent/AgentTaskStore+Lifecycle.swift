@@ -140,6 +140,8 @@ extension AgentTaskStore {
         planProgress.clear()
         state.sessionAllowlist.reset()
         state.clearThreadRoutingNotices()
+        onTaskClosed?(oldID)
+        onActiveTaskChanged?()
     }
 
     /// Applies a routing decision. Returns the effective route, or nil on hard failure.

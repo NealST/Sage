@@ -83,6 +83,12 @@ extension AgentRuntime {
             let plan = self.state.activeTask?.id == id ? self.state.activeTask?.workPlan : nil
             await self.onTaskSettled?(id, plan, .failed(message))
         }
+        taskStore.onActiveTaskChanged = { [weak self] in
+            self?.turns.adoptActiveTask()
+        }
+        taskStore.onTaskClosed = { [weak self] id in
+            self?.turns.dropTurnLoop(for: id)
+        }
         operations.onBecameIdle = { [weak self] in
             await self?.drainQueuedTurns()
         }
@@ -153,6 +159,7 @@ extension AgentRuntime {
     /// - Parameter reloadCatalog: When false, skip skill rescan (caller already applied a shared scan).
     func bootstrap(project: ProjectRecord? = nil, reloadCatalog: Bool = true) async {
         await lifecycle.bootstrap(project: project, reloadCatalog: reloadCatalog)
+        turns.adoptActiveTask()
     }
 
     func prepareForWindowClose() async {
@@ -291,7 +298,10 @@ extension AgentRuntime {
         state.turnInput.offer = nil
         state.turnInput.pendingSteer = offer
         await operations.cancelInFlight()
-        guard await turns.persistSteerTurn(offer) else { return }
+        guard await turns.persistSteerTurn(offer) else {
+            state.turnInput.pendingSteer = nil
+            return
+        }
         _ = await operations.run { await self.turns.continueAfterSteer() }
     }
 

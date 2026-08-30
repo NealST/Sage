@@ -321,7 +321,7 @@ nonisolated extension ContextBudget {
             layout.workPlanAppendix,
             layout.todoAppendix,
             memoryAppendix,
-            layout.reviewFeedback,
+            layout.followUpAppendix,
             slices.projectAppendix,
             slices.skillsCatalog,
             renderRelated(layout.relatedSnippets, mode: slices.relatedMode),

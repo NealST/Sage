@@ -39,6 +39,8 @@ final class PlanAgent {
         ) { chunk in
             if let visible = adapter.ingest(chunk) {
                 modelGateway.streaming.publish(visible)
+            } else if adapter.isEnvelope {
+                modelGateway.streaming.setReservingWorkPlan(true)
             }
         }
         return adoptProposal(
