@@ -35,6 +35,7 @@ final class WorkPlanTests: XCTestCase {
         XCTAssertEqual(plan?.kind, .answer)
         XCTAssertEqual(plan?.reply, "哈哈，今天也挺好的。")
         XCTAssertEqual(plan?.directReply, "哈哈，今天也挺好的。")
+        XCTAssertEqual(plan?.skipsReview, true)
         XCTAssertNotEqual(plan?.requiresConfirmation, true)
     }
 
@@ -72,6 +73,7 @@ final class WorkPlanTests: XCTestCase {
         ```
         """)
         XCTAssertEqual(plan?.kind, .observe)
+        XCTAssertEqual(plan?.skipsReview, true)
         XCTAssertEqual(plan?.approach.contains("根目录"), true)
         XCTAssertEqual(plan?.promptAppendix.contains("observe plan"), true)
         XCTAssertEqual(plan?.promptAppendix.contains("Mutating tools are rejected"), true)
@@ -160,6 +162,14 @@ final class WorkPlanTests: XCTestCase {
             hasToolBatch: true
         )
         XCTAssertNil(failedHidesBoth)
+
+        let reviewFailed = AgentTurnChrome.resolve(
+            phase: .awaitingConfirmation,
+            hasWorkPlan: true,
+            hasToolBatch: true,
+            pendingPrompt: .reviewFailed(draft: "done", message: "Reviewer timed out")
+        )
+        XCTAssertEqual(reviewFailed, .reviewFailed)
     }
 
     func testParsesPersistAdvice() {

@@ -8,6 +8,58 @@
 import SwiftUI
 
 extension AgentComposerView {
+    var pendingConfirmationHint: String {
+        switch session.agent.turnChrome {
+        case .toolRoundLimit:
+            return "Continue for more tool rounds, or finish"
+
+        case .toolApproval:
+            return "Allow, skip, or stop this tool"
+
+        case .reviewFailed:
+            return "Retry review, or use the current reply"
+
+        default:
+            return "Run or Cancel the pending plan"
+        }
+    }
+
+    var composerPlaceholder: String {
+        if session.agent.state.turnInput.hasOffer {
+            return "Choose Queue or Correct above…"
+        }
+        if session.agent.state.isBusy {
+            return "Send to queue or correct this turn…"
+        }
+        if session.agent.state.hasPendingPlan {
+            return "Finish the pending plan first…"
+        }
+        if blocksTyping {
+            return "Sage is working…"
+        }
+        if isDropTargeted {
+            return "Add to this message"
+        }
+        if !session.draftAttachments.isEmpty {
+            return "Ask about these files…"
+        }
+        return "Ask Sage…"
+    }
+
+    var composerAccessibilityHint: String {
+        if session.agent.state.isBusy {
+            return "Press Return to queue this message or correct the current turn"
+        }
+        if session.agent.state.hasPendingPlan {
+            return "Run, cancel, or retry the pending plan before sending"
+        }
+        if blocksTyping { return "Unavailable while Sage is working" }
+        if !slashSuggestions.isEmpty {
+            return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
+        }
+        return "Press Return to send. Shift-Command-A adds files."
+    }
+
     func handleComposerSubmit() {
         if applySelectedSuggestion() { return }
         guard !blocksSubmit else { return }

@@ -61,15 +61,11 @@ extension AgentRuntime {
     }
 
     var blocksNewInput: Bool {
-        if state.isBusy { return true }
         switch state.phase {
-        case .thinking, .executing, .awaitingConfirmation:
-            return true
-
         case .failed:
             return state.activeTask?.pendingPlan != nil || planProgress.hasPlan
 
-        case .idle, .completed:
+        default:
             return false
         }
     }
@@ -86,6 +82,9 @@ extension AgentRuntime {
             guard let self else { return }
             let plan = self.state.activeTask?.id == id ? self.state.activeTask?.workPlan : nil
             await self.onTaskSettled?(id, plan, .failed(message))
+        }
+        operations.onBecameIdle = { [weak self] in
+            await self?.drainQueuedTurns()
         }
         turns.bind(
             slashHost: host,
@@ -270,8 +269,39 @@ extension AgentRuntime {
 
     @discardableResult
     func submit(_ userText: String, attachments: [MessageAttachment] = []) async -> Bool {
-        await operations.runAccepted {
+        if state.isBusy {
+            state.turnInput.offer = QueuedUserTurn(text: userText, attachments: attachments)
+            return true
+        }
+        return await operations.runAccepted {
             await self.turns.performSubmit(userText, attachments: attachments)
+        }
+    }
+
+    func queueTurnInterrupt() {
+        state.turnInput.enqueueOffer()
+    }
+
+    func dismissTurnInterrupt() {
+        state.turnInput.offer = nil
+    }
+
+    func steerTurnInterrupt() async {
+        guard let offer = state.turnInput.offer else { return }
+        state.turnInput.offer = nil
+        state.turnInput.pendingSteer = offer
+        await operations.cancelInFlight()
+        guard await turns.persistSteerTurn(offer) else { return }
+        _ = await operations.run { await self.turns.continueAfterSteer() }
+    }
+
+    func drainQueuedTurns() async {
+        guard state.turnInput.pendingSteer == nil, !state.isBusy else { return }
+        if case .awaitingConfirmation = state.phase { return }
+        if state.pendingPrompt != nil { return }
+        guard let next = state.turnInput.popNext() else { return }
+        _ = await operations.runAccepted {
+            await self.turns.performSubmit(next.text, attachments: next.attachments)
         }
     }
 
@@ -304,8 +334,21 @@ extension AgentRuntime {
         case .toolApproval:
             await confirmToolApproval(scope: .task)
 
+        case .reviewFailed:
+            await retryFailedReview()
+
         case .none:
             break
         }
+    }
+
+    func retryFailedReview() async {
+        guard turnChrome == .reviewFailed else { return }
+        _ = await operations.run { await self.turns.retryFailedReview() }
+    }
+
+    func acceptFailedReview() async {
+        guard turnChrome == .reviewFailed else { return }
+        _ = await operations.run { await self.turns.acceptFailedReview() }
     }
 }

@@ -18,9 +18,21 @@ nonisolated struct ReviewVerdict: Sendable, Equatable {
     var feedback: String
 }
 
+enum ReviewEvaluationError: LocalizedError {
+    case unusable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unusable(let detail):
+            return detail.nilIfEmpty ?? "The reviewer could not produce a usable verdict."
+        }
+    }
+}
+
 @MainActor
 final class ReviewAgent {
     static let maxRevisions = 2
+    static let maxAttempts = 3
 
     private let state: AgentSessionState
     private let modelGateway: AgentModelGateway
@@ -31,56 +43,33 @@ final class ReviewAgent {
     }
 
     func evaluate(draft: String, changes: WorkspaceChangeSet) async throws -> ReviewVerdict {
-        let plan = state.activeTask?.workPlan
-        let userText = state.events.last { $0.kind == .userInput }?
-            .modelFacingContent(includeImagePixels: false) ?? ""
-        let planLine = plan.map { workPlan in
-            "kind=\(workPlan.kind.rawValue); intent=\(workPlan.intent)\n\(workPlan.approach)"
-        } ?? "(none)"
-        let reply = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let brief = """
-        User request:
-        \(userText)
-
-        Work plan:
-        \(planLine)
-
-        Execute reply:
-        \(reply.isEmpty ? "(none)" : String(reply.prefix(1_500)))
-
-        Workspace changes:
-        \(changes.reviewBrief(maxChars: 12_000))
-        """
-        let raw = try await modelGateway.completeUnstreamed(
-            system: Self.systemPrompt,
-            user: brief,
-            role: .review
+        let brief = Self.brief(
+            userText: state.events.last { $0.kind == .userInput }?
+                .modelFacingContent(includeImagePixels: false) ?? "",
+            plan: state.activeTask?.workPlan,
+            draft: draft,
+            turnDigest: TranscriptDigest.makeCurrentTurn(from: state.events),
+            changes: changes
         )
-        return Self.parse(raw) ?? Self.fallbackAccept()
+        var lastDetail = "The reviewer returned unusable output."
+        for _ in 1...Self.maxAttempts {
+            try Task.checkCancellation()
+            do {
+                let raw = try await modelGateway.completeUnstreamed(
+                    system: Self.systemPrompt,
+                    user: brief,
+                    role: .review
+                )
+                if let verdict = Self.parse(raw) { return verdict }
+                lastDetail = "The reviewer returned unusable output."
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastDetail = error.localizedDescription
+            }
+        }
+        throw ReviewEvaluationError.unusable(lastDetail)
     }
-
-    static let systemPrompt = """
-    You are Sage's reviewer. You do not call tools and you do not execute anything.
-    Compare the user's request and the work plan against the execute reply and the \
-    net workspace changes since work started. Output JSON only — no markdown fence, no prose.
-
-    Schema:
-    {
-      "decision": "accept" | "revise",
-      "feedback": "one or two sentences"
-    }
-
-    decision:
-    - accept: the intent is met well enough; leftover polish is optional
-    - revise: a concrete gap remains that another execute pass can fix
-
-    Rules:
-    - Judge the resulting workspace and the execute reply, not which tools were used.
-    - Do not ask for a larger scope than the plan.
-    - If the execute agent already said it is blocked (permissions, missing file), accept and do not loop.
-    - "No workspace files changed" is valid when the plan was observation or the reply is the deliverable.
-    - Write feedback in the same language the user used.
-    """
 
     nonisolated static func parse(_ raw: String?) -> ReviewVerdict? {
         guard let object = ModelJSON.object(from: raw),
@@ -90,9 +79,5 @@ final class ReviewAgent {
         let feedback = (object["feedback"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return ReviewVerdict(decision: decision, feedback: feedback)
-    }
-
-    nonisolated static func fallbackAccept() -> ReviewVerdict {
-        ReviewVerdict(decision: .accept, feedback: "")
     }
 }

@@ -29,6 +29,8 @@ nonisolated struct ModelTurn: Sendable {
 enum StreamDelta: Sendable {
     /// A text content fragment.
     case text(String)
+    /// Provider reasoning / thinking tokens. Displayed, not part of the reply.
+    case thinking(String)
     /// A tool call fragment (index identifies which call is being built).
     case toolCallDelta(index: Int, id: String?, name: String?, arguments: String?)
     /// Provider-reported token usage (often on the final SSE chunk).

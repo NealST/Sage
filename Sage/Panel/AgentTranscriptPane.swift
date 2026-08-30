@@ -195,21 +195,31 @@ struct ThinkingStreamAccessory: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-            if streaming.isActive {
+            if !streaming.thinking.isEmpty {
+                Text(streaming.thinking)
+                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            if !streaming.text.isEmpty {
                 StreamingContentView(text: streaming.text)
                     .transition(.opacity)
-            } else if let retry = retryState {
-                RetryCountdownView(state: retry)
+            } else if streaming.thinking.isEmpty {
+                if let retry = retryState {
+                    RetryCountdownView(state: retry)
+                        .transition(.opacity)
+                } else {
+                    HStack(spacing: SageDesign.Spacing.small) {
+                        ProgressView().controlSize(.small)
+                        Text("Thinking…")
+                            .font(.system(size: SageDesign.Typography.bodySize))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
                     .transition(.opacity)
-            } else {
-                HStack(spacing: SageDesign.Spacing.small) {
-                    ProgressView().controlSize(.small)
-                    Text("Thinking…")
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
                 }
-                .transition(.opacity)
             }
         }
         .animation(SageDesign.Motion.streamingTransition, value: streaming.isActive)

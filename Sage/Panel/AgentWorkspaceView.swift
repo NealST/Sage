@@ -252,9 +252,7 @@ struct AgentWorkspaceView: View {
                 isInputFocused = false
                 return
             }
-            if !session.agent.state.isBusy {
-                isInputFocused = true
-            }
+            isInputFocused = true
         }
     }
 }

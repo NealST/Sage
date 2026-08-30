@@ -71,6 +71,9 @@ final class AppState {
             case .toolApproval:
                 return "Tool waiting for approval"
 
+            case .reviewFailed:
+                return "Review failed — retry or use this reply"
+
             default:
                 return "Plan waiting for confirmation"
             }

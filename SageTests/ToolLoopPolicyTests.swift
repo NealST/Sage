@@ -193,6 +193,13 @@ final class AgentPendingPromptPersistenceTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AgentPendingPrompt.self, from: data)
         XCTAssertEqual(decoded, prompt)
     }
+
+    func testReviewFailedPromptRoundTrips() throws {
+        let prompt = AgentPendingPrompt.reviewFailed(draft: "done", message: "timed out")
+        let data = try JSONEncoder().encode(prompt)
+        let decoded = try JSONDecoder().decode(AgentPendingPrompt.self, from: data)
+        XCTAssertEqual(decoded, prompt)
+    }
 }
 
 final class PreToolUseHookEvaluatorTests: XCTestCase {
@@ -234,7 +241,8 @@ final class PreToolUseHookEvaluatorTests: XCTestCase {
             activatedSkills: []
         )
         guard case .ask(let approval) = asked else {
-            return XCTFail("Expected an ask decision")
+            XCTFail("Expected an ask decision")
+            return
         }
         XCTAssertEqual(approval.reason, "Review shell [hooks.json]")
         XCTAssertFalse(approval.identity.isEmpty)

@@ -20,7 +20,7 @@ struct AgentComposerView: View {
 
     @State var slashSuggestions: [ComposerSlashSuggestion] = []
     @State var selectedSuggestionIndex: Int = 0
-    @State private var isDropTargeted = false
+    @State var isDropTargeted = false
     @State var attachmentImportCount = 0
     @State var isPreparingAttachments = false
     @State var attachmentHintGeneration: UInt = 0
@@ -215,46 +215,6 @@ struct AgentComposerView: View {
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
-    }
-
-    private var pendingConfirmationHint: String {
-        switch session.agent.turnChrome {
-        case .toolRoundLimit:
-            return "Continue for more tool rounds, or finish"
-
-        case .toolApproval:
-            return "Allow, skip, or stop this tool"
-
-        default:
-            return "Run or Cancel the pending plan"
-        }
-    }
-
-    private var composerPlaceholder: String {
-        if session.agent.state.hasPendingPlan {
-            return "Finish the pending plan first…"
-        }
-        if blocksTyping {
-            return "Sage is working…"
-        }
-        if isDropTargeted {
-            return "Add to this message"
-        }
-        if !session.draftAttachments.isEmpty {
-            return "Ask about these files…"
-        }
-        return "Ask Sage…"
-    }
-
-    private var composerAccessibilityHint: String {
-        if session.agent.state.hasPendingPlan {
-            return "Run, cancel, or retry the pending plan before sending"
-        }
-        if blocksTyping { return "Unavailable while Sage is working" }
-        if !slashSuggestions.isEmpty {
-            return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
-        }
-        return "Press Return to send. Shift-Command-A adds files."
     }
 
     var blocksTyping: Bool {

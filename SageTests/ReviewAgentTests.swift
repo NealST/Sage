@@ -19,6 +19,20 @@ final class ReviewAgentTests: XCTestCase {
         XCTAssertEqual(verdict?.decision, .accept)
     }
 
+    func testBriefKeepsTheFullExecuteReply() {
+        let draft = String(repeating: "x", count: 2_000)
+        let brief = ReviewAgent.brief(
+            userText: "补安装说明",
+            plan: nil,
+            draft: draft,
+            turnDigest: "Tool result: wrote Install.md",
+            changes: .empty
+        )
+        XCTAssertTrue(brief.contains(draft))
+        XCTAssertTrue(brief.contains("补安装说明"))
+        XCTAssertTrue(brief.contains("wrote Install.md"))
+    }
+
     func testChangeSetBriefIsTheReviewEvidence() {
         var book = WorkspaceChangeBook()
         book.applyWrite(path: "Install.md", before: nil, after: "## Install\n", created: true)

@@ -79,6 +79,25 @@ nonisolated struct ToolAuthorizationRequirement: Codable, Hashable, Sendable {
             : nil
     }
 
+    func isCovered(
+        byDirectoryRoots roots: [ToolAuthorizationCapability: Set<String>]
+    ) -> Bool {
+        resources.allSatisfy { resource in
+            switch resource.capability {
+            case .localWrite, .sensitiveRead:
+                let granted = roots[resource.capability, default: []]
+                return !resource.roots.isEmpty && resource.roots.allSatisfy { required in
+                    granted.contains { grantedRoot in
+                        required == grantedRoot || required.hasPrefix(grantedRoot + "/")
+                    }
+                }
+
+            default:
+                return false
+            }
+        }
+    }
+
     func isCovered(by grants: [ToolAuthorizationGrant]) -> Bool {
         resources.allSatisfy { requiredResource in
             grants.contains { grant in

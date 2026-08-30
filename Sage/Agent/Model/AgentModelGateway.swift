@@ -205,63 +205,9 @@ final class AgentModelGateway {
         return """
 
 
-        ## Reviewer feedback
-        The previous execute pass was not accepted. Address this, then finish:
+        ## Follow-up
+        Address this, then finish:
         \(feedback)
         """
-    }
-
-    func streamComplete(includeTools: Bool = true) async throws -> ModelTurn {
-        let req = await prepareRequest(includeTools: includeTools)
-        let stream = try await modelClient.streamComplete(
-            events: req.events,
-            tools: req.tools,
-            settings: req.settings
-        )
-
-        state.retryState = nil
-
-        var contentChunks: [String] = []
-        var toolCallBuilders: [Int: ToolCallBuilder] = [:]
-        var usage = TokenUsage()
-
-        for try await delta in stream {
-            try Task.checkCancellation()
-
-            switch delta {
-            case .text(let chunk):
-                contentChunks.append(chunk)
-                streaming.publish(TextToolCallParser.visibleText(in: contentChunks.joined()))
-
-            case .toolCallDelta(let index, let id, let name, let arguments):
-                var builder = toolCallBuilders[index] ?? ToolCallBuilder()
-                if let id { builder.id = id }
-                if let name { builder.name = name }
-                if let arguments { builder.arguments += arguments }
-                toolCallBuilders[index] = builder
-
-            case .usage(let input, let output):
-                usage.input = input
-                usage.output = output
-
-            case .done:
-                break
-            }
-        }
-
-        let contentBuffer = contentChunks.joined()
-        state.addTokenUsage(usage)
-
-        let structuredCalls = toolCallBuilders.keys.sorted().compactMap { index -> ToolCallProposal? in
-            guard let builder = toolCallBuilders[index],
-                  let id = builder.id,
-                  let name = builder.name
-            else { return nil }
-            return ToolCallProposal(id: id, name: name, argumentsJSON: builder.arguments)
-        }
-        let recovered = TextToolCallParser.recover(from: contentBuffer, existing: structuredCalls)
-        streaming.flush(recovered.content ?? "")
-        compact?.considerBackground(occupancy: req.occupancy, tools: req.tools)
-        return ModelTurn(content: recovered.content, toolCalls: recovered.calls, usage: usage)
     }
 }

@@ -8,23 +8,34 @@ import Foundation
 @Observable
 final class StreamingPlayback {
     private(set) var text: String = ""
+    private(set) var thinking: String = ""
     /// Coarse scroll trigger: `lineCount * 1000 + lengthBucket` (bucket = utf16 count / 80).
     private(set) var scrollThrottleKey: Int = 0
 
     private var lineCount = 1
 
-    var isActive: Bool { !text.isEmpty }
+    var isActive: Bool { !text.isEmpty || !thinking.isEmpty }
 
     func apply(_ text: String) {
         updateLineCount(for: text)
         self.text = text
-        scrollThrottleKey = lineCount &* 1_000 &+ (text.utf16.count / 80)
+        bumpScrollKey(for: text)
+    }
+
+    func applyThinking(_ text: String) {
+        thinking = text
+        bumpScrollKey(for: text)
     }
 
     func clear() {
         text = ""
+        thinking = ""
         lineCount = 1
         scrollThrottleKey = 0
+    }
+
+    private func bumpScrollKey(for text: String) {
+        scrollThrottleKey = lineCount &* 1_000 &+ (text.utf16.count / 80)
     }
 
     private func updateLineCount(for text: String) {

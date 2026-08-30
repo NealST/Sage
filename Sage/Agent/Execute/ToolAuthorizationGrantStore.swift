@@ -13,6 +13,7 @@ final class ToolAuthorizationGrantStore {
         var taskInvocationKeys: [String: Set<String>]?
         var longTermInvocationKeys: Set<String>?
         var longTermInvocationLabels: [String: String]?
+        var directoryRoots: [String: [String]]?
     }
 
     static let shared = ToolAuthorizationGrantStore()
@@ -24,6 +25,8 @@ final class ToolAuthorizationGrantStore {
     private var taskInvocationKeys: [String: Set<String>]
     private var longTermInvocationKeys: Set<String>
     private var longTermInvocationLabels: [String: String]
+    /// Directory roots that survive task switches.
+    private var directoryRoots: [ToolAuthorizationCapability: Set<String>]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -34,28 +37,43 @@ final class ToolAuthorizationGrantStore {
             taskInvocationKeys = snapshot.taskInvocationKeys ?? [:]
             longTermInvocationKeys = snapshot.longTermInvocationKeys ?? []
             longTermInvocationLabels = snapshot.longTermInvocationLabels ?? [:]
+            directoryRoots = Self.decodeDirectoryRoots(snapshot.directoryRoots)
         } else {
             taskGrants = [:]
             longTermGrants = []
             taskInvocationKeys = [:]
             longTermInvocationKeys = []
             longTermInvocationLabels = [:]
+            directoryRoots = [:]
         }
     }
 
     func contains(_ requirement: ToolAuthorizationRequirement, scopeID: String) -> Bool {
         requirement.isCovered(
             by: longTermGrants + taskGrants[scopeID, default: []]
-        )
+        ) || requirement.isCovered(byDirectoryRoots: directoryRoots)
     }
 
     func allowForTask(_ requirement: ToolAuthorizationRequirement, scopeID: String) {
         append(requirement, to: &taskGrants[scopeID, default: []])
+        rememberDirectoryRoots(requirement)
         persist()
     }
 
     func allowLongTerm(_ requirement: ToolAuthorizationRequirement) {
         append(requirement, to: &longTermGrants)
+        rememberDirectoryRoots(requirement)
+        persist()
+    }
+
+    func rememberDirectoryRoots(_ requirement: ToolAuthorizationRequirement) {
+        for resource in requirement.resources {
+            guard resource.capability == .localWrite || resource.capability == .sensitiveRead
+            else { continue }
+            for root in resource.roots where !root.isEmpty {
+                directoryRoots[resource.capability, default: []].insert(root)
+            }
+        }
         persist()
     }
 
@@ -89,6 +107,7 @@ final class ToolAuthorizationGrantStore {
         longTermGrants.removeAll()
         longTermInvocationKeys.removeAll()
         longTermInvocationLabels.removeAll()
+        directoryRoots.removeAll()
         persist()
     }
 
@@ -98,6 +117,7 @@ final class ToolAuthorizationGrantStore {
         taskInvocationKeys.removeAll()
         longTermInvocationKeys.removeAll()
         longTermInvocationLabels.removeAll()
+        directoryRoots.removeAll()
         persist()
     }
 
@@ -153,7 +173,8 @@ final class ToolAuthorizationGrantStore {
             longTermGrants: longTermGrants,
             taskInvocationKeys: taskInvocationKeys,
             longTermInvocationKeys: longTermInvocationKeys,
-            longTermInvocationLabels: longTermInvocationLabels
+            longTermInvocationLabels: longTermInvocationLabels,
+            directoryRoots: encodeDirectoryRoots()
         )
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults.set(data, forKey: storageKey)
@@ -169,5 +190,22 @@ final class ToolAuthorizationGrantStore {
             return segments.last.map { "MCP · \($0)" } ?? "MCP"
         }
         return principal
+    }
+
+    private func encodeDirectoryRoots() -> [String: [String]] {
+        Dictionary(uniqueKeysWithValues: directoryRoots.map { capability, roots in
+            (capability.rawValue, roots.sorted())
+        })
+    }
+
+    private static func decodeDirectoryRoots(
+        _ raw: [String: [String]]?
+    ) -> [ToolAuthorizationCapability: Set<String>] {
+        var decoded: [ToolAuthorizationCapability: Set<String>] = [:]
+        for (key, roots) in raw ?? [:] {
+            guard let capability = ToolAuthorizationCapability(rawValue: key) else { continue }
+            decoded[capability] = Set(roots.filter { !$0.isEmpty })
+        }
+        return decoded
     }
 }

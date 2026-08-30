@@ -298,10 +298,22 @@ nonisolated struct StreamingToolCallDelta: Decodable {
 nonisolated struct StreamingDelta: Decodable {
     let content: String?
     let toolCalls: [StreamingToolCallDelta]?
+    let reasoning: String?
+    let reasoningContent: String?
+    let thinking: String?
 
     enum CodingKeys: String, CodingKey {
         case content
         case toolCalls = "tool_calls"
+        case reasoning
+        case reasoningContent = "reasoning_content"
+        case thinking
+    }
+
+    var thinkingText: String? {
+        [reasoningContent, reasoning, thinking]
+            .compactMap { $0 }
+            .first { !$0.isEmpty }
     }
 }
 

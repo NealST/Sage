@@ -106,6 +106,7 @@ final class SessionToolAllowlist {
                 requirement: requirement
             )
         )
+        grantStore.rememberDirectoryRoots(requirement)
     }
 
     func containsHookApproval(

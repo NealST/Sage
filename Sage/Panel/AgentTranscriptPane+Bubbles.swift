@@ -27,6 +27,7 @@ extension AgentTranscriptPane {
     func thinkingAccessory(onStreamScroll: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             todoListIfPresent
+            turnInterruptIfPresent
             ThinkingStreamAccessory(
                 retryState: session.agent.state.retryState,
                 canStop: session.agent.canStop,
@@ -44,7 +45,19 @@ extension AgentTranscriptPane {
         }()
         VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             todoListIfPresent
+            turnInterruptIfPresent
             confirmationChrome(isExecuting: isExecuting)
+        }
+    }
+
+    @ViewBuilder var turnInterruptIfPresent: some View {
+        if let offer = session.agent.state.turnInput.offer {
+            TurnInterruptCard(
+                preview: offer.text,
+                onQueue: { session.agent.queueTurnInterrupt() },
+                onSteer: { Task { await session.agent.steerTurnInterrupt() } },
+                onCancel: { session.agent.dismissTurnInterrupt() }
+            )
         }
     }
 
@@ -92,6 +105,15 @@ extension AgentTranscriptPane {
 
         case .toolApproval:
             toolApprovalChrome()
+
+        case .reviewFailed:
+            if case .reviewFailed(_, let message) = session.agent.state.pendingPrompt {
+                ReviewFailedCard(
+                    message: message,
+                    onRetry: { Task { await session.agent.retryFailedReview() } },
+                    onAccept: { Task { await session.agent.acceptFailedReview() } }
+                )
+            }
 
         case .none:
             EmptyView()

@@ -127,7 +127,7 @@ extension TurnCoordinator {
     /// Review sub-agent. Accept finishes; revise sends execute around again.
     func reviewAndFinish(_ draft: String) async {
         let workPlan = state.activeTask?.workPlan
-        if workPlan?.kind == .answer {
+        if workPlan?.skipsReview == true {
             await finalizeAssistantText(draft, considerPersist: false)
             return
         }
@@ -158,10 +158,58 @@ extension TurnCoordinator {
             streaming.clear()
             await handleStop?(nil)
         } catch {
-            // A reviewer failure should not hide a finished execute pass.
-            state.reviewFeedback = nil
-            await finalizeAssistantText(draft, considerPersist: true)
+            await presentReviewFailure(draft: draft, message: error.localizedDescription)
         }
+    }
+
+    func retryFailedReview() async {
+        guard case .reviewFailed(let draft, _) = state.pendingPrompt else { return }
+        guard await persistClearedPendingPrompt() else { return }
+        await reviewAndFinish(draft)
+    }
+
+    func acceptFailedReview() async {
+        guard case .reviewFailed(let draft, _) = state.pendingPrompt else { return }
+        guard await persistClearedPendingPrompt() else { return }
+        state.reviewFeedback = nil
+        await finalizeAssistantText(draft, considerPersist: true)
+    }
+
+    func persistSteerTurn(_ turn: QueuedUserTurn) async -> Bool {
+        let event = AgentEvent(
+            kind: .userInput,
+            content: turn.text,
+            attachments: turn.attachments
+        )
+        guard await taskStore.commit(
+            appendEvents: [event],
+            deleteEventIDs: [],
+            mutate: { task in
+                task.status = .active
+            }
+        ) else { return false }
+        state.reviewFeedback = turn.text
+        return true
+    }
+
+    func continueAfterSteer() async {
+        state.turnInput.pendingSteer = nil
+        if state.activeTask?.workPlan == nil {
+            let text = state.events.last { $0.kind == .userInput }?.content ?? ""
+            await presentWorkPlan(for: text, autoConfirm: false)
+            return
+        }
+        planApproved = true
+        await execute.start()
+    }
+
+    func presentReviewFailure(draft: String, message: String) async {
+        let prompt = AgentPendingPrompt.reviewFailed(draft: draft, message: message)
+        state.pendingPrompt = prompt
+        _ = await taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.pendingPrompt = prompt
+        }
+        state.enterAwaitingConfirmation()
     }
 
     func finalizeAssistantText(

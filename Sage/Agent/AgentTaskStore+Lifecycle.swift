@@ -48,6 +48,7 @@ extension AgentTaskStore {
             state.refreshSummary(for: task)
             state.sessionAllowlist.reset()
             state.workspaceChanges.reset()
+            state.turnInput.reset()
             await restorePhaseFromActiveTask()
             state.clearTopicDriftOffer()
             state.suppressedDriftOfferTaskID = nil

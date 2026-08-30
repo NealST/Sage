@@ -86,6 +86,9 @@ nonisolated struct WorkPlan: Identifiable, Codable, Sendable, Equatable {
 
     var requiresConfirmation: Bool { kind == .act }
 
+    /// Observation and direct replies do not go through Review.
+    var skipsReview: Bool { kind == .answer || kind == .observe }
+
     /// Reply that can be shown immediately — no execute loop.
     var directReply: String? {
         guard kind == .answer else { return nil }

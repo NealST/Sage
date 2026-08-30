@@ -53,6 +53,8 @@ final class AgentSessionState {
     var pendingPrompt: AgentPendingPrompt?
     /// Net file mutations for the current execute→review cycle.
     let workspaceChanges = TurnChangeSet()
+    /// Mid-turn user messages: offer, queue, and in-flight steer.
+    let turnInput = TurnInputQueue()
 
     var events: [AgentEvent] {
         activeTask?.events ?? []

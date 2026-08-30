@@ -167,6 +167,10 @@ enum ToolBatchExecutor {
     }
 
     static func handleStop(plan: AgentPlan?, services: ExecuteServices) async {
+        if services.state.turnInput.pendingSteer != nil {
+            services.clearStream()
+            return
+        }
         if var plan {
             for index in plan.steps.indices where plan.steps[index].status == .running {
                 plan.steps[index].status = .pending

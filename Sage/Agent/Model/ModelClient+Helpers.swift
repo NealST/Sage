@@ -177,6 +177,9 @@ extension ModelClient {
         if let content = delta.content, !content.isEmpty {
             continuation.yield(.text(content))
         }
+        if let thinking = delta.thinkingText {
+            continuation.yield(.thinking(thinking))
+        }
         if let toolCalls = delta.toolCalls {
             for toolCall in toolCalls {
                 continuation.yield(.toolCallDelta(

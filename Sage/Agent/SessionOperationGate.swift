@@ -49,12 +49,12 @@ final class SessionOperationGate {
         workTask?.cancel()
     }
 
+    var onBecameIdle: (() async -> Void)?
+
     /// Runs `body` under the busy lock with a cancellable `workTask`.
     @discardableResult
     func run(_ body: @escaping @MainActor () async -> Void) async -> Bool {
         guard begin() else { return false }
-        defer { end(); workTask = nil }
-
         let owner: UUID? = processOwnerID
         let work = Task { @MainActor in
             await ProcessRunner.$ownerID.withValue(owner) {
@@ -63,14 +63,15 @@ final class SessionOperationGate {
         }
         workTask = work
         await work.value
+        workTask = nil
+        end()
+        await onBecameIdle?()
         return true
     }
 
     /// Like `run`, but returns a Bool produced by `body` (e.g. submit accepted).
     func runAccepted(_ body: @escaping @MainActor () async -> Bool) async -> Bool {
         guard begin() else { return false }
-        defer { end(); workTask = nil }
-
         var result = false
         let owner: UUID? = processOwnerID
         let work = Task { @MainActor in
@@ -80,6 +81,9 @@ final class SessionOperationGate {
         }
         workTask = work
         await work.value
+        workTask = nil
+        end()
+        await onBecameIdle?()
         return result
     }
 

@@ -253,6 +253,26 @@ final class SessionToolAllowlistActorTests: XCTestCase {
         }
     }
 
+    func testDirectoryGrantSurvivesTaskSwitch() async {
+        await MainActor.run {
+            let list = makeAllowlist()
+            let args = #"{"path":"~/Documents/note.txt","content":"hello"}"#
+            list.allowThisTask(
+                name: "write_text_file",
+                argumentsJSON: args,
+                policy: .home,
+                scopeID: "task-a"
+            )
+            list.reset()
+            XCTAssertTrue(list.contains(
+                name: "write_text_file",
+                argumentsJSON: args,
+                policy: .home,
+                scopeID: "task-b"
+            ))
+        }
+    }
+
     func testAllowOnceIsConsumedExactlyOnce() async {
         await MainActor.run {
             let list = makeAllowlist()

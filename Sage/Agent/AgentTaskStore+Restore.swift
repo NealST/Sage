@@ -32,6 +32,10 @@ extension AgentTaskStore {
             state.enterAwaitingConfirmation()
             return true
         }
+        if case .reviewFailed = task.pendingPrompt {
+            state.enterAwaitingConfirmation()
+            return true
+        }
         if case .toolApproval = task.pendingPrompt {
             if var plan = task.pendingPlan {
                 normalizeRestoredPlan(&plan, events: task.events)
