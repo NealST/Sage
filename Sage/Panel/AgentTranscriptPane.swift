@@ -54,6 +54,8 @@ struct AgentTranscriptPane: View {
     @Environment(AppState.self) var appState
     @Environment(AgentSession.self) var session
     @Binding var stickToBottom: Bool
+    /// When the composer has focus, confirmation cards must not steal Return.
+    var composerFocused: Bool = false
     /// Mouse-down in the transcript — release composer focus so text selection can take first responder.
     var onBeginReading: () -> Void = {}
 

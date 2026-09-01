@@ -7,25 +7,30 @@ import Foundation
 
 extension AgentRuntime {
     func confirmWorkPlan() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .workPlan else { return }
         _ = await operations.run { await self.turns.startExecution() }
     }
 
     func confirmToolBatch() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         _ = await operations.run { await self.executeCurrentPlanUnlocked(retryFailedSteps: false) }
     }
 
     func confirmToolRoundLimit() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .toolRoundLimit else { return }
         _ = await operations.run { await self.turns.extendAndContinueToolRounds() }
     }
 
     func finishToolRoundLimit() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .toolRoundLimit else { return }
         _ = await operations.run { await self.turns.finishWithoutMoreToolRounds() }
     }
 
     func confirmToolApproval(scope: SessionToolApprovalScope) async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard case .toolApproval(_, let name, let args, _) = state.pendingPrompt else { return }
         let hookDecision = await preToolUseDecision(name: name, argumentsJSON: args)
         if case .deny(let reason) = hookDecision {
@@ -134,6 +139,7 @@ extension AgentRuntime {
     }
 
     func skipToolApproval() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         await failToolApproval(reason: "User skipped this tool.")
     }
 
@@ -180,6 +186,7 @@ extension AgentRuntime {
     }
 
     func cancelPendingPlan() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard operations.begin() else { return }
         defer { operations.end() }
         let taskID = state.activeTaskID

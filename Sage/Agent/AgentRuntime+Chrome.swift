@@ -274,12 +274,22 @@ extension AgentRuntime {
         _ = await operations.run { await self.turns.performRetry() }
     }
 
+    func freezeConfirmationActions() {
+        guard case .awaitingConfirmation = state.phase else { return }
+        state.freezeConfirmationActions()
+    }
+
+    func unfreezeConfirmationActions() {
+        state.unfreezeConfirmationActions()
+    }
+
     @discardableResult
     func submit(_ userText: String, attachments: [MessageAttachment] = []) async -> Bool {
         if state.isBusy {
             state.turnInput.offer = QueuedUserTurn(text: userText, attachments: attachments)
             return true
         }
+        freezeConfirmationActions()
         return await operations.runAccepted {
             await self.turns.performSubmit(userText, attachments: attachments)
         }
@@ -353,11 +363,13 @@ extension AgentRuntime {
     }
 
     func retryFailedReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .reviewFailed else { return }
         _ = await operations.run { await self.turns.retryFailedReview() }
     }
 
     func acceptFailedReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .reviewFailed else { return }
         _ = await operations.run { await self.turns.acceptFailedReview() }
     }

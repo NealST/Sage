@@ -143,6 +143,19 @@ enum ToolBatchExecutor {
     }
 
     @discardableResult
+    static func discardUnconfirmedPlan(services: ExecuteServices) async -> Bool {
+        let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: services.events)
+        guard await services.commit(
+            appendEvents: [],
+            deleteEventIDs: retractIDs,
+            mutate: clearUnconfirmedPlan
+        ) else { return false }
+        services.state.clearPendingPrompt()
+        services.planProgress.clear()
+        return true
+    }
+
+    @discardableResult
     static func cancelPendingPlan(services: ExecuteServices) async -> Bool {
         let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: services.events)
         let text = "Cancelled. Nothing was changed."
@@ -151,12 +164,7 @@ enum ToolBatchExecutor {
         guard await services.commit(
             appendEvents: [cancelEvent],
             deleteEventIDs: retractIDs,
-            mutate: { task in
-                task.pendingPlan = nil
-                task.pendingPrompt = nil
-                task.workPlan = nil
-                task.status = .active
-            }
+            mutate: clearUnconfirmedPlan
         ) else { return false }
 
         services.state.clearPendingPrompt()
@@ -164,6 +172,13 @@ enum ToolBatchExecutor {
         services.state.lastAssistantText = text
         services.state.enterIdle()
         return true
+    }
+
+    private static func clearUnconfirmedPlan(_ task: inout TaskRecord) {
+        task.pendingPlan = nil
+        task.pendingPrompt = nil
+        task.workPlan = nil
+        task.status = .active
     }
 
     static func handleStop(plan: AgentPlan?, services: ExecuteServices) async {

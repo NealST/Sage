@@ -42,9 +42,16 @@ extension AgentTranscriptPane {
             if case .executing = session.agent.state.phase { return true }
             return false
         }()
+        let freezeConfirmationActions = session.agent.state.shouldDisableConfirmationActions
+        let bindsReturnShortcut = !composerFocused && !freezeConfirmationActions
         VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             todoListIfPresent
-            confirmationChrome(isExecuting: isExecuting)
+            confirmationChrome(
+                isExecuting: isExecuting,
+                bindsReturnShortcut: bindsReturnShortcut
+            )
+                .disabled(freezeConfirmationActions)
+                .opacity(freezeConfirmationActions ? 0.55 : 1)
         }
     }
 
@@ -55,13 +62,14 @@ extension AgentTranscriptPane {
     }
 
     @ViewBuilder
-    func confirmationChrome(isExecuting: Bool) -> some View {
+    func confirmationChrome(isExecuting: Bool, bindsReturnShortcut: Bool) -> some View {
         switch session.agent.turnChrome {
         case .workPlan:
             if let workPlan = session.agent.state.activeTask?.workPlan {
                 WorkPlanCard(
                     plan: workPlan,
                     isExecuting: isExecuting,
+                    bindsReturnShortcut: bindsReturnShortcut,
                     onConfirm: { Task { await session.agent.confirmWorkPlan() } },
                     onCancel: { Task { await session.agent.cancelPendingPlan() } },
                     onStop: { session.agent.stop() }
@@ -74,6 +82,7 @@ extension AgentTranscriptPane {
                 PlanCardView(
                     plan: plan,
                     isExecuting: isExecuting,
+                    bindsReturnShortcut: bindsReturnShortcut,
                     onConfirm: { Task { await session.agent.confirmToolBatch() } },
                     onCancel: { Task { await session.agent.cancelPendingPlan() } },
                     onStop: { session.agent.stop() }

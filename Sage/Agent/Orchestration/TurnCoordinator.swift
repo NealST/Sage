@@ -116,6 +116,7 @@ final class TurnCoordinator {
             )
             return false
         }
+        guard await replaceUnconfirmedPlanIfNeeded() else { return false }
         if attachments.isEmpty,
            !trimmed.isEmpty,
            let handled = await handleSlashIfNeeded(trimmed) {
@@ -164,17 +165,53 @@ final class TurnCoordinator {
     }
 
     func canAcceptNewUserTurn() -> Bool {
-        if state.activeTask?.pendingPlan != nil || state.hasPendingPlan {
-            state.enterFailed(
-                message: "Finish, cancel, or retry the pending plan before sending a new request."
-            )
-            return false
-        }
         guard settings.isConfigured else {
             state.enterFailed(message: ModelClientError.notConfigured.localizedDescription)
             return false
         }
         return true
+    }
+}
+
+extension TurnCoordinator {
+    /// Freeze the card for a frame, then drop it so the new submit can plan.
+    func replaceUnconfirmedPlanIfNeeded() async -> Bool {
+        guard case .awaitingConfirmation = state.phase else { return true }
+        if state.shouldDisableConfirmationActions {
+            await Self.yieldForNextRunLoop()
+        }
+        guard await discardUnconfirmedTurn() else {
+            state.unfreezeConfirmationActions()
+            return false
+        }
+        return true
+    }
+
+    /// Drop an unconfirmed card so a new composer submit can replace it.
+    /// Leaves phase unchanged; the caller moves to thinking after persisting the new turn.
+    func discardUnconfirmedTurn() async -> Bool {
+        let retractIDs = AgentEventHelpers.unexecutedToolProposalIDs(in: state.events)
+        guard await taskStore.commit(
+            appendEvents: [],
+            deleteEventIDs: retractIDs,
+            mutate: { task in
+                task.pendingPlan = nil
+                task.pendingPrompt = nil
+                task.workPlan = nil
+                task.status = .active
+            }
+        ) else { return false }
+        state.clearPendingPrompt()
+        planProgress.clear()
+        return true
+    }
+
+    private static func yieldForNextRunLoop() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
     }
 
     struct SubmitRouting {

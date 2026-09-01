@@ -8,6 +8,7 @@ import SwiftUI
 struct PlanCardView: View {
     let plan: AgentPlan
     var isExecuting: Bool
+    var bindsReturnShortcut: Bool = true
     var onConfirm: () -> Void
     var onCancel: () -> Void
     var onStop: (() -> Void)?
@@ -47,24 +48,39 @@ struct PlanCardView: View {
                 }
                 .padding(.top, SageDesign.Spacing.extraSmall)
             } else {
-                HStack(spacing: SageDesign.Spacing.small) {
-                    Button("Cancel", role: .cancel, action: onCancel)
-                        .keyboardShortcut(.cancelAction)
-                        .controlSize(.regular)
-
-                    Spacer(minLength: 0)
-
-                    Button("Run", action: onConfirm)
-                        .keyboardShortcut(.defaultAction)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.regular)
-                }
-                .padding(.top, SageDesign.Spacing.extraSmall)
+                confirmRow
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
+    }
+
+    @ViewBuilder private var confirmRow: some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            if bindsReturnShortcut {
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                    .controlSize(.regular)
+            } else {
+                Button("Cancel", role: .cancel, action: onCancel)
+                    .controlSize(.regular)
+            }
+
+            Spacer(minLength: 0)
+
+            if bindsReturnShortcut {
+                Button("Run", action: onConfirm)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+            } else {
+                Button("Run", action: onConfirm)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+            }
+        }
+        .padding(.top, SageDesign.Spacing.extraSmall)
     }
 
     private func accessibilityStatus(_ status: StepStatus) -> String {

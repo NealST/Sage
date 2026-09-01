@@ -235,45 +235,81 @@ final class SessionOperationGateTests: XCTestCase {
 
 @MainActor
 final class TurnCoordinatorRoutingTests: XCTestCase {
-    func testSubmitRejectsWhileAPlanIsPending() async throws {
+    func testSubmitDiscardsUnconfirmedPlanThenAccepts() async throws {
+        let runtime = try makeIsolatedRuntime()
+        defer { runtime.cleanup() }
+
+        _ = await runtime.instance.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.instance.taskStore.commit(
+            appendEvents: [unexecutedWriteProposal(id: "c1")],
+            deleteEventIDs: []
+        ) { task in
+            task.pendingPlan = AgentPlan(
+                summary: "pending",
+                steps: [
+                    AgentStep(toolCallID: "c1", toolName: "write_text_file", argumentsJSON: "{}", title: "Write"),
+                ]
+            )
+            task.workPlan = WorkPlan(kind: .act, intent: "改文件", approach: "写一处。", sideEffects: "会改文件")
+        }
+        runtime.instance.state.enterAwaitingConfirmation()
+
+        _ = await runtime.instance.turns.performSubmit("follow up")
+        XCTAssertNil(runtime.instance.state.activeTask?.pendingPlan)
+        XCTAssertNil(runtime.instance.state.activeTask?.workPlan)
+        XCTAssertFalse(runtime.instance.state.events.contains { eventProposesTool($0, id: "c1") })
+        XCTAssertFalse(
+            runtime.instance.state.events.contains { $0.content.contains("Cancelled. Nothing was changed.") }
+        )
+        if case .failed(let message) = runtime.instance.state.phase {
+            XCTAssertFalse(message.contains("pending plan"))
+        }
+    }
+
+    func testFrozenConfirmationIgnoresRun() async throws {
+        let runtime = try makeIsolatedRuntime()
+        defer { runtime.cleanup() }
+
+        _ = await runtime.instance.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.instance.taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.workPlan = WorkPlan(kind: .act, intent: "改文件", approach: "写一处。", sideEffects: "会改文件")
+        }
+        runtime.instance.state.enterAwaitingConfirmation()
+        XCTAssertFalse(runtime.instance.state.shouldDisableConfirmationActions)
+        runtime.instance.freezeConfirmationActions()
+        XCTAssertTrue(runtime.instance.state.shouldDisableConfirmationActions)
+
+        await runtime.instance.confirmWorkPlan()
+        XCTAssertEqual(runtime.instance.state.phase, .awaitingConfirmation)
+        XCTAssertNotNil(runtime.instance.state.activeTask?.workPlan)
+    }
+
+    private func eventProposesTool(_ event: AgentEvent, id: String) -> Bool {
+        event.kind == .assistantResponse && (event.toolCalls ?? []).contains { $0.id == id }
+    }
+
+    private func unexecutedWriteProposal(id: String) -> AgentEvent {
+        AgentEvent(
+            kind: .assistantResponse,
+            content: "",
+            toolCalls: [ToolCallRecord(id: id, name: "write_text_file", argumentsJSON: "{}")]
+        )
+    }
+
+    private func makeIsolatedRuntime() throws -> (instance: AgentRuntime, cleanup: () -> Void) {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("SageTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-
         let repository = GRDBTaskRepository(
             databaseURL: directory.appendingPathComponent("sage.sqlite"),
             legacyJSONURL: directory.appendingPathComponent("tasks.json")
         )
-        let runtime = AgentRuntime(
+        let instance = AgentRuntime(
             settings: .shared,
             tools: .makeDefault(),
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
-        let plan = AgentPlan(
-            summary: "pending",
-            steps: [
-                AgentStep(
-                    toolCallID: "c1",
-                    toolName: "write_text_file",
-                    argumentsJSON: "{}",
-                    title: "Write"
-                ),
-            ]
-        )
-        _ = await runtime.taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
-            task.pendingPlan = plan
-        }
-        runtime.state.enterAwaitingConfirmation()
-
-        let accepted = await runtime.turns.performSubmit("follow up")
-        XCTAssertFalse(accepted)
-        guard case .failed(let message) = runtime.state.phase else {
-            XCTFail("expected failed phase while a plan is pending")
-            return
-        }
-        XCTAssertTrue(message.contains("pending plan"))
+        return (instance, { try? FileManager.default.removeItem(at: directory) })
     }
 }

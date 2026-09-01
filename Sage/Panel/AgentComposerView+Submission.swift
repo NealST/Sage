@@ -36,6 +36,9 @@ extension AgentComposerView {
     }
 
     var composerPlaceholder: String {
+        if case .awaitingConfirmation = session.agent.state.phase {
+            return "Send to replace this plan…"
+        }
         if session.agent.state.hasPendingPlan {
             return "Finish the pending plan first…"
         }
@@ -61,6 +64,9 @@ extension AgentComposerView {
     var composerAccessibilityHint: String {
         if session.agent.state.isBusy {
             return "Press Return to send. Sage will ask whether to queue or redirect."
+        }
+        if case .awaitingConfirmation = session.agent.state.phase {
+            return "Press Return to send. This replaces the pending plan."
         }
         if session.agent.state.hasPendingPlan {
             return "Run, cancel, or retry the pending plan before sending"
@@ -127,6 +133,7 @@ extension AgentComposerView {
         }
         stickToBottom = true
         slashSuggestions = []
+        session.agent.freezeConfirmationActions()
         isPreparingAttachments = true
         let submissionRevision = session.beginAttachmentSubmission(attachments)
         Task {
@@ -137,16 +144,10 @@ extension AgentComposerView {
                 }
             }.value
             guard failedImages.isEmpty else {
-                isPreparingAttachments = false
-                session.finishAttachmentSubmission(
-                    attachments,
-                    accepted: false,
+                abortFailedImagePreparation(
+                    failedImages,
+                    attachments: attachments,
                     startingRevision: submissionRevision
-                )
-                showPersistentAttachmentHint(
-                    "Couldn’t prepare for vision: "
-                    + failedImages.map(\.displayName).joined(separator: ", ")
-                    + "."
                 )
                 return
             }
@@ -158,5 +159,24 @@ extension AgentComposerView {
                 startingRevision: submissionRevision
             )
         }
+    }
+
+    private func abortFailedImagePreparation(
+        _ failedImages: [MessageAttachment],
+        attachments: [MessageAttachment],
+        startingRevision: UInt
+    ) {
+        isPreparingAttachments = false
+        session.agent.unfreezeConfirmationActions()
+        session.finishAttachmentSubmission(
+            attachments,
+            accepted: false,
+            startingRevision: startingRevision
+        )
+        showPersistentAttachmentHint(
+            "Couldn’t prepare for vision: "
+            + failedImages.map(\.displayName).joined(separator: ", ")
+            + "."
+        )
     }
 }

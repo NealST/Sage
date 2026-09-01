@@ -153,7 +153,10 @@ struct AgentWorkspaceView: View {
 
     private var taskPane: some View {
         VStack(spacing: 0) {
-            AgentTranscriptPane(stickToBottom: $stickToBottom) {
+            AgentTranscriptPane(
+                stickToBottom: $stickToBottom,
+                composerFocused: isInputFocused
+            ) {
                 isInputFocused = false
             }
             Divider().opacity(SageDesign.Chrome.dividerOpacity)

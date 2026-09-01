@@ -34,6 +34,9 @@ final class AgentSessionState {
     /// True while peeling the latest turn into a new task (blocks double-taps).
     var isAcceptingTopicDrift = false
     private(set) var isBusy = false
+    /// Composer started a replacement while a card is still unconfirmed.
+    /// Buttons disable immediately; `isBusy` follows once the turn gate opens.
+    private(set) var confirmationActionsFrozen = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
     /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
@@ -193,34 +196,52 @@ final class AgentSessionState {
         recentSummaries = TaskSummary.sortedForRecents(recentSummaries)
     }
 
+    var shouldDisableConfirmationActions: Bool {
+        guard case .awaitingConfirmation = phase else { return false }
+        return isBusy || confirmationActionsFrozen
+    }
+
+    func freezeConfirmationActions() {
+        confirmationActionsFrozen = true
+    }
+
+    func unfreezeConfirmationActions() {
+        confirmationActionsFrozen = false
+    }
+
     /// Sync phase with an in-memory plan without embedding the plan graph in `phase`.
     func enterAwaitingConfirmation() {
-        phase = .awaitingConfirmation
+        setPhase(.awaitingConfirmation)
     }
 
     func enterExecuting() {
-        phase = .executing
+        setPhase(.executing)
     }
 
     func enterIdle() {
-        phase = .idle
+        setPhase(.idle)
     }
 
     func enterThinking() {
-        phase = .thinking
+        setPhase(.thinking)
     }
 
     func enterCompleted(summary: String) {
-        phase = .completed(summary: summary)
+        setPhase(.completed(summary: summary))
     }
 
     func enterFailed(message: String) {
-        phase = .failed(message: message)
+        setPhase(.failed(message: message))
     }
 
     /// Skill extraction and other host-driven overlays that already have an `AgentPhase`.
     func applyHostPhase(_ phase: AgentPhase) {
-        self.phase = phase
+        setPhase(phase)
+    }
+
+    private func setPhase(_ newPhase: AgentPhase) {
+        confirmationActionsFrozen = false
+        phase = newPhase
     }
 
     func clearCompletedPhase() {

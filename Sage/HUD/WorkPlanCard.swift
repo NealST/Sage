@@ -9,6 +9,7 @@ import SwiftUI
 struct WorkPlanCard: View {
     let plan: WorkPlan
     var isExecuting: Bool
+    var bindsReturnShortcut: Bool = true
     var onConfirm: () -> Void
     var onCancel: () -> Void
     var onStop: (() -> Void)?
@@ -18,7 +19,11 @@ struct WorkPlanCard: View {
             plan: plan,
             actions: isExecuting
                 ? .executing(onStop: onStop)
-                : .confirm(onConfirm: onConfirm, onCancel: onCancel)
+                : .confirm(
+                    onConfirm: onConfirm,
+                    onCancel: onCancel,
+                    bindsReturnShortcut: bindsReturnShortcut
+                )
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
@@ -38,7 +43,7 @@ struct WorkPlanCardSkeleton: View {
 }
 
 private enum WorkPlanCardActions {
-    case confirm(onConfirm: () -> Void, onCancel: () -> Void)
+    case confirm(onConfirm: () -> Void, onCancel: () -> Void, bindsReturnShortcut: Bool)
     case executing(onStop: (() -> Void)?)
     case placeholder
 }
@@ -96,8 +101,8 @@ private struct WorkPlanCardBody: View {
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
 
-        case .confirm(let onConfirm, let onCancel):
-            confirmRow(onConfirm: onConfirm, onCancel: onCancel, shortcuts: true)
+        case .confirm(let onConfirm, let onCancel, let bindsReturnShortcut):
+            confirmRow(onConfirm: onConfirm, onCancel: onCancel, shortcuts: bindsReturnShortcut)
 
         case .placeholder:
             confirmRow(onConfirm: {}, onCancel: {}, shortcuts: false)
