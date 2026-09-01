@@ -203,9 +203,18 @@ struct ThinkingStreamAccessory: View {
                 .transition(.opacity)
             }
             if !streaming.text.isEmpty {
-                StreamingContentView(text: streaming.text)
+                if streaming.isReservingWorkPlan {
+                    MarkdownContentView(
+                        markdown: streaming.text,
+                        collapsible: true,
+                        syntaxHighlighting: false
+                    )
                     .transition(.opacity)
-            } else if streaming.thinking.isEmpty {
+                } else {
+                    StreamingContentView(text: streaming.text)
+                        .transition(.opacity)
+                }
+            } else if streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
                 if let retry = retryState {
                     RetryCountdownView(state: retry)
                         .transition(.opacity)

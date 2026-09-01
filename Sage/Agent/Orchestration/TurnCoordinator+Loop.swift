@@ -11,21 +11,30 @@ extension TurnCoordinator {
         do {
             try Task.checkCancellation()
             let catalogNames = (skillCatalog()?.enabledSkills ?? []).map(\.name)
-            let workPlan = try await planner.propose(
+            let proposed = try await planner.propose(
                 userText: userText,
                 skillAppendix: skillRecall.cachedResult?.text ?? "",
                 allowedSkillNames: catalogNames
             )
+            let workPlan = proposed.plan
             streaming.setReservingWorkPlan(false)
             try Task.checkCancellation()
+            let leadIn = proposed.leadIn.trimmingCharacters(in: .whitespacesAndNewlines)
+            let leadInEvents: [AgentEvent] =
+                workPlan.kind != .answer && !leadIn.isEmpty
+                ? [AgentEvent(kind: .assistantResponse, content: leadIn)]
+                : []
             guard await taskStore.commit(
-                appendEvents: [],
+                appendEvents: leadInEvents,
                 deleteEventIDs: [],
                 mutate: { task in
                     task.workPlan = workPlan
                     task.status = workPlan.requiresConfirmation ? .awaitingApproval : .active
                 }
             ) else { return }
+            if workPlan.kind != .answer {
+                streaming.flush("")
+            }
 
             applyThreadOffer(from: workPlan)
 

@@ -83,8 +83,7 @@ private struct WorkPlanCardBody: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private var actionRow: some View {
+    @ViewBuilder private var actionRow: some View {
         switch actions {
         case .executing(let onStop):
             HStack(spacing: SageDesign.Spacing.small) {

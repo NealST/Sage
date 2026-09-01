@@ -12,6 +12,12 @@ nonisolated struct SkillPersistAdvice: Sendable, Equatable {
     var persist: Bool
 }
 
+/// Plan plus any markdown the model wrote before the JSON.
+nonisolated struct ProposedWorkPlan: Sendable {
+    var plan: WorkPlan
+    var leadIn: String
+}
+
 @MainActor
 final class PlanAgent {
     private let state: AgentSessionState
@@ -26,7 +32,7 @@ final class PlanAgent {
         userText: String,
         skillAppendix: String,
         allowedSkillNames: [String]
-    ) async throws -> WorkPlan {
+    ) async throws -> ProposedWorkPlan {
         var adapter = PlanStreamAdapter()
         let raw = try await modelGateway.streamCustom(
             system: Self.systemPrompt,
@@ -39,14 +45,12 @@ final class PlanAgent {
         ) { chunk in
             if let visible = adapter.ingest(chunk) {
                 modelGateway.streaming.publish(visible)
-            } else if adapter.isEnvelope {
-                modelGateway.streaming.setReservingWorkPlan(true)
             }
+            modelGateway.streaming.setReservingWorkPlan(adapter.isReservingWorkPlan)
         }
-        return adoptProposal(
+        return try adoptProposal(
             adapter.finish(),
             raw: raw,
-            userText: userText,
             allowed: Set(allowedSkillNames)
         )
     }
@@ -54,25 +58,26 @@ final class PlanAgent {
     private func adoptProposal(
         _ outcome: PlanStreamAdapter.Outcome,
         raw: String,
-        userText: String,
         allowed: Set<String>
-    ) -> WorkPlan {
-        if case .answer(let text) = outcome, let plan = Self.parsePlain(text) {
-            modelGateway.streaming.flush(text)
-            return plan
-        }
-        let plan = Self.parse(raw) ?? Self.fallback(for: userText)
-        return WorkPlan(
-            id: plan.id,
-            kind: plan.kind,
-            intent: plan.intent,
-            approach: plan.approach,
-            sideEffects: plan.sideEffects,
-            threadAdvice: plan.threadAdvice,
-            threadLabel: plan.threadLabel,
-            skillNames: plan.skillNames.filter { allowed.contains($0) },
-            reply: plan.reply
+    ) throws -> ProposedWorkPlan {
+        let proposed = try Self.resolveProposal(outcome, raw: raw)
+        let plan = WorkPlan(
+            id: proposed.plan.id,
+            kind: proposed.plan.kind,
+            intent: proposed.plan.intent,
+            approach: proposed.plan.approach,
+            sideEffects: proposed.plan.sideEffects,
+            threadAdvice: proposed.plan.threadAdvice,
+            threadLabel: proposed.plan.threadLabel,
+            skillNames: proposed.plan.skillNames.filter { allowed.contains($0) },
+            reply: proposed.plan.reply
         )
+        if plan.kind == .answer, let reply = plan.directReply {
+            modelGateway.streaming.flush(reply)
+        } else {
+            modelGateway.streaming.flush(proposed.leadIn)
+        }
+        return ProposedWorkPlan(plan: plan, leadIn: proposed.leadIn)
     }
 
     /// After Review accept. Does not write files — only whether extraction should run.
@@ -102,7 +107,7 @@ final class PlanAgent {
     Write the user-facing answer as markdown. No JSON, no preamble, no "kind".
 
     2) Work plan, when you must read or change the Mac:
-    JSON only. First character is `{`. No markdown fence, no prose before the JSON.
+    JSON only. Start with `{`. No markdown fence, no “OK” / “好的” / other prose before the JSON.
     {
       "kind": "observe" | "act",
       "intent": "one sentence: what the user wants",

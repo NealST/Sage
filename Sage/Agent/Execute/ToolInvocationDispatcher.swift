@@ -27,13 +27,15 @@ nonisolated enum ToolInvocationDispatcher {
         let authorization = request.resolvingAuthorization().authorization
 
         return try await Self.invokeBuiltIn(
-            named: request.name,
-            tool: tool,
-            argumentsJSON: request.argumentsJSON,
-            pathGuardPolicy: request.pathGuardPolicy,
-            allowlist: allowlist,
-            sensitiveReadRoots: authorization?.roots(for: .sensitiveRead) ?? [],
-            writeRoots: authorization?.roots(for: .localWrite) ?? []
+            BuiltInCall(
+                name: request.name,
+                tool: tool,
+                argumentsJSON: request.argumentsJSON,
+                pathGuardPolicy: request.pathGuardPolicy,
+                allowlist: allowlist,
+                sensitiveReadRoots: authorization?.roots(for: .sensitiveRead) ?? [],
+                writeRoots: authorization?.roots(for: .localWrite) ?? []
+            )
         )
     }
 
@@ -132,36 +134,34 @@ nonisolated enum ToolInvocationDispatcher {
     ]
 
     @MainActor
-    private static func invokeBuiltIn(
-        named name: String,
-        tool: any AgentTool,
-        argumentsJSON: String,
-        pathGuardPolicy: PathGuard.Policy,
-        allowlist: [String],
-        sensitiveReadRoots: [String],
-        writeRoots: [String]
-    ) async throws -> String {
-        if mainActorToolNames.contains(name) {
-            return try await PathGuard.$policy.withValue(pathGuardPolicy) {
-                try await PathGuard.$readAllowlist.withValue(allowlist) {
-                    try await PathGuard.$sensitiveReadAllowlist.withValue(sensitiveReadRoots) {
-                        try await PathGuard.$writeAllowlist.withValue(writeRoots) {
-                            try await tool.call(argumentsJSON: argumentsJSON)
-                        }
+    private static func invokeBuiltIn(_ call: BuiltInCall) async throws -> String {
+        if mainActorToolNames.contains(call.name) {
+            return try await call.invoke()
+        }
+        return try await Task.detached(priority: .userInitiated) {
+            try await call.invoke()
+        }.value
+    }
+}
+
+private struct BuiltInCall: Sendable {
+    var name: String
+    var tool: any AgentTool
+    var argumentsJSON: String
+    var pathGuardPolicy: PathGuard.Policy
+    var allowlist: [String]
+    var sensitiveReadRoots: [String]
+    var writeRoots: [String]
+
+    func invoke() async throws -> String {
+        try await PathGuard.$policy.withValue(pathGuardPolicy) {
+            try await PathGuard.$readAllowlist.withValue(allowlist) {
+                try await PathGuard.$sensitiveReadAllowlist.withValue(sensitiveReadRoots) {
+                    try await PathGuard.$writeAllowlist.withValue(writeRoots) {
+                        try await tool.call(argumentsJSON: argumentsJSON)
                     }
                 }
             }
         }
-        return try await Task.detached(priority: .userInitiated) {
-            try await PathGuard.$policy.withValue(pathGuardPolicy) {
-                try await PathGuard.$readAllowlist.withValue(allowlist) {
-                    try await PathGuard.$sensitiveReadAllowlist.withValue(sensitiveReadRoots) {
-                        try await PathGuard.$writeAllowlist.withValue(writeRoots) {
-                            try await tool.call(argumentsJSON: argumentsJSON)
-                        }
-                    }
-                }
-            }
-        }.value
     }
 }

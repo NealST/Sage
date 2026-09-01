@@ -167,71 +167,29 @@ final class CapabilityStore {
 
         reconnectTasks[serverID]?.cancel()
         reconnectTasks[serverID] = nil
-
         mcpServers[index].status = .connecting
         mcpServers[index].statusMessage = nil
-
         await disconnect(serverID: serverID)
 
         guard let stillIndexed = mcpServers.firstIndex(where: { $0.id == serverID }),
               mcpServers[stillIndexed].enabled
         else { return }
 
-        let config = mcpServers[stillIndexed]
         let client = MCPStdioClient(
-            config: config,
+            config: mcpServers[stillIndexed],
             writableRoots: writableRoots,
             allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
         )
-
         await client.setOnProcessExit { [weak self] exitedServerID in
             await self?.handleServerProcessExit(serverID: exitedServerID)
         }
-
         clients[serverID] = client
 
         do {
-            let tools = try await withThrowingTaskGroup(of: [MCPToolInfo].self) { group in
-                group.addTask { try await client.connect() }
-                group.addTask {
-                    try await Task.sleep(for: .seconds(20))
-                    throw MCPStdioClient.ClientError.remote("Connection timed out")
-                }
-                guard let result = try await group.next() else {
-                    throw CancellationError()
-                }
-                group.cancelAll()
-                return result
-            }
-            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else {
-                await client.disconnect()
-                clients[serverID] = nil
-                return
-            }
-            mcpServers[idx].status = .connected
-            mcpServers[idx].toolCount = tools.count
-            mcpServers[idx].statusMessage = nil
-            mcpServers[idx].reconnectAttempts = 0
-            mcpServers[idx].recentLogs = await client.stderrLog
-            mcpTools.removeAll { $0.serverID == serverID }
-            mcpTools.append(contentsOf: tools)
+            let tools = try await Self.connectWithTimeout(client)
+            await applyConnectSuccess(serverID: serverID, tools: tools, client: client)
         } catch {
-            let stderrLines = await client.stderrLog
-            await client.disconnect()
-            clients[serverID] = nil
-            guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
-            mcpServers[idx].status = .error
-            mcpServers[idx].statusMessage = stderrLines.last ?? error.localizedDescription
-            mcpServers[idx].toolCount = 0
-            mcpServers[idx].recentLogs = stderrLines
-            mcpTools.removeAll { $0.serverID == serverID }
-        }
-    }
-
-    private func isUniqueServerName(_ name: String, excluding serverID: String?) -> Bool {
-        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return !normalized.isEmpty && !mcpServers.contains { server in
-            server.id != serverID && server.name.lowercased() == normalized
+            await applyConnectFailure(serverID: serverID, client: client, error: error)
         }
     }
 
@@ -293,6 +251,65 @@ final class CapabilityStore {
                 await self.connect(serverID: serverID)
             }.value
         }
+    }
+}
+
+extension CapabilityStore {
+    private func isUniqueServerName(_ name: String, excluding serverID: String?) -> Bool {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return !normalized.isEmpty && !mcpServers.contains { server in
+            server.id != serverID && server.name.lowercased() == normalized
+        }
+    }
+
+    private static func connectWithTimeout(_ client: MCPStdioClient) async throws -> [MCPToolInfo] {
+        try await withThrowingTaskGroup(of: [MCPToolInfo].self) { group in
+            group.addTask { try await client.connect() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(20))
+                throw MCPStdioClient.ClientError.remote("Connection timed out")
+            }
+            guard let result = try await group.next() else {
+                throw CancellationError()
+            }
+            group.cancelAll()
+            return result
+        }
+    }
+
+    private func applyConnectSuccess(
+        serverID: String,
+        tools: [MCPToolInfo],
+        client: MCPStdioClient
+    ) async {
+        guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else {
+            await client.disconnect()
+            clients[serverID] = nil
+            return
+        }
+        mcpServers[idx].status = .connected
+        mcpServers[idx].toolCount = tools.count
+        mcpServers[idx].statusMessage = nil
+        mcpServers[idx].reconnectAttempts = 0
+        mcpServers[idx].recentLogs = await client.stderrLog
+        mcpTools.removeAll { $0.serverID == serverID }
+        mcpTools.append(contentsOf: tools)
+    }
+
+    private func applyConnectFailure(
+        serverID: String,
+        client: MCPStdioClient,
+        error: Error
+    ) async {
+        let stderrLines = await client.stderrLog
+        await client.disconnect()
+        clients[serverID] = nil
+        guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+        mcpServers[idx].status = .error
+        mcpServers[idx].statusMessage = stderrLines.last ?? error.localizedDescription
+        mcpServers[idx].toolCount = 0
+        mcpServers[idx].recentLogs = stderrLines
+        mcpTools.removeAll { $0.serverID == serverID }
     }
 
     /// Chains work behind any in-flight op for the same server id.

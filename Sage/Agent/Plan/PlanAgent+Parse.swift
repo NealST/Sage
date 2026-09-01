@@ -5,23 +5,42 @@
 
 import Foundation
 
+enum PlanProposalError: LocalizedError {
+    case unreadable
+
+    var errorDescription: String? {
+        "The work plan couldn't be read. Retry to try again."
+    }
+}
+
 extension PlanAgent {
-    nonisolated static func fallback(for userText: String) -> WorkPlan {
-        WorkPlan(
-            kind: .act,
-            intent: String(userText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)),
-            approach: """
-            ## 理解
-            按用户这句话完成最小必要改动。
+    /// Parse the JSON plan when present. Never invent an act card.
+    nonisolated static func resolveProposal(
+        _ outcome: PlanStreamAdapter.Outcome,
+        raw: String
+    ) throws -> ProposedWorkPlan {
+        switch outcome {
+        case .envelope(let envelope, let visible):
+            guard let plan = parse(envelope) ?? parse(raw) else {
+                throw PlanProposalError.unreadable
+            }
+            return ProposedWorkPlan(plan: plan, leadIn: visible)
 
-            ## 约束
-            不扩大范围，不改无关文件。
-
-            ## 路径
-            先看清现状，再做最小修改。
-            """,
-            sideEffects: "May read or change files in the current workspace."
-        )
+        case .answer(let text):
+            let source = PlanStreamAdapter.planJSONStart(in: text) != nil ? text : raw
+            if let start = PlanStreamAdapter.planJSONStart(in: source),
+               let plan = parse(source) {
+                return ProposedWorkPlan(
+                    plan: plan,
+                    leadIn: String(source[..<start])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+            if let plan = parsePlain(text) {
+                return ProposedWorkPlan(plan: plan, leadIn: "")
+            }
+            throw PlanProposalError.unreadable
+        }
     }
 
     nonisolated static func parsePlain(_ raw: String?) -> WorkPlan? {

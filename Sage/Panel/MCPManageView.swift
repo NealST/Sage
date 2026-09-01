@@ -229,14 +229,20 @@ struct MCPManageView: View {
     }
 
     private func statusIcon(_ status: MCPServerStatus) -> some View {
-        Image(systemName: symbol(for: status))
+        Image(systemName: MCPServerStatusChrome.symbol(status))
             .font(.system(size: type.micro, weight: .semibold))
-            .foregroundStyle(color(for: status))
+            .foregroundStyle(MCPServerStatusChrome.color(status))
             .frame(width: 14)
-            .accessibilityLabel(accessibilityStatusName(status))
+            .accessibilityLabel(MCPServerStatusChrome.accessibilityName(status))
     }
 
-    private func accessibilityStatusName(_ status: MCPServerStatus) -> String {
+    private func statusLabel(_ server: MCPServerConfig) -> String {
+        MCPServerStatusChrome.label(server)
+    }
+}
+
+private enum MCPServerStatusChrome {
+    static func accessibilityName(_ status: MCPServerStatus) -> String {
         switch status {
         case .connected: return "Connected"
         case .connecting: return "Connecting"
@@ -247,7 +253,7 @@ struct MCPManageView: View {
         }
     }
 
-    private func symbol(for status: MCPServerStatus) -> String {
+    static func symbol(_ status: MCPServerStatus) -> String {
         switch status {
         case .connected: return "checkmark.circle.fill"
         case .connecting, .reconnecting: return "arrow.triangle.2.circlepath"
@@ -257,7 +263,7 @@ struct MCPManageView: View {
         }
     }
 
-    private func color(for status: MCPServerStatus) -> Color {
+    static func color(_ status: MCPServerStatus) -> Color {
         switch status {
         case .connected: return .green
         case .connecting, .reconnecting: return .yellow
@@ -267,7 +273,7 @@ struct MCPManageView: View {
         }
     }
 
-    private func statusLabel(_ server: MCPServerConfig) -> String {
+    static func label(_ server: MCPServerConfig) -> String {
         switch server.status {
         case .connected: return "Connected · \(server.toolCount) tools"
         case .connecting: return "Connecting…"

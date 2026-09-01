@@ -79,13 +79,40 @@ final class WorkPlanTests: XCTestCase {
         XCTAssertEqual(plan?.promptAppendix.contains("Mutating tools are rejected"), true)
     }
 
-    func testFallbackIsActMarkdown() {
-        let plan = PlanAgent.fallback(for: "改一下配置")
-        XCTAssertEqual(plan.kind, .act)
-        XCTAssertTrue(plan.requiresConfirmation)
-        XCTAssertTrue(plan.approach.contains("##"))
-        XCTAssertEqual(plan.threadAdvice, .continueThread)
-        XCTAssertTrue(plan.skillNames.isEmpty)
+    func testUnreadableEnvelopeDoesNotInventAct() {
+        XCTAssertThrowsError(
+            try PlanAgent.resolveProposal(.envelope(raw: "{", visible: ""), raw: "{")
+        ) { error in
+            XCTAssertTrue(error is PlanProposalError)
+        }
+        XCTAssertNil(PlanAgent.parse("{"))
+    }
+
+    func testPreambleJSONIsAPlan() throws {
+        let raw = """
+        好的
+        {"kind":"act","intent":"改 README","approach":"只补一节。","side_effects":"会改 README"}
+        """
+        let fromEnvelope = try PlanAgent.resolveProposal(
+            .envelope(raw: raw, visible: "好的"),
+            raw: raw
+        )
+        XCTAssertEqual(fromEnvelope.plan.kind, .act)
+        XCTAssertEqual(fromEnvelope.plan.intent, "改 README")
+        XCTAssertEqual(fromEnvelope.leadIn, "好的")
+
+        let fromAnswer = try PlanAgent.resolveProposal(.answer(raw), raw: raw)
+        XCTAssertEqual(fromAnswer.plan.kind, .act)
+    }
+
+    func testPlainAnswerStillAnswers() throws {
+        let plan = try PlanAgent.resolveProposal(
+            .answer("哈哈，今天也挺好的。"),
+            raw: "哈哈，今天也挺好的。"
+        )
+        XCTAssertEqual(plan.plan.kind, .answer)
+        XCTAssertEqual(plan.plan.directReply, "哈哈，今天也挺好的。")
+        XCTAssertEqual(plan.leadIn, "")
     }
 
     func testParsesThreadOfferAndSkills() {

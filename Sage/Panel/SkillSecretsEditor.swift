@@ -77,8 +77,8 @@ struct SkillSecretsEditor: View {
     }
 
     private func refresh() {
-        storedNames = Set(skill.requiredSecretNames.filter {
-            SkillSecretStore.hasStoredSecret($0, for: skill)
+        storedNames = Set(skill.requiredSecretNames.filter { name in
+            SkillSecretStore.hasStoredSecret(name, for: skill)
         })
         drafts = [:]
         errorMessage = nil

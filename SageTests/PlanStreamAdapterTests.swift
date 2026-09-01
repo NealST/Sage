@@ -6,6 +6,7 @@ final class PlanStreamAdapterTests: XCTestCase {
         var adapter = PlanStreamAdapter()
         XCTAssertEqual(adapter.ingest("哈"), "哈")
         XCTAssertEqual(adapter.ingest("哈，今天不错。"), "哈哈，今天不错。")
+        XCTAssertFalse(adapter.isEnvelope)
         XCTAssertEqual(adapter.finish(), .answer("哈哈，今天不错。"))
     }
 
@@ -13,16 +14,20 @@ final class PlanStreamAdapterTests: XCTestCase {
         var adapter = PlanStreamAdapter()
         XCTAssertFalse(adapter.isEnvelope)
         XCTAssertNil(adapter.ingest("{"))
-        XCTAssertTrue(adapter.isEnvelope)
+        XCTAssertTrue(adapter.isReservingWorkPlan)
         XCTAssertNil(adapter.ingest(#""kind":"act"}"#))
-        XCTAssertEqual(adapter.finish(), .envelope(#"{"kind":"act"}"#))
+        XCTAssertTrue(adapter.isEnvelope)
+        XCTAssertEqual(adapter.finish(), .envelope(raw: #"{"kind":"act"}"#, visible: ""))
     }
 
     func testLeadingWhitespaceThenJSON() {
         var adapter = PlanStreamAdapter()
         XCTAssertNil(adapter.ingest("  \n"))
         XCTAssertNil(adapter.ingest(#"{"kind":"observe"}"#))
-        XCTAssertEqual(adapter.finish(), .envelope("  \n{\"kind\":\"observe\"}"))
+        XCTAssertEqual(
+            adapter.finish(),
+            .envelope(raw: "  \n{\"kind\":\"observe\"}", visible: "")
+        )
     }
 
     func testFencedJSONIsEnvelope() {
@@ -31,7 +36,7 @@ final class PlanStreamAdapterTests: XCTestCase {
         XCTAssertTrue(adapter.isEnvelope)
         XCTAssertEqual(
             adapter.finish(),
-            .envelope("```json\n{\"kind\":\"act\"}")
+            .envelope(raw: "```json\n{\"kind\":\"act\"}", visible: "")
         )
     }
 
@@ -64,7 +69,37 @@ final class PlanStreamAdapterTests: XCTestCase {
         var adapter = PlanStreamAdapter()
         XCTAssertNil(adapter.ingest("  \n"))
         XCTAssertFalse(adapter.isEnvelope)
+        XCTAssertFalse(adapter.isReservingWorkPlan)
         XCTAssertNil(adapter.ingest("{"))
+        XCTAssertTrue(adapter.isReservingWorkPlan)
+        XCTAssertNil(adapter.ingest(#""kind":"observe"}"#))
         XCTAssertTrue(adapter.isEnvelope)
+    }
+
+    func testPreambleStreamsThenJSONReservesCard() {
+        var adapter = PlanStreamAdapter()
+        XCTAssertEqual(adapter.ingest("好的\n"), "好的\n")
+        XCTAssertFalse(adapter.isEnvelope)
+        XCTAssertFalse(adapter.isReservingWorkPlan)
+        XCTAssertEqual(adapter.ingest("{"), "好的")
+        XCTAssertTrue(adapter.isReservingWorkPlan)
+        XCTAssertEqual(adapter.ingest(#""kind":"act","intent":"改"}"#), "好的")
+        XCTAssertTrue(adapter.isEnvelope)
+        XCTAssertEqual(
+            adapter.finish(),
+            .envelope(raw: "好的\n{\"kind\":\"act\",\"intent\":\"改\"}", visible: "好的")
+        )
+    }
+
+    func testProseThenInlinePlanJSONSplits() {
+        var adapter = PlanStreamAdapter()
+        XCTAssertEqual(adapter.ingest("好的，"), "好的，")
+        let json = #"{"kind":"act","intent":"改"}"#
+        XCTAssertEqual(adapter.ingest(json), "好的，")
+        XCTAssertTrue(adapter.isEnvelope)
+        XCTAssertEqual(
+            adapter.finish(),
+            .envelope(raw: "好的，" + json, visible: "好的，")
+        )
     }
 }
