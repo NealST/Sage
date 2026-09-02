@@ -128,6 +128,7 @@ extension TurnCoordinator {
 
     func startExecution() async {
         planApproved = true
+        state.enterThinking()
         if let workPlan = state.activeTask?.workPlan {
             await activateRecalledSkills(from: workPlan)
         }

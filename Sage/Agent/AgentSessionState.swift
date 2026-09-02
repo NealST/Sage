@@ -198,7 +198,7 @@ final class AgentSessionState {
 
     var shouldDisableConfirmationActions: Bool {
         guard case .awaitingConfirmation = phase else { return false }
-        return isBusy || confirmationActionsFrozen
+        return confirmationActionsFrozen
     }
 
     func freezeConfirmationActions() {

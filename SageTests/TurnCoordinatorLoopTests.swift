@@ -36,6 +36,32 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertEqual(runtime.turns.retryPath(), .retryToolBatch)
     }
 
+    func testConfirmWorkPlanStartsExecuteWithoutDiscarding() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+        }
+        runtime.state.enterAwaitingConfirmation()
+        runtime.state.setBusy(true)
+        XCTAssertFalse(runtime.state.shouldDisableConfirmationActions)
+        runtime.state.setBusy(false)
+
+        await runtime.confirmWorkPlan()
+
+        XCTAssertTrue(runtime.turns.planApproved)
+        XCTAssertNotNil(runtime.state.activeTask?.workPlan)
+        XCTAssertFalse(runtime.state.confirmationActionsFrozen)
+    }
+
     func testRetryPathConfirmsUnapprovedActPlan() async throws {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
@@ -69,6 +95,66 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         }
         XCTAssertNotEqual(runtime.turns.retryPath(), .retryToolBatch)
         XCTAssertNotEqual(runtime.turns.retryPath(), .confirmWorkPlan)
+    }
+
+    func testNewUserTurnDiscardsLeftoverWorkPlanSoRetryReplans() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+        }
+        runtime.turns.planApproved = true
+
+        let persisted = await runtime.turns.persistSubmittedUserEvent(
+            "看看天气",
+            route: .continueActive(reason: "User continued the current thread")
+        )
+        XCTAssertTrue(persisted)
+        XCTAssertNil(runtime.state.activeTask?.workPlan)
+        XCTAssertNil(runtime.state.activeTask?.pendingPlan)
+        XCTAssertFalse(runtime.planProgress.hasPlan)
+        XCTAssertEqual(runtime.state.events.last?.content, "看看天气")
+
+        runtime.turns.planApproved = false
+        if runtime.settings.isConfigured {
+            XCTAssertEqual(runtime.turns.retryPath(), .resumeModelTurn)
+        } else {
+            XCTAssertNil(runtime.turns.retryPath())
+        }
+        XCTAssertNotEqual(runtime.turns.retryPath(), .confirmWorkPlan)
+        XCTAssertNotEqual(runtime.turns.retryPath(), .retryToolBatch)
+    }
+
+    func testSteerKeepsWorkPlanForTheCurrentTurn() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        let leftover = WorkPlan(
+            kind: .act,
+            intent: "改 README",
+            approach: "只补一节。",
+            sideEffects: "会改 README"
+        )
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = leftover
+        }
+
+        let steered = await runtime.turns.persistSteerTurn(
+            QueuedUserTurn(text: "改用美式拼写", attachments: [])
+        )
+        XCTAssertTrue(steered)
+        XCTAssertEqual(runtime.state.activeTask?.workPlan, leftover)
+        XCTAssertEqual(runtime.state.steerInstruction, "改用美式拼写")
     }
 
     func testFollowUpAppendixSeparatesReviewAndSteer() {

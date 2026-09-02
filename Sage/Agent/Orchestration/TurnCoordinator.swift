@@ -258,6 +258,9 @@ extension TurnCoordinator {
             mutate: { task in
                 task.status = .active
                 task.pendingPlan = nil
+                // A new user turn invalidates the previous strategy. Retry
+                // must replan this message, not confirm or execute leftovers.
+                task.workPlan = nil
                 if task.summary == nil {
                     task.summary = String(summaryText.prefix(160))
                 }
@@ -293,9 +296,7 @@ extension TurnCoordinator {
                 if task.summary == nil {
                     task.summary = String(prompt.prefix(160))
                 }
-                if let frozenPlan {
-                    task.workPlan = frozenPlan
-                }
+                task.workPlan = frozenPlan
             }
         ) else { return }
 

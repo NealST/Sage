@@ -7,7 +7,7 @@ import Foundation
 
 extension AgentRuntime {
     func confirmWorkPlan() async {
-        guard !state.shouldDisableConfirmationActions else { return }
+        guard !state.confirmationActionsFrozen else { return }
         guard turnChrome == .workPlan else { return }
         _ = await operations.run { await self.turns.startExecution() }
     }
