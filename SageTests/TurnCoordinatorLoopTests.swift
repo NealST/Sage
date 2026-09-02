@@ -133,28 +133,41 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertNotEqual(runtime.turns.retryPath(), .retryToolBatch)
     }
 
-    func testSteerKeepsWorkPlanForTheCurrentTurn() async throws {
+    func testSteerDiscardsWorkPlanSoTheNewMessageIsReplanned() async throws {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
-        let leftover = WorkPlan(
-            kind: .act,
-            intent: "改 README",
-            approach: "只补一节。",
-            sideEffects: "会改 README"
-        )
         _ = await runtime.taskStore.commit(
-            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            appendEvents: [AgentEvent(kind: .userInput, content: "先看看 README")],
             deleteEventIDs: []
         ) { task in
-            task.workPlan = leftover
+            task.workPlan = WorkPlan(
+                kind: .observe,
+                intent: "先看看 README",
+                approach: "只读。"
+            )
         }
+        runtime.turns.planApproved = true
+        runtime.state.steerInstruction = "旧纠偏"
+        runtime.state.reviewFeedback = "旧复核"
 
         let steered = await runtime.turns.persistSteerTurn(
-            QueuedUserTurn(text: "改用美式拼写", attachments: [])
+            QueuedUserTurn(text: "算了，把开头重写一下", attachments: [])
         )
         XCTAssertTrue(steered)
-        XCTAssertEqual(runtime.state.activeTask?.workPlan, leftover)
-        XCTAssertEqual(runtime.state.steerInstruction, "改用美式拼写")
+        XCTAssertNil(runtime.state.activeTask?.workPlan)
+        XCTAssertNil(runtime.state.activeTask?.pendingPlan)
+        XCTAssertFalse(runtime.turns.planApproved)
+        XCTAssertNil(runtime.state.steerInstruction)
+        XCTAssertNil(runtime.state.reviewFeedback)
+        XCTAssertEqual(runtime.state.events.last?.content, "算了，把开头重写一下")
+
+        if runtime.settings.isConfigured {
+            XCTAssertEqual(runtime.turns.retryPath(), .resumeModelTurn)
+        } else {
+            XCTAssertNil(runtime.turns.retryPath())
+        }
+        XCTAssertNotEqual(runtime.turns.retryPath(), .confirmWorkPlan)
+        XCTAssertNotEqual(runtime.turns.retryPath(), .retryToolBatch)
     }
 
     func testFollowUpAppendixSeparatesReviewAndSteer() {
@@ -216,7 +229,9 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertEqual(runtime.turns.reviewRounds, 0)
         XCTAssertEqual(runtime.turns.execute.toolBatchCount, 0)
         XCTAssertEqual(runtime.turns.execute.toolBatchLimit, ExecuteAgent.defaultToolBatchLimit)
-        XCTAssertEqual(runtime.state.steerInstruction, "改读 INSTALL")
+        XCTAssertNil(runtime.state.steerInstruction)
+        XCTAssertFalse(runtime.turns.planApproved)
+        XCTAssertNil(runtime.state.activeTask?.workPlan)
         XCTAssertNil(runtime.state.reviewFeedback)
         XCTAssertEqual(runtime.turns.latestUserEventID, runtime.state.events.last?.id)
         XCTAssertFalse(runtime.state.events.contains { $0.toolCalls?.contains { $0.id == "c1" } == true })
@@ -301,6 +316,11 @@ final class TurnCoordinatorLoopTests: XCTestCase {
                 ]
             )
             task.pendingPrompt = .toolRoundLimit(currentLimit: 8, nextLimit: 16)
+            task.workPlan = WorkPlan(
+                kind: .observe,
+                intent: "读 README",
+                approach: "只读。"
+            )
         }
     }
 

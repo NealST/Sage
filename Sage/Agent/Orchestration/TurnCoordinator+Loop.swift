@@ -200,25 +200,24 @@ extension TurnCoordinator {
                 task.status = .active
                 task.pendingPlan = nil
                 task.pendingPrompt = nil
+                task.workPlan = nil
             }
         ) else { return false }
         state.clearPendingPrompt()
         latestUserEventID = event.id
-        state.steerInstruction = turn.text
-        reviewRounds = 0
-        execute.resetLoop()
+        resetTurn()
         return true
     }
 
     func continueAfterSteer() async {
         state.turnInput.pendingSteer = nil
-        if state.activeTask?.workPlan == nil {
-            let text = state.events.last { $0.kind == .userInput }?.content ?? ""
-            await presentWorkPlan(for: text)
-            return
-        }
-        planApproved = true
-        await execute.start()
+        let text = state.events.last { $0.kind == .userInput }?.content ?? ""
+        state.enterThinking()
+        state.lastAssistantText = nil
+        streaming.clear()
+        skillRecall.clearTurnCache()
+        _ = skillRecall.prepareSkillsForTurn(query: text)
+        await presentWorkPlan(for: text)
     }
 
     func presentReviewFailure(draft: String, message: String) async {
