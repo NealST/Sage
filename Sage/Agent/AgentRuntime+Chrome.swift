@@ -283,9 +283,14 @@ extension AgentRuntime {
         state.unfreezeConfirmationActions()
     }
 
+    /// Busy execute or an unconfirmed card: Return asks queue / redirect / cancel.
+    var shouldOfferTurnInterrupt: Bool {
+        state.isBusy || state.phase == .awaitingConfirmation
+    }
+
     @discardableResult
     func submit(_ userText: String, attachments: [MessageAttachment] = []) async -> Bool {
-        if state.isBusy {
+        if shouldOfferTurnInterrupt {
             state.turnInput.offer = QueuedUserTurn(text: userText, attachments: attachments)
             return true
         }
@@ -297,16 +302,19 @@ extension AgentRuntime {
 
     func queueTurnInterrupt() {
         state.turnInput.enqueueOffer()
+        unfreezeConfirmationActions()
     }
 
     func dismissTurnInterrupt() {
         state.turnInput.offer = nil
+        unfreezeConfirmationActions()
     }
 
     func steerTurnInterrupt() async {
         guard let offer = state.turnInput.offer else { return }
         state.turnInput.offer = nil
         state.turnInput.pendingSteer = offer
+        unfreezeConfirmationActions()
         await operations.cancelInFlight()
         guard await turns.persistSteerTurn(offer) else {
             state.turnInput.pendingSteer = nil

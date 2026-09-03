@@ -107,6 +107,117 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(state.phase, .awaitingConfirmation)
     }
 
+    func testRestoreFailedStatusShowsRetryWithoutPendingPlan() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        let repository = fixture.repository
+        let created = await store.createAndActivateTask(relatedTo: [])
+        let taskID = try XCTUnwrap(created)
+        let message = "The work plan couldn't be read. Retry to try again."
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "看一下项目")],
+            deleteEventIDs: []
+        ) { task in
+            task.status = .failed
+            task.lastFailureMessage = message
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(state.phase, .failed(message: message))
+        let reloaded = try await repository.loadTask(id: taskID)
+        XCTAssertEqual(reloaded?.status, .failed)
+        XCTAssertEqual(reloaded?.lastFailureMessage, message)
+    }
+
+    func testRestoreToolResultWithoutPendingPlanLooksInterrupted() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        let repository = fixture.repository
+        let created = await store.createAndActivateTask(relatedTo: [])
+        let taskID = try XCTUnwrap(created)
+        _ = await store.commit(
+            appendEvents: [
+                AgentEvent(kind: .userInput, content: "读 README"),
+                AgentEvent(kind: .toolResult, content: "# Title", toolCallID: "c1"),
+            ],
+            deleteEventIDs: []
+        ) { task in
+            task.status = .active
+            task.pendingPlan = nil
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(
+            state.phase,
+            .failed(message: AgentTaskStore.interruptedAfterToolsMessage)
+        )
+        XCTAssertEqual(state.activeTask?.status, .failed)
+        let reloaded = try await repository.loadTask(id: taskID)
+        XCTAssertEqual(reloaded?.status, .failed)
+        XCTAssertEqual(reloaded?.lastFailureMessage, AgentTaskStore.interruptedAfterToolsMessage)
+    }
+
+    func testRestoreUnapprovedWorkPlanShowsConfirmCard() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        _ = await store.createAndActivateTask(relatedTo: [])
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+            task.status = .awaitingApproval
+            task.workPlanApproved = false
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(state.phase, .awaitingConfirmation)
+        XCTAssertFalse(state.activeTask?.workPlanApproved ?? true)
+    }
+
+    func testRestoreApprovedWorkPlanWithoutBatchShowsRetry() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        let repository = fixture.repository
+        let created = await store.createAndActivateTask(relatedTo: [])
+        let taskID = try XCTUnwrap(created)
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+            task.status = .active
+            task.workPlanApproved = true
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(
+            state.phase,
+            .failed(message: AgentTaskStore.interruptedAfterApprovalMessage)
+        )
+        XCTAssertEqual(state.activeTask?.status, .failed)
+        XCTAssertEqual(state.activeTask?.workPlan?.intent, "改 README")
+        XCTAssertEqual(state.activeTask?.workPlanApproved, true)
+        let reloaded = try await repository.loadTask(id: taskID)
+        XCTAssertEqual(reloaded?.status, .failed)
+        XCTAssertEqual(reloaded?.workPlanApproved, true)
+        XCTAssertEqual(reloaded?.lastFailureMessage, AgentTaskStore.interruptedAfterApprovalMessage)
+    }
+
     func testBeginNewTaskDoesNotInheritWorkingMemory() async throws {
         let fixture = try makeStore()
         let repository = fixture.repository

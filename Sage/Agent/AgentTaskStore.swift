@@ -27,6 +27,11 @@ final class AgentTaskStore {
     var setsScopeActive: Bool { !suppressScopeActivePointer }
 
     static let maxRelatedTaskIDs = 8
+    static let interruptedAfterToolsMessage =
+        "Interrupted after tools finished. Retry to summarize."
+    static let interruptedAfterApprovalMessage =
+        "This plan was already approved. Retry to continue."
+    static let genericTurnFailureMessage = "This turn failed. Retry to continue."
 
     init(
         state: AgentSessionState,
@@ -174,7 +179,7 @@ final class AgentTaskStore {
                 }
                 closing.pendingPlan = nil
                 closing.pendingPrompt = nil
-                closing.workPlan = nil
+                closing.clearWorkPlan()
                 closing.workingMemory = closing.workingMemory?.validated(against: closing.events)
                 closing.updatedAt = .now
                 try await taskRepository.mutateTask(

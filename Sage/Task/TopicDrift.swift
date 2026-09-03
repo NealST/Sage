@@ -2,8 +2,9 @@
 //  TopicDrift.swift
 //  Sage
 //
-//  Soft offer + thread title helpers. Drift judgment lives on the Plan model
-//  (`WorkPlan.threadAdvice`), never a bag-of-words route.
+//  Soft offer + thread title helpers. Plan (`WorkPlan.threadAdvice`) and
+//  explicit start-fresh language both surface this chip; neither switches
+//  the task until the user confirms Start Fresh.
 //
 
 import Foundation

@@ -59,6 +59,10 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
     var skillPersistConsidered: Bool
     /// Set when this task was spawned by a schedule runner (not a window thread).
     var originScheduleID: UUID?
+    /// Last turn-failure banner. Meaningful when `status == .failed`.
+    var lastFailureMessage: String?
+    /// User confirmed this WorkPlan. Survives a crash before the first tool batch.
+    var workPlanApproved: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -82,6 +86,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         activatedSkillNames: Set<String> = [],
         skillPersistConsidered: Bool = false,
         originScheduleID: UUID? = nil,
+        lastFailureMessage: String? = nil,
+        workPlanApproved: Bool = false,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -104,8 +110,15 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         self.activatedSkillNames = activatedSkillNames
         self.skillPersistConsidered = skillPersistConsidered
         self.originScheduleID = originScheduleID
+        self.lastFailureMessage = lastFailureMessage
+        self.workPlanApproved = workPlanApproved
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    mutating func clearWorkPlan() {
+        workPlan = nil
+        workPlanApproved = false
     }
 
     init(from decoder: Decoder) throws {
@@ -132,6 +145,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         activatedSkillNames = try container.decodeIfPresent(Set<String>.self, forKey: .activatedSkillNames) ?? []
         skillPersistConsidered = try container.decodeIfPresent(Bool.self, forKey: .skillPersistConsidered) ?? false
         originScheduleID = try container.decodeIfPresent(UUID.self, forKey: .originScheduleID)
+        lastFailureMessage = try container.decodeIfPresent(String.self, forKey: .lastFailureMessage)
+        workPlanApproved = try container.decodeIfPresent(Bool.self, forKey: .workPlanApproved) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -157,6 +172,8 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         try container.encode(activatedSkillNames, forKey: .activatedSkillNames)
         try container.encode(skillPersistConsidered, forKey: .skillPersistConsidered)
         try container.encodeIfPresent(originScheduleID, forKey: .originScheduleID)
+        try container.encodeIfPresent(lastFailureMessage, forKey: .lastFailureMessage)
+        try container.encode(workPlanApproved, forKey: .workPlanApproved)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
@@ -166,7 +183,7 @@ nonisolated struct TaskRecord: Identifiable, Codable, Sendable, Equatable {
         case events, workPlan, workingMemory, pendingPlan, todos, unlockedMCPServerNames
         case pendingPrompt, entities, relatedTaskIDs, activatedSkillNames
         case skillPersistConsidered
-        case originScheduleID
+        case originScheduleID, lastFailureMessage, workPlanApproved
         case createdAt, updatedAt
     }
 }

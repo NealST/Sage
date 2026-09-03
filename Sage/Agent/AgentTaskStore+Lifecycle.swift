@@ -99,7 +99,7 @@ extension AgentTaskStore {
         closing.events = keptEvents
         closing.pendingPlan = nil
         closing.pendingPrompt = nil
-        closing.workPlan = nil
+        closing.clearWorkPlan()
         closing.workingMemory = closing.workingMemory?.validated(against: keptEvents)
         closing.updatedAt = .now
         if !closing.events.isEmpty,

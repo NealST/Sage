@@ -5,19 +5,23 @@
 
 import Foundation
 
-/// First-pass filter only: explicit fresh-start language, or no active task.
-/// Otherwise the current task stays sticky — no silent resume or split.
+/// First-pass filter only: no active task, or keep the current one sticky.
+/// Fresh-start language becomes a Start Fresh offer — it does not switch.
 nonisolated struct ContinuityTaskResolver: TaskRouting {
     func route(
         input: String,
         workspace: TaskWorkspaceSnapshot
     ) -> TaskRoute {
-        if Self.requestsFreshStart(input) {
-            return .beginNew(reason: "User requested a fresh start")
-        }
-
         guard workspace.activeTaskID != nil else {
             return .beginNew(reason: "No active task")
+        }
+
+        if Self.requestsFreshStart(input) {
+            return .continueActive(
+                relatedTaskIDs: workspace.activeTask?.relatedTaskIDs ?? [],
+                reason: "User asked to start fresh; wait for confirmation",
+                shouldOfferFreshStart: true
+            )
         }
 
         return .continueActive(

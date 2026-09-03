@@ -49,6 +49,8 @@ extension GRDBTaskRepository {
             skillPersistConsidered: boolFlag(row),
             originScheduleID: (row["origin_schedule_id"] as String?)
                 .flatMap(UUID.init(uuidString:)),
+            lastFailureMessage: row["last_failure_message"],
+            workPlanApproved: boolColumn(row, "work_plan_approved"),
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )
@@ -60,8 +62,12 @@ extension GRDBTaskRepository {
     }
 
     func boolFlag(_ row: Row) -> Bool {
-        if let flag = row["skill_persist_considered"] as Int? { return flag != 0 }
-        if let flag = row["skill_persist_considered"] as Bool? { return flag }
+        boolColumn(row, "skill_persist_considered")
+    }
+
+    func boolColumn(_ row: Row, _ name: String) -> Bool {
+        if let flag = row[name] as Int? { return flag != 0 }
+        if let flag = row[name] as Bool? { return flag }
         return false
     }
 

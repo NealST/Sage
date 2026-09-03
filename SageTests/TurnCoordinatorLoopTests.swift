@@ -58,8 +58,46 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         await runtime.confirmWorkPlan()
 
         XCTAssertTrue(runtime.turns.planApproved)
+        XCTAssertEqual(runtime.state.activeTask?.workPlanApproved, true)
         XCTAssertNotNil(runtime.state.activeTask?.workPlan)
         XCTAssertFalse(runtime.state.confirmationActionsFrozen)
+    }
+
+    func testPersistedApprovalRestoresRetryWithoutConfirmCard() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+            task.status = .awaitingApproval
+        }
+        runtime.state.enterAwaitingConfirmation()
+
+        let persisted = await runtime.turns.persistWorkPlanApproval()
+        XCTAssertTrue(persisted)
+        XCTAssertEqual(runtime.state.activeTask?.workPlanApproved, true)
+        XCTAssertEqual(runtime.state.activeTask?.status, .active)
+
+        runtime.turns.planApproved = false
+        await runtime.taskStore.restorePhaseFromActiveTask()
+        runtime.turns.adoptActiveTask()
+
+        XCTAssertEqual(
+            runtime.state.phase,
+            .failed(message: AgentTaskStore.interruptedAfterApprovalMessage)
+        )
+        XCTAssertTrue(runtime.turns.planApproved)
+        if runtime.settings.isConfigured {
+            XCTAssertEqual(runtime.turns.retryPath(), .resumeModelTurn)
+        }
+        XCTAssertNotEqual(runtime.turns.retryPath(), .confirmWorkPlan)
     }
 
     func testRetryPathConfirmsUnapprovedActPlan() async throws {
@@ -209,6 +247,61 @@ final class TurnCoordinatorLoopTests: XCTestCase {
                 name: "read_text_file",
                 argumentsJSON: #"{"path":"~/Documents/note.txt"}"#
             )
+        )
+    }
+
+    func testSubmitWhileAwaitingConfirmationOffersInterrupt() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。",
+                sideEffects: "会改 README"
+            )
+        }
+        runtime.state.enterAwaitingConfirmation()
+
+        let accepted = await runtime.submit("别改 README，改 INSTALL")
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(runtime.state.turnInput.offer?.text, "别改 README，改 INSTALL")
+        XCTAssertEqual(runtime.state.phase, .awaitingConfirmation)
+        XCTAssertEqual(runtime.state.activeTask?.workPlan?.intent, "改 README")
+        XCTAssertFalse(runtime.state.events.contains { $0.content == "别改 README，改 INSTALL" })
+    }
+
+    func testExplicitFreshStartStaysOnTaskAndOffersStartFresh() async throws {
+        let runtime = try makeRuntime()
+        let created = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        let taskID = try XCTUnwrap(created)
+        let prior = [
+            AgentEvent(kind: .userInput, content: "整理 Downloads"),
+            AgentEvent(kind: .assistantResponse, content: "Sorted."),
+        ]
+        _ = await runtime.taskStore.commit(appendEvents: prior, deleteEventIDs: []) { task in
+            task.topic = "整理 Downloads"
+        }
+        runtime.turns.latestUserEventID = prior[0].id
+
+        let routing = await runtime.turns.routeSubmittedTurn("新任务：帮我写一个脚本")
+        XCTAssertEqual(routing?.route.action, .continueActive)
+        XCTAssertEqual(routing?.route.shouldOfferFreshStart, true)
+        XCTAssertEqual(runtime.state.activeTaskID, taskID)
+
+        let steered = await runtime.turns.persistSteerTurn(
+            QueuedUserTurn(text: "新任务：帮我写一个脚本", attachments: [])
+        )
+        XCTAssertTrue(steered)
+        XCTAssertEqual(runtime.state.activeTaskID, taskID)
+        XCTAssertEqual(runtime.state.topicDriftOffer?.taskID, taskID)
+        XCTAssertEqual(runtime.state.topicDriftOffer?.topicLabel, "整理 Downloads")
+        XCTAssertEqual(
+            runtime.state.topicDriftOffer?.triggeringUserEventID,
+            runtime.turns.latestUserEventID
         )
     }
 

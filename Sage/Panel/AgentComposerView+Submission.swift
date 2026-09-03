@@ -37,7 +37,7 @@ extension AgentComposerView {
 
     var composerPlaceholder: String {
         if case .awaitingConfirmation = session.agent.state.phase {
-            return "Send to replace this plan…"
+            return "Ask Sage…"
         }
         if session.agent.state.hasPendingPlan {
             return "Finish the pending plan first…"
@@ -62,11 +62,8 @@ extension AgentComposerView {
     }
 
     var composerAccessibilityHint: String {
-        if session.agent.state.isBusy {
+        if session.agent.shouldOfferTurnInterrupt {
             return "Press Return to send. Sage will ask whether to queue or redirect."
-        }
-        if case .awaitingConfirmation = session.agent.state.phase {
-            return "Press Return to send. This replaces the pending plan."
         }
         if session.agent.state.hasPendingPlan {
             return "Run, cancel, or retry the pending plan before sending"

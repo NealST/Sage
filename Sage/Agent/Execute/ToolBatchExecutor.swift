@@ -177,7 +177,7 @@ enum ToolBatchExecutor {
     private static func clearUnconfirmedPlan(_ task: inout TaskRecord) {
         task.pendingPlan = nil
         task.pendingPrompt = nil
-        task.workPlan = nil
+        task.clearWorkPlan()
         task.status = .active
     }
 

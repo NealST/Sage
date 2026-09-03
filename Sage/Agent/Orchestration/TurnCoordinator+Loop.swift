@@ -29,6 +29,7 @@ extension TurnCoordinator {
                 deleteEventIDs: [],
                 mutate: { task in
                     task.workPlan = workPlan
+                    task.workPlanApproved = !workPlan.requiresConfirmation
                     task.status = workPlan.requiresConfirmation ? .awaitingApproval : .active
                 }
             ) else { return }
@@ -126,8 +127,18 @@ extension TurnCoordinator {
         await execute.pauseForToolRoundLimit()
     }
 
+    func persistWorkPlanApproval() async -> Bool {
+        await taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
+            task.workPlanApproved = true
+            if task.status == .awaitingApproval {
+                task.status = .active
+            }
+        }
+    }
+
     func startExecution() async {
         planApproved = true
+        guard await persistWorkPlanApproval() else { return }
         state.enterThinking()
         if let workPlan = state.activeTask?.workPlan {
             await activateRecalledSkills(from: workPlan)
@@ -200,12 +211,14 @@ extension TurnCoordinator {
                 task.status = .active
                 task.pendingPlan = nil
                 task.pendingPrompt = nil
-                task.workPlan = nil
+                task.clearWorkPlan()
+                task.lastFailureMessage = nil
             }
         ) else { return false }
         state.clearPendingPrompt()
         latestUserEventID = event.id
         resetTurn()
+        offerFreshStartIfUserRequested(for: turn.text)
         return true
     }
 
@@ -253,8 +266,9 @@ extension TurnCoordinator {
                 task.status = .completed
                 task.pendingPlan = nil
                 task.pendingPrompt = nil
+                task.lastFailureMessage = nil
                 if !keepWorkPlanAfterComplete {
-                    task.workPlan = nil
+                    task.clearWorkPlan()
                 }
                 task.skillPersistConsidered = true
             }
@@ -282,16 +296,32 @@ extension TurnCoordinator {
     }
 
     func applyThreadOffer(from workPlan: WorkPlan) {
-        guard allowDriftOffer,
-              workPlan.threadAdvice == .offerFresh,
-              state.topicDriftOffer == nil,
+        guard allowDriftOffer, workPlan.threadAdvice == .offerFresh else { return }
+        presentFreshStartOffer(
+            label: workPlan.threadLabel,
+            requiringMinimumHistory: true
+        )
+    }
+
+    /// Phrase-level “新任务 / start fresh” stays on this thread until Start Fresh.
+    func offerFreshStartIfUserRequested(for input: String) {
+        let route = router.route(input: input, workspace: workspaceSnapshot())
+        guard route.shouldOfferFreshStart else { return }
+        presentFreshStartOffer(label: nil, requiringMinimumHistory: false)
+    }
+
+    func presentFreshStartOffer(label: String?, requiringMinimumHistory: Bool) {
+        guard state.topicDriftOffer == nil,
               let task = state.activeTask,
-              task.events.count >= TopicDriftDetector.minimumPriorEvents,
               state.suppressedDriftOfferTaskID != task.id,
               let userEventID = latestUserEventID
         else { return }
+        if requiringMinimumHistory,
+           task.events.count < TopicDriftDetector.minimumPriorEvents {
+            return
+        }
 
-        let label = workPlan.threadLabel
+        let resolved = label
             ?? TopicDriftDetector.threadLabel(
                 topic: task.topic,
                 abstract: task.abstract,
@@ -301,7 +331,7 @@ extension TurnCoordinator {
         state.topicDriftOffer = TopicDriftOffer(
             taskID: task.id,
             triggeringUserEventID: userEventID,
-            topicLabel: label
+            topicLabel: resolved
         )
         state.contextHint = nil
     }
@@ -327,19 +357,23 @@ extension TurnCoordinator {
     /// Load loop flags for the window’s current task. Stashes the previous thread.
     func adoptActiveTask() {
         let newID = state.activeTaskID
-        if turnLoopTaskID == newID { return }
-        if let oldID = turnLoopTaskID {
-            turnLoopByTask[oldID] = TurnLoopState(
-                planApproved: planApproved,
-                reviewRounds: reviewRounds
-            )
+        if turnLoopTaskID != newID {
+            if let oldID = turnLoopTaskID {
+                turnLoopByTask[oldID] = TurnLoopState(
+                    planApproved: planApproved,
+                    reviewRounds: reviewRounds
+                )
+            }
+            turnLoopTaskID = newID
+            let stored = newID.flatMap { turnLoopByTask[$0] } ?? TurnLoopState()
+            planApproved = stored.planApproved
+            reviewRounds = stored.reviewRounds
+            execute.resetLoop()
+            latestUserEventID = state.events.last { $0.kind == .userInput }?.id
         }
-        turnLoopTaskID = newID
-        let stored = newID.flatMap { turnLoopByTask[$0] } ?? TurnLoopState()
-        planApproved = stored.planApproved
-        reviewRounds = stored.reviewRounds
-        execute.resetLoop()
-        latestUserEventID = state.events.last { $0.kind == .userInput }?.id
+        if state.activeTask?.workPlanApproved == true {
+            planApproved = true
+        }
     }
 
     func dropTurnLoop(for id: UUID) {

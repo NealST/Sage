@@ -102,14 +102,41 @@ extension ToolBatchExecutor {
         case .outcome(let outcome):
             return outcome
 
-        case .runnable(let runnable):
-            return await collectParallelResults(runnable, plan: &plan, services: services)
+        case .runnable(let runnable, let deferredApproval):
+            let outcome = await collectParallelResults(runnable, plan: &plan, services: services)
+            return await finishParallelWave(
+                outcome,
+                deferredApproval: deferredApproval,
+                plan: &plan,
+                services: services
+            )
         }
     }
 
-    enum ParallelPrep {
+    enum ParallelPrep: Equatable {
         case outcome(WaveOutcome)
-        case runnable([Int])
+        case runnable(approved: [Int], deferredApproval: DeferredApproval?)
+    }
+
+    struct DeferredApproval: Equatable {
+        var step: AgentStep
+        var hookReason: String?
+    }
+
+    /// After approved siblings finish, ask for the first gated step. A cancelled
+    /// or persist-failed wave must not open that card.
+    static func finishParallelWave(
+        _ outcome: WaveOutcome,
+        deferredApproval: DeferredApproval?,
+        plan: inout AgentPlan,
+        services: ExecuteServices
+    ) async -> WaveOutcome {
+        guard outcome == .succeeded, let deferredApproval else { return outcome }
+        return await pauseForApproval(
+            approvalStep(deferredApproval.step, hookReason: deferredApproval.hookReason),
+            plan: plan,
+            services: services
+        )
     }
 
     static func prepareParallelRun(
@@ -117,13 +144,14 @@ extension ToolBatchExecutor {
         plan: inout AgentPlan,
         services: ExecuteServices
     ) async -> ParallelPrep {
-        var runnable = indices.filter { index in
+        let candidates = indices.filter { index in
             plan.steps.indices.contains(index) && !shouldSkip(plan.steps[index], services: services)
         }
-        guard !runnable.isEmpty else { return .outcome(.succeeded) }
+        guard !candidates.isEmpty else { return .outcome(.succeeded) }
 
         var approved: [Int] = []
-        for index in runnable {
+        var deferredApproval: DeferredApproval?
+        for index in candidates {
             switch await approveParallelStep(index, plan: &plan, services: services) {
             case .approved:
                 approved.append(index)
@@ -131,21 +159,41 @@ extension ToolBatchExecutor {
             case .skipped:
                 continue
 
+            case .needsApproval(let hookApproval):
+                if deferredApproval == nil {
+                    deferredApproval = DeferredApproval(
+                        step: plan.steps[index],
+                        hookReason: hookApproval?.reason
+                    )
+                }
+
             case .halt(let outcome):
                 return .outcome(outcome)
             }
         }
-        runnable = approved
-        guard !runnable.isEmpty else { return .outcome(.succeeded) }
-        guard await markParallelRunning(runnable, plan: &plan, services: services) else {
+
+        if approved.isEmpty {
+            if let deferredApproval {
+                return .outcome(
+                    await pauseForApproval(
+                        approvalStep(deferredApproval.step, hookReason: deferredApproval.hookReason),
+                        plan: plan,
+                        services: services
+                    )
+                )
+            }
+            return .outcome(.succeeded)
+        }
+        guard await markParallelRunning(approved, plan: &plan, services: services) else {
             return .outcome(.persistFailed)
         }
-        return .runnable(runnable)
+        return .runnable(approved: approved, deferredApproval: deferredApproval)
     }
 
-    enum ParallelStepPrep {
+    enum ParallelStepPrep: Equatable {
         case approved
         case skipped
+        case needsApproval(PreToolUseApproval?)
         case halt(WaveOutcome)
     }
 
@@ -187,13 +235,7 @@ extension ToolBatchExecutor {
             hookApproval: hookApproval,
             services: services
         ) {
-            return .halt(
-                await pauseForApproval(
-                    approvalStep(step, hookReason: hookApproval?.reason),
-                    plan: plan,
-                    services: services
-                )
-            )
+            return .needsApproval(hookApproval)
         }
         return .approved
     }

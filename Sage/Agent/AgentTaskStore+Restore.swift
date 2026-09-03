@@ -72,39 +72,81 @@ extension AgentTaskStore {
     }
 
     func restorePendingPlan(from task: TaskRecord) async {
-        guard var plan = task.pendingPlan else {
-            if task.workPlan?.requiresConfirmation == true,
-               task.status == .awaitingApproval {
+        if var plan = task.pendingPlan {
+            normalizeRestoredPlan(&plan, events: task.events)
+            let unfinished = plan.steps.contains { step in
+                step.status != .succeeded && step.status != .skipped
+            }
+            if unfinished {
+                var updated = task
+                updated.pendingPlan = plan
+                state.activeTask = updated
+                planProgress.replace(plan)
                 state.enterAwaitingConfirmation()
-                planProgress.clear()
                 return
             }
-            state.enterIdle()
-            planProgress.clear()
-            return
+            if task.events.last?.kind == .toolResult {
+                await persistRestoredFailure(task, message: Self.interruptedAfterToolsMessage)
+                return
+            }
+            await clearFinishedPendingPlan(task)
         }
-        normalizeRestoredPlan(&plan, events: task.events)
-        var updated = task
-        let unfinished = plan.steps.contains { step in
-            step.status != .succeeded && step.status != .skipped
-        }
-        if unfinished {
-            updated.pendingPlan = plan
-            state.activeTask = updated
-            planProgress.replace(plan)
+
+        planProgress.clear()
+        if task.workPlan?.requiresConfirmation == true,
+           !task.workPlanApproved,
+           task.status == .awaitingApproval {
             state.enterAwaitingConfirmation()
             return
         }
-        updated.pendingPlan = nil
-        state.activeTask = updated
-        planProgress.clear()
-        try? await taskRepository.saveTaskState(updated, setActive: setsScopeActive)
-        state.refreshSummary(for: updated)
-        if updated.events.last?.kind == .toolResult {
-            state.enterFailed(message: "Interrupted after tools finished. Retry to summarize.")
-        } else {
-            state.enterIdle()
+        if task.status == .failed {
+            state.enterFailed(message: restoredFailureMessage(from: task))
+            return
         }
+        if task.status != .completed, task.events.last?.kind == .toolResult {
+            await persistRestoredFailure(task, message: Self.interruptedAfterToolsMessage)
+            return
+        }
+        if task.workPlanApproved, task.status != .completed {
+            await persistRestoredFailure(task, message: Self.interruptedAfterApprovalMessage)
+            return
+        }
+        state.enterIdle()
+    }
+
+    func restoredFailureMessage(from task: TaskRecord) -> String {
+        task.lastFailureMessage?.nilIfEmpty ?? Self.genericTurnFailureMessage
+    }
+
+    func clearFinishedPendingPlan(_ task: TaskRecord) async {
+        var updated = task
+        updated.pendingPlan = nil
+        updated.updatedAt = .now
+        do {
+            try await taskRepository.saveTaskState(updated, setActive: setsScopeActive)
+            state.activeTask = updated
+            state.refreshSummary(for: updated)
+        } catch {
+            state.activeTask = updated
+        }
+        planProgress.clear()
+    }
+
+    func persistRestoredFailure(_ task: TaskRecord, message: String) async {
+        var updated = task
+        updated.pendingPlan = nil
+        updated.status = .failed
+        updated.lastFailureMessage = message
+        updated.updatedAt = .now
+        do {
+            try await taskRepository.saveTaskState(updated, setActive: setsScopeActive)
+            state.activeTask = updated
+            state.refreshSummary(for: updated)
+        } catch {
+            state.activeTask = updated
+        }
+        planProgress.clear()
+        state.enterFailed(message: message)
     }
 
     func normalizeRestoredPlan(_ plan: inout AgentPlan, events: [AgentEvent]) {
@@ -219,6 +261,7 @@ extension AgentTaskStore {
         state.enterFailed(message: message)
         guard var task = state.activeTask else { return }
         task.status = .failed
+        task.lastFailureMessage = message
         task.updatedAt = .now
         do {
             try await taskRepository.saveTaskState(task, setActive: setsScopeActive)

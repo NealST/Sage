@@ -132,6 +132,22 @@ nonisolated extension GRDBTaskSchema {
                 sql: "ALTER TABLE tasks ADD COLUMN unlocked_mcp_servers_json TEXT;"
             )
         }
+        migrator.registerMigration("addTaskLastFailureMessage") { database in
+            try addColumnIfMissing(
+                database,
+                table: "tasks",
+                column: "last_failure_message",
+                sql: "ALTER TABLE tasks ADD COLUMN last_failure_message TEXT;"
+            )
+        }
+        migrator.registerMigration("addTaskWorkPlanApproved") { database in
+            try addColumnIfMissing(
+                database,
+                table: "tasks",
+                column: "work_plan_approved",
+                sql: "ALTER TABLE tasks ADD COLUMN work_plan_approved INTEGER NOT NULL DEFAULT 0;"
+            )
+        }
     }
 
     static func registerEventAttachmentMigration(_ migrator: inout DatabaseMigrator) {

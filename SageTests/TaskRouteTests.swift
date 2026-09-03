@@ -14,6 +14,7 @@ final class TaskRouteTests: XCTestCase {
         XCTAssertEqual(route.relatedTaskIDs, [id])
         XCTAssertEqual(route.confidence, 0.9)
         XCTAssertEqual(route.userVisibleHint, "Continuing")
+        XCTAssertFalse(route.shouldOfferFreshStart)
         XCTAssertEqual(route.eventContext.relatedTaskIDs, [id])
     }
 
@@ -54,7 +55,9 @@ final class TaskRouteTests: XCTestCase {
             input: "新任务：帮我写一个脚本",
             workspace: workspace
         )
-        XCTAssertEqual(fresh.action, .beginNew)
+        XCTAssertEqual(fresh.action, .continueActive)
+        XCTAssertTrue(fresh.shouldOfferFreshStart)
+        XCTAssertEqual(fresh.relatedTaskIDs, current.relatedTaskIDs)
     }
 
     func testRouterKeepsCurrentTaskWhenTopicsDiverge() async {
@@ -73,7 +76,7 @@ final class TaskRouteTests: XCTestCase {
         XCTAssertEqual(route.action, .continueActive)
     }
 
-    func testRouterBeginsNewOnExplicitFreshStart() async {
+    func testRouterOffersFreshStartWithoutSwitching() async {
         let task = Self.seededTask(topic: "整理 Downloads")
         let workspace = TaskWorkspaceSnapshot(
             focusedProject: nil,
@@ -86,7 +89,8 @@ final class TaskRouteTests: XCTestCase {
             input: "新任务：帮我写一个脚本",
             workspace: workspace
         )
-        XCTAssertEqual(route.action, .beginNew)
+        XCTAssertEqual(route.action, .continueActive)
+        XCTAssertTrue(route.shouldOfferFreshStart)
     }
 
     func testRouterBeginsNewWhenNoActiveTask() async {

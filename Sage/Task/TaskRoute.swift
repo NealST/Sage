@@ -19,6 +19,8 @@ nonisolated struct TaskRoute: Sendable, Equatable {
     var confidence: Double
     var reason: String
     var userVisibleHint: String?
+    /// Phrase asked to Start Fresh. Stay on this task until the user confirms.
+    var shouldOfferFreshStart: Bool
 
     var eventContext: EventContext {
         EventContext(
@@ -32,14 +34,16 @@ nonisolated struct TaskRoute: Sendable, Equatable {
         relatedTaskIDs: [UUID] = [],
         confidence: Double = 1,
         reason: String,
-        userVisibleHint: String? = nil
+        userVisibleHint: String? = nil,
+        shouldOfferFreshStart: Bool = false
     ) -> Self {
         Self(
             action: .continueActive,
             relatedTaskIDs: relatedTaskIDs,
             confidence: confidence,
             reason: reason,
-            userVisibleHint: userVisibleHint
+            userVisibleHint: userVisibleHint,
+            shouldOfferFreshStart: shouldOfferFreshStart
         )
     }
 
@@ -53,7 +57,8 @@ nonisolated struct TaskRoute: Sendable, Equatable {
             relatedTaskIDs: [],
             confidence: confidence,
             reason: reason,
-            userVisibleHint: userVisibleHint
+            userVisibleHint: userVisibleHint,
+            shouldOfferFreshStart: false
         )
     }
 }
@@ -66,8 +71,8 @@ nonisolated protocol TaskRouting: Sendable {
     ) -> TaskRoute
 }
 
-/// Continuity only: explicit fresh-start language, or keep the current task.
-/// Topic drift is a UI offer (`TopicDriftDetector`), never a route.
+/// Continuity only: keep the current task, or open the first one.
+/// “Start Fresh” language and Plan drift are UI offers, never a silent switch.
 @MainActor
 final class CompositeTaskRouter {
     private let continuity: ContinuityTaskResolver

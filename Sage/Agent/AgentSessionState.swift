@@ -34,8 +34,8 @@ final class AgentSessionState {
     /// True while peeling the latest turn into a new task (blocks double-taps).
     var isAcceptingTopicDrift = false
     private(set) var isBusy = false
-    /// Composer started a replacement while a card is still unconfirmed.
-    /// Buttons disable immediately; `isBusy` follows once the turn gate opens.
+    /// Confirm-card buttons disable while composer submit is in flight or the
+    /// queue/redirect dialog is up. `isBusy` follows once the turn gate opens.
     private(set) var confirmationActionsFrozen = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false

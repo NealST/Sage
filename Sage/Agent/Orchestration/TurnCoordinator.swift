@@ -143,6 +143,9 @@ final class TurnCoordinator {
             summary: query
         ) else { return false }
         allowDriftOffer = !routing.beganNewThread
+        if routing.route.shouldOfferFreshStart {
+            presentFreshStartOffer(label: nil, requiringMinimumHistory: false)
+        }
         state.enterThinking()
         state.lastAssistantText = nil
         streaming.clear()
@@ -197,7 +200,8 @@ extension TurnCoordinator {
             mutate: { task in
                 task.pendingPlan = nil
                 task.pendingPrompt = nil
-                task.workPlan = nil
+                task.clearWorkPlan()
+                task.lastFailureMessage = nil
                 task.status = .active
             }
         ) else { return false }
@@ -260,7 +264,8 @@ extension TurnCoordinator {
                 task.pendingPlan = nil
                 // A new user turn invalidates the previous strategy. Retry
                 // must replan this message, not confirm or execute leftovers.
-                task.workPlan = nil
+                task.clearWorkPlan()
+                task.lastFailureMessage = nil
                 if task.summary == nil {
                     task.summary = String(summaryText.prefix(160))
                 }
@@ -293,10 +298,12 @@ extension TurnCoordinator {
             mutate: { task in
                 task.status = .active
                 task.pendingPlan = nil
+                task.lastFailureMessage = nil
                 if task.summary == nil {
                     task.summary = String(prompt.prefix(160))
                 }
                 task.workPlan = frozenPlan
+                task.workPlanApproved = frozenPlan != nil
             }
         ) else { return }
 

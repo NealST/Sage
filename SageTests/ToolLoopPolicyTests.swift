@@ -277,3 +277,162 @@ final class PreToolUseHookEvaluatorTests: XCTestCase {
         XCTAssertTrue(reason.contains("Invalid PreToolUse hook config"))
     }
 }
+
+@MainActor
+final class ToolBatchParallelApprovalTests: XCTestCase {
+    private var tempDirectory: URL?
+    private var projectRoot: URL?
+
+    override func tearDown() async throws {
+        if let tempDirectory {
+            try? FileManager.default.removeItem(at: tempDirectory)
+        }
+        if let projectRoot {
+            try? FileManager.default.removeItem(at: projectRoot)
+        }
+        try await super.tearDown()
+    }
+
+    func testPrepareRunsApprovedSiblingsBeforeGatedRead() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        try attachHookProject(to: runtime, hookContains: "gated")
+        var plan = mixedReadPlan()
+        let prepared = await ToolBatchExecutor.prepareParallelRun(
+            [0, 1, 2],
+            plan: &plan,
+            services: runtime.makeExecuteServices()
+        )
+
+        guard case .runnable(let approved, let deferred) = prepared else {
+            XCTFail("Expected approved siblings to run before JIT")
+            return
+        }
+        XCTAssertEqual(approved, [0, 1])
+        XCTAssertEqual(deferred?.step.toolCallID, "gated")
+        XCTAssertEqual(plan.steps[0].status, .running)
+        XCTAssertEqual(plan.steps[1].status, .running)
+        XCTAssertEqual(plan.steps[2].status, .pending)
+        XCTAssertNil(runtime.state.pendingPrompt)
+    }
+
+    func testPreparePausesImmediatelyWhenEveryStepNeedsApproval() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        try attachHookProject(to: runtime, hookContains: "secret")
+        var plan = AgentPlan(
+            summary: "Sensitive reads",
+            steps: [
+                readStep(id: "secret-1", path: "secret-a.md"),
+                readStep(id: "secret-2", path: "secret-b.md"),
+            ]
+        )
+        let prepared = await ToolBatchExecutor.prepareParallelRun(
+            [0, 1],
+            plan: &plan,
+            services: runtime.makeExecuteServices()
+        )
+
+        XCTAssertEqual(prepared, .outcome(.paused))
+        XCTAssertEqual(plan.steps[0].status, .pending)
+        XCTAssertEqual(plan.steps[1].status, .pending)
+        guard case .toolApproval(let callID, _, _, _) = runtime.state.pendingPrompt else {
+            XCTFail("Expected the first gated read to ask for approval")
+            return
+        }
+        XCTAssertEqual(callID, "secret-1")
+    }
+
+    func testFinishParallelWaveAsksAfterApprovedSiblingsSucceed() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        try attachHookProject(to: runtime, hookContains: "gated")
+        var plan = mixedReadPlan()
+        let outcome = await ToolBatchExecutor.finishParallelWave(
+            .succeeded,
+            deferredApproval: ToolBatchExecutor.DeferredApproval(step: plan.steps[2]),
+            plan: &plan,
+            services: runtime.makeExecuteServices()
+        )
+        XCTAssertEqual(outcome, .paused)
+        guard case .toolApproval(let callID, _, _, _) = runtime.state.pendingPrompt else {
+            XCTFail("Expected JIT after approved siblings finished")
+            return
+        }
+        XCTAssertEqual(callID, "gated")
+    }
+
+    func testFinishParallelWaveDoesNotAskAfterCancel() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        try attachHookProject(to: runtime, hookContains: "gated")
+        var plan = mixedReadPlan()
+        let outcome = await ToolBatchExecutor.finishParallelWave(
+            .cancelled,
+            deferredApproval: ToolBatchExecutor.DeferredApproval(step: plan.steps[2]),
+            plan: &plan,
+            services: runtime.makeExecuteServices()
+        )
+        XCTAssertEqual(outcome, .cancelled)
+        XCTAssertNil(runtime.state.pendingPrompt)
+    }
+
+    private func mixedReadPlan() -> AgentPlan {
+        AgentPlan(
+            summary: "Reads",
+            steps: [
+                readStep(id: "readme", path: "README.md"),
+                readStep(id: "install", path: "INSTALL.md"),
+                readStep(id: "gated", path: "gated.md"),
+            ]
+        )
+    }
+
+    private func readStep(id: String, path: String) -> AgentStep {
+        AgentStep(
+            toolCallID: id,
+            toolName: "read_text_file",
+            argumentsJSON: #"{"path":"\#(path)"}"#,
+            title: path
+        )
+    }
+
+    private func makeRuntime() throws -> AgentRuntime {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SageTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        tempDirectory = directory
+        let repository = GRDBTaskRepository(
+            databaseURL: directory.appendingPathComponent("sage.sqlite"),
+            legacyJSONURL: directory.appendingPathComponent("tasks.json")
+        )
+        return AgentRuntime(
+            settings: .shared,
+            tools: .makeDefault(),
+            taskRepository: repository,
+            skills: SkillSessionController()
+        )
+    }
+
+    private func attachHookProject(to runtime: AgentRuntime, hookContains: String) throws {
+        let project = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/.sage-parallel-tests-\(UUID().uuidString)", isDirectory: true)
+        let sage = project.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: sage, withIntermediateDirectories: true)
+        projectRoot = project
+        let config = """
+        {
+          "pre_tool_use": [
+            {
+              "tool": "read_text_file",
+              "action": "ask",
+              "argument_contains": {"path": "\(hookContains)"},
+              "reason": "Review this read"
+            }
+          ]
+        }
+        """
+        try Data(config.utf8).write(to: sage.appendingPathComponent("hooks.json"))
+        runtime.state.focusedProject = ProjectRecord(name: "parallel-tests", rootPath: project.path)
+    }
+}
