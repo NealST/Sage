@@ -113,6 +113,7 @@ final class SessionLifecycle {
             state.recentSummaries = []
             state.lastAssistantText = nil
             state.clearThreadRoutingNotices()
+            state.clearParkedTurnInput()
             state.activatedSkillNames = []
             planProgress.clear()
             skills.invalidatePendingSuggestions()

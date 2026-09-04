@@ -28,14 +28,17 @@ extension AgentTaskStore {
                 )
                 return
             }
+            state.parkTurnInput(for: current.id)
         }
 
         do {
             guard let task = try await taskRepository.loadTask(id: id) else {
+                restoreParkedTurnInputAfterFailedSwitch()
                 state.enterFailed(message: "Could not find that task context.")
                 return
             }
             guard task.projectID == state.focusedProject?.id else {
+                restoreParkedTurnInputAfterFailedSwitch()
                 state.enterFailed(message: "That task belongs to a different project.")
                 return
             }
@@ -48,13 +51,14 @@ extension AgentTaskStore {
             state.refreshSummary(for: task)
             state.sessionAllowlist.reset()
             state.workspaceChanges.reset()
-            state.turnInput.reset()
+            state.restoreTurnInput(for: task.id)
             await restorePhaseFromActiveTask()
             state.clearTopicDriftOffer()
             state.suppressedDriftOfferTaskID = nil
             state.forceFreshOnNextSubmit = false
             state.contextHint = nil
         } catch {
+            restoreParkedTurnInputAfterFailedSwitch()
             state.enterFailed(
                 message: "Could not restore task context: \(error.localizedDescription)"
             )
@@ -140,8 +144,14 @@ extension AgentTaskStore {
         planProgress.clear()
         state.sessionAllowlist.reset()
         state.clearThreadRoutingNotices()
+        state.discardParkedTurnInput(for: oldID)
         onTaskClosed?(oldID)
         onActiveTaskChanged?()
+    }
+
+    func restoreParkedTurnInputAfterFailedSwitch() {
+        guard let id = state.activeTaskID else { return }
+        state.restoreTurnInput(for: id)
     }
 
     /// Applies a routing decision. Returns the effective route, or nil on hard failure.

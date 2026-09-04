@@ -197,6 +197,7 @@ final class AgentTaskStore {
             state.enterIdle()
             state.lastAssistantText = nil
             planProgress.clear()
+            state.discardParkedTurnInput(for: closing.id)
             onTaskClosed?(closing.id)
             return true
         } catch {

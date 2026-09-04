@@ -66,6 +66,59 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(state.phase, .idle)
     }
 
+    func testActivateTaskParksQueuedTurnsForTheLeftThread() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        let createdFirst = await store.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "keep first")],
+            deleteEventIDs: []
+        )
+        let createdSecond = await store.beginNewTask(relatedTo: [])
+        let second = try XCTUnwrap(createdSecond)
+        await store.activateTask(first)
+        state.enterAwaitingConfirmation()
+        state.turnInput.items = [
+            QueuedUserTurn(text: "回来再发", attachments: []),
+        ]
+        state.turnInput.offer = QueuedUserTurn(text: "还没选", attachments: [])
+
+        await store.activateTask(second)
+        XCTAssertEqual(state.activeTaskID, second)
+        XCTAssertTrue(state.turnInput.items.isEmpty)
+        XCTAssertNil(state.turnInput.offer)
+        XCTAssertEqual(state.parkedTurnInput[first]?.items.first?.text, "回来再发")
+        XCTAssertEqual(state.parkedTurnInput[first]?.offer?.text, "还没选")
+
+        await store.activateTask(first)
+        XCTAssertEqual(state.activeTaskID, first)
+        XCTAssertEqual(state.turnInput.items.map(\.text), ["回来再发"])
+        XCTAssertEqual(state.turnInput.offer?.text, "还没选")
+        XCTAssertNil(state.parkedTurnInput[first])
+    }
+
+    func testBeginNewTaskDropsQueuedTurns() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        let createdFirst = await store.createAndActivateTask(relatedTo: [])
+        let first = try XCTUnwrap(createdFirst)
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "keep first")],
+            deleteEventIDs: []
+        )
+        state.turnInput.items = [
+            QueuedUserTurn(text: "不要带到新任务", attachments: []),
+        ]
+
+        let createdSecond = await store.beginNewTask(relatedTo: [])
+        _ = try XCTUnwrap(createdSecond)
+        XCTAssertTrue(state.turnInput.items.isEmpty)
+        XCTAssertNil(state.parkedTurnInput[first])
+    }
+
     func testApplyBeginNewCreatesFreshTask() async throws {
         let fixture = try makeStore()
         let store = fixture.store

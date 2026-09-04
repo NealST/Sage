@@ -60,6 +60,36 @@ final class AgentSessionState {
     let workspaceChanges = TurnChangeSet()
     /// Mid-turn user messages: offer, queue, and in-flight steer.
     let turnInput = TurnInputQueue()
+    /// Queues parked when this window leaves a thread. Lost on quit.
+    var parkedTurnInput: [UUID: TurnInputQueue.Snapshot] = [:]
+
+    func parkTurnInput(for taskID: UUID) {
+        let snapshot = turnInput.snapshot
+        turnInput.reset()
+        if snapshot.isEmpty {
+            parkedTurnInput.removeValue(forKey: taskID)
+        } else {
+            parkedTurnInput[taskID] = snapshot
+        }
+    }
+
+    func restoreTurnInput(for taskID: UUID) {
+        if let snapshot = parkedTurnInput.removeValue(forKey: taskID) {
+            turnInput.apply(snapshot)
+        } else {
+            turnInput.reset()
+        }
+    }
+
+    func discardParkedTurnInput(for taskID: UUID) {
+        parkedTurnInput.removeValue(forKey: taskID)
+        turnInput.reset()
+    }
+
+    func clearParkedTurnInput() {
+        parkedTurnInput = [:]
+        turnInput.reset()
+    }
 
     var events: [AgentEvent] {
         activeTask?.events ?? []
