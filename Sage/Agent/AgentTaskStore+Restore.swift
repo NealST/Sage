@@ -40,6 +40,14 @@ extension AgentTaskStore {
             state.enterAwaitingConfirmation()
             return true
         }
+        if case .reviewMustFix = task.pendingPrompt {
+            state.enterAwaitingConfirmation()
+            return true
+        }
+        if case .reviewOptional = task.pendingPrompt {
+            state.enterAwaitingConfirmation()
+            return true
+        }
         if case .toolApproval = task.pendingPrompt {
             if var plan = task.pendingPlan {
                 normalizeRestoredPlan(&plan, events: task.events)

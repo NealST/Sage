@@ -48,14 +48,20 @@ nonisolated struct WorkspaceFileChange: Codable, Equatable, Sendable, Identifiab
     }
 }
 
+nonisolated struct WorkspaceAction: Codable, Equatable, Sendable {
+    var toolName: String
+    var succeeded: Bool
+}
+
 nonisolated struct WorkspaceChangeSet: Codable, Equatable, Sendable {
     var files: [WorkspaceFileChange]
     var opaqueMutationCount: Int
+    var actions: [WorkspaceAction]
 
-    static let empty = Self(files: [], opaqueMutationCount: 0)
+    static let empty = Self(files: [], opaqueMutationCount: 0, actions: [])
 
     var isEmpty: Bool {
-        files.isEmpty && opaqueMutationCount == 0
+        files.isEmpty && actions.isEmpty
     }
 
     var totalStats: LineDiff.Stats {
@@ -63,6 +69,34 @@ nonisolated struct WorkspaceChangeSet: Codable, Equatable, Sendable {
             totals.insertions += file.insertions
             totals.deletions += file.deletions
         }
+    }
+
+    init(
+        files: [WorkspaceFileChange],
+        opaqueMutationCount: Int,
+        actions: [WorkspaceAction] = []
+    ) {
+        self.files = files
+        self.opaqueMutationCount = opaqueMutationCount
+        self.actions = actions
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        files = try container.decode([WorkspaceFileChange].self, forKey: .files)
+        opaqueMutationCount = try container.decode(Int.self, forKey: .opaqueMutationCount)
+        actions = try container.decodeIfPresent([WorkspaceAction].self, forKey: .actions) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(files, forKey: .files)
+        try container.encode(opaqueMutationCount, forKey: .opaqueMutationCount)
+        try container.encode(actions, forKey: .actions)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case files, opaqueMutationCount, actions
     }
 }
 
@@ -80,6 +114,7 @@ nonisolated struct WorkspaceChangeBook: Equatable, Sendable {
 
     private(set) var entries: [String: Entry] = [:]
     private(set) var opaqueMutationCount = 0
+    private(set) var actions: [WorkspaceAction] = []
 
     mutating func applyWrite(path: String, before: String?, after: String, created: Bool) {
         var entry = entries[path] ?? Entry(
@@ -168,9 +203,17 @@ nonisolated struct WorkspaceChangeBook: Equatable, Sendable {
         opaqueMutationCount += 1
     }
 
+    mutating func recordAction(toolName: String, succeeded: Bool) {
+        actions.append(WorkspaceAction(toolName: toolName, succeeded: succeeded))
+        if succeeded {
+            opaqueMutationCount += 1
+        }
+    }
+
     mutating func reset() {
         entries = [:]
         opaqueMutationCount = 0
+        actions = []
     }
 }
 
@@ -179,7 +222,11 @@ extension WorkspaceChangeBook {
         let files = entries.values
             .sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
             .compactMap(Self.fileChange(from:))
-        return WorkspaceChangeSet(files: files, opaqueMutationCount: opaqueMutationCount)
+        return WorkspaceChangeSet(
+            files: files,
+            opaqueMutationCount: opaqueMutationCount,
+            actions: actions
+        )
     }
 
     private mutating func dropIfNetZero(_ path: String) {

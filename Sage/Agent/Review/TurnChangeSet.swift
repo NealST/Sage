@@ -34,7 +34,12 @@ final class TurnChangeSet {
         started = false
     }
 
-    func record(toolName: String, argumentsJSON: String, result: String) {
+    func record(
+        toolName: String,
+        argumentsJSON: String,
+        result: String,
+        succeeded: Bool = true
+    ) {
         if !started {
             started = true
         }
@@ -42,6 +47,7 @@ final class TurnChangeSet {
             toolName: toolName,
             argumentsJSON: argumentsJSON,
             result: result,
+            succeeded: succeeded,
             to: &book
         )
     }

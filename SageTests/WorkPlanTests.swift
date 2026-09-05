@@ -197,6 +197,30 @@ final class WorkPlanTests: XCTestCase {
             pendingPrompt: .reviewFailed(draft: "done", message: "Reviewer timed out")
         )
         XCTAssertEqual(reviewFailed, .reviewFailed)
+
+        let reviewMustFix = AgentTurnChrome.resolve(
+            phase: .thinking,
+            hasWorkPlan: true,
+            hasToolBatch: false,
+            pendingPrompt: .reviewMustFix(draft: "done", message: "还缺安装步骤")
+        )
+        XCTAssertEqual(reviewMustFix, .reviewMustFix)
+
+        let mustFixYieldsToBatch = AgentTurnChrome.resolve(
+            phase: .executing,
+            hasWorkPlan: true,
+            hasToolBatch: true,
+            pendingPrompt: .reviewMustFix(draft: "done", message: "还缺安装步骤")
+        )
+        XCTAssertEqual(mustFixYieldsToBatch, .toolBatch)
+
+        let reviewOptional = AgentTurnChrome.resolve(
+            phase: .awaitingConfirmation,
+            hasWorkPlan: true,
+            hasToolBatch: false,
+            pendingPrompt: .reviewOptional(draft: "done", message: "目录名可以更短")
+        )
+        XCTAssertEqual(reviewOptional, .reviewOptional)
     }
 
     func testParsesPersistAdvice() {

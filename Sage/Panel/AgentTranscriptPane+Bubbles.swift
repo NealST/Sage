@@ -27,11 +27,15 @@ extension AgentTranscriptPane {
     func thinkingAccessory(onStreamScroll: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             todoListIfPresent
+            if case .reviewMustFix(_, let message) = session.agent.state.pendingPrompt {
+                ReviewFindingsCard(message: message, mode: .continuing)
+            }
             ThinkingStreamAccessory(
                 retryState: session.agent.state.retryState,
                 canStop: session.agent.canStop,
                 onStop: { session.agent.stop() },
-                onStreamScroll: onStreamScroll
+                onStreamScroll: onStreamScroll,
+                status: session.agent.state.isReviewing ? "Checking the project…" : nil
             )
         }
     }
@@ -108,6 +112,32 @@ extension AgentTranscriptPane {
                     message: message,
                     onRetry: { Task { await session.agent.retryFailedReview() } },
                     onAccept: { Task { await session.agent.acceptFailedReview() } }
+                )
+            }
+
+        case .reviewMustFix:
+            if case .reviewMustFix(_, let message) = session.agent.state.pendingPrompt {
+                ReviewFindingsCard(
+                    message: message,
+                    mode: isExecuting
+                        ? .continuing
+                        : .resumeMustFix(
+                            onContinue: { Task { await session.agent.resumeMustFixReview() } },
+                            onKeep: { Task { await session.agent.acceptMustFixReview() } }
+                        ),
+                    bindsReturnShortcut: bindsReturnShortcut
+                )
+            }
+
+        case .reviewOptional:
+            if case .reviewOptional(_, let message) = session.agent.state.pendingPrompt {
+                ReviewFindingsCard(
+                    message: message,
+                    mode: .optional(
+                        onImprove: { Task { await session.agent.applyOptionalReview() } },
+                        onKeep: { Task { await session.agent.acceptOptionalReview() } }
+                    ),
+                    bindsReturnShortcut: bindsReturnShortcut
                 )
             }
 

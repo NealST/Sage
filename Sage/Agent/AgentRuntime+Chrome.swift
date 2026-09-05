@@ -365,6 +365,12 @@ extension AgentRuntime {
         case .reviewFailed:
             await retryFailedReview()
 
+        case .reviewMustFix:
+            await resumeMustFixReview()
+
+        case .reviewOptional:
+            await applyOptionalReview()
+
         case .none:
             break
         }
@@ -380,5 +386,29 @@ extension AgentRuntime {
         guard !state.shouldDisableConfirmationActions else { return }
         guard turnChrome == .reviewFailed else { return }
         _ = await operations.run { await self.turns.acceptFailedReview() }
+    }
+
+    func resumeMustFixReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
+        guard turnChrome == .reviewMustFix else { return }
+        _ = await operations.run { await self.turns.resumeMustFixReview() }
+    }
+
+    func acceptMustFixReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
+        guard turnChrome == .reviewMustFix else { return }
+        _ = await operations.run { await self.turns.acceptMustFixReview() }
+    }
+
+    func applyOptionalReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
+        guard turnChrome == .reviewOptional else { return }
+        _ = await operations.run { await self.turns.applyOptionalReview() }
+    }
+
+    func acceptOptionalReview() async {
+        guard !state.shouldDisableConfirmationActions else { return }
+        guard turnChrome == .reviewOptional else { return }
+        _ = await operations.run { await self.turns.acceptOptionalReview() }
     }
 }

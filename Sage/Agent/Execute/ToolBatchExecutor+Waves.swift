@@ -429,6 +429,12 @@ extension ToolBatchExecutor {
         case .failure(let message):
             plan.steps[index].status = .failed
             plan.steps[index].result = message
+            services.state.workspaceChanges.record(
+                toolName: step.toolName,
+                argumentsJSON: step.argumentsJSON,
+                result: message,
+                succeeded: false
+            )
             return AgentEvent(
                 kind: .toolResult,
                 content: "ERROR: \(message)",

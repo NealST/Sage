@@ -6,12 +6,40 @@
 import Foundation
 
 enum TurnChangeSetRecording {
-    private static let opaqueTools: Set<String> = [
-        "run_shell_command",
-        "run_skill_script",
+    private static let fileTools: Set<String> = [
+        "write_text_file",
+        "delete_file",
+        "move_file",
+        "rename_file",
+        "copy_file",
+        "create_directory",
     ]
 
     static func apply(
+        toolName: String,
+        argumentsJSON: String,
+        result: String,
+        succeeded: Bool = true,
+        to book: inout WorkspaceChangeBook
+    ) {
+        if fileTools.contains(toolName) {
+            if succeeded {
+                applyFileTool(
+                    toolName: toolName,
+                    argumentsJSON: argumentsJSON,
+                    result: result,
+                    to: &book
+                )
+            } else {
+                book.recordAction(toolName: toolName, succeeded: false)
+            }
+            return
+        }
+        guard ToolDefinition.requiresConfirmation(forToolNamed: toolName) else { return }
+        book.recordAction(toolName: toolName, succeeded: succeeded)
+    }
+
+    private static func applyFileTool(
         toolName: String,
         argumentsJSON: String,
         result: String,
@@ -38,9 +66,7 @@ enum TurnChangeSetRecording {
             }
 
         default:
-            if opaqueTools.contains(toolName) {
-                book.markOpaque()
-            }
+            break
         }
     }
 

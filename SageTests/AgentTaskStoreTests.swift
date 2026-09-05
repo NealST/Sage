@@ -271,6 +271,42 @@ final class AgentTaskStoreTests: XCTestCase {
         XCTAssertEqual(reloaded?.lastFailureMessage, AgentTaskStore.interruptedAfterApprovalMessage)
     }
 
+    func testRestoreReviewMustFixShowsContinueCard() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        _ = await store.createAndActivateTask(relatedTo: [])
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.pendingPrompt = .reviewMustFix(draft: "done", message: "还缺安装步骤")
+            task.status = .active
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(state.phase, .awaitingConfirmation)
+        XCTAssertEqual(state.pendingPrompt, .reviewMustFix(draft: "done", message: "还缺安装步骤"))
+    }
+
+    func testRestoreReviewOptionalShowsChoiceCard() async throws {
+        let fixture = try makeStore()
+        let store = fixture.store
+        let state = fixture.state
+        _ = await store.createAndActivateTask(relatedTo: [])
+        _ = await store.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.pendingPrompt = .reviewOptional(draft: "done", message: "目录名可以更短")
+            task.status = .active
+        }
+
+        await store.restorePhaseFromActiveTask()
+        XCTAssertEqual(state.phase, .awaitingConfirmation)
+        XCTAssertEqual(state.pendingPrompt, .reviewOptional(draft: "done", message: "目录名可以更短"))
+    }
+
     func testBeginNewTaskDoesNotInheritWorkingMemory() async throws {
         let fixture = try makeStore()
         let repository = fixture.repository

@@ -34,7 +34,7 @@ final class WorkspaceChangeBookTests: XCTestCase {
         let brief = book.snapshot().reviewBrief(maxChars: 2_000)
         XCTAssertTrue(brief.contains("README.md"))
         XCTAssertTrue(brief.contains("added"))
-        XCTAssertTrue(brief.contains("other write"))
+        XCTAssertTrue(brief.contains("Non-file actions completed"))
         XCTAssertFalse(brief.contains("Tool result"))
         XCTAssertFalse(brief.contains("write_text_file"))
     }
@@ -66,5 +66,71 @@ final class WorkspaceChangeBookTests: XCTestCase {
         )
         XCTAssertEqual(book.snapshot().files.first?.kind, .added)
         XCTAssertEqual(book.snapshot().files.first?.after, "hello\n")
+    }
+
+    func testRecordingClipboardCountsAsNonFileAction() {
+        var book = WorkspaceChangeBook()
+        TurnChangeSetRecording.apply(
+            toolName: "set_clipboard",
+            argumentsJSON: #"{"text":"hello"}"#,
+            result: "[OK] Clipboard updated",
+            to: &book
+        )
+        let snapshot = book.snapshot()
+        XCTAssertTrue(snapshot.files.isEmpty)
+        XCTAssertEqual(snapshot.actions, [WorkspaceAction(toolName: "set_clipboard", succeeded: true)])
+        XCTAssertFalse(snapshot.isEmpty)
+        let brief = snapshot.reviewBrief(maxChars: 2_000)
+        XCTAssertTrue(brief.contains("No files changed."))
+        XCTAssertTrue(brief.contains("set_clipboard (completed)"))
+        XCTAssertFalse(brief.contains("No workspace files changed."))
+        XCTAssertEqual(snapshot.inspectPlaces(), ["clipboard"])
+    }
+
+    func testInspectPlacesListsPathsWithoutBodies() {
+        var book = WorkspaceChangeBook()
+        book.applyWrite(path: "Install.md", before: nil, after: "## Install\n", created: true)
+        let places = book.snapshot().inspectPlaces()
+        XCTAssertEqual(places, ["Install.md"])
+        XCTAssertFalse(places.contains { $0.contains("## Install") })
+    }
+
+    func testRecordingReadDoesNotCountAsEvidence() {
+        var book = WorkspaceChangeBook()
+        TurnChangeSetRecording.apply(
+            toolName: "get_clipboard",
+            argumentsJSON: "{}",
+            result: "hello",
+            to: &book
+        )
+        XCTAssertTrue(book.snapshot().isEmpty)
+        XCTAssertTrue(book.snapshot().actions.isEmpty)
+    }
+
+    func testDecodingLegacyChangeSetWithoutActions() throws {
+        let legacy = WorkspaceChangeSet(files: [], opaqueMutationCount: 2)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as? [String: Any]
+        )
+        object.removeValue(forKey: "actions")
+        let decoded = try JSONDecoder().decode(
+            WorkspaceChangeSet.self,
+            from: try JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertEqual(decoded.opaqueMutationCount, 2)
+        XCTAssertTrue(decoded.actions.isEmpty)
+    }
+
+    func testRecordingFailedNotifyStillCountsAsEvidence() {
+        var book = WorkspaceChangeBook()
+        TurnChangeSetRecording.apply(
+            toolName: "notify",
+            argumentsJSON: #"{"title":"Hi"}"#,
+            result: "denied",
+            succeeded: false,
+            to: &book
+        )
+        XCTAssertEqual(book.snapshot().actions.first?.succeeded, false)
+        XCTAssertFalse(book.snapshot().isEmpty)
     }
 }

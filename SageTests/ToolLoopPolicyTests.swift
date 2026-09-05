@@ -200,6 +200,20 @@ final class AgentPendingPromptPersistenceTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AgentPendingPrompt.self, from: data)
         XCTAssertEqual(decoded, prompt)
     }
+
+    func testReviewMustFixPromptRoundTrips() throws {
+        let prompt = AgentPendingPrompt.reviewMustFix(draft: "done", message: "还缺安装步骤")
+        let data = try JSONEncoder().encode(prompt)
+        let decoded = try JSONDecoder().decode(AgentPendingPrompt.self, from: data)
+        XCTAssertEqual(decoded, prompt)
+    }
+
+    func testReviewOptionalPromptRoundTrips() throws {
+        let prompt = AgentPendingPrompt.reviewOptional(draft: "done", message: "目录名可以更短")
+        let data = try JSONEncoder().encode(prompt)
+        let decoded = try JSONDecoder().decode(AgentPendingPrompt.self, from: data)
+        XCTAssertEqual(decoded, prompt)
+    }
 }
 
 final class PreToolUseHookEvaluatorTests: XCTestCase {

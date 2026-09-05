@@ -164,6 +164,8 @@ nonisolated enum AgentPendingPrompt: Equatable, Sendable, Codable {
     case toolRoundLimit(currentLimit: Int, nextLimit: Int)
     case toolApproval(toolCallID: String, toolName: String, argumentsJSON: String, title: String)
     case reviewFailed(draft: String, message: String)
+    case reviewMustFix(draft: String, message: String)
+    case reviewOptional(draft: String, message: String)
 }
 
 /// Which confirm chrome to show. Work plan and tool batch must not share a card.
@@ -173,6 +175,8 @@ nonisolated enum AgentTurnChrome: Equatable, Sendable {
     case toolRoundLimit
     case toolApproval
     case reviewFailed
+    case reviewMustFix
+    case reviewOptional
 
     static func resolve(
         phase: AgentPhase,
@@ -183,6 +187,13 @@ nonisolated enum AgentTurnChrome: Equatable, Sendable {
         switch pendingPrompt {
         case .reviewFailed:
             return .reviewFailed
+
+        case .reviewMustFix:
+            if phase == .executing, hasToolBatch { break }
+            return .reviewMustFix
+
+        case .reviewOptional:
+            return phase == .awaitingConfirmation ? .reviewOptional : nil
 
         case .toolApproval:
             return phase == .awaitingConfirmation ? .toolApproval : nil

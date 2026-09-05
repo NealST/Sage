@@ -32,6 +32,7 @@ final class TurnCoordinator {
     var handleStop: ((AgentPlan?) async -> Void)?
     /// User approved a side-effect work plan this turn. Scoped to `turnLoopTaskID`.
     var planApproved = false
+    /// Auto must-fix continues this turn. Optional Improve does not increment it.
     var reviewRounds = 0
     var latestUserEventID: UUID?
     /// In-memory loop flags keyed by task, so switching threads does not leak them.
@@ -92,6 +93,7 @@ final class TurnCoordinator {
         self.slashHost = slashHost
         self.executeToolBatch = executeToolBatch
         self.handleStop = handleStop
+        reviewer.skillHost = slashHost as? SkillToolHost
         execute.bind(
             executeTools: { [weak self] in
                 await self?.executeToolBatch?(false)

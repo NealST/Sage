@@ -54,6 +54,8 @@ final class AgentRuntime {
     Runtime lists live skills, MCP, and todos.
     Prefer file tools for reads and writes. After tools run, you will see their results — \
     then continue or give a short summary.
+    For code work, compile and run the project's checks yourself before you finish. \
+    Keep going until they are green — Review will not compile or test.
     For multi-step act work, track remaining steps with manage_todo_list — do not rewrite the work plan.
     Reply in the same language the user uses.
     """

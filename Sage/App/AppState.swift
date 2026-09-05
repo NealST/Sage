@@ -61,7 +61,7 @@ final class AppState {
             return "Ask Sage to work on your Mac"
 
         case .thinking:
-            return "Thinking…"
+            return keySession.agent.state.isReviewing ? "Checking the project…" : "Thinking…"
 
         case .awaitingConfirmation:
             switch keySession.agent.turnChrome {
@@ -73,6 +73,12 @@ final class AppState {
 
             case .reviewFailed:
                 return "Review failed — retry or use this reply"
+
+            case .reviewMustFix:
+                return "Review found issues — continue or keep this reply"
+
+            case .reviewOptional:
+                return "Review found improvements — choose whether to apply"
 
             default:
                 return "Plan waiting for confirmation"

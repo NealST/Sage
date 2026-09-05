@@ -194,9 +194,21 @@ struct ThinkingStreamAccessory: View {
     let canStop: Bool
     let onStop: () -> Void
     let onStreamScroll: () -> Void
+    var status: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+            if let status {
+                HStack(spacing: SageDesign.Spacing.small) {
+                    ProgressView().controlSize(.small)
+                    Text(status)
+                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .accessibilityLabel(status)
+                .transition(.opacity)
+            }
             if !streaming.thinking.isEmpty {
                 ThinkingProcessView(
                     text: streaming.thinking,
@@ -216,7 +228,7 @@ struct ThinkingStreamAccessory: View {
                     StreamingContentView(text: streaming.text)
                         .transition(.opacity)
                 }
-            } else if streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
+            } else if status == nil, streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
                 if let retry = retryState {
                     RetryCountdownView(state: retry)
                         .transition(.opacity)

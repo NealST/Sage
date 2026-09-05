@@ -19,6 +19,12 @@ extension AgentComposerView {
         case .reviewFailed:
             return "Retry review, or use the current reply"
 
+        case .reviewMustFix:
+            return "Continue fixing these issues, or keep this reply"
+
+        case .reviewOptional:
+            return "Improve these, or keep this reply"
+
         default:
             return "Run or Cancel the pending plan"
         }

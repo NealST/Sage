@@ -185,17 +185,33 @@ final class AgentModelGateway {
 
     /// Non-streaming completion for plan / review sub-agents. Does not publish tokens.
     func completeUnstreamed(system: String, user: String, role: ModelRole) async throws -> String {
-        let snapshot = settings.snapshot(for: role)
-        let turn = try await modelClient.complete(
+        let turn = try await completeUnstreamedTurn(
             events: [
                 AgentEvent(kind: .systemInstruction, content: system),
                 AgentEvent(kind: .userInput, content: user),
             ],
             tools: [],
-            settings: snapshot
+            role: role
+        )
+        return turn.content ?? ""
+    }
+
+    /// Off-transcript turn for a sub-agent. Optional tools stay off the user thread.
+    func completeUnstreamedTurn(
+        events: [AgentEvent],
+        tools: [ToolDefinition],
+        role: ModelRole,
+        toolChoice: String? = nil
+    ) async throws -> ModelTurn {
+        let snapshot = settings.snapshot(for: role)
+        let turn = try await modelClient.complete(
+            events: events,
+            tools: tools,
+            settings: snapshot,
+            toolChoice: toolChoice
         )
         state.addTokenUsage(turn.usage)
-        return turn.content ?? ""
+        return turn
     }
 
     func followUpAppendix() -> String {

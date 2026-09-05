@@ -63,6 +63,120 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertFalse(runtime.state.confirmationActionsFrozen)
     }
 
+    func testPresentOptionalReviewWaitsThenKeepReplyFinalizes() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。"
+            )
+            task.workPlanApproved = true
+        }
+
+        await runtime.turns.presentReviewOptional(draft: "已经改好了。", message: "目录名可以更短")
+        XCTAssertEqual(runtime.state.phase, .awaitingConfirmation)
+        XCTAssertEqual(runtime.turnChrome, .reviewOptional)
+        guard case .reviewOptional(_, let message) = runtime.state.pendingPrompt else {
+            return XCTFail("expected optional review prompt")
+        }
+        XCTAssertEqual(message, "目录名可以更短")
+
+        await runtime.turns.acceptOptionalReview()
+        XCTAssertNil(runtime.state.pendingPrompt)
+        guard case .completed = runtime.state.phase else {
+            return XCTFail("expected completed, got \(runtime.state.phase)")
+        }
+        XCTAssertEqual(runtime.state.events.last?.content, "已经改好了。")
+    }
+
+    func testExhaustedMustFixWaitsInsteadOfShipping() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "复制到剪贴板")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "复制到剪贴板",
+                approach: "set_clipboard"
+            )
+            task.workPlanApproved = true
+        }
+        runtime.turns.reviewRounds = ReviewAgent.maxRevisions
+
+        await runtime.turns.applyReviewVerdict(
+            .mustFixOnly("安装步骤还缺 brew"),
+            draft: "已复制。"
+        )
+
+        XCTAssertEqual(runtime.state.phase, .awaitingConfirmation)
+        XCTAssertEqual(runtime.turnChrome, .reviewMustFix)
+        guard case .reviewMustFix(let draft, let message) = runtime.state.pendingPrompt else {
+            return XCTFail("expected must-fix prompt after the revision cap")
+        }
+        XCTAssertEqual(draft, "已复制。")
+        XCTAssertEqual(message, "安装步骤还缺 brew")
+        XCTAssertNil(runtime.state.events.last { $0.kind == .assistantResponse })
+    }
+
+    func testAcceptExhaustedMustFixShipsTheDraft() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "复制到剪贴板")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "复制到剪贴板",
+                approach: "set_clipboard"
+            )
+            task.workPlanApproved = true
+        }
+
+        await runtime.turns.presentReviewMustFix(
+            draft: "已复制。",
+            message: "安装步骤还缺 brew",
+            waitForUser: true
+        )
+        await runtime.turns.acceptMustFixReview()
+
+        guard case .completed = runtime.state.phase else {
+            return XCTFail("expected completed, got \(runtime.state.phase)")
+        }
+        XCTAssertNil(runtime.state.pendingPrompt)
+        XCTAssertEqual(runtime.state.events.last?.content, "已复制。")
+    }
+
+    func testApplyReviewVerdictOptionalWaits() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "改 README")],
+            deleteEventIDs: []
+        ) { task in
+            task.workPlan = WorkPlan(
+                kind: .act,
+                intent: "改 README",
+                approach: "只补一节。"
+            )
+            task.workPlanApproved = true
+        }
+
+        await runtime.turns.applyReviewVerdict(
+            ReviewVerdict(mustFix: nil, optional: "目录名可以更短"),
+            draft: "已经改好了。"
+        )
+        XCTAssertEqual(runtime.state.phase, .awaitingConfirmation)
+        XCTAssertEqual(runtime.turnChrome, .reviewOptional)
+    }
+
     func testPersistedApprovalRestoresRetryWithoutConfirmCard() async throws {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])

@@ -39,6 +39,8 @@ final class AgentSessionState {
     private(set) var confirmationActionsFrozen = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
+    /// True while Review is inspecting the current world off-transcript.
+    var isReviewing = false
     /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
     var reviewFeedback: String?
     /// Mid-turn redirect from the user. Distinct from review feedback.
@@ -152,6 +154,7 @@ final class AgentSessionState {
         suppressedDriftOfferTaskID = nil
         contextHint = nil
         forceFreshOnNextSubmit = false
+        isReviewing = false
         reviewFeedback = nil
         steerInstruction = nil
         pendingPrompt = nil
@@ -271,6 +274,9 @@ final class AgentSessionState {
 
     private func setPhase(_ newPhase: AgentPhase) {
         confirmationActionsFrozen = false
+        if newPhase != .thinking {
+            isReviewing = false
+        }
         phase = newPhase
     }
 

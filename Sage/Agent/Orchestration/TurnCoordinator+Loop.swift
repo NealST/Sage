@@ -146,12 +146,15 @@ extension TurnCoordinator {
         await execute.start()
     }
 
-    /// Review sub-agent. Accept finishes; revise sends execute around again.
+    /// Review sub-agent. Must-fix auto-continues up to two rounds, then waits.
     func reviewAndFinish(_ draft: String) async {
         let workPlan = state.activeTask?.workPlan
         if workPlan?.skipsReview == true {
             await finalizeAssistantText(draft, considerPersist: false)
             return
+        }
+        if case .reviewMustFix = state.pendingPrompt {
+            _ = await taskStore.clearPendingPrompt()
         }
 
         do {
@@ -159,29 +162,48 @@ extension TurnCoordinator {
             if !draft.isEmpty {
                 streaming.flush(draft)
             }
-            let verdict = try await reviewer.evaluate(
-                draft: draft,
-                changes: state.workspaceChanges.snapshot()
-            )
+            let verdict = try await {
+                state.isReviewing = true
+                defer { state.isReviewing = false }
+                return try await reviewer.evaluate(draft: draft, workPlan: workPlan)
+            }()
             try Task.checkCancellation()
-
-            if verdict.decision == .accept || reviewRounds >= ReviewAgent.maxRevisions {
-                state.reviewFeedback = nil
-                await finalizeAssistantText(draft, considerPersist: true)
-                return
-            }
-
-            reviewRounds += 1
-            state.reviewFeedback = verdict.feedback.nilIfEmpty
-                ?? "The result does not fully match the plan. Finish the remaining work."
-            execute.resetLoop()
-            await execute.start()
+            await applyReviewVerdict(verdict, draft: draft)
         } catch is CancellationError {
             streaming.clear()
             await handleStop?(nil)
         } catch {
             await presentReviewFailure(draft: draft, message: error.localizedDescription)
         }
+    }
+
+    func applyReviewVerdict(_ verdict: ReviewVerdict, draft: String) async {
+        if verdict.hasMustFix {
+            let message = verdict.mustFix
+                ?? "The result does not fully match the plan. Finish the remaining work."
+            if reviewRounds < ReviewAgent.maxRevisions {
+                await presentReviewMustFix(draft: draft, message: message, waitForUser: false)
+                reviewRounds += 1
+                state.reviewFeedback = message
+                execute.resetLoop()
+                state.enterThinking()
+                await execute.start()
+                return
+            }
+            await presentReviewMustFix(draft: draft, message: message, waitForUser: true)
+            return
+        }
+
+        if verdict.hasOptional {
+            await presentReviewOptional(
+                draft: draft,
+                message: verdict.optional ?? "These improvements are optional."
+            )
+            return
+        }
+
+        state.reviewFeedback = nil
+        await finalizeAssistantText(draft, considerPersist: true)
     }
 
     func retryFailedReview() async {
@@ -192,6 +214,39 @@ extension TurnCoordinator {
 
     func acceptFailedReview() async {
         guard case .reviewFailed(let draft, _) = state.pendingPrompt else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
+        state.reviewFeedback = nil
+        await finalizeAssistantText(draft, considerPersist: true)
+    }
+
+    func resumeMustFixReview() async {
+        guard case .reviewMustFix(let draft, let message) = state.pendingPrompt else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
+        state.reviewFeedback = message
+        execute.resetLoop()
+        state.enterThinking()
+        await execute.start()
+        _ = draft
+    }
+
+    func acceptMustFixReview() async {
+        guard case .reviewMustFix(let draft, _) = state.pendingPrompt else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
+        state.reviewFeedback = nil
+        await finalizeAssistantText(draft, considerPersist: true)
+    }
+
+    func applyOptionalReview() async {
+        guard case .reviewOptional(_, let message) = state.pendingPrompt else { return }
+        guard await taskStore.clearPendingPrompt() else { return }
+        state.reviewFeedback = message
+        execute.resetLoop()
+        state.enterThinking()
+        await execute.start()
+    }
+
+    func acceptOptionalReview() async {
+        guard case .reviewOptional(let draft, _) = state.pendingPrompt else { return }
         guard await taskStore.clearPendingPrompt() else { return }
         state.reviewFeedback = nil
         await finalizeAssistantText(draft, considerPersist: true)
@@ -234,12 +289,34 @@ extension TurnCoordinator {
     }
 
     func presentReviewFailure(draft: String, message: String) async {
-        let prompt = AgentPendingPrompt.reviewFailed(draft: draft, message: message)
+        await persistReviewPrompt(
+            .reviewFailed(draft: draft, message: message),
+            waitForUser: true
+        )
+    }
+
+    func presentReviewMustFix(draft: String, message: String, waitForUser: Bool) async {
+        await persistReviewPrompt(
+            .reviewMustFix(draft: draft, message: message),
+            waitForUser: waitForUser
+        )
+    }
+
+    func presentReviewOptional(draft: String, message: String) async {
+        await persistReviewPrompt(
+            .reviewOptional(draft: draft, message: message),
+            waitForUser: true
+        )
+    }
+
+    func persistReviewPrompt(_ prompt: AgentPendingPrompt, waitForUser: Bool) async {
         state.pendingPrompt = prompt
         _ = await taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
             task.pendingPrompt = prompt
         }
-        state.enterAwaitingConfirmation()
+        if waitForUser {
+            state.enterAwaitingConfirmation()
+        }
     }
 
     func finalizeAssistantText(
