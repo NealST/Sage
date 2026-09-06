@@ -58,9 +58,10 @@ final class ReviewAgentTests: XCTestCase {
         XCTAssertTrue(brief.contains("已经补上安装步骤。"))
         XCTAssertTrue(brief.contains("This project"))
         XCTAssertTrue(brief.contains("read-only tools"))
+        XCTAssertTrue(brief.contains("optional hints"))
         XCTAssertFalse(brief.contains("Recorded effects"))
         XCTAssertFalse(brief.contains("This turn"))
-        XCTAssertFalse(brief.contains("Places to inspect"))
+        XCTAssertFalse(brief.contains("Suggested places (reference only"))
     }
 
     func testBriefListsInspectPlacesWithoutDiffs() {
@@ -71,11 +72,20 @@ final class ReviewAgentTests: XCTestCase {
             sandbox: "This project",
             inspectPlaces: ["Install.md", "clipboard"]
         )
-        XCTAssertTrue(brief.contains("Places to inspect"))
+        XCTAssertTrue(brief.contains("Suggested places (reference only"))
         XCTAssertTrue(brief.contains("- Install.md"))
         XCTAssertTrue(brief.contains("- clipboard"))
+        XCTAssertTrue(brief.contains("optional hints"))
         XCTAssertFalse(brief.contains("+## Install"))
         XCTAssertFalse(brief.contains("Recorded effects"))
+        XCTAssertFalse(brief.contains("look here first"))
+    }
+
+    func testSystemPromptTreatsPlacesAsHints() {
+        XCTAssertTrue(ReviewAgent.systemPrompt.contains("only a hint"))
+        XCTAssertTrue(ReviewAgent.systemPrompt.contains("Do not limit yourself"))
+        XCTAssertTrue(ReviewAgent.systemPrompt.contains("not treat a listed path as proof"))
+        XCTAssertFalse(ReviewAgent.systemPrompt.contains("start there"))
     }
 
     func testInspectToolsAreReadOnly() {

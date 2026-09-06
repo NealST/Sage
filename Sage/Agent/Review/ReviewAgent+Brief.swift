@@ -12,11 +12,12 @@ extension ReviewAgent {
     Your job is gap-finding and quality assessment against the confirmed contract.
 
     Use the read-only tools to look at what exists now — files, folders, clipboard, \
-    volume, frontmost app. If places to inspect are listed, start there. Still read \
-    them yourself; the list is not evidence. Do not treat the draft reply as proof. \
+    volume, frontmost app. Suggested places, if listed, are only a hint from recorded \
+    file writes. The list can be incomplete or wrong. Do not limit yourself to it, \
+    and do not treat a listed path as proof that something changed. Judge from the \
+    plan and what you can still see. Do not treat the draft reply as proof. \
     Do not invent a change log. If something cannot be observed (a notification already gone), \
-    judge only from the plan and what you can still see. Do not assume it failed \
-    just because you cannot replay the action.
+    do not assume it failed just because you cannot replay the action.
 
     Output JSON only when you have looked enough — no markdown fence, no prose.
 
@@ -33,6 +34,7 @@ extension ReviewAgent {
     - Stay inside the confirmed plan. Do not ask for a larger job.
     - Do not put prose or tone nits in either field.
     - Do not report compile or test failures; that is Execute's loop.
+    - Suggested places are hints, not scope. Follow what you observe now.
     - Write both fields in the same language the user used.
     """
 
@@ -67,7 +69,7 @@ extension ReviewAgent {
         } else {
             let lines = inspectPlaces.map { "- \($0)" }.joined(separator: "\n")
             placesBlock = """
-            Places to inspect (look here first; read them yourself):
+            Suggested places (reference only; may be incomplete or wrong):
             \(lines)
 
 
@@ -80,7 +82,9 @@ extension ReviewAgent {
         \(planLines)\(draftBlock)\(placesBlock)Sandbox:
         \(sandbox)
 
-        Inspect the current Mac yourself with the read-only tools, then output the JSON verdict.
+        Inspect the current Mac yourself with the read-only tools. \
+        Suggested places are optional hints, not the review scope. \
+        Then output the JSON verdict.
         """
     }
 }
