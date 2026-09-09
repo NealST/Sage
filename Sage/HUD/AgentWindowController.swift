@@ -89,8 +89,6 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
         window.minSize = NSSize(width: 560, height: 440)
-        window.isOpaque = true
-        window.backgroundColor = NSColor.windowBackgroundColor
         window.sageApplyLiquidGlass(customTitlebar: true)
         window.hasShadow = true
         window.hidesOnDeactivate = false

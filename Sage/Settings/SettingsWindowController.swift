@@ -63,8 +63,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.sageApplyLiquidGlass(customTitlebar: false)
-        window.isOpaque = true
-        window.backgroundColor = .windowBackgroundColor
         window.hasShadow = true
         // Keep false so field/text drag selects content instead of moving the window.
         window.isMovableByWindowBackground = false

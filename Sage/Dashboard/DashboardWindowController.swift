@@ -71,8 +71,6 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         window.titleVisibility = .visible
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.sageApplyLiquidGlass(customTitlebar: false)
-        window.isOpaque = true
-        window.backgroundColor = .windowBackgroundColor
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false

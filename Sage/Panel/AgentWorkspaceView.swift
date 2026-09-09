@@ -38,6 +38,7 @@ struct AgentWorkspaceView: View {
     var body: some View {
         workspaceCanvas
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .windowBackgroundColor))
             .safeAreaInset(edge: .top, spacing: 0) {
                 topChrome
             }

@@ -167,12 +167,12 @@ struct AgentTranscriptPane: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(hotkeyHint)
-                    .font(.system(size: type.micro))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: type.micro, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
             Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
-                .font(.system(size: type.micro))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: type.micro, weight: .medium))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, SageDesign.Spacing.large)

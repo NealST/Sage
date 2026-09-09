@@ -89,6 +89,13 @@ extension NSWindow {
             titleVisibility = .hidden
             titlebarAppearsTransparent = true
         }
+        sageApplyWindowMaterial()
+    }
+
+    /// Reading canvas stays opaque. Glass is only the floating chrome.
+    func sageApplyWindowMaterial() {
+        isOpaque = true
+        backgroundColor = .windowBackgroundColor
     }
 }
 
