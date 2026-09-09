@@ -38,9 +38,10 @@ struct WorkspaceChromeView: View {
             trailingCluster
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: SageDesign.Panel.titlebarContentHeight)
         .padding(.leading, SageDesign.Spacing.large)
         .padding(.trailing, SageDesign.Spacing.large)
+        .padding(.vertical, SageDesign.Spacing.small)
+        .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
     }
 
     // MARK: - Zones

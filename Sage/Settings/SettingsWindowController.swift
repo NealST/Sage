@@ -39,7 +39,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Normal level: yields to other apps when Sage is inactive.
         window.level = .normal
         window.collectionBehavior = [.moveToActiveSpace]
-        if !window.setFrameUsingName("SageSettingsWindow") {
+        if !window.setFrameUsingName("SageSettingsWindow.sidebar") {
             window.center()
         }
         window.makeKeyAndOrderFront(nil)
@@ -50,7 +50,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // reads `@Environment(AccessibilitySettings.self)` from ancestors, not content.
         let root = SettingsView(
             settings: appState.settings,
-            onDone: { [weak self] in self?.window?.performClose(nil) },
             onOpenSkills: { [weak self] session in
                 self?.showSkills(pinnedSession: session)
             }
@@ -62,10 +61,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Settings"
-        // Titlebar chrome stays; only the title label is hidden so traffic lights sit normally.
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = false
-        window.styleMask = [.titled, .closable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.sageApplyLiquidGlass(customTitlebar: false)
         window.isOpaque = true
         window.backgroundColor = .windowBackgroundColor
         window.hasShadow = true
@@ -73,10 +70,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = false
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
-        window.setContentSize(NSSize(width: 440, height: 620))
-        window.setFrameAutosaveName("SageSettingsWindow")
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.minSize = NSSize(width: 680, height: 480)
+        window.setContentSize(NSSize(width: 720, height: 640))
+        window.setFrameAutosaveName("SageSettingsWindow.sidebar")
         return window
     }
 

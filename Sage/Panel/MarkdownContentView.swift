@@ -15,7 +15,6 @@ struct MarkdownContentView: View {
     /// TreeSitter highlighting — disable on the streaming hot path.
     var syntaxHighlighting: Bool = true
 
-    @Environment(AccessibilitySettings.self) private var accessibility
     @State private var expanded = false
     @State private var measuredHeight: CGFloat = 0
     /// Hash of the markdown that produced `measuredHeight` — skip remounting the measurer.
@@ -129,30 +128,16 @@ struct MarkdownContentView: View {
         }
     }
 
-    /// Scroll-edge style fade that matches the canvas (material) instead of a hard window fill.
+    /// Fade into the reading canvas — same window fill, not a second material.
     private var collapseFade: some View {
-        Group {
-            if accessibility.reduceTransparency {
-                LinearGradient(
-                    colors: [
-                        Color(nsColor: .windowBackgroundColor).opacity(0),
-                        Color(nsColor: .windowBackgroundColor),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            } else {
-                Rectangle()
-                    .fill(.regularMaterial)
-                    .mask(
-                        LinearGradient(
-                            colors: [.clear, .black],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            }
-        }
+        LinearGradient(
+            colors: [
+                Color(nsColor: .windowBackgroundColor).opacity(0),
+                Color(nsColor: .windowBackgroundColor),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
         .frame(height: 52)
         .allowsHitTesting(false)
     }

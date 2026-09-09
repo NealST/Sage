@@ -176,21 +176,18 @@ struct SkillSaveStatusIndicator: View {
             Spacer(minLength: 0)
 
             if case .failed = job.status {
-                Button {
+                Button("Dismiss", systemImage: "xmark") {
                     session.skills.dismissSkillSaveJob(job.id)
                     if session.skills.saveJobs.isEmpty {
                         showPopover = false
                     }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
                 }
+                .labelStyle(.iconOnly)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
                 .buttonStyle(.plain)
                 .help("Dismiss")
-                .accessibilityLabel("Dismiss")
             }
         }
         .padding(.horizontal, SageDesign.Spacing.medium)

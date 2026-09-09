@@ -20,36 +20,44 @@ struct AttachmentChipView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            thumbnail
-                .frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            Button(action: selectOrPreview) {
+                HStack(spacing: 6) {
+                    thumbnail
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
 
-            Text(attachment.displayName)
-                .font(.system(size: type.micro, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 140, alignment: .leading)
+                    Text(attachment.displayName)
+                        .font(.system(size: type.micro, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 140, alignment: .leading)
 
-            if !attachment.isAvailable {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .help("File is no longer available")
-                    .accessibilityLabel("File missing")
+                    if !attachment.isAvailable {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .help("File is no longer available")
+                            .accessibilityLabel("File missing")
+                    }
+                }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(
+                attachment.isAvailable
+                    ? "Opens a Quick Look preview"
+                    : "The file is no longer available"
+            )
 
             if showsRemove {
-                Button {
+                Button("Remove \(attachment.displayName)", systemImage: "xmark") {
                     onRemove?()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
                 }
+                .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
-                .accessibilityLabel("Remove \(attachment.displayName)")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 18, height: 18)
             }
         }
         .padding(.leading, 5)
@@ -66,22 +74,6 @@ struct AttachmentChipView: View {
                     lineWidth: 1
                 )
         }
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .onTapGesture {
-            if let onSelect {
-                onSelect()
-            } else {
-                QuickLookPresenter.shared.preview(url: attachment.fileURL)
-            }
-        }
-        .accessibilityElement(children: showsRemove ? .contain : .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(
-            attachment.isAvailable
-                ? "Opens a Quick Look preview"
-                : "The file is no longer available"
-        )
-        .accessibilityAddTraits(.isButton)
         .task(id: attachment.path) {
             guard attachment.kind == .image, attachment.isAvailable else {
                 previewImage = nil
@@ -92,6 +84,14 @@ struct AttachmentChipView: View {
                 AttachmentImageEncoder.thumbnailData(for: url)
             }.value
             previewImage = data.flatMap(NSImage.init(data:))
+        }
+    }
+
+    private func selectOrPreview() {
+        if let onSelect {
+            onSelect()
+        } else {
+            QuickLookPresenter.shared.preview(url: attachment.fileURL)
         }
     }
 

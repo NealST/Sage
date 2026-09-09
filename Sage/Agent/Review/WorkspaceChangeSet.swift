@@ -217,7 +217,7 @@ nonisolated struct WorkspaceChangeBook: Equatable, Sendable {
     }
 }
 
-extension WorkspaceChangeBook {
+nonisolated extension WorkspaceChangeBook {
     func snapshot() -> WorkspaceChangeSet {
         let files = entries.values
             .sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }

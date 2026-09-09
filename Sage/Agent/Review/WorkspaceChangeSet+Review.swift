@@ -64,7 +64,7 @@ extension WorkspaceChangeSet {
             }
         } else if opaqueMutationCount > 0 {
             let noun = opaqueMutationCount == 1 ? "action" : "actions"
-            lines.append("Non-file actions completed: \(opaqueMutationCount)")
+            lines.append("Non-file \(noun) completed: \(opaqueMutationCount)")
         }
         return clip(lines.joined(separator: "\n"), maxChars: maxChars)
     }

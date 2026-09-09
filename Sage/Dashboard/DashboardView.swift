@@ -24,6 +24,7 @@ struct DashboardView: View {
                     .padding(.top, 20)
                     .padding(.bottom, SageDesign.Spacing.large)
                 }
+                .sageScrollEdgeGlass()
                 .onAppear {
                     if let id = appState.focusedScheduleID {
                         proxy.scrollTo(id, anchor: .center)
@@ -38,7 +39,6 @@ struct DashboardView: View {
         }
         .frame(width: 400)
         .frame(minHeight: 360)
-        .background(Color(nsColor: .windowBackgroundColor))
         .task {
             await appState.schedules.reload()
         }

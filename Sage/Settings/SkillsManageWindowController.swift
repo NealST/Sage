@@ -54,8 +54,8 @@ final class SkillsManageWindowController: NSObject, NSWindowDelegate {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Skills"
         window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.sageApplyLiquidGlass(customTitlebar: false)
         window.isOpaque = true
         window.backgroundColor = .windowBackgroundColor
         window.hasShadow = true

@@ -6,23 +6,24 @@
 import SwiftUI
 
 struct TodoListCard: View {
+    @Environment(\.sageTypography) private var type
     let items: [AgentTodoItem]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Todos")
-                .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
+                .font(.system(size: type.caption, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .accessibilityAddTraits(.isHeader)
 
             ForEach(items) { item in
                 HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
                     Image(systemName: icon(for: item.status))
-                        .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
+                        .font(.system(size: type.caption, weight: .semibold))
                         .foregroundStyle(color(for: item.status))
                         .frame(width: 12)
                     Text(item.title)
-                        .font(.system(size: SageDesign.Typography.captionSize))
+                        .font(.system(size: type.caption))
                         .foregroundStyle(item.status == .completed ? .secondary : .primary)
                         .strikethrough(item.status == .completed)
                         .fixedSize(horizontal: false, vertical: true)
@@ -31,6 +32,7 @@ struct TodoListCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sageGlassCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Todo list")
     }

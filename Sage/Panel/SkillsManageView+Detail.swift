@@ -27,8 +27,7 @@ extension SkillsManageView {
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .sageScrollEdgeGlass()
         .environment(\.defaultMinListRowHeight, 28)
     }
 
@@ -100,8 +99,6 @@ extension SkillsManageView {
                 .padding(.horizontal, SageDesign.Spacing.extraLarge)
                 .padding(.vertical, SageDesign.Spacing.medium)
 
-                Divider().opacity(SageDesign.Chrome.dividerOpacity)
-
                 SkillEditorPane(
                     skill: selected,
                     reloadSkills: {
@@ -112,7 +109,6 @@ extension SkillsManageView {
                     }
                 )
             }
-            .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         } else {
             ContentUnavailableView(
                 "Select a Skill",

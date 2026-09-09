@@ -14,6 +14,7 @@ struct ReviewFindingsCard: View {
         case optional(onImprove: () -> Void, onKeep: () -> Void)
     }
 
+    @Environment(\.sageTypography) private var type
     let message: String
     var mode: Mode
     var bindsReturnShortcut: Bool = true
@@ -21,20 +22,20 @@ struct ReviewFindingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(title)
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
+                .font(.system(size: type.body, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
             Text(message)
-                .font(.system(size: SageDesign.Typography.captionSize))
+                .font(.system(size: type.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             switch mode {
             case .continuing:
                 Text("Sage will keep working on these.")
-                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .font(.system(size: type.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -56,6 +57,7 @@ struct ReviewFindingsCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sageGlassCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
         .accessibilityHint(accessibilityHint)
@@ -94,6 +96,7 @@ struct ReviewFindingsCard: View {
         HStack(spacing: SageDesign.Spacing.small) {
             if let secondaryTitle, let secondary {
                 Button(secondaryTitle, role: .cancel, action: secondary)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
             }
 
@@ -102,11 +105,11 @@ struct ReviewFindingsCard: View {
             if bindsReturnShortcut {
                 Button(primaryTitle, action: primary)
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             } else {
                 Button(primaryTitle, action: primary)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             }
         }

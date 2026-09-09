@@ -44,7 +44,6 @@ struct SkillsManageView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             if session.skillCatalog.skills.isEmpty {
                 ContentUnavailableView(
@@ -65,10 +64,8 @@ struct SkillsManageView: View {
                 }
             }
 
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
             footer
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 640, minHeight: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -155,16 +152,14 @@ struct SkillsManageView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
-            Button {
+            Button("Refresh", systemImage: "arrow.clockwise") {
                 Task {
                     await appState.reloadSkillsAcrossSessions()
                 }
-            } label: {
-                Image(systemName: "arrow.clockwise")
             }
+            .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
             .help("Refresh")
-            .accessibilityLabel("Refresh")
         }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)

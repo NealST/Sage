@@ -354,7 +354,7 @@ struct MCPServerRow: View {
                 }
                 .frame(maxHeight: 120)
                 .padding(.top, SageDesign.Spacing.small)
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(SageDesign.Glass.appearTransition)
             }
         }
         .padding(SageDesign.Spacing.medium)

@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ThinkingProcessView: View {
+    @Environment(\.sageTypography) private var type
     let text: String
     var replyStarted: Bool
     @State private var isExpanded = true
@@ -15,8 +16,8 @@ struct ThinkingProcessView: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             Text(text)
-                .font(.system(size: SageDesign.Typography.captionSize))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: type.caption))
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -28,7 +29,7 @@ struct ThinkingProcessView: View {
                         .controlSize(.mini)
                 }
                 Text("Thinking")
-                    .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                    .font(.system(size: type.caption, weight: .medium))
                     .foregroundStyle(.secondary)
             }
         }

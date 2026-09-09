@@ -70,7 +70,7 @@ extension PathGuard {
             && isInsidePolicy(resolvedPath, policy: policy)
     }
 
-    private static func isInsidePolicy(_ path: String, policy: Policy) -> Bool {
+    nonisolated private static func isInsidePolicy(_ path: String, policy: Policy) -> Bool {
         switch policy {
         case .home:
             return isInsideHome(path)

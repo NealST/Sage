@@ -10,13 +10,7 @@ import SwiftUI
 enum SkillTipChrome {
     @MainActor
     static var bannerTransition: AnyTransition {
-        if AccessibilitySettings.shared.reduceMotion {
-            return .opacity
-        }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .bottom)),
-            removal: .opacity.combined(with: .move(edge: .bottom))
-        )
+        SageDesign.Glass.appearTransition
     }
 
     @ViewBuilder
@@ -31,16 +25,13 @@ enum SkillTipChrome {
 
     @ViewBuilder
     static func dismissButton(action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Dismiss")
-        .accessibilityLabel("Dismiss")
+        Button("Dismiss", systemImage: "xmark", action: action)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .buttonStyle(.plain)
+            .help("Dismiss")
     }
 
     @ViewBuilder
@@ -58,35 +49,8 @@ enum SkillTipChrome {
         content()
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .sagePanelBackground(cornerRadius: 10)
+            .sagePanelBackground(cornerRadius: 10, weight: .clear)
+            .sageGlassMaterialize()
     }
 }
 
-extension View {
-    /// Shared fill + optional contrast stroke used by tips, settings cards, dashboard, composer.
-    func sagePanelBackground(cornerRadius: CGFloat) -> some View {
-        modifier(SagePanelBackgroundModifier(cornerRadius: cornerRadius))
-    }
-}
-
-private struct SagePanelBackgroundModifier: ViewModifier {
-    let cornerRadius: CGFloat
-    @Environment(AccessibilitySettings.self) private var accessibility
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(accessibility.fillOpacity))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        Color.primary.opacity(
-                            accessibility.increaseContrast ? accessibility.strokeOpacity : 0
-                        ),
-                        lineWidth: accessibility.increaseContrast ? 1 : 0
-                    )
-            }
-    }
-}

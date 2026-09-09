@@ -6,84 +6,49 @@
 import SwiftUI
 
 struct SettingsPrivacySection: View {
+    @Environment(AppState.self) private var appState
     var eraseMessage: String?
     var isBusy: Bool
     var onErase: () -> Void
     @State private var authorizationRefresh = 0
+    @State private var showEraseConfirm = false
 
     var body: some View {
-        SettingsFormChrome.section("Privacy") {
-            HStack(alignment: .top, spacing: SageDesign.Spacing.medium) {
-                Image(systemName: "lock.shield")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 20)
-                    .padding(.top, 2)
+        Section {
+            Text(
+                """
+                File tools stay in your home folder, or the project root when a Project is focused. \
+                Shell, Skill, schedule, and MCP processes run in a default-deny macOS sandbox. \
+                Normal reads are automatic; sensitive reads and local writes require \
+                just-in-time approval.
+                """
+            )
+            .foregroundStyle(.secondary)
+        } header: {
+            Text("Sandbox")
+        }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sandbox")
-                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    Text(
-                        """
-                        File tools stay in your home folder, or the project root when a Project is focused. \
-                        Shell, Skill, schedule, and MCP processes run in a default-deny macOS sandbox. \
-                        Normal reads are automatic; sensitive reads and local writes require \
-                        just-in-time approval. Shell network and protected-metadata access are also gated.
-                        """
-                    )
-                    .font(.system(size: SageDesign.Typography.microSize))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .sagePanelBackground(cornerRadius: 10)
-
-            if !longTermPermissionSummaries.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(longTermPermissionSummaries) { grant in
-                        HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(grant.title)
-                                    .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
-                                Text(grant.detail)
-                                    .font(.system(size: SageDesign.Typography.microSize, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                            }
-                            Spacer()
-                            Button("Revoke") {
-                                ToolAuthorizationGrantStore.shared.removeLongTermGrant(id: grant.id)
-                                authorizationRefresh += 1
-                            }
-                            .controlSize(.small)
+        if !longTermPermissionSummaries.isEmpty {
+            Section("Permissions") {
+                ForEach(longTermPermissionSummaries) { grant in
+                    LabeledContent(grant.title) {
+                        Button("Revoke") {
+                            ToolAuthorizationGrantStore.shared.removeLongTermGrant(id: grant.id)
+                            authorizationRefresh += 1
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
+                        .controlSize(.small)
                     }
-                }
-                .sagePanelBackground(cornerRadius: 10)
-            }
-
-            HStack(spacing: SageDesign.Spacing.medium) {
-                Image(systemName: "checkmark.shield")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 20)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Long-term permissions")
-                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    Text(longTermPermissionSummary)
-                        .font(.system(size: SageDesign.Typography.microSize))
+                    Text(grant.detail)
+                        .font(.caption)
+                        .monospaced()
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
+            }
+        }
 
-                Spacer()
-
+        Section {
+            LabeledContent("Long-term permissions") {
                 Button("Revoke all") {
                     ToolAuthorizationGrantStore.shared.removeAllLongTermGrants()
                     authorizationRefresh += 1
@@ -91,39 +56,45 @@ struct SettingsPrivacySection: View {
                 .controlSize(.small)
                 .disabled(ToolAuthorizationGrantStore.shared.longTermGrantCount == 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .sagePanelBackground(cornerRadius: 10)
+            Text(longTermPermissionSummary)
+                .foregroundStyle(.secondary)
 
-            HStack(spacing: SageDesign.Spacing.medium) {
-                Image(systemName: "externaldrive")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 20)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Local history")
-                        .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
-                    Text(eraseMessage ?? "Task events stay on this Mac.")
-                        .font(.system(size: SageDesign.Typography.microSize))
-                        .foregroundStyle(
-                            eraseMessage?.hasPrefix("Could") == true ? Color.orange : Color.secondary
-                        )
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-
+            LabeledContent("Local history") {
                 Button("Erase…") {
-                    onErase()
+                    showEraseConfirm = true
                 }
                 .controlSize(.small)
                 .disabled(isBusy)
+                .confirmationDialog(
+                    eraseDialogTitle,
+                    isPresented: $showEraseConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Erase Data", role: .destructive, action: onErase)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(eraseDialogMessage)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .sagePanelBackground(cornerRadius: 10)
+            Text(eraseMessage ?? "Task events stay on this Mac.")
+                .foregroundStyle(
+                    eraseMessage?.hasPrefix("Could") == true ? Color.orange : Color.secondary
+                )
         }
+    }
+
+    private var eraseDialogTitle: String {
+        if case .awaitingConfirmation = appState.agent.state.phase {
+            return "Erase data and abandon pending plan?"
+        }
+        return "Erase all local Sage data?"
+    }
+
+    private var eraseDialogMessage: String {
+        if case .awaitingConfirmation = appState.agent.state.phase {
+            return "This deletes local task history and abandons the pending plan. Your API key in Keychain is kept."
+        }
+        return "This permanently deletes local task history from this Mac. Your API key in Keychain is kept."
     }
 
     private var longTermPermissionSummary: String {

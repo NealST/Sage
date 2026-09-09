@@ -51,7 +51,6 @@ extension SkillEditorPane {
     var body: some View {
         VStack(spacing: 0) {
             editorToolbar
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             if isLoading {
                 ProgressView()

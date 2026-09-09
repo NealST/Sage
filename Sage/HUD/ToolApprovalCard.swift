@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct ToolApprovalCard: View {
+    @Environment(\.sageTypography) private var type
     let title: String
     let toolName: String
     let argumentsJSON: String
@@ -19,19 +20,19 @@ struct ToolApprovalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(title)
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
+                .font(.system(size: type.body, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
             Text(subtitle)
-                .font(.system(size: SageDesign.Typography.captionSize))
+                .font(.system(size: type.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let authorizationSummary, !authorizationSummary.isEmpty {
                 Text(authorizationSummary)
-                    .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                    .font(.system(size: type.caption, design: .monospaced))
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -39,7 +40,7 @@ struct ToolApprovalCard: View {
 
             if let preview = commandPreview {
                 Text(preview)
-                    .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                    .font(.system(size: type.caption, design: .monospaced))
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -48,28 +49,34 @@ struct ToolApprovalCard: View {
             HStack(spacing: SageDesign.Spacing.small) {
                 Button("Skip", role: .cancel, action: onSkip)
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
 
                 Spacer(minLength: 0)
+
+                Menu {
+                    Button("Always allow this permission", action: onAllowTool)
+                } label: {
+                    Label("More approval options", systemImage: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .labelStyle(.iconOnly)
+                .help("Always allow this permission")
+                .accessibilityLabel("More approval options")
 
                 Button("Allow once", action: onAllowOnce)
-                    .controlSize(.regular)
-            }
-
-            HStack(spacing: SageDesign.Spacing.small) {
-                Spacer(minLength: 0)
-
-                Button("Always allow", action: onAllowTool)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
 
                 Button("Allow for this task", action: onAllowSession)
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sageGlassCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tool approval")
     }
@@ -84,7 +91,7 @@ struct ToolApprovalCard: View {
         }
         return """
         \(lead) \
-        Allow it once, for this task, or until you revoke the permission.
+        Allow it for this task, once, or choose Always in More.
         """
     }
 

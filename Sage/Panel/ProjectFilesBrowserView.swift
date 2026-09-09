@@ -39,6 +39,7 @@ struct ProjectFilesBrowserView: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .sageScrollEdgeGlass()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

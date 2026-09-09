@@ -7,7 +7,7 @@ struct AgentPanelView: View {
     var body: some View {
         AgentWorkspaceView()
             .frame(minWidth: 560, minHeight: 440)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .backgroundExtensionEffect()
             .accessibilityElement(children: .contain)
             .accessibilityLabel(session.isGeneral ? "Sage" : session.agent.state.focusTitle)
             .sageScaledTypography()

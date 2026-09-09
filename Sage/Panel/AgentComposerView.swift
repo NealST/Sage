@@ -67,11 +67,11 @@ struct AgentComposerView: View {
                     if canSubmit && slashSuggestions.isEmpty {
                         Text("Submit ⏎")
                             .font(.system(size: type.micro, weight: .medium))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     } else if !slashSuggestions.isEmpty {
                         Text("Select ⏎")
                             .font(.system(size: type.micro, weight: .medium))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -109,8 +109,8 @@ struct AgentComposerView: View {
 
             HStack(spacing: SageDesign.Spacing.small) {
                 Text(appState.settings.resolvedModel(for: .execute))
-                    .font(.system(size: type.micro))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: type.micro, weight: .medium))
+                    .foregroundStyle(.secondary)
 
                 if !session.skills.saveJobs.isEmpty {
                     SkillSaveStatusIndicator()
@@ -176,21 +176,19 @@ struct AgentComposerView: View {
     }
 
     private var attachButton: some View {
-        Button {
+        Button("Add files", systemImage: "plus") {
             pickAttachments()
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .labelStyle(.iconOnly)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .frame(width: 22, height: 22)
+        .buttonStyle(.glass)
+        .controlSize(.small)
         .disabled(blocksTyping || isPreparingAttachments)
         .opacity(blocksTyping || isPreparingAttachments ? 0.45 : 1)
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .help("Add files to this message")
-        .accessibilityLabel("Add files")
     }
 
     private var suggestionList: some View {
@@ -225,15 +223,9 @@ struct AgentComposerView: View {
                 .buttonStyle(.plain)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
-        }
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .sagePanelBackground(cornerRadius: SageDesign.Glass.chip, weight: .clear)
+        .sageGlassMaterialize()
+        .transition(SageDesign.Glass.appearTransition)
     }
 
     var blocksTyping: Bool {

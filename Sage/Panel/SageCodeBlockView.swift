@@ -105,26 +105,17 @@ struct SageCodeBlockView: View {
     }
 
     private var copyButton: some View {
-        Button {
+        Button(copied ? "Copied" : "Copy code", systemImage: copied ? "checkmark" : "doc.on.doc") {
             copyCode()
-        } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(copied ? Color.secondary : Color.secondary.opacity(0.9))
-                .frame(width: 26, height: 22)
-                .background {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.35), lineWidth: 1)
-                        }
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         }
+        .labelStyle(.iconOnly)
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(copied ? Color.secondary : Color.secondary.opacity(0.9))
+        .frame(width: 26, height: 22)
+        .sagePanelBackground(cornerRadius: 5, weight: .clear)
+        .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         .buttonStyle(.plain)
         .help(copied ? "Copied" : "Copy code")
-        .accessibilityLabel(copied ? "Copied" : "Copy code")
     }
 
     /// Quiet text control — no filled footer strip.

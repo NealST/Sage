@@ -16,8 +16,8 @@ final class SessionToolAllowlist {
     private var hookOneShotKeys: Set<String> = []
     private let grantStore: ToolAuthorizationGrantStore
 
-    init(grantStore: ToolAuthorizationGrantStore = .shared) {
-        self.grantStore = grantStore
+    init(grantStore: ToolAuthorizationGrantStore? = nil) {
+        self.grantStore = grantStore ?? .shared
     }
 
     nonisolated static func needsGate(

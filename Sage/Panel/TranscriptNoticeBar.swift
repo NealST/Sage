@@ -9,24 +9,22 @@ import SwiftUI
 
 struct TranscriptNoticeBar: View {
     @Environment(AgentSession.self) private var session
-    @Environment(AccessibilitySettings.self) private var accessibility
     @Environment(\.sageTypography) private var type
 
     var body: some View {
         if let offer = session.agent.state.topicDriftOffer {
             topicDriftChip(offer)
+                .sageGlassMaterialize()
                 .transition(noticeTransition)
         } else if let hint = session.agent.state.contextHint {
             contextChip(hint)
+                .sageGlassMaterialize()
                 .transition(noticeTransition)
         }
     }
 
     private var noticeTransition: AnyTransition {
-        if accessibility.reduceMotion {
-            return .opacity
-        }
-        return .opacity.combined(with: .move(edge: .top))
+        SageDesign.Glass.appearTransition
     }
 
     private func topicDriftChip(_ offer: TopicDriftOffer) -> some View {
@@ -37,7 +35,7 @@ struct TranscriptNoticeBar: View {
                 .accessibilityHidden(true)
 
             Text(offer.message)
-                .font(.system(size: type.micro))
+                .font(.system(size: type.micro, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -46,8 +44,8 @@ struct TranscriptNoticeBar: View {
             Button("Start Fresh") {
                 Task { await session.agent.startFresh() }
             }
-            .controlSize(.mini)
-            .buttonStyle(.plain)
+            .controlSize(.small)
+            .buttonStyle(.glass)
             .font(.system(size: type.micro, weight: .semibold))
             .disabled(!session.agent.canStartFresh)
             .help(
@@ -58,16 +56,12 @@ struct TranscriptNoticeBar: View {
             .accessibilityLabel("Start Fresh")
             .accessibilityHint("Starts a new task with your last message")
 
-            Button {
+            Button("Keep going", systemImage: "xmark") {
                 session.agent.dismissTopicDriftOffer()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.glass)
+            .controlSize(.small)
             .disabled(session.agent.state.isAcceptingTopicDrift)
             .help("Keep going in this task")
             .accessibilityLabel("Keep going")
@@ -84,16 +78,15 @@ struct TranscriptNoticeBar: View {
                 .font(.system(size: type.micro, weight: .semibold))
                 .accessibilityHidden(true)
             Text(hint)
-                .font(.system(size: type.micro))
+                .font(.system(size: type.micro, weight: .medium))
                 .lineLimit(1)
                 .accessibilityLabel(hint)
             Spacer(minLength: 4)
             Button("Don’t reuse") {
                 session.agent.dismissContextHint()
             }
-            .controlSize(.mini)
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .controlSize(.small)
+            .buttonStyle(.glass)
             .help("Next request starts without this prior context")
             .accessibilityHint("Next request starts without this prior context")
         }

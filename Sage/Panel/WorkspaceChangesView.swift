@@ -11,6 +11,7 @@ struct WorkspaceChangesView: View {
     let changes: WorkspaceChangeSet
 
     @Environment(\.pathGuardPolicy) private var pathGuardPolicy
+    @Environment(\.sageTypography) private var type
     @State private var expandedIDs: Set<String>
 
     init(changes: WorkspaceChangeSet) {
@@ -37,23 +38,13 @@ struct WorkspaceChangesView: View {
             }
             if changes.opaqueMutationCount > 0 {
                 Text(opaqueCaption)
-                    .font(.system(size: SageDesign.Typography.microSize))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: type.micro, weight: .medium))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-        )
-        .overlay {
-            if AccessibilityPreferences.increaseContrast {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .sagePanelBackground(cornerRadius: SageDesign.Glass.panel)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(headerAccessibilityLabel)
     }
@@ -61,11 +52,11 @@ struct WorkspaceChangesView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Changes")
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
+                .font(.system(size: type.body, weight: .semibold))
                 .tracking(-0.2)
             Spacer(minLength: 8)
             Text(headerSummary)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                .font(.system(size: type.micro, weight: .medium))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
@@ -122,30 +113,30 @@ struct WorkspaceChangesView: View {
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(PathTextSupport.attributedString(from: file.path, policy: pathGuardPolicy))
-                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .font(.system(size: type.caption))
                     .lineLimit(2)
                     .textSelection(.enabled)
                 if let previousPath = file.previousPath {
                     Text("from \(previousPath)")
-                        .font(.system(size: SageDesign.Typography.microSize))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: type.micro, weight: .medium))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
             Text(file.kind.rowLabel)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                .font(.system(size: type.micro, weight: .medium))
                 .foregroundStyle(.secondary)
             if !file.stats.isIdentity {
                 Text(file.stats.summary)
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                    .font(.system(size: type.micro, weight: .medium))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             if file.hasLineDiff {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
             }
         }
@@ -158,8 +149,8 @@ struct WorkspaceChangesView: View {
     private func fileDiff(_ file: WorkspaceFileChange) -> some View {
         if file.kind == .removed, file.before == nil {
             Text("Previous contents weren’t captured.")
-                .font(.system(size: SageDesign.Typography.microSize))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: type.micro, weight: .medium))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
         } else {
             UnifiedDiffView(

@@ -42,8 +42,8 @@ struct SageScaledTypographyModifier: ViewModifier {
     @ScaledMetric(relativeTo: .body) private var body = SageDesign.Typography.bodySize
     @ScaledMetric(relativeTo: .caption) private var caption = SageDesign.Typography.captionSize
     @ScaledMetric(relativeTo: .title3) private var title = SageDesign.Typography.titleSize
-    @ScaledMetric(relativeTo: .caption2) private var micro = SageDesign.Typography.microSize
-    @ScaledMetric(relativeTo: .caption2) private var icon = SageDesign.Typography.iconSize
+    @ScaledMetric(relativeTo: .caption) private var micro = SageDesign.Typography.microSize
+    @ScaledMetric(relativeTo: .caption) private var icon = SageDesign.Typography.iconSize
 
     func body(content: Content) -> some View {
         content.environment(

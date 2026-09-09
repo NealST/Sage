@@ -49,13 +49,14 @@ private enum WorkPlanCardActions {
 }
 
 private struct WorkPlanCardBody: View {
+    @Environment(\.sageTypography) private var type
     let plan: WorkPlan
     let actions: WorkPlanCardActions
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.intent)
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
+                .font(.system(size: type.body, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -70,15 +71,15 @@ private struct WorkPlanCardBody: View {
 
             if !plan.skillNames.isEmpty {
                 Text("Uses \(plan.skillNames.joined(separator: ", "))")
-                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .font(.system(size: type.caption))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let sideEffects = plan.sideEffects, !sideEffects.isEmpty {
                 Text(sideEffects)
-                    .font(.system(size: SageDesign.Typography.captionSize))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: type.caption))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
             }
@@ -86,6 +87,7 @@ private struct WorkPlanCardBody: View {
             actionRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sageGlassCard()
     }
 
     @ViewBuilder private var actionRow: some View {
@@ -96,6 +98,7 @@ private struct WorkPlanCardBody: View {
                 if let onStop {
                     Button("Stop", role: .cancel, action: onStop)
                         .keyboardShortcut(.cancelAction)
+                        .buttonStyle(.glass)
                         .controlSize(.regular)
                 }
             }
@@ -118,9 +121,11 @@ private struct WorkPlanCardBody: View {
             if shortcuts {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
             } else {
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
             }
 
@@ -129,11 +134,11 @@ private struct WorkPlanCardBody: View {
             if shortcuts {
                 Button("Run", action: onConfirm)
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             } else {
                 Button("Run", action: onConfirm)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             }
         }

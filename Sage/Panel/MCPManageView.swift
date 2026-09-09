@@ -19,7 +19,6 @@ struct MCPManageView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
             if appState.mcpHub.mcpServers.isEmpty {
                 ContentUnavailableView {
@@ -28,7 +27,7 @@ struct MCPManageView: View {
                     Text("Add a stdio MCP server to expose its tools to Sage.")
                 } actions: {
                     Button("Add Server") { showingAdd = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                         .controlSize(.regular)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,9 +38,9 @@ struct MCPManageView: View {
                     }
                 }
                 .listStyle(.inset)
+                .sageScrollEdgeGlass()
             }
 
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
             footer
         }
         .frame(width: 560, height: 500)
@@ -51,26 +50,6 @@ struct MCPManageView: View {
         }
         .sheet(isPresented: $showingAdd) {
             addSheet
-        }
-        .confirmationDialog(
-            "Delete “\(serverPendingDelete?.name ?? "server")”?",
-            isPresented: Binding(
-                get: { serverPendingDelete != nil },
-                set: { if !$0 { serverPendingDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let id = serverPendingDelete?.id {
-                    appState.mcpHub.deleteMCPServer(id)
-                }
-                serverPendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) {
-                serverPendingDelete = nil
-            }
-        } message: {
-            Text("This removes the server configuration and its tools from Sage.")
         }
     }
 
@@ -162,6 +141,24 @@ struct MCPManageView: View {
                 serverPendingDelete = server
             }
             .controlSize(.small)
+            .confirmationDialog(
+                "Delete “\(server.name)”?",
+                isPresented: Binding(
+                    get: { serverPendingDelete?.id == server.id },
+                    set: { if !$0 { serverPendingDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    appState.mcpHub.deleteMCPServer(server.id)
+                    serverPendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    serverPendingDelete = nil
+                }
+            } message: {
+                Text("This removes the server configuration and its tools from Sage.")
+            }
         }
     }
 

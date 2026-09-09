@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct PlanCardView: View {
+    @Environment(\.sageTypography) private var type
     let plan: AgentPlan
     var isExecuting: Bool
     var bindsReturnShortcut: Bool = true
@@ -16,7 +17,7 @@ struct PlanCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.summary)
-                .font(.system(size: SageDesign.Typography.bodySize, weight: .semibold))
+                .font(.system(size: type.body, weight: .semibold))
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -43,6 +44,7 @@ struct PlanCardView: View {
                     if let onStop {
                         Button("Stop", role: .cancel, action: onStop)
                             .keyboardShortcut(.cancelAction)
+                            .buttonStyle(.glass)
                             .controlSize(.regular)
                     }
                 }
@@ -52,6 +54,7 @@ struct PlanCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .sageGlassCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
     }
@@ -61,9 +64,11 @@ struct PlanCardView: View {
             if bindsReturnShortcut {
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
             } else {
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.glass)
                     .controlSize(.regular)
             }
 
@@ -72,11 +77,11 @@ struct PlanCardView: View {
             if bindsReturnShortcut {
                 Button("Run", action: onConfirm)
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             } else {
                 Button("Run", action: onConfirm)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.regular)
             }
         }

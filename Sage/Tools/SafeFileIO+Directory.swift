@@ -8,14 +8,14 @@
 import Darwin
 import Foundation
 
-extension SafeFileIO {
-    static func createDirectory(at url: URL) throws {
+nonisolated extension SafeFileIO {
+    nonisolated static func createDirectory(at url: URL) throws {
         let descriptor = try createDirectoryTree(to: url)
         Darwin.close(descriptor)
     }
 
     /// Opens `url`, creating any missing parents with `mkdirat` from an already-verified ancestor.
-    static func createDirectoryTree(to url: URL) throws -> Int32 {
+    nonisolated static func createDirectoryTree(to url: URL) throws -> Int32 {
         let resolved = try PathGuard.resolveAllowed(url.path, access: .write)
         try PathGuard.assertWriteAllowed(resolved)
         if let existing = try openExistingDirectory(resolved, access: .write) {
@@ -36,7 +36,7 @@ extension SafeFileIO {
         )
     }
 
-    static func copyDirectory(at source: URL, to destination: URL) throws {
+    nonisolated static func copyDirectory(at source: URL, to destination: URL) throws {
         try PathGuard.assertSensitiveReadAllowed(source)
         try FileTransferDestination.assertNotRelocatingProtectedRoot(source)
         let sourceDescriptor = try openDirectory(source, access: .read)
@@ -47,8 +47,8 @@ extension SafeFileIO {
     }
 }
 
-extension SafeFileIO {
-    private static func openExistingDirectory(
+nonisolated extension SafeFileIO {
+    nonisolated private static func openExistingDirectory(
         _ url: URL,
         access: PathGuard.Access,
     ) throws -> Int32? {
@@ -71,7 +71,7 @@ extension SafeFileIO {
         return nil
     }
 
-    private static func makeDirectoryChild(
+    nonisolated private static func makeDirectoryChild(
         named name: String,
         in parentDescriptor: Int32,
         path: String,
@@ -101,7 +101,7 @@ extension SafeFileIO {
         }
     }
 
-    private static func copyOpenedDirectory(from source: Int32, to destination: Int32) throws {
+    nonisolated private static func copyOpenedDirectory(from source: Int32, to destination: Int32) throws {
         let listing = Darwin.dup(source)
         guard listing >= 0 else {
             throw posixError(operation: "list directory", path: "(descriptor)")
@@ -114,7 +114,7 @@ extension SafeFileIO {
         try copyDirectoryEntries(from: stream, source: source, to: destination)
     }
 
-    private static func copyDirectoryEntries(
+    nonisolated private static func copyDirectoryEntries(
         from stream: UnsafeMutablePointer<DIR>,
         source: Int32,
         to destination: Int32,
@@ -126,7 +126,7 @@ extension SafeFileIO {
         }
     }
 
-    private static func directoryEntryName(_ entry: UnsafeMutablePointer<dirent>) -> String? {
+    nonisolated private static func directoryEntryName(_ entry: UnsafeMutablePointer<dirent>) -> String? {
         withUnsafeBytes(of: entry.pointee.d_name) { buffer in
             guard let base = buffer.baseAddress?.assumingMemoryBound(to: CChar.self) else {
                 return nil
@@ -137,8 +137,8 @@ extension SafeFileIO {
     }
 }
 
-extension SafeFileIO {
-    private static func copyDirectoryEntry(
+nonisolated extension SafeFileIO {
+    nonisolated private static func copyDirectoryEntry(
         named name: String,
         from source: Int32,
         to destination: Int32,
@@ -154,7 +154,7 @@ extension SafeFileIO {
         }
     }
 
-    private static func copyDirectoryChild(
+    nonisolated private static func copyDirectoryChild(
         named name: String,
         from source: Int32,
         to destination: Int32,
@@ -174,7 +174,7 @@ extension SafeFileIO {
         try copyOpenedDirectory(from: childSource, to: childDestination)
     }
 
-    private static func copyRegularChild(
+    nonisolated private static func copyRegularChild(
         named name: String,
         from source: Int32,
         to destination: Int32,
@@ -207,7 +207,7 @@ extension SafeFileIO {
         shouldRemove = false
     }
 
-    private static func finishCopy(from source: Int32, to destination: Int32, name: String) throws {
+    nonisolated private static func finishCopy(from source: Int32, to destination: Int32, name: String) throws {
         guard fcopyfile(source, destination, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 else {
             throw posixError(operation: "copy", path: name)
         }
@@ -216,7 +216,7 @@ extension SafeFileIO {
         }
     }
 
-    private static func openatDirectory(
+    nonisolated private static func openatDirectory(
         named name: String,
         in parent: Int32,
         access: PathGuard.Access,
@@ -238,7 +238,7 @@ extension SafeFileIO {
         }
     }
 
-    private static func descriptorURL(
+    nonisolated private static func descriptorURL(
         _ descriptor: Int32,
         access: PathGuard.Access,
     ) throws -> URL {

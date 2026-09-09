@@ -5,91 +5,54 @@
 
 import SwiftUI
 
+enum SettingsConnectionTestState: Equatable {
+    case idle
+    case testing
+    case success
+    case failure(String)
+}
+
 struct SettingsConnectionSection: View {
     @Bindable var settings: ModelSettings
     var testState: SettingsConnectionTestState
     var onFieldChange: () -> Void
 
     var body: some View {
-        SettingsFormChrome.section("Connection") {
-            VStack(spacing: 0) {
-                SettingsFormChrome.field(
-                    title: "Base URL",
-                    error: baseURLValidationError,
-                    isFirst: true
-                ) {
-                    TextField("https://api.openai.com/v1", text: $settings.baseURL)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
-                        .onChange(of: settings.baseURL) { _, _ in onFieldChange() }
-                }
+        Section {
+            connectionField(
+                "Base URL",
+                text: $settings.baseURL,
+                prompt: "https://api.openai.com/v1",
+                error: baseURLValidationError
+            ) {
+                onFieldChange()
+            }
 
-                SettingsFormChrome.divider
+            connectionField(
+                "Model",
+                text: $settings.model,
+                prompt: "gpt-4.1-mini",
+                error: modelValidationError
+            ) {
+                onFieldChange()
+            }
 
-                SettingsFormChrome.field(
-                    title: "Model",
-                    error: modelValidationError
-                ) {
-                    TextField("gpt-4.1-mini", text: $settings.model)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
-                        .onChange(of: settings.model) { _, _ in onFieldChange() }
-                }
+            connectionField("Plan model", text: $settings.planModel, prompt: "same as Model")
+            connectionField("Execute model", text: $settings.executeModel, prompt: "same as Model")
+            connectionField("Review model", text: $settings.reviewModel, prompt: "same as Model")
 
-                SettingsFormChrome.divider
-
-                SettingsFormChrome.field(
-                    title: "Plan model",
-                    error: nil
-                ) {
-                    TextField("same as Model", text: $settings.planModel)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
-                }
-
-                SettingsFormChrome.divider
-
-                SettingsFormChrome.field(
-                    title: "Execute model",
-                    error: nil
-                ) {
-                    TextField("same as Model", text: $settings.executeModel)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
-                }
-
-                SettingsFormChrome.divider
-
-                SettingsFormChrome.field(
-                    title: "Review model",
-                    error: nil
-                ) {
-                    TextField("same as Model", text: $settings.reviewModel)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
-                }
-
-                SettingsFormChrome.divider
-
-                SettingsFormChrome.field(
-                    title: "API Key",
-                    error: apiKeyValidationError,
-                    isLast: true
-                ) {
+            LabeledContent("API Key") {
+                VStack(alignment: .trailing, spacing: 4) {
                     SecureField("sk-…", text: $settings.apiKey)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: SageDesign.Typography.bodySize))
-                        .foregroundStyle(.primary)
                         .onChange(of: settings.apiKey) { _, _ in onFieldChange() }
+                    if let apiKeyValidationError {
+                        Text(apiKeyValidationError)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
-            .sagePanelBackground(cornerRadius: 10)
-
+        } footer: {
             statusRow
         }
     }
@@ -100,35 +63,47 @@ struct SettingsConnectionSection: View {
             && apiKeyError(in: settings) == nil
     }
 
+    @ViewBuilder
+    private func connectionField(
+        _ title: String,
+        text: Binding<String>,
+        prompt: String,
+        error: String? = nil,
+        onChange: (() -> Void)? = nil
+    ) -> some View {
+        LabeledContent(title) {
+            VStack(alignment: .trailing, spacing: 4) {
+                TextField(prompt, text: text)
+                    .onChange(of: text.wrappedValue) { _, _ in onChange?() }
+                if let error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
     private var statusRow: some View {
         Group {
             if let persistenceError = settings.apiKeyPersistenceError {
-                Label(persistenceError, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                Text(persistenceError)
             } else {
                 switch testState {
                 case .idle:
                     Text("Stored in Keychain · saves automatically")
-                        .foregroundStyle(.secondary)
 
                 case .testing:
-                    Label("Testing connection…", systemImage: "arrow.triangle.2.circlepath")
-                        .foregroundStyle(.secondary)
+                    Text("Testing connection…")
 
                 case .success:
-                    Label("Connection succeeded", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    Text("Connection succeeded")
 
                 case .failure(let message):
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .lineLimit(3)
+                    Text(message)
                 }
             }
         }
-        .font(.system(size: SageDesign.Typography.microSize))
-        .padding(.leading, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel(statusAccessibilityLabel)
     }
 

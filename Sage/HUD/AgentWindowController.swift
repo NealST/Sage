@@ -86,13 +86,12 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         window.title = session.isGeneral
             ? "Sage"
             : (session.agent.state.focusedProject?.name ?? "Opening…")
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
         window.minSize = NSSize(width: 560, height: 440)
         window.isOpaque = true
         window.backgroundColor = NSColor.windowBackgroundColor
+        window.sageApplyLiquidGlass(customTitlebar: true)
         window.hasShadow = true
         window.hidesOnDeactivate = false
         window.animationBehavior = .documentWindow

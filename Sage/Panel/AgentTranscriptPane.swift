@@ -53,6 +53,7 @@ struct TranscriptEventRevision: Equatable {
 struct AgentTranscriptPane: View {
     @Environment(AppState.self) var appState
     @Environment(AgentSession.self) var session
+    @Environment(\.sageTypography) var type
     @Binding var stickToBottom: Bool
     /// When the composer has focus, confirmation cards must not steal Return.
     var composerFocused: Bool = false
@@ -85,6 +86,7 @@ struct AgentTranscriptPane: View {
                     }
                     .padding(SageDesign.Spacing.large)
                 }
+                .sageScrollEdgeGlass()
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in onBeginReading() }
@@ -115,11 +117,11 @@ struct AgentTranscriptPane: View {
                         scrollToLatest(using: proxy)
                     } label: {
                         Label("Jump to latest", systemImage: "arrow.down")
-                            .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                            .font(.system(size: type.micro, weight: .semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .controlSize(.small)
                     .padding(.bottom, SageDesign.Spacing.medium)
                     .accessibilityLabel("Jump to latest")
@@ -152,24 +154,24 @@ struct AgentTranscriptPane: View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if let project = session.agent.state.focusedProject {
                 Text("Tell me what to do")
-                    .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
+                    .font(.system(size: type.title, weight: .semibold))
                 Text("Sage can explore and edit files under \(ProjectPanelActions.displayPath(project.rootPath)).")
-                    .font(.system(size: SageDesign.Typography.bodySize))
+                    .font(.system(size: type.body))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Ask Sage to work on your Mac")
-                    .font(.system(size: SageDesign.Typography.titleSize, weight: .semibold))
+                    .font(.system(size: type.title, weight: .semibold))
                 Text("Try “Summarize my Downloads folder” or “Rewrite what’s on my clipboard.”")
-                    .font(.system(size: SageDesign.Typography.bodySize))
+                    .font(.system(size: type.body))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(hotkeyHint)
-                    .font(.system(size: SageDesign.Typography.microSize))
+                    .font(.system(size: type.micro))
                     .foregroundStyle(.tertiary)
             }
             Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
-                .font(.system(size: SageDesign.Typography.microSize))
+                .font(.system(size: type.micro))
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -190,6 +192,7 @@ struct AgentTranscriptPane: View {
 /// Owns `StreamingPlayback` reads so event bubbles do not rebuild on SSE tokens.
 struct ThinkingStreamAccessory: View {
     @Environment(StreamingPlayback.self) private var streaming
+    @Environment(\.sageTypography) private var type
     let retryState: RetryDisplayState?
     let canStop: Bool
     let onStop: () -> Void
@@ -202,7 +205,7 @@ struct ThinkingStreamAccessory: View {
                 HStack(spacing: SageDesign.Spacing.small) {
                     ProgressView().controlSize(.small)
                     Text(status)
-                        .font(.system(size: SageDesign.Typography.bodySize))
+                        .font(.system(size: type.body))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
@@ -236,7 +239,7 @@ struct ThinkingStreamAccessory: View {
                     HStack(spacing: SageDesign.Spacing.small) {
                         ProgressView().controlSize(.small)
                         Text("Thinking…")
-                            .font(.system(size: SageDesign.Typography.bodySize))
+                            .font(.system(size: type.body))
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
                     }

@@ -41,6 +41,7 @@ struct ProjectHistoryBrowserView: View {
                     .padding(.vertical, 2)
                 }
                 .listStyle(.plain)
+                .sageScrollEdgeGlass()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

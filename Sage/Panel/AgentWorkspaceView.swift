@@ -36,43 +36,16 @@ struct AgentWorkspaceView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            WorkspaceChromeView(
-                gitBranch: $gitBranch,
-                branchSwitchError: $branchSwitchError,
-                projectTab: $projectTab
-            )
-
-            if let branchSwitchError, !branchSwitchError.isEmpty {
-                branchErrorBanner(branchSwitchError)
+        workspaceCanvas
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                topChrome
             }
-
-            if isWorkspaceReady {
-                if projectTab == .task || !isProjectWindow {
-                    TranscriptNoticeBar()
-                        .animation(
-                            SageDesign.Motion.expandAnimation,
-                            value: session.agent.state.topicDriftOffer?.triggeringUserEventID
-                        )
-                        .animation(
-                            SageDesign.Motion.expandAnimation,
-                            value: session.agent.state.contextHint
-                        )
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isWorkspaceReady, showsTaskPane {
+                    bottomChrome
                 }
-
-                Divider().opacity(SageDesign.Chrome.dividerOpacity)
-
-                if isProjectWindow {
-                    projectTabBody
-                } else {
-                    taskPane
-                }
-            } else {
-                Divider().opacity(SageDesign.Chrome.dividerOpacity)
-                bootstrapPlaceholder
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.pathGuardPolicy, session.agent.state.pathGuardPolicy)
         .environment(session.agent.streamingPlayback)
         .onAppear {
@@ -131,48 +104,94 @@ struct AgentWorkspaceView: View {
 
     // MARK: - Tabs
 
+    private var showsTaskPane: Bool {
+        projectTab == .task || !isProjectWindow
+    }
+
+    @ViewBuilder private var workspaceCanvas: some View {
+        if isWorkspaceReady {
+            if isProjectWindow {
+                projectTabBody
+            } else {
+                taskScrollSurface
+            }
+        } else {
+            bootstrapPlaceholder
+        }
+    }
+
+    @ViewBuilder private var topChrome: some View {
+        VStack(spacing: 0) {
+            WorkspaceChromeView(
+                gitBranch: $gitBranch,
+                branchSwitchError: $branchSwitchError,
+                projectTab: $projectTab
+            )
+            if let branchSwitchError, !branchSwitchError.isEmpty {
+                branchErrorBanner(branchSwitchError)
+            }
+            if isWorkspaceReady, showsTaskPane {
+                TranscriptNoticeBar()
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.topicDriftOffer?.triggeringUserEventID
+                    )
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.contextHint
+                    )
+            }
+        }
+        .sageGlassToolbar()
+    }
+
+    private var bottomChrome: some View {
+        GlassEffectContainer(spacing: SageDesign.Glass.containerSpacing) {
+            VStack(spacing: 0) {
+                SkillTipsBanner()
+                    .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)
+                if let draft = session.skills.scriptScheduleDraft {
+                    ScheduleScriptPanel(initial: draft)
+                        .id(draft.openedAt)
+                        .transition(SkillTipChrome.bannerTransition)
+                }
+                AgentComposerView(
+                    isInputFocused: $isInputFocused,
+                    stickToBottom: $stickToBottom
+                )
+            }
+        }
+        .animation(SageDesign.Motion.expandAnimation, value: session.skills.scriptScheduleDraft != nil)
+    }
+
     @ViewBuilder private var projectTabBody: some View {
         switch projectTab {
         case .task:
-            taskPane
+            taskScrollSurface
 
         case .files:
             if let root = session.agent.state.focusedProject?.rootURL {
                 ProjectFilesBrowserView(rootURL: root)
                     .id("\(root.path)-\(gitBranch ?? "none")")
+                    .sageScrollEdgeGlass()
             }
 
         case .history:
             if let root = session.agent.state.focusedProject?.rootURL {
                 ProjectHistoryBrowserView(rootURL: root)
-                    // Refresh when branch changes after checkout.
                     .id(gitBranch ?? "none")
+                    .sageScrollEdgeGlass()
             }
         }
     }
 
-    private var taskPane: some View {
-        VStack(spacing: 0) {
-            AgentTranscriptPane(
-                stickToBottom: $stickToBottom,
-                composerFocused: isInputFocused
-            ) {
-                isInputFocused = false
-            }
-            Divider().opacity(SageDesign.Chrome.dividerOpacity)
-            SkillTipsBanner()
-                .animation(SageDesign.Motion.expandAnimation, value: session.skills.tips.showBanner)
-            if let draft = session.skills.scriptScheduleDraft {
-                ScheduleScriptPanel(initial: draft)
-                    .id(draft.openedAt)
-                    .transition(SkillTipChrome.bannerTransition)
-            }
-            AgentComposerView(
-                isInputFocused: $isInputFocused,
-                stickToBottom: $stickToBottom
-            )
+    private var taskScrollSurface: some View {
+        AgentTranscriptPane(
+            stickToBottom: $stickToBottom,
+            composerFocused: isInputFocused
+        ) {
+            isInputFocused = false
         }
-        .animation(SageDesign.Motion.expandAnimation, value: session.skills.scriptScheduleDraft != nil)
     }
 
     private var bootstrapPlaceholder: some View {
@@ -201,13 +220,11 @@ struct AgentWorkspaceView: View {
             Button("Dismiss") {
                 branchSwitchError = nil
             }
-            .controlSize(.mini)
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .controlSize(.small)
+            .buttonStyle(.glass)
         }
         .padding(.horizontal, SageDesign.Spacing.large)
-        .padding(.vertical, SageDesign.Spacing.small)
-        .background(Color.orange.opacity(0.08))
+        .padding(.bottom, SageDesign.Spacing.small)
         .accessibilityElement(children: .combine)
     }
 
