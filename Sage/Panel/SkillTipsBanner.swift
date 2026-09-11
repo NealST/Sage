@@ -16,6 +16,8 @@ struct SkillTipsBanner: View {
     @State private var scopeByID: [UUID: SkillScope] = [:]
     @State private var primaryPathByID: [UUID: String] = [:]
     @State private var pointerInsideBanner = false
+    /// Vertical drag toward dismiss — tracks 1:1, then commits by distance or velocity.
+    @State private var dragOffset: CGFloat = 0
 
     private var tips: SkillTipStore { session.skills.tips }
 
@@ -40,6 +42,7 @@ struct SkillTipsBanner: View {
                                     tips.dismiss(suggestion.id)
                                 }
                         }
+                        .contextMenu { muteTipButton(.save) }
 
                     case .choose(let choice):
                         SkillChooseTipRow(choice: choice)
@@ -55,6 +58,7 @@ struct SkillTipsBanner: View {
                                     tips.dismiss(suggestion.id)
                                 }
                         }
+                        .contextMenu { muteTipButton(.consolidate) }
 
                     case .schedule(let draft):
                         SkillScheduleTipRow(
@@ -73,12 +77,16 @@ struct SkillTipsBanner: View {
                                 }
                             }
                         )
+                        .contextMenu { muteTipButton(.schedule) }
                     }
                 }
             }
+            .gesture(dragDismissGesture)
+            .offset(y: dragOffset)
             .onAppear {
                 seedPrimaryDefaults()
                 scheduleAutoDismiss()
+                dragOffset = 0
             }
             .onChange(of: tips.revision) { _, _ in
                 pruneLocalState()
@@ -89,6 +97,54 @@ struct SkillTipsBanner: View {
             .onDisappear {
                 autoDismissTask?.cancel()
                 pointerInsideBanner = false
+            }
+        }
+    }
+
+    /// Drag down to dismiss — same rule as the auto-dismiss timer (a pending
+    /// choice question stays until answered). Release commits by distance or
+    /// flick velocity; otherwise the banner springs back.
+    private var dragDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard canDragDismiss else { return }
+                // Downward-only, 1:1 with the pointer; upward pulls stay put.
+                dragOffset = max(0, value.translation.height)
+            }
+            .onEnded { value in
+                guard canDragDismiss else { return }
+                let shouldDismiss = dragOffset > 80
+                    || (value.velocity.height > 600 && dragOffset > 16)
+                if shouldDismiss {
+                    withAnimation(SageDesign.Motion.expandAnimation) {
+                        scopeByID.removeAll()
+                        primaryPathByID.removeAll()
+                        tips.dismissAutoDismissable()
+                    }
+                    // Keep the dragged offset — the removal fade finishes from here.
+                } else {
+                    withAnimation(
+                        SageDesign.Motion.dragSettle(
+                            velocity: value.velocity.height,
+                            from: dragOffset
+                        )
+                    ) {
+                        dragOffset = 0
+                    }
+                }
+            }
+    }
+
+    private var canDragDismiss: Bool {
+        tips.choosePrompt == nil
+    }
+
+    /// Permanent dismissal for one tip category — persists across relaunches.
+    /// Restore lives in Settings › Capabilities.
+    private func muteTipButton(_ kind: SkillTipKind) -> some View {
+        Button("Don’t suggest \(kind.suggestionName) again") {
+            withAnimation(SageDesign.Motion.expandAnimation) {
+                tips.mute(kind)
             }
         }
     }

@@ -13,8 +13,13 @@ struct MCPManageView: View {
     @State private var draftCommand = ""
     @State private var draftArgs = ""
     @State private var showingAdd = false
+    /// Failure text for the add sheet — cleared on reopen and on field edits.
+    @State private var addError: String?
+    @FocusState private var nameFieldFocused: Bool
     @State private var serverPendingDelete: MCPServerConfig?
     @State private var toolsByServerID: [String: [MCPToolInfo]] = [:]
+    @State private var searchText = ""
+    @ScaledMetric(relativeTo: .body) private var addSheetWidth: CGFloat = 440
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,17 +38,29 @@ struct MCPManageView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
-                    ForEach(appState.mcpHub.mcpServers) { server in
+                    ForEach(visibleServers) { server in
                         serverRow(server)
+                    }
+
+                    if isFiltering, visibleServers.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                            .frame(maxWidth: .infinity)
                     }
                 }
                 .listStyle(.inset)
                 .sageScrollEdgeGlass()
+                .searchable(
+                    text: $searchText,
+                    placement: .toolbar,
+                    prompt: "Search servers or tools"
+                )
             }
 
             footer
         }
-        .frame(width: 560, height: 500)
+        // Ideal = previous fixed size; bounds let users grow the sheet when a
+        // server exposes many tools.
+        .frame(minWidth: 480, idealWidth: 560, minHeight: 360, idealHeight: 500)
         .onAppear { refreshToolsIndex() }
         .onChange(of: appState.mcpHub.mcpTools) { _, _ in
             refreshToolsIndex()
@@ -53,10 +70,25 @@ struct MCPManageView: View {
         }
     }
 
+    private var isFiltering: Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var visibleServers: [MCPServerConfig] {
+        guard isFiltering else { return appState.mcpHub.mcpServers }
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        return appState.mcpHub.mcpServers.filter { server in
+            if server.name.localizedCaseInsensitiveContains(query) { return true }
+            if server.command.localizedCaseInsensitiveContains(query) { return true }
+            let toolNames = toolsByServerID[server.id] ?? []
+            return toolNames.contains { $0.name.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
     private var header: some View {
         HStack {
             Text("MCP Servers")
-                .font(.headline)
+                .sageFont(type.title, weight: .semibold)
             Spacer()
             Button("Add Server") { showingAdd = true }
         }
@@ -67,13 +99,13 @@ struct MCPManageView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text("stdio MCP servers run with Sage’s full user privileges and are not limited by the project sandbox.")
-                .font(.system(size: type.micro))
+                .sageMicro(type.micro)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(.cancelAction)
             }
         }
         .padding(.horizontal, SageDesign.Spacing.large)
@@ -86,7 +118,7 @@ struct MCPManageView: View {
             HStack {
                 statusIcon(server.status)
                 Text(server.name)
-                    .font(.system(size: type.body, weight: .semibold))
+                    .sageFont(type.body, weight: .semibold)
                 Spacer()
                 Toggle(
                     "Enabled for \(server.name)",
@@ -102,21 +134,24 @@ struct MCPManageView: View {
             }
 
             Text(server.command + (server.args.isEmpty ? "" : " " + server.args.joined(separator: " ")))
-                .font(.system(size: type.micro, design: .monospaced))
+                .sageMicro(type.micro, design: .monospaced)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
             serverRowActions(server)
 
             if let tools = toolsByServerID[server.id], !tools.isEmpty {
-                DisclosureGroup("Tools (\(server.toolCount))") {
+                DisclosureGroup {
                     ForEach(tools) { tool in
                         Text(tool.name)
-                            .font(.system(size: type.micro))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.secondary)
                     }
+                } label: {
+                    Text("Tools (\(server.toolCount))")
+                        .monospacedDigit()
                 }
-                .font(.system(size: type.micro, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
             }
         }
         .padding(.vertical, 4)
@@ -128,7 +163,7 @@ struct MCPManageView: View {
     private func serverRowActions(_ server: MCPServerConfig) -> some View {
         HStack {
             Text(statusLabel(server))
-                .font(.system(size: type.micro))
+                .sageMicro(type.micro)
                 .foregroundStyle(.secondary)
             Spacer()
             if server.status == .error || server.status == .disconnected {
@@ -163,55 +198,99 @@ struct MCPManageView: View {
     }
 
     private var addSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             Text("Add MCP Server")
-                .font(.headline)
-            TextField("Name", text: $draftName)
-                .textFieldStyle(.roundedBorder)
-            TextField("Command", text: $draftCommand)
-                .textFieldStyle(.roundedBorder)
-            TextField("Arguments (space-separated)", text: $draftArgs)
-                .textFieldStyle(.roundedBorder)
-            if hasDuplicateDraftName {
-                Text("Server names must be unique.")
-                    .font(.system(size: type.micro))
-                    .foregroundStyle(.red)
+                .sageFont(type.title, weight: .semibold)
+
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+                TextField("Name", text: $draftName)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($nameFieldFocused)
+                    .onChange(of: draftName) { _, _ in addError = nil }
+                TextField("Command", text: $draftCommand)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: draftCommand) { _, _ in addError = nil }
+                TextField("Arguments (space-separated)", text: $draftArgs)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: draftArgs) { _, _ in addError = nil }
+
+                if hasDuplicateDraftName {
+                    Text("Server names must be unique.")
+                        .sageMicro(type.micro)
+                        .foregroundStyle(SageDesign.Palette.danger)
+                } else if commandHasWhitespace {
+                    Text("Command can’t contain spaces — put the arguments in the Arguments field.")
+                        .sageMicro(type.micro)
+                        .foregroundStyle(SageDesign.Palette.danger)
+                } else if let addError {
+                    Text(addError)
+                        .sageMicro(type.micro)
+                        .foregroundStyle(SageDesign.Palette.danger)
+                } else if missingRequiredFields {
+                    Text("Enter a name and a command to add this server.")
+                        .sageMicro(type.micro)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("The command runs with your full user privileges, outside the project sandbox. Only add servers you trust.")
+                        .sageMicro(type.micro)
+                        .foregroundStyle(.secondary)
+                    Text("Example — Command: npx · Arguments: -y @modelcontextprotocol/server-filesystem /Users/you")
+                        .sageMicro(type.micro)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text("The command runs in Sage's process sandbox. Only add servers you trust.")
-                .font(.system(size: type.micro))
-                .foregroundStyle(.secondary)
-            Text("Example: npx  ·  -y @modelcontextprotocol/server-filesystem /Users/you")
-                .font(.system(size: type.micro))
-                .foregroundStyle(.secondary)
 
             HStack {
                 Spacer()
                 Button("Cancel") { showingAdd = false }
+                    .keyboardShortcut(.cancelAction)
                 Button("Add") {
-                    let args = draftArgs
-                        .split(whereSeparator: \.isWhitespace)
-                        .map(String.init)
-                    let server = MCPServerConfig(
-                        name: draftName.trimmingCharacters(in: .whitespacesAndNewlines),
-                        command: draftCommand.trimmingCharacters(in: .whitespacesAndNewlines),
-                        args: args,
-                        enabled: true
-                    )
-                    guard !server.name.isEmpty, !server.command.isEmpty else { return }
-                    guard appState.mcpHub.addMCPServer(server) else { return }
-                    draftName = ""
-                    draftCommand = ""
-                    draftArgs = ""
-                    showingAdd = false
+                    addServer()
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty
-                    || draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
-                    || hasDuplicateDraftName)
+                    .buttonStyle(.glassProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canAddDraft)
             }
         }
-        .padding()
-        .frame(width: 420)
+        .padding(SageDesign.Spacing.large)
+        .frame(width: addSheetWidth)
+        .onAppear {
+            addError = nil
+            nameFieldFocused = true
+        }
+    }
+
+    private var missingRequiredFields: Bool {
+        draftName.trimmingCharacters(in: .whitespaces).isEmpty
+            || draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// The command is a single executable path — flags belong in Arguments.
+    private var commandHasWhitespace: Bool {
+        !draftCommand.isEmpty && draftCommand.contains(where: \.isWhitespace)
+    }
+
+    private var canAddDraft: Bool {
+        !missingRequiredFields && !hasDuplicateDraftName && !commandHasWhitespace
+    }
+
+    private func addServer() {
+        let server = MCPServerConfig(
+            name: draftName.trimmingCharacters(in: .whitespacesAndNewlines),
+            command: draftCommand.trimmingCharacters(in: .whitespacesAndNewlines),
+            args: draftArgs.split(whereSeparator: \.isWhitespace).map(String.init),
+            enabled: true
+        )
+        guard appState.mcpHub.addMCPServer(server) else {
+            addError = "Couldn’t add this server — check the name and command, then try again."
+            return
+        }
+        draftName = ""
+        draftCommand = ""
+        draftArgs = ""
+        showingAdd = false
     }
 
     private var hasDuplicateDraftName: Bool {
@@ -227,7 +306,7 @@ struct MCPManageView: View {
 
     private func statusIcon(_ status: MCPServerStatus) -> some View {
         Image(systemName: MCPServerStatusChrome.symbol(status))
-            .font(.system(size: type.micro, weight: .semibold))
+            .sageMicro(type.micro, weight: .semibold)
             .foregroundStyle(MCPServerStatusChrome.color(status))
             .frame(width: 14)
             .accessibilityLabel(MCPServerStatusChrome.accessibilityName(status))
@@ -262,11 +341,11 @@ private enum MCPServerStatusChrome {
 
     static func color(_ status: MCPServerStatus) -> Color {
         switch status {
-        case .connected: return .green
-        case .connecting, .reconnecting: return .yellow
-        case .error: return .red
+        case .connected: return SageDesign.Palette.success
+        case .connecting, .reconnecting: return SageDesign.Palette.warning
+        case .error: return SageDesign.Palette.danger
         case .disconnected: return .secondary
-        case .disabled: return .gray.opacity(0.7)
+        case .disabled: return Color.secondary.opacity(0.7)
         }
     }
 

@@ -24,6 +24,7 @@ struct AgentWorkspaceView: View {
     @FocusState private var isInputFocused: Bool
     @State private var stickToBottom = true
     @State private var gitBranch: String?
+    @State private var gitBranches: [String] = []
     @State private var branchSwitchError: String?
     @State private var projectTab: ProjectWorkspaceTab = .task
 
@@ -60,6 +61,14 @@ struct AgentWorkspaceView: View {
             focusInputSoon()
             refreshGitBranch()
             updateWindowTitle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .sageSelectWorkspaceTab)) { note in
+            guard note.object as? AgentSession.Kind == session.kind else { return }
+            guard isProjectWindow,
+                  let raw = note.userInfo?[ProjectWorkspaceTab.notificationKey] as? String,
+                  let tab = ProjectWorkspaceTab(rawValue: raw)
+            else { return }
+            projectTab = tab
         }
         .onChange(of: appState.isAgentWindowVisible) { _, visible in
             guard visible, appState.keySession.kind == session.kind else { return }
@@ -100,6 +109,8 @@ struct AgentWorkspaceView: View {
                 // Stay put so the user can select and copy the reply.
                 break
             }
+            appState.refreshDockBadge()
+            requestAttentionIfNeeded(phase)
         }
     }
 
@@ -125,6 +136,7 @@ struct AgentWorkspaceView: View {
         VStack(spacing: 0) {
             WorkspaceChromeView(
                 gitBranch: $gitBranch,
+                gitBranches: $gitBranches,
                 branchSwitchError: $branchSwitchError,
                 projectTab: $projectTab
             )
@@ -179,9 +191,20 @@ struct AgentWorkspaceView: View {
 
         case .history:
             if let root = session.agent.state.focusedProject?.rootURL {
-                ProjectHistoryBrowserView(rootURL: root)
-                    .id(gitBranch ?? "none")
-                    .sageScrollEdgeGlass()
+                VStack(spacing: 0) {
+                    SageTasksSection(repository: appState.taskRepository, projectID: session.projectID)
+                    Divider()
+                    ProjectHistoryBrowserView(rootURL: root, branch: gitBranch)
+                        .id(gitBranch ?? "none")
+                        .sageScrollEdgeGlass()
+                }
+            } else {
+                // General window: no git history to show — task history is the page.
+                TaskHistoryBrowserView(
+                    repository: appState.taskRepository,
+                    projectID: nil
+                )
+                .sageScrollEdgeGlass()
             }
         }
     }
@@ -196,33 +219,29 @@ struct AgentWorkspaceView: View {
     }
 
     private var bootstrapPlaceholder: some View {
-        VStack(spacing: SageDesign.Spacing.medium) {
-            ProgressView()
-                .controlSize(.regular)
-            Text(isProjectWindow ? "Opening project…" : "Starting Sage…")
-                .font(.system(size: type.micro))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(isProjectWindow ? "Opening project" : "Starting Sage")
+        TranscriptBootstrapSkeleton(isProjectWindow: isProjectWindow)
     }
 
     private func branchErrorBanner(_ message: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(SageDesign.Palette.warning)
                 .accessibilityHidden(true)
             Text(message)
-                .font(.system(size: type.micro))
+                .sageMicro(type.micro)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
-            Button("Dismiss") {
+            Button {
                 branchSwitchError = nil
+            } label: {
+                Text("Dismiss")
+                    .sageMicro(type.micro, weight: .semibold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .contentShape(Capsule())
             }
-            .controlSize(.small)
-            .buttonStyle(.glass)
+            .buttonStyle(SagePressableChipButtonStyle())
         }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.bottom, SageDesign.Spacing.small)
@@ -232,12 +251,19 @@ struct AgentWorkspaceView: View {
     private func refreshGitBranch() {
         guard let root = session.agent.state.focusedProject?.rootURL else {
             gitBranch = nil
+            gitBranches = []
             return
         }
         let url = root
         Task.detached(priority: .utility) {
+            // One detached pass fetches both — the branch menu must never run
+            // `git branch` (a blocking subprocess) on the main thread.
             let branch = GitBranchReader.currentBranch(inProjectRoot: url)
-            await MainActor.run { gitBranch = branch }
+            let branches = GitBranchReader.localBranches(inProjectRoot: url)
+            await MainActor.run {
+                gitBranch = branch
+                gitBranches = branches
+            }
         }
     }
 
@@ -275,5 +301,74 @@ struct AgentWorkspaceView: View {
             }
             isInputFocused = true
         }
+    }
+
+    /// One attention signal per phase transition while the user's attention
+    /// is elsewhere. Channels split by Apple's feedback kinds: decisions need
+    /// a chime (the deadlock case — the agent waits on the user while the
+    /// user thinks Sage is working); completed/failed lean on their system
+    /// notification banner (which carries its own sound) plus the Dock
+    /// bounce, so no second sound stacks on top. App activation is too
+    /// coarse — the user focused in Settings or another project's window
+    /// still needs the signal for this transcript.
+    private func requestAttentionIfNeeded(_ phase: AgentPhase) {
+        guard appState.windowControllers[session.kind]?.isKey != true else { return }
+        switch phase {
+        case .awaitingConfirmation:
+            NSSound(named: NSSound.Name("Ping"))?.play()
+            NSApp.requestUserAttention(.informationalRequest)
+        case .failed, .completed:
+            NSApp.requestUserAttention(.informationalRequest)
+        case .thinking, .executing, .idle:
+            break
+        }
+    }
+}
+
+/// Placeholder rows shaped like the transcript they become — the window's
+/// structure lands instantly instead of a spinner floating in a void.
+/// Quiet by design: one slow opacity pulse, dropped entirely under
+/// Reduce Motion.
+private struct TranscriptBootstrapSkeleton: View {
+    let isProjectWindow: Bool
+    @Environment(\.sageTypography) private var type
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulsing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
+            Text(isProjectWindow ? "Opening project…" : "Starting Sage…")
+                .sageMicro(type.micro)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
+                bar(width: 210, height: 32, radius: 16)
+                bar(width: 280, height: 14, radius: 7)
+                bar(width: 240, height: 14, radius: 7)
+                bar(width: 320, height: 64, radius: SageDesign.Glass.card)
+                bar(width: 200, height: 14, radius: 7)
+                bar(width: 150, height: 14, radius: 7)
+            }
+            .opacity(pulsing ? 0.45 : 0.8)
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                value: pulsing
+            )
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, SageDesign.Spacing.large)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task {
+            guard !reduceMotion else { return }
+            pulsing = true
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(isProjectWindow ? "Opening project" : "Starting Sage")
+    }
+
+    private func bar(width: CGFloat, height: CGFloat, radius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
+            .frame(width: width, height: height)
+            .accessibilityHidden(true)
     }
 }

@@ -10,32 +10,59 @@ extension SkillsManageView {
 
     var skillList: some View {
         List(selection: skillSelectionBinding) {
-            if !globalSkills.isEmpty {
+            if !visibleGlobalSkills.isEmpty {
                 Section("Everywhere") {
-                    ForEach(globalSkills) { skill in
+                    ForEach(visibleGlobalSkills) { skill in
                         skillRow(skill)
                     }
                 }
             }
 
-            if !projectSkills.isEmpty {
+            if !visibleProjectSkills.isEmpty {
                 Section(projectName) {
-                    ForEach(projectSkills) { skill in
+                    ForEach(visibleProjectSkills) { skill in
                         skillRow(skill)
                     }
                 }
+            }
+
+            if isFiltering, visibleGlobalSkills.isEmpty, visibleProjectSkills.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             }
         }
         .listStyle(.sidebar)
         .sageScrollEdgeGlass()
         .environment(\.defaultMinListRowHeight, 28)
+        .searchable(
+            text: $searchText,
+            placement: .toolbar,
+            prompt: "Search skills"
+        )
+    }
+
+    var isFiltering: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    var visibleGlobalSkills: [SkillRecord] {
+        guard isFiltering else { return globalSkills }
+        return globalSkills.filter { matchesSearch($0) }
+    }
+
+    var visibleProjectSkills: [SkillRecord] {
+        guard isFiltering else { return projectSkills }
+        return projectSkills.filter { matchesSearch($0) }
+    }
+
+    func matchesSearch(_ skill: SkillRecord) -> Bool {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        return skill.name.localizedCaseInsensitiveContains(query)
+            || skill.description.localizedCaseInsensitiveContains(query)
     }
 
     @ViewBuilder
     func skillRow(_ skill: SkillRecord) -> some View {
         HStack(spacing: 8) {
             Text(skill.name)
-                .font(.system(size: type.body, weight: .medium))
+                .sageFont(type.body, weight: .medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
 
@@ -53,7 +80,7 @@ extension SkillsManageView {
             )
             .labelsHidden()
             .toggleStyle(.switch)
-            .controlSize(.mini)
+            .controlSize(.small)
         }
         .tag(skill.path)
         .help(skill.description)
@@ -76,10 +103,10 @@ extension SkillsManageView {
                 HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(selected.name)
-                            .font(.system(size: type.title, weight: .semibold))
+                            .sageFont(type.title, weight: .semibold)
                             .lineLimit(1)
                         Text(locationCaption(for: selected))
-                            .font(.system(size: type.micro))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                     }
@@ -90,11 +117,7 @@ extension SkillsManageView {
                         SkillFinderActions.revealSkill(selected)
                     }
                     .controlSize(.small)
-
-                    Button("Delete…", role: .destructive) {
-                        skillPendingDelete = selected
-                    }
-                    .controlSize(.small)
+                    .help("Reveal this skill’s SKILL.md in Finder")
                 }
                 .padding(.horizontal, SageDesign.Spacing.extraLarge)
                 .padding(.vertical, SageDesign.Spacing.medium)
@@ -104,9 +127,7 @@ extension SkillsManageView {
                     reloadSkills: {
                         await appState.reloadSkillsAcrossSessions()
                     },
-                    onDirtyChanged: { dirty in
-                        editorDirty = dirty
-                    }
+                    editSession: editSession
                 )
             }
         } else {
@@ -119,55 +140,10 @@ extension SkillsManageView {
         }
     }
 
-    /// Collapsed frontmatter description — keeps the markdown body on screen.
-    func skillDescriptionSection(_ description: String) -> some View {
-        let collapsible = Self.descriptionNeedsCollapse(description)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(description)
-                .font(.system(size: type.caption))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .lineLimit(collapsible && !descriptionExpanded ? Self.collapsedDescriptionLineLimit : nil)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .animation(SageDesign.Motion.expandAnimation, value: descriptionExpanded)
-
-            if collapsible {
-                Button {
-                    withAnimation(SageDesign.Motion.expandAnimation) {
-                        descriptionExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(descriptionExpanded ? "Show less" : "Show more")
-                            .font(.system(size: type.micro, weight: .medium))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .semibold))
-                            .rotationEffect(.degrees(descriptionExpanded ? 180 : 0))
-                    }
-                    .foregroundStyle(.secondary)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(descriptionExpanded ? "Collapse description" : "Expand description")
-            }
-        }
-        .padding(.horizontal, SageDesign.Spacing.extraLarge)
-        .padding(.bottom, SageDesign.Spacing.medium)
-    }
-
-    static let collapsedDescriptionLineLimit = 3
-
-    static func descriptionNeedsCollapse(_ text: String) -> Bool {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
-        return text.count > 160 || lines > collapsedDescriptionLineLimit
-    }
-
     var footer: some View {
         HStack {
             Text(footerSummary)
-                .font(.system(size: type.micro))
+                .sageMicro(type.micro)
                 .foregroundStyle(.tertiary)
             Spacer()
             Button("Done", action: performDone)
@@ -178,12 +154,36 @@ extension SkillsManageView {
     }
 
     func performDone() {
-        guard !editorDirty else {
-            closeAfterDiscard = true
-            showDiscardAlert = true
+        guard editSession.isDirty else {
+            closeWindow()
             return
         }
-        closeWindow()
+        closeAfterDiscard = true
+        showDiscardAlert = true
+    }
+
+    /// Alert choice: persist the pending edits, then continue with the
+    /// deferred close or selection switch. A failed save keeps the window
+    /// open — the pane surfaces the error itself.
+    func saveAndContinue() async {
+        guard await editSession.saveAction?() == true else { return }
+        continueAfterResolvedEdit()
+    }
+
+    /// Alert choice: drop the pending edits and continue.
+    func discardAndContinue() {
+        editSession.isDirty = false
+        continueAfterResolvedEdit()
+    }
+
+    private func continueAfterResolvedEdit() {
+        if closeAfterDiscard {
+            closeAfterDiscard = false
+            closeWindow()
+        } else {
+            selectedPath = pendingSelectedPath
+        }
+        pendingSelectedPath = nil
     }
 
     func closeWindow() {
@@ -239,7 +239,7 @@ extension SkillsManageView {
             get: { selectedPath },
             set: { requestedPath in
                 guard requestedPath != selectedPath else { return }
-                guard editorDirty else {
+                guard editSession.isDirty else {
                     selectedPath = requestedPath
                     return
                 }

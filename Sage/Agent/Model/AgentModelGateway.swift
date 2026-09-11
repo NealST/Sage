@@ -63,6 +63,11 @@ final class AgentModelGateway {
         await modelClient.setRetryStatusHandler(handler)
     }
 
+    /// Ends the visible retry countdown early; the next attempt fires immediately.
+    func requestImmediateRetry() {
+        Task { await modelClient.requestImmediateRetry() }
+    }
+
     /// Single source of truth for tools exposed to the model (and UI).
     func availableToolDefinitions(includeSkills: Bool = true) -> [ToolDefinition] {
         let mcpDefinitions = MCPToolGroupTool.groupedDefinitions(
@@ -144,6 +149,9 @@ final class AgentModelGateway {
         state.modelVisibleAttachmentEventIDs = Set(
             assembly.events.filter { !$0.attachments.isEmpty }.map(\.id)
         )
+        // Only the execute path calls prepareRequest, so this is the live
+        // conversation's occupancy — sub-agent requests never touch it.
+        state.contextOccupancy = assembly.occupancy
 
         return PreparedModelRequest(
             events: assembly.events,

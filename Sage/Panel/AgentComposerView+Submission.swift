@@ -57,7 +57,7 @@ extension AgentComposerView {
         if !session.draftAttachments.isEmpty {
             return "Ask about these files…"
         }
-        return "Ask Sage…"
+        return "Ask Sage… (type / for commands)"
     }
 
     func restoreTurnInterruptDraft() {
@@ -78,7 +78,30 @@ extension AgentComposerView {
         if !slashSuggestions.isEmpty {
             return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
         }
-        return "Press Return to send. Shift-Command-A adds files."
+        return "Press Return to send. Command-Up recalls recent messages. Shift-Command-A adds files."
+    }
+
+    /// ⌘↑/⌘↓ recall. Positive `step` moves older, negative moves newer; the
+    /// live draft is stashed on first recall and restored on the way back down.
+    func recallInputHistory(_ step: Int) -> KeyPress.Result {
+        let history = session.inputHistory
+        guard !history.isEmpty else { return .ignored }
+        let current = historyRecallIndex ?? -1
+        if step < 0, current == -1 { return .ignored }
+        if step > 0, historyRecallIndex == nil {
+            liveDraftBeforeRecall = session.draft
+        }
+        let next = current + step
+        if next < 0 {
+            historyRecallIndex = nil
+            session.draft = liveDraftBeforeRecall ?? ""
+            liveDraftBeforeRecall = nil
+        } else {
+            let clamped = min(next, history.count - 1)
+            historyRecallIndex = clamped
+            session.draft = history[clamped]
+        }
+        return .handled
     }
 
     func handleComposerSubmit() {
@@ -98,7 +121,9 @@ extension AgentComposerView {
 
     func applySuggestion(_ suggestion: ComposerSlashSuggestion) {
         session.draft = suggestion.insertDraft
-        slashSuggestions = []
+        withAnimation(SageDesign.Motion.scrollAnimation) {
+            slashSuggestions = []
+        }
         if suggestion.submitOnSelect {
             submit()
         }
@@ -113,7 +138,7 @@ extension AgentComposerView {
 
     func dismissSuggestionsIfNeeded() -> KeyPress.Result {
         guard !slashSuggestions.isEmpty else { return .ignored }
-        withAnimation(.easeOut(duration: 0.15)) { slashSuggestions = [] }
+        withAnimation(SageDesign.Motion.scrollAnimation) { slashSuggestions = [] }
         return .handled
     }
 
@@ -122,6 +147,8 @@ extension AgentComposerView {
         let attachments = session.draftAttachments
         guard !trimmed.isEmpty || !attachments.isEmpty else { return }
         guard !blocksSubmit else { return }
+        // A sent turn must not leave a pending removal holding managed files.
+        commitAttachmentRemoval()
         if !attachments.isEmpty, trimmed.hasPrefix("/") {
             showPersistentAttachmentHint("Remove attachments before running a slash command.")
             return
@@ -135,7 +162,12 @@ extension AgentComposerView {
             return
         }
         stickToBottom = true
-        slashSuggestions = []
+        withAnimation(SageDesign.Motion.scrollAnimation) {
+            slashSuggestions = []
+        }
+        session.recordSubmittedInput(trimmed)
+        historyRecallIndex = nil
+        liveDraftBeforeRecall = nil
         session.agent.freezeConfirmationActions()
         isPreparingAttachments = true
         let submissionRevision = session.beginAttachmentSubmission(attachments)

@@ -42,6 +42,15 @@ struct ToolResultIndex: Equatable {
     func shouldPreviewAgainstDisk(callID: String) -> Bool {
         !completedCallIDs.contains(callID)
     }
+
+    /// Transcript chips derive status from indexed results: no result yet means
+    /// running while the turn is active, skipped once the turn ended without
+    /// one landing (the call was dropped, not still queued).
+    func status(for callID: String, isBusy: Bool) -> StepStatus {
+        if successContentByCallID[callID] != nil { return .succeeded }
+        if completedCallIDs.contains(callID) { return .failed }
+        return isBusy ? .running : .skipped
+    }
 }
 
 /// Cheap identity for transcript event lists — rebuild indexes only when this changes.
@@ -62,77 +71,218 @@ struct AgentTranscriptPane: View {
 
     @State private var eventRevision = TranscriptEventRevision(count: 0, lastID: nil)
     @State private var toolIndex = ToolResultIndex.empty
-    @State private var displayEvents: [AgentEvent] = []
+    /// Shared with the bubbles extension file (identity for latest-reply logic).
+    @State var displayEvents: [AgentEvent] = []
+    /// Matches the plan skeleton → confirmed plan card glass morph.
+    @Namespace var planGlassNamespace
+    /// In-task find (⌘F). While active, the transcript filters to matching events.
+    @State private var isFinding = false
+    @State private var findText = ""
+    @FocusState private var findFieldFocused: Bool
 
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
-                        if displayEvents.isEmpty {
+                        if isFinding, !findText.isEmpty, visibleEvents.isEmpty {
+                            noFindMatches
+                        } else if displayEvents.isEmpty {
                             emptyTranscript
                         }
 
-                        ForEach(displayEvents) { event in
+                        ForEach(visibleEvents) { event in
                             eventBubble(event, toolIndex: toolIndex)
                                 .id(event.id)
                         }
 
-                        phaseAccessory {
-                                guard stickToBottom else { return }
-                                scrollToLatestStreaming(using: proxy)
+                        if !isFinding {
+                            phaseAccessory {
+                                    guard stickToBottom else { return }
+                                    scrollToLatestStreaming(using: proxy)
+                            }
+                            .id("phase-accessory")
+                            .transition(SageDesign.Glass.appearTransition)
                         }
-                        .id("phase-accessory")
                     }
                     .padding(SageDesign.Spacing.large)
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.phase
+                    )
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.turnChrome
+                    )
+                    // Todo insertions / status flips resize the accessory cards;
+                    // settle those with the same spring as the phase changes.
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.activeTask?.todos
+                    )
                 }
                 .sageScrollEdgeGlass()
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if isFinding {
+                        findBar
+                            .transition(SageDesign.Glass.appearTransition)
+                    }
+                }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in onBeginReading() }
                 )
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    let threshold: CGFloat = 72
-                    return geometry.contentOffset.y + geometry.containerSize.height
-                        >= geometry.contentSize.height - threshold
-                } action: { _, nearBottom in
-                    stickToBottom = nearBottom
+                // Hysteresis: a wider window to re-stick than to un-stick, so
+                // slow scrolling around the threshold doesn't flicker the
+                // jump button in and out.
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentSize.height
+                        - geometry.contentOffset.y
+                        - geometry.containerSize.height
+                } action: { _, distanceFromBottom in
+                    let stickThreshold: CGFloat = 72
+                    let unstickThreshold: CGFloat = 96
+                    if stickToBottom {
+                        if distanceFromBottom > unstickThreshold { stickToBottom = false }
+                    } else {
+                        if distanceFromBottom <= stickThreshold { stickToBottom = true }
+                    }
                 }
                 .onAppear {
                     refreshTranscriptCachesIfNeeded()
                 }
                 .onChange(of: transcriptEventRevision) { _, _ in
                     refreshTranscriptCachesIfNeeded()
-                    guard stickToBottom else { return }
+                    guard stickToBottom, !isFinding else { return }
                     scrollToLatest(using: proxy)
                 }
                 .onChange(of: session.agent.state.phase) { _, _ in
-                    guard stickToBottom else { return }
+                    guard stickToBottom, !isFinding else { return }
                     scrollToLatest(using: proxy)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .sageFindInTranscript)) { note in
+                    guard note.object as? AgentSession.Kind == session.kind else { return }
+                    isFinding = true
+                    findFieldFocused = true
+                }
 
-                if !stickToBottom && !displayEvents.isEmpty {
+                if !stickToBottom && !displayEvents.isEmpty && !isFinding {
                     Button {
                         stickToBottom = true
                         scrollToLatest(using: proxy)
                     } label: {
                         Label("Jump to latest", systemImage: "arrow.down")
-                            .font(.system(size: type.micro, weight: .semibold))
+                            .sageMicro(type.micro, weight: .semibold)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                     }
-                    .buttonStyle(.glassProminent)
+                    // Quiet glass, not prominent — a tertiary navigation control
+                    // must not carry the same weight as Send / Allow.
+                    .buttonStyle(.glass)
                     .controlSize(.small)
                     .padding(.bottom, SageDesign.Spacing.medium)
+                    .transition(SageDesign.Glass.appearTransition)
                     .accessibilityLabel("Jump to latest")
                 }
             }
+            .animation(SageDesign.Motion.scrollAnimation, value: stickToBottom)
         }
     }
 
     var transcriptEventRevision: TranscriptEventRevision {
         let events = session.agent.state.events
         return TranscriptEventRevision(count: events.count, lastID: events.last?.id)
+    }
+
+    /// Find mode narrows the transcript to matching events — including their
+    /// tool chips, so a search for a tool name or argument still finds the turn.
+    var visibleEvents: [AgentEvent] {
+        guard isFinding, !findText.isEmpty else { return displayEvents }
+        let query = findText.lowercased()
+        return displayEvents.filter { event in
+            if event.content.lowercased().contains(query) { return true }
+            return event.toolCalls?.contains { call in
+                call.name.lowercased().contains(query)
+                    || call.argumentsJSON.lowercased().contains(query)
+            } ?? false
+        }
+    }
+
+    private var findMatchLabel: String {
+        let count = visibleEvents.count
+        return count == 1 ? "1 match" : "\(count) matches"
+    }
+
+    private var findBar: some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .sageFont(type.caption)
+                .foregroundStyle(.tertiary)
+            TextField("Find in task", text: $findText)
+                .sageFont(type.body)
+                .textFieldStyle(.plain)
+                .focused($findFieldFocused)
+            if isFinding, !findText.isEmpty {
+                Text(findMatchLabel)
+                    .sageMicro(type.micro)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            Button {
+                endFinding()
+            } label: {
+                Image(systemName: "xmark")
+                    .sageFont(type.caption)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Close find (Esc)")
+            .accessibilityLabel("Close find")
+        }
+        .padding(.horizontal, SageDesign.Spacing.medium)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
+                .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.primary.opacity(SageDesign.Chrome.dividerOpacity))
+                .frame(height: 1)
+        }
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.top, SageDesign.Spacing.small)
+        .onKeyPress(.escape) {
+            if findText.isEmpty {
+                endFinding()
+            } else {
+                findText = ""
+            }
+            return .handled
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Find in task")
+    }
+
+    private var noFindMatches: some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .sageFont(type.caption)
+                .foregroundStyle(.secondary)
+            Text("No matches for “\(findText)”")
+                .sageFont(type.body)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, SageDesign.Spacing.large)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func endFinding() {
+        isFinding = false
+        findText = ""
+        findFieldFocused = false
     }
 
     func refreshTranscriptCachesIfNeeded() {
@@ -154,29 +304,63 @@ struct AgentTranscriptPane: View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if let project = session.agent.state.focusedProject {
                 Text("Tell me what to do")
-                    .font(.system(size: type.title, weight: .semibold))
+                    .sageFont(type.title, weight: .semibold)
                 Text("Sage can explore and edit files under \(ProjectPanelActions.displayPath(project.rootPath)).")
-                    .font(.system(size: type.body))
+                    .sageFont(type.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Ask Sage to work on your Mac")
-                    .font(.system(size: type.title, weight: .semibold))
-                Text("Try “Summarize my Downloads folder” or “Rewrite what’s on my clipboard.”")
-                    .font(.system(size: type.body))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .sageFont(type.title, weight: .semibold)
+                starterPromptChips
                 Text(hotkeyHint)
-                    .font(.system(size: type.micro, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
             }
             Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
-                .font(.system(size: type.micro, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, SageDesign.Spacing.large)
         .accessibilityElement(children: .combine)
+    }
+
+    /// First-run prompts: one tap fills the composer (no auto-send — the user
+    /// reviews, then hits Return), so the empty state is a door, not a dead end.
+    private var starterPrompts: [(icon: String, prompt: String)] {
+        [
+            ("tray.full", "Summarize my Downloads folder"),
+            ("doc.on.clipboard", "Rewrite what’s on my clipboard"),
+        ]
+    }
+
+    private var starterPromptChips: some View {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+            ForEach(starterPrompts, id: \.prompt) { starter in
+                Button {
+                    session.draft = starter.prompt
+                    NotificationCenter.default.post(
+                        name: .sageFocusAgentInput,
+                        object: session.kind
+                    )
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: starter.icon)
+                            .sageFont(type.caption)
+                            .foregroundStyle(.secondary)
+                        Text(starter.prompt)
+                            .sageFont(type.body, weight: .medium)
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(SagePressableChipButtonStyle())
+                .accessibilityHint("Fills the message box with this prompt")
+            }
+        }
     }
 
     var hotkeyHint: String {
@@ -194,10 +378,16 @@ struct ThinkingStreamAccessory: View {
     @Environment(StreamingPlayback.self) private var streaming
     @Environment(\.sageTypography) private var type
     let retryState: RetryDisplayState?
-    let canStop: Bool
-    let onStop: () -> Void
     let onStreamScroll: () -> Void
     var status: String? = nil
+    /// Namespace for the skeleton → confirmed plan card glass morph.
+    var planGlassNamespace: Namespace.ID? = nil
+    /// Stop affordance for the retry countdown — the wait is cancellable.
+    var agentCanStop: Bool = false
+    var onAgentStop: () -> Void = {}
+    /// Skips the remaining retry backoff; nil hides the affordance.
+    var onRetryNow: (() -> Void)? = nil
+    @State private var thinkingElapsedSeconds = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
@@ -205,7 +395,7 @@ struct ThinkingStreamAccessory: View {
                 HStack(spacing: SageDesign.Spacing.small) {
                     ProgressView().controlSize(.small)
                     Text(status)
-                        .font(.system(size: type.body))
+                        .sageFont(type.body)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }
@@ -220,49 +410,71 @@ struct ThinkingStreamAccessory: View {
                 .transition(.opacity)
             }
             if !streaming.text.isEmpty {
-                if streaming.isReservingWorkPlan {
-                    MarkdownContentView(
-                        markdown: streaming.text,
-                        collapsible: true,
-                        syntaxHighlighting: false
+                // Streaming always renders uncollapsed (block-cached + throttled).
+                // Collapsing is a committed-reply affordance only — the reset in
+                // MarkdownContentView's onChange would tear down its measure
+                // cache every ~100ms and fight the user's expand choice.
+                StreamingContentView(text: streaming.text)
+                    .transition(.opacity)
+            } else if status == nil, streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
+                if let retry = retryState {
+                    RetryCountdownView(
+                        state: retry,
+                        onStop: agentCanStop ? { onAgentStop() } : nil,
+                        onRetryNow: onRetryNow
                     )
                     .transition(.opacity)
                 } else {
-                    StreamingContentView(text: streaming.text)
-                        .transition(.opacity)
-                }
-            } else if status == nil, streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
-                if let retry = retryState {
-                    RetryCountdownView(state: retry)
-                        .transition(.opacity)
-                } else {
                     HStack(spacing: SageDesign.Spacing.small) {
                         ProgressView().controlSize(.small)
-                        Text("Thinking…")
-                            .font(.system(size: type.body))
+                        Text(thinkingLabel)
+                            .sageFont(type.body)
                             .foregroundStyle(.secondary)
+                            .monospacedDigit()
                         Spacer(minLength: 0)
                     }
                     .transition(.opacity)
                 }
             }
             if streaming.isReservingWorkPlan {
-                WorkPlanCardSkeleton()
-                    .transition(.opacity)
+                WorkPlanCardSkeleton(
+                    matchedGlass: planGlassNamespace.map {
+                        SageDesign.Glass.MatchedSpec(
+                            id: SageDesign.Glass.workPlanCardMatchID,
+                            namespace: $0
+                        )
+                    }
+                )
+                .transition(.opacity)
             }
         }
         .animation(SageDesign.Motion.streamingTransition, value: streaming.isActive)
         .animation(SageDesign.Motion.streamingTransition, value: streaming.isReservingWorkPlan)
-        .overlay(alignment: .topTrailing) {
-            if canStop {
-                Button("Stop", action: onStop)
-                    .controlSize(.small)
-                    .keyboardShortcut(.cancelAction)
+        .task(id: showsPlainThinkingSpinner) {
+            guard showsPlainThinkingSpinner else { return }
+            thinkingElapsedSeconds = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                thinkingElapsedSeconds += 1
             }
         }
         .onChange(of: streaming.scrollThrottleKey) { _, _ in
             onStreamScroll()
         }
+    }
+
+    private var showsPlainThinkingSpinner: Bool {
+        retryState == nil
+            && status == nil
+            && streaming.thinking.isEmpty
+            && streaming.text.isEmpty
+            && !streaming.isReservingWorkPlan
+    }
+
+    /// Silence for the first few seconds, then an elapsed count so long waits
+    /// read as progress instead of a frozen spinner.
+    private var thinkingLabel: String {
+        thinkingElapsedSeconds >= 5 ? "Thinking… \(thinkingElapsedSeconds)s" : "Thinking…"
     }
 }
 

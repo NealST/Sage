@@ -27,6 +27,8 @@ final class ModelSettings {
         static let planModel = "llm.planModel"
         static let executeModel = "llm.executeModel"
         static let reviewModel = "llm.reviewModel"
+        static let temperature = "llm.temperature"
+        static let requestTimeout = "llm.requestTimeout"
         /// Legacy plaintext storage — migrated out on launch.
         static let apiKeyFallback = "llm.apiKey.fallback"
     }
@@ -52,6 +54,22 @@ final class ModelSettings {
     /// Empty = use `model`. Invisible accept / revise pass.
     var reviewModel: String {
         didSet { UserDefaults.standard.set(reviewModel, forKey: DefaultsKey.reviewModel) }
+    }
+
+    /// Sampling temperature for agent turns. `nil` = provider default.
+    var temperature: Double? {
+        didSet {
+            if let temperature {
+                UserDefaults.standard.set(temperature, forKey: DefaultsKey.temperature)
+            } else {
+                UserDefaults.standard.removeObject(forKey: DefaultsKey.temperature)
+            }
+        }
+    }
+
+    /// Per-request timeout in seconds, clamped to 30…600.
+    var requestTimeout: TimeInterval {
+        didSet { UserDefaults.standard.set(requestTimeout, forKey: DefaultsKey.requestTimeout) }
     }
 
     var apiKey: String = "" {
@@ -80,6 +98,12 @@ final class ModelSettings {
         planModel = UserDefaults.standard.string(forKey: DefaultsKey.planModel) ?? ""
         executeModel = UserDefaults.standard.string(forKey: DefaultsKey.executeModel) ?? ""
         reviewModel = UserDefaults.standard.string(forKey: DefaultsKey.reviewModel) ?? ""
+        temperature = UserDefaults.standard.object(forKey: DefaultsKey.temperature) as? Double
+        if let storedTimeout = UserDefaults.standard.object(forKey: DefaultsKey.requestTimeout) as? Double {
+            requestTimeout = min(max(storedTimeout, 30), 600)
+        } else {
+            requestTimeout = 120
+        }
 
         if let key = KeychainStore.get(account: Account.apiKey), !key.isEmpty {
             apiKey = key
@@ -115,7 +139,9 @@ final class ModelSettings {
         ModelSettingsSnapshot(
             baseURL: baseURL,
             model: resolvedModel(for: role),
-            apiKey: apiKey
+            apiKey: apiKey,
+            temperature: temperature,
+            requestTimeout: requestTimeout
         )
     }
 

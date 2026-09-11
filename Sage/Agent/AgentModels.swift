@@ -243,6 +243,8 @@ struct RetryDisplayState: Equatable {
     var maxAttempts: Int
     var totalSeconds: Int
     var secondsRemaining: Int
+    /// Why the request is being retried, e.g. "Rate limited".
+    var reason: String? = nil
 }
 
 /// Cumulative token usage for the current session.

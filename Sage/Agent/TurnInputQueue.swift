@@ -13,11 +13,21 @@ nonisolated struct QueuedUserTurn: Equatable, Sendable {
 @MainActor
 @Observable
 final class TurnInputQueue {
-    var offer: QueuedUserTurn?
-    var items: [QueuedUserTurn] = []
-    var pendingSteer: QueuedUserTurn?
+    var offer: QueuedUserTurn? {
+        didSet { notifyChanged() }
+    }
+    var items: [QueuedUserTurn] = [] {
+        didSet { notifyChanged() }
+    }
+    var pendingSteer: QueuedUserTurn? {
+        didSet { notifyChanged() }
+    }
+    /// Owner hook — every queue mutation (including park/restore) funnels here
+    /// so queued turns persist alongside the composer draft.
+    @ObservationIgnored var onChanged: (() -> Void)?
 
     var hasOffer: Bool { offer != nil }
+    var hasQueuedItems: Bool { !items.isEmpty }
 
     func enqueueOffer() {
         guard let offer else { return }
@@ -54,5 +64,9 @@ final class TurnInputQueue {
         offer = nil
         items = []
         pendingSteer = nil
+    }
+
+    private func notifyChanged() {
+        onChanged?()
     }
 }

@@ -6,20 +6,18 @@
 import MarkdownUI
 import SwiftUI
 
-/// Displays incrementally streamed text with a breathing cursor at the end.
+/// Displays incrementally streamed text with an inline block-cursor glyph.
 ///
 /// Uses a two-layer optimization for performance:
 /// 1. **Block splitting** — completed markdown blocks are cached and never re-parsed.
 /// 2. **Throttling** — the active (last) block is re-rendered at most every ~100ms.
 ///
-/// The cursor pulses with an organic easeInOut rhythm (not a hard blink)
-/// and respects `reduceMotion` — showing a static caret when motion is reduced.
+/// The glyph rides inline at the end of the active block. Callers show their
+/// own waiting state before the first token arrives (thinking spinner), so an
+/// empty-text body renders nothing.
 struct StreamingContentView: View {
     let text: String
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.sageTypography) private var type
-    @State private var cursorOpacity: Double = 1.0
     @State private var throttledState = ThrottledStreamState()
 
     var body: some View {
@@ -27,8 +25,6 @@ struct StreamingContentView: View {
             if !text.isEmpty {
                 streamingBlocks
             }
-            streamingCursor
-                .padding(.top, text.isEmpty ? 0 : 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: text) { _, newValue in
@@ -52,27 +48,20 @@ struct StreamingContentView: View {
                     .equatable()
             }
             // Active (last) block — throttled re-renders; no TreeSitter on the hot path.
+            // The block-cursor glyph rides inline with the text instead of claiming
+            // its own row, so long lines wrap around it naturally.
             if !throttledState.activeBlockMarkdown.isEmpty {
                 MarkdownContentView(
-                    markdown: throttledState.activeBlockMarkdown,
+                    markdown: throttledState.activeBlockMarkdown + "▍",
                     syntaxHighlighting: false
                 )
+                // VoiceOver: content grows while streaming — poll rather than
+                // announce every throttle tick. No container label, so the
+                // streamed text itself stays readable.
+                .accessibilityElement(children: .contain)
+                .accessibilityAddTraits(.updatesFrequently)
             }
         }
-    }
-
-    private var streamingCursor: some View {
-        RoundedRectangle(cornerRadius: 1, style: .continuous)
-            .fill(Color.secondary)
-            .frame(width: 2, height: type.body + 2)
-            .opacity(cursorOpacity)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(SageDesign.Motion.cursorPulse) {
-                    cursorOpacity = 0.2
-                }
-            }
-            .accessibilityLabel("Generating response")
     }
 }
 

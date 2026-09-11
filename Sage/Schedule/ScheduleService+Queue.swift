@@ -61,9 +61,14 @@ extension ScheduleService {
         )
         defer { ProcessInfo.processInfo.endActivity(activity) }
 
-        guard var record = try? await taskRepository.loadSchedule(id: job.id) else {
+        let loadedRecord: ScheduleRecord?
+        do {
+            loadedRecord = try await taskRepository.loadSchedule(id: job.id)
+        } catch {
+            PersistenceLogger.warn("schedule_load_failed job=\(job.id)", error: error)
             return .unavailable
         }
+        guard var record = loadedRecord else { return .unavailable }
         let snapshotUpdatedAt = record.updatedAt
         let started = Date.now
         guard record.allowsRunnerStart else { return .skipped }
@@ -126,14 +131,35 @@ extension ScheduleService {
         ScheduleNotifier.post(
             ScheduleNotificationPayload(
                 scheduleID: record.id,
-                title: record.title,
-                body: body,
+                title: Self.notificationTitle(for: record),
+                body: Self.notificationBody(body),
                 kind: record.kind,
                 projectID: record.projectID,
                 taskID: taskID
             ),
             playsSound: playsSound
         )
+    }
+
+    /// The outcome belongs in the title — banners truncate the body, so a
+    /// failure must read without expanding.
+    static func notificationTitle(for record: ScheduleRecord) -> String {
+        switch record.status {
+        case .failed: return "\(record.title) — failed"
+        case .awaitingConfirmation: return "\(record.title) — needs your review"
+        case .needsFirstRun: return "\(record.title) — needs setup"
+        case .armed, .paused, .draft: return "\(record.title) — finished"
+        }
+    }
+
+    /// One informative line; the Dashboard row keeps the full log.
+    static func notificationBody(_ body: String) -> String {
+        let firstLine = body
+            .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+            .first.map(String.init) ?? body
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count > 140 else { return trimmed }
+        return String(trimmed.prefix(137)).trimmingCharacters(in: .whitespaces) + "…"
     }
 
     /// Persists run results. Deleted rows are left alone; Pause / Re-plan during the run is kept.
@@ -143,7 +169,15 @@ extension ScheduleService {
         snapshotUpdatedAt: Date,
         scriptRun: ScheduleRunRecord? = nil
     ) async -> Bool {
-        guard let live = try? await taskRepository.loadSchedule(id: result.id) else {
+        let liveRecord: ScheduleRecord?
+        do {
+            liveRecord = try await taskRepository.loadSchedule(id: result.id)
+        } catch {
+            // Keep the in-memory record armed; only a confirmed deletion forgets it.
+            PersistenceLogger.warn("schedule_commit_reload_failed id=\(result.id)", error: error)
+            return false
+        }
+        guard let live = liveRecord else {
             forget(result.id)
             return false
         }

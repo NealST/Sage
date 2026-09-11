@@ -11,6 +11,8 @@ struct SkillConsolidateTipRow: View {
     var onMerge: (SkillConsolidateSuggestion) -> Void
     var onDismiss: () -> Void
 
+    @Environment(\.sageTypography) private var type
+
     private var primary: SkillRecallCandidate? {
         suggestion.candidates.first { $0.path == primaryPath } ?? suggestion.primary
     }
@@ -26,9 +28,9 @@ struct SkillConsolidateTipRow: View {
                     SkillTipChrome.icon("arrow.triangle.merge")
                     VStack(alignment: .leading, spacing: 2) {
                         Text("These skills look overlapping")
-                            .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                            .sageFont(type.caption, weight: .medium)
                         Text("Merge into one skill to keep the catalog clear.")
-                            .font(.system(size: SageDesign.Typography.microSize))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -39,7 +41,7 @@ struct SkillConsolidateTipRow: View {
                 if suggestion.candidates.count >= 2 {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Keep")
-                            .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                            .sageMicro(type.micro, weight: .medium)
                             .foregroundStyle(.secondary)
 
                         if suggestion.candidates.count <= 3 {
@@ -64,7 +66,7 @@ struct SkillConsolidateTipRow: View {
 
                         if let primary {
                             Text(mergeConsequence(keeping: primary, removing: removed))
-                                .font(.system(size: SageDesign.Typography.microSize))
+                                .sageMicro(type.micro)
                                 .foregroundStyle(.tertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .animation(SageDesign.Motion.expandAnimation, value: primaryPath)
@@ -76,7 +78,7 @@ struct SkillConsolidateTipRow: View {
                     Button("Merge") {
                         onMerge(suggestion.resolved(primaryPath: primaryPath))
                     }
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                    .sageMicro(type.micro, weight: .semibold)
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
                     .disabled(primary == nil)
@@ -117,19 +119,19 @@ struct SkillScheduleTipRow: View {
                     HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Schedule this?")
-                                .font(.system(size: type.caption, weight: .medium))
+                                .sageFont(type.caption, weight: .medium)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
 
                             Text("\(draft.cadence.shortLabel) · \(draft.scopeLabel)")
-                                .font(.system(size: type.micro))
+                                .sageMicro(type.micro)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
 
                             Text(draft.prompt.isEmpty
                                  ? "Write what Sage should do, or use this conversation."
                                  : draft.prompt)
-                                .font(.system(size: type.micro))
+                                .sageMicro(type.micro)
                                 .foregroundStyle(draft.prompt.isEmpty ? .tertiary : .secondary)
                                 .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -145,7 +147,7 @@ struct SkillScheduleTipRow: View {
                         Button(draft.runOnceNow ? "Save and run" : "Save") {
                             onSave(draft)
                         }
-                        .font(.system(size: type.micro, weight: .semibold))
+                        .sageMicro(type.micro, weight: .semibold)
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -169,7 +171,7 @@ struct SkillScheduleTipRow: View {
                                 draft.prompt = wording
                             }
                         }
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .help("Use your latest request in this chat as the scheduled task.")
@@ -185,7 +187,7 @@ struct SkillScheduleTipRow: View {
                         Text("Run once now")
                     }
                     .toggleStyle(.checkbox)
-                    .font(.system(size: type.micro))
+                    .sageMicro(type.micro)
                     .help("Run immediately after save. The timetable still fires at the scheduled time.")
                     .accessibilityLabel("Run once now")
                 }
@@ -205,6 +207,6 @@ struct TipCandidateButtonStyle: ButtonStyle {
                     .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0.04))
             )
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(SageDesign.Motion.pressFeedback, value: configuration.isPressed)
     }
 }

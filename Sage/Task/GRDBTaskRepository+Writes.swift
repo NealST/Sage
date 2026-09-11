@@ -6,6 +6,17 @@
 import Foundation
 import GRDB
 
+enum RepositoryError: LocalizedError {
+    case encodingFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .encodingFailed:
+            return "Could not encode task state for storage; the previous value was kept."
+        }
+    }
+}
+
 extension GRDBTaskRepository {
     // MARK: - Writes
 
@@ -39,10 +50,11 @@ extension GRDBTaskRepository {
 
     func updateWorkingMemory(taskID: UUID, memory: TaskWorkingMemory?) throws {
         let pool = try database()
+        // `nil` clears the column on purpose; an encode failure must throw
+        // instead, or it would persist `nil` and wipe the stored memory.
         let json: String?
         if let memory, memory.hasContent {
-            json = (try? JSONEncoder().encode(memory))
-                .flatMap { String(data: $0, encoding: .utf8) }
+            json = try Self.encodeJSON(memory)
         } else {
             json = nil
         }
@@ -67,8 +79,7 @@ extension GRDBTaskRepository {
         let pool = try database()
         let json: String? = items.isEmpty
             ? nil
-            : (try? JSONEncoder().encode(items))
-                .flatMap { String(data: $0, encoding: .utf8) }
+            : try Self.encodeJSON(items)
         try pool.write { database in
             try database.execute(
                 sql: """
@@ -90,8 +101,7 @@ extension GRDBTaskRepository {
         let pool = try database()
         let json: String? = names.isEmpty
             ? nil
-            : (try? JSONEncoder().encode(names.sorted()))
-                .flatMap { String(data: $0, encoding: .utf8) }
+            : try Self.encodeJSON(names.sorted())
         try pool.write { database in
             try database.execute(
                 sql: """
@@ -107,6 +117,14 @@ extension GRDBTaskRepository {
                 ]
             )
         }
+    }
+
+    private static func encodeJSON(_ value: some Encodable) throws -> String {
+        let data = try JSONEncoder().encode(value)
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw RepositoryError.encodingFailed
+        }
+        return string
     }
 
     func deleteTask(id: UUID) throws {

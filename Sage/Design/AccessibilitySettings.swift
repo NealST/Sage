@@ -60,6 +60,9 @@ final class AccessibilitySettings {
     var fillOpacity: Double { increaseContrast ? 0.14 : 0.06 }
     var strongFillOpacity: Double { increaseContrast ? 0.20 : 0.10 }
     var pillFillOpacity: Double { increaseContrast ? 0.16 : 0.08 }
+    /// Diff changed-line fills must read as a signal on any background, unlike
+    /// the passive chrome tints above.
+    var diffFillOpacity: Double { increaseContrast ? 0.22 : 0.14 }
     var strokeOpacity: Double { increaseContrast ? 0.40 : 0.10 }
     var dividerOpacity: Double { increaseContrast ? 0.60 : 0.35 }
 }

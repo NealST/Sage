@@ -89,6 +89,61 @@ nonisolated enum SkillTipItem: Identifiable, Equatable, Sendable {
         case .save, .consolidate, .schedule: return true
         }
     }
+
+    /// Choose prompts pause the turn and are never muteable.
+    var muteKind: SkillTipKind? {
+        switch self {
+        case .save: return .save
+        case .choose: return nil
+        case .consolidate: return .consolidate
+        case .schedule: return .schedule
+        }
+    }
+}
+
+/// Tip categories the user can permanently silence.
+nonisolated enum SkillTipKind: String, CaseIterable, Sendable {
+    case save
+    case consolidate
+    case schedule
+
+    var suggestionName: String {
+        switch self {
+        case .save: return "saving skills"
+        case .consolidate: return "consolidating skills"
+        case .schedule: return "schedules"
+        }
+    }
+}
+
+/// Muted tip categories, persisted so "don't suggest again" survives relaunches.
+nonisolated enum SkillTipMuting {
+    private static let key = "sage.skillTips.mutedKinds"
+
+    static var mutedKinds: Set<SkillTipKind> {
+        Set(
+            UserDefaults.standard.stringArray(forKey: key)?
+                .compactMap(SkillTipKind.init(rawValue:)) ?? []
+        )
+    }
+
+    static func isMuted(_ kind: SkillTipKind) -> Bool {
+        mutedKinds.contains(kind)
+    }
+
+    static func setMuted(_ kind: SkillTipKind, _ muted: Bool) {
+        var kinds = mutedKinds
+        if muted {
+            kinds.insert(kind)
+        } else {
+            kinds.remove(kind)
+        }
+        UserDefaults.standard.set(kinds.map(\.rawValue), forKey: key)
+    }
+
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
 
 /// Unified tip store: debounced save suggestions + immediate recall prompts.
@@ -130,12 +185,14 @@ final class SkillTipStore {
     // MARK: - Save tips
 
     func enqueueSave(_ suggestion: SkillSuggestion) {
+        guard !SkillTipMuting.isMuted(.save) else { return }
         removeSaveDuplicates(of: suggestion)
         saveBuffer.append(suggestion)
         scheduleFlush()
     }
 
     func enqueueSaveImmediate(_ suggestion: SkillSuggestion) {
+        guard !SkillTipMuting.isMuted(.save) else { return }
         debounceTask?.cancel()
         debounceTask = nil
         removeSaveDuplicates(of: suggestion)
@@ -159,6 +216,7 @@ final class SkillTipStore {
     }
 
     func enqueueSchedule(_ draft: ScheduleDraft) {
+        guard !SkillTipMuting.isMuted(.schedule) else { return }
         items.removeAll { item in
             if case .schedule = item { return true }
             return false
@@ -201,6 +259,7 @@ final class SkillTipStore {
     }
 
     func enqueueConsolidate(_ suggestion: SkillConsolidateSuggestion) {
+        guard !SkillTipMuting.isMuted(.consolidate) else { return }
         let key = Set(suggestion.candidates.map(\.path))
         let exists = items.contains { item in
             guard case .consolidate(let existing) = item else { return false }
@@ -209,6 +268,17 @@ final class SkillTipStore {
         guard !exists else { return }
         items.append(.consolidate(suggestion))
         noteMutation()
+    }
+
+    /// Permanently silences one category and clears whatever is on screen for it.
+    func mute(_ kind: SkillTipKind) {
+        SkillTipMuting.setMuted(kind, true)
+        if kind == .save {
+            saveBuffer.removeAll()
+        }
+        let before = items.count
+        items.removeAll { $0.muteKind == kind }
+        if items.count != before { noteMutation() }
     }
 
     func dismissChoose() {

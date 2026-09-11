@@ -20,7 +20,10 @@ struct ScheduleScriptPanel: View {
     @State private var presetInsert: String
     @State private var runOnceNow = false
     @State private var workingDirectoryIsAllowed = true
+    @State private var filePickError: String?
     @FocusState private var commandFocused: Bool
+    /// Label column width — scales with Dynamic Type alongside the micro labels.
+    @ScaledMetric(relativeTo: .caption) private var labelColumnWidth: CGFloat = 80
 
     init(initial: ScheduleScriptDraft) {
         self.initial = initial
@@ -34,23 +37,23 @@ struct ScheduleScriptPanel: View {
             VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Run a script")
-                        .font(.system(size: type.caption, weight: .medium))
+                        .sageFont(type.caption, weight: .medium)
                     Spacer(minLength: SageDesign.Spacing.small)
                     Text(scopeLabel)
-                        .font(.system(size: type.micro))
+                        .sageMicro(type.micro)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
 
                 HStack(spacing: SageDesign.Spacing.small) {
                     Text("Command")
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
+                        .frame(width: labelColumnWidth, alignment: .leading)
 
                     TextField("./scripts/daily.sh", text: $command, axis: .vertical)
                         .textFieldStyle(.plain)
-                        .font(.system(size: type.body, design: .monospaced))
+                        .sageFont(type.body, design: .monospaced)
                         .lineLimit(1...3)
                         .focused($commandFocused)
                         .accessibilityLabel("Command")
@@ -64,13 +67,13 @@ struct ScheduleScriptPanel: View {
 
                 HStack(spacing: SageDesign.Spacing.small) {
                     Text("Working dir")
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
+                        .frame(width: labelColumnWidth, alignment: .leading)
 
                     TextField(".", text: $workingDirectory)
                         .textFieldStyle(.plain)
-                        .font(.system(size: type.body, design: .monospaced))
+                        .sageFont(type.body, design: .monospaced)
                         .accessibilityLabel("Working directory")
                         .help("Relative to this window’s sandbox. Must stay inside PathGuard.")
 
@@ -81,18 +84,31 @@ struct ScheduleScriptPanel: View {
                     .disabled(session.agent.blocksNewInput)
                 }
 
+                if let filePickError {
+                    HStack(spacing: SageDesign.Spacing.small) {
+                        Color.clear.frame(width: labelColumnWidth)
+                        Text(filePickError)
+                            .sageMicro(type.micro)
+                            .foregroundStyle(SageDesign.Palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 if !workingDirectoryIsAllowed {
-                    Text("Working directory must exist inside this window’s sandbox.")
-                        .font(.system(size: type.micro))
-                        .foregroundStyle(.red)
-                        .padding(.leading, 88)
+                    HStack(spacing: SageDesign.Spacing.small) {
+                        // Alignment spacer matching the label column above.
+                        Color.clear.frame(width: labelColumnWidth)
+                        Text("Working directory must exist inside this window’s sandbox.")
+                            .sageMicro(type.micro)
+                            .foregroundStyle(SageDesign.Palette.danger)
+                    }
                 }
 
                 HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
                     Text("When")
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
+                        .frame(width: labelColumnWidth, alignment: .leading)
 
                     HStack(spacing: 6) {
                         ForEach(ScheduleCadenceParser.presets) { preset in
@@ -102,31 +118,31 @@ struct ScheduleScriptPanel: View {
                 }
 
                 HStack(spacing: SageDesign.Spacing.small) {
-                    Button(runOnceNow ? "Save and run" : "Save") {
-                        save()
-                    }
-                    .font(.system(size: type.micro, weight: .semibold))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                    .disabled(!canSave)
-                    .help("Save this timetable. It runs in this window’s sandbox.")
-
-                    Button("Cancel") {
-                        cancel()
-                    }
-                    .font(.system(size: type.micro, weight: .medium))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-
                     Toggle(isOn: $runOnceNow) {
                         Text("Run once now")
                     }
                     .toggleStyle(.checkbox)
-                    .font(.system(size: type.micro))
+                    .sageMicro(type.micro)
                     .help("Run immediately after save. The timetable still fires at the scheduled time.")
                     .accessibilityLabel("Run once now")
 
                     Spacer(minLength: 0)
+
+                    Button("Cancel") {
+                        cancel()
+                    }
+                    .controlSize(.small)
+                    .help("Discard this draft (Esc)")
+
+                    // Primary action — prominent, rightmost per macOS convention.
+                    Button(runOnceNow ? "Save and Run" : "Save") {
+                        save()
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.small)
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!canSave)
+                    .help("Save this timetable (⌘S). It runs in this window’s sandbox.")
                 }
             }
         }
@@ -179,11 +195,11 @@ struct ScheduleScriptPanel: View {
             presetInsert = preset.insert
         }
         .buttonStyle(.plain)
-        .font(.system(size: type.micro, weight: selected ? .semibold : .medium))
+        .sageMicro(type.micro, weight: selected ? .semibold : .medium)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
                 .fill(Color.accentColor.opacity(selected ? 0.14 : 0.05))
         )
         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
@@ -203,12 +219,13 @@ struct ScheduleScriptPanel: View {
 
         let root = sandboxRoot.resolvingSymlinksInPath().path
         let picked = url.resolvingSymlinksInPath().path
-        guard picked == root || picked.hasPrefix(root + "/") else { return }
+        guard picked == root || picked.hasPrefix(root + "/") else {
+            filePickError = "That file is outside this window’s sandbox. Pick one inside \(PathGuard.displayPath(root, policy: pathGuardPolicy))."
+            return
+        }
+        filePickError = nil
 
-        let policy: PathGuard.Policy = session.agent.state.focusedProject == nil
-            ? .home
-            : .project(root: sandboxRoot)
-        var display = PathGuard.displayPath(picked, policy: policy)
+        var display = PathGuard.displayPath(picked, policy: pathGuardPolicy)
         if display.contains(" ") {
             display = "\"\(display)\""
         }

@@ -146,9 +146,12 @@ extension AgentModelGateway {
     ) -> [ToolCallProposal] {
         builders.keys.sorted().compactMap { index -> ToolCallProposal? in
             guard let builder = builders[index],
-                  let id = builder.id,
                   let name = builder.name
             else { return nil }
+            // Providers that omit call ids on continuation fragments would
+            // otherwise make the whole call evaporate; a stable synthesized
+            // id keeps it executable and correlates its tool result.
+            let id = builder.id ?? "call-\(index)"
             return ToolCallProposal(id: id, name: name, argumentsJSON: builder.arguments)
         }
     }

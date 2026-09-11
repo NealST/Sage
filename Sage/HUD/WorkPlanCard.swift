@@ -10,6 +10,9 @@ struct WorkPlanCard: View {
     let plan: WorkPlan
     var isExecuting: Bool
     var bindsReturnShortcut: Bool = true
+    /// Shared identity with `WorkPlanCardSkeleton` so the glass material
+    /// morphs when the reserved skeleton becomes the confirmable card.
+    var matchedGlass: SageDesign.Glass.MatchedSpec? = nil
     var onConfirm: () -> Void
     var onCancel: () -> Void
     var onStop: (() -> Void)?
@@ -18,12 +21,13 @@ struct WorkPlanCard: View {
         WorkPlanCardBody(
             plan: plan,
             actions: isExecuting
-                ? .executing(onStop: onStop)
+                ? .executing(onStop: onStop, bindsReturnShortcut: bindsReturnShortcut)
                 : .confirm(
                     onConfirm: onConfirm,
                     onCancel: onCancel,
                     bindsReturnShortcut: bindsReturnShortcut
-                )
+                ),
+            matchedGlass: matchedGlass
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
@@ -32,8 +36,10 @@ struct WorkPlanCard: View {
 
 /// Same layout as `WorkPlanCard`, redacted with the system placeholder treatment.
 struct WorkPlanCardSkeleton: View {
+    var matchedGlass: SageDesign.Glass.MatchedSpec? = nil
+
     var body: some View {
-        WorkPlanCardBody(plan: .skeletonPlaceholder, actions: .placeholder)
+        WorkPlanCardBody(plan: .skeletonPlaceholder, actions: .placeholder, matchedGlass: matchedGlass)
             .redacted(reason: .placeholder)
             .allowsHitTesting(false)
             .accessibilityElement(children: .ignore)
@@ -44,7 +50,7 @@ struct WorkPlanCardSkeleton: View {
 
 private enum WorkPlanCardActions {
     case confirm(onConfirm: () -> Void, onCancel: () -> Void, bindsReturnShortcut: Bool)
-    case executing(onStop: (() -> Void)?)
+    case executing(onStop: (() -> Void)?, bindsReturnShortcut: Bool)
     case placeholder
 }
 
@@ -52,11 +58,12 @@ private struct WorkPlanCardBody: View {
     @Environment(\.sageTypography) private var type
     let plan: WorkPlan
     let actions: WorkPlanCardActions
+    var matchedGlass: SageDesign.Glass.MatchedSpec? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.intent)
-                .font(.system(size: type.body, weight: .semibold))
+                .sageFont(type.body, weight: .semibold)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
@@ -71,78 +78,56 @@ private struct WorkPlanCardBody: View {
 
             if !plan.skillNames.isEmpty {
                 Text("Uses \(plan.skillNames.joined(separator: ", "))")
-                    .font(.system(size: type.caption))
+                    .sageFont(type.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let sideEffects = plan.sideEffects, !sideEffects.isEmpty {
-                Text(sideEffects)
-                    .font(.system(size: type.caption))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
+            if let sideEffects = plan.sideEffects,
+               !sideEffects.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label {
+                    Text(sideEffects)
+                        .sageFont(type.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .sageFont(type.icon, weight: .semibold)
+                        .foregroundStyle(SageDesign.Palette.warning)
+                }
+                .padding(SageDesign.Spacing.extraSmall)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
+                        .fill(SageDesign.Palette.warning.opacity(SageDesign.Chrome.diffFillOpacity))
+                )
+                .accessibilityLabel("Side effects: \(sideEffects)")
+                .padding(.top, SageDesign.Spacing.extraSmall)
             }
 
             actionRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sageGlassCard()
+        .sageGlassCard(matched: matchedGlass)
     }
 
     @ViewBuilder private var actionRow: some View {
         switch actions {
-        case .executing(let onStop):
-            HStack(spacing: SageDesign.Spacing.small) {
-                Spacer(minLength: 0)
-                if let onStop {
-                    Button("Stop", role: .cancel, action: onStop)
-                        .keyboardShortcut(.cancelAction)
-                        .buttonStyle(.glass)
-                        .controlSize(.regular)
-                }
+        case .executing(let onStop, let bindsReturnShortcut):
+            if let onStop {
+                PlanStopRow(bindsShortcuts: bindsReturnShortcut, onStop: onStop)
             }
-            .padding(.top, SageDesign.Spacing.extraSmall)
 
         case .confirm(let onConfirm, let onCancel, let bindsReturnShortcut):
-            confirmRow(onConfirm: onConfirm, onCancel: onCancel, shortcuts: bindsReturnShortcut)
+            PlanDecisionRow(
+                onConfirm: onConfirm,
+                onCancel: onCancel,
+                bindsShortcuts: bindsReturnShortcut
+            )
 
         case .placeholder:
-            confirmRow(onConfirm: {}, onCancel: {}, shortcuts: false)
+            PlanDecisionRow(onConfirm: {}, onCancel: {}, bindsShortcuts: false)
         }
-    }
-
-    private func confirmRow(
-        onConfirm: @escaping () -> Void,
-        onCancel: @escaping () -> Void,
-        shortcuts: Bool
-    ) -> some View {
-        HStack(spacing: SageDesign.Spacing.small) {
-            if shortcuts {
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
-            } else {
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
-            }
-
-            Spacer(minLength: 0)
-
-            if shortcuts {
-                Button("Run", action: onConfirm)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            } else {
-                Button("Run", action: onConfirm)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            }
-        }
-        .padding(.top, SageDesign.Spacing.extraSmall)
     }
 }
 

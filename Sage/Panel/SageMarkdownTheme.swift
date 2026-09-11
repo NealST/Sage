@@ -13,11 +13,14 @@ extension Theme {
     /// Layout mirrors `Theme.gitHub` / github-markdown-css (heading rules, tables,
     /// blockquotes, task lists) but uses semantic AppKit colors so light/dark and
     /// accessibility contrast follow the system — no Primer hex tokens.
-    /// Deliberately omits a page `BackgroundColor` so the panel material shows through.
-    static let sage = Theme()
+    /// Deliberately omits a page `BackgroundColor` so the panel material shows
+    /// through. `readingSize` is the Dynamic Type–scaled body point size; em-based
+    /// styles (headings, code) derive from it.
+    static func sage(readingSize: CGFloat) -> Theme {
+        Theme()
         .text {
             ForegroundColor(.primary)
-            FontSize(14)
+            FontSize(readingSize)
         }
         .strong {
             FontWeight(.semibold)
@@ -47,7 +50,7 @@ extension Theme {
                         FontWeight(.semibold)
                         FontSize(.em(1.65))
                     }
-                Divider().overlay(Color(nsColor: .separatorColor))
+                Divider().overlay(Color(nsColor: .separatorColor)).opacity(SageDesign.Chrome.dividerOpacity)
             }
         }
         .heading2 { configuration in
@@ -60,7 +63,7 @@ extension Theme {
                         FontWeight(.semibold)
                         FontSize(.em(1.35))
                     }
-                Divider().overlay(Color(nsColor: .separatorColor))
+                Divider().overlay(Color(nsColor: .separatorColor)).opacity(SageDesign.Chrome.dividerOpacity)
             }
         }
         .heading3 { configuration in
@@ -182,4 +185,5 @@ extension Theme {
                 .padding(.vertical, 8)
                 .markdownMargin(top: 20, bottom: 20)
         }
+    }
 }

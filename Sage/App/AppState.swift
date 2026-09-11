@@ -22,6 +22,9 @@ final class AppState {
     var generalSession: AgentSession
     var projectSessions: [UUID: AgentSession] = [:]
     var windowControllers: [AgentSession.Kind: AgentWindowController] = [:]
+    /// Project windows in open order (dictionary order is not recoverable).
+    var openProjectOrder: [UUID] = []
+    let openProjectsStore = OpenProjectsStore()
     var isReloadingSkillsAcrossSessions = false
     var pendingSkillsReload = false
     var focusPointerSyncTask: Task<Void, Never>?
@@ -46,6 +49,41 @@ final class AppState {
         set { keySession.draft = newValue }
     }
 
+    // MARK: - Attention (menu bar)
+
+    /// First session waiting on the user across ALL windows. The status icon
+    /// scans every session, so the menu actions must target the same session —
+    /// otherwise the icon badges "attention" while the menu offers nothing.
+    var awaitingConfirmationSession: AgentSession? {
+        if case .awaitingConfirmation = keySession.agent.state.phase { return keySession }
+        return allSessions.first { session in
+            if case .awaitingConfirmation = session.agent.state.phase { return true }
+            return false
+        }
+    }
+
+    /// First failed session, preferring the key session when it's the failed one.
+    var failedSession: AgentSession? {
+        if case .failed = keySession.agent.state.phase { return keySession }
+        return allSessions.first { session in
+            if case .failed = session.agent.state.phase { return true }
+            return false
+        }
+    }
+
+    /// Session with a turn in flight — the key session when it's busy, else
+    /// the first busy one.
+    var stoppableSession: AgentSession? {
+        if keySession.agent.canStop { return keySession }
+        return allSessions.first { $0.agent.canStop }
+    }
+
+    /// A schedule that failed or is waiting on the user's review. Overnight
+    /// failures must be visible from the menu bar, not only in the Dashboard.
+    var attentionSchedule: ScheduleRecord? {
+        schedules.records.first { $0.status == .failed || $0.status == .awaitingConfirmation }
+    }
+
     var statusHint: String {
         if hotkeyRegistrationFailed {
             return "Global shortcut unavailable"
@@ -53,18 +91,24 @@ final class AppState {
         if !settings.isConfigured {
             return "Set API key in Settings"
         }
+        if let schedule = attentionSchedule {
+            return schedule.status == .failed
+                ? "Schedule failed — check the Dashboard"
+                : "Schedule needs your review"
+        }
         if let title = schedules.runningTitle {
             return "Scheduled: \(Self.compactStatus(title))"
         }
-        switch keySession.agent.state.phase {
+        let agent = (awaitingConfirmationSession ?? keySession).agent
+        switch agent.state.phase {
         case .idle:
             return "Ask Sage to work on your Mac"
 
         case .thinking:
-            return keySession.agent.state.isReviewing ? "Checking the project…" : "Thinking…"
+            return agent.state.isReviewing ? "Checking the project…" : "Thinking…"
 
         case .awaitingConfirmation:
-            switch keySession.agent.turnChrome {
+            switch agent.turnChrome {
             case .toolRoundLimit:
                 return "Tool round limit — continue or finish"
 
@@ -143,8 +187,10 @@ final class AppState {
         for id in projectIDs {
             await disposeProjectSession(projectID: id, revealGeneralIfKey: false)
         }
+        openProjectsStore.discard()
 
         generalSession.resetComposer()
+        generalSession.discardPersistedDraft()
         let didErase = await generalSession.agent.eraseAllData()
         if didErase {
             MessageAttachment.deleteAllManagedCopies()

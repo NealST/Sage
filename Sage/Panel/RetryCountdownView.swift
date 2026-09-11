@@ -10,35 +10,71 @@ import SwiftUI
 /// Apple design principles applied:
 /// - **Continuous feedback** — the ring animates smoothly each second (spring, no hard jumps).
 /// - **Status clarity** — shows attempt number and seconds remaining.
+/// - **Agency** — waiting is not being trapped: Stop is right here, Escape-bound.
 /// - **Reduced motion** — falls back to a simple text countdown without the ring animation.
 /// - **Spatial consistency** — occupies the same slot as the "Thinking…" spinner.
 struct RetryCountdownView: View {
     let state: RetryDisplayState
+    var onStop: (() -> Void)? = nil
+    var onRetryNow: (() -> Void)? = nil
 
+    @Environment(\.sageTypography) private var type
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: SageDesign.Spacing.small) {
             countdownRing
             VStack(alignment: .leading, spacing: 2) {
-                Text("Retrying in \(state.secondsRemaining)s")
-                    .font(.system(size: SageDesign.Typography.bodySize, weight: .medium))
+                Text(headline)
+                    .sageFont(type.body, weight: .medium)
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(
-                        reduceMotion ? .none : .interpolatingSpring(duration: 0.3, bounce: 0),
+                        reduceMotion ? .none : SageDesign.Motion.countdownTick,
                         value: state.secondsRemaining
                     )
                 Text("Attempt \(state.attempt) of \(state.maxAttempts)")
-                    .font(.system(size: SageDesign.Typography.captionSize))
+                    .sageFont(type.caption)
                     .foregroundStyle(.tertiary)
+                    .monospacedDigit()
             }
             Spacer(minLength: 0)
+            if let onStop {
+                Button(role: .cancel, action: onStop) {
+                    Text("Stop")
+                }
+                .buttonStyle(.glass)
+                .controlSize(.regular)
+                .keyboardShortcut(.cancelAction)
+                .help("Stop this turn instead of waiting for the next attempt (Esc)")
+            }
+            if let onRetryNow {
+                Button(action: onRetryNow) {
+                    Text("Retry Now")
+                }
+                .buttonStyle(.glass)
+                .controlSize(.regular)
+                .help("Skip the remaining wait and retry immediately")
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "Retrying, attempt \(state.attempt) of \(state.maxAttempts), \(state.secondsRemaining) seconds remaining"
-        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    /// "Rate limited — retrying in 5s"; falls back to a bare countdown when
+    /// the gateway didn't report a reason.
+    var headline: String {
+        guard let reason = state.reason?.nilIfEmpty else {
+            return "Retrying in \(state.secondsRemaining)s"
+        }
+        return "\(reason) — retrying in \(state.secondsRemaining)s"
+    }
+
+    var accessibilityText: String {
+        let countdown = "Retrying, attempt \(state.attempt) of \(state.maxAttempts), \(state.secondsRemaining) seconds remaining"
+        guard let reason = state.reason?.nilIfEmpty else { return countdown }
+        return "\(reason). \(countdown)"
     }
 
     private var countdownRing: some View {
@@ -51,22 +87,23 @@ struct RetryCountdownView: View {
             Circle()
                 .trim(from: 0, to: ringProgress)
                 .stroke(
-                    Color.orange.opacity(0.8),
+                    SageDesign.Palette.warning.opacity(0.8),
                     style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
                 .animation(
-                    reduceMotion ? .none : .interpolatingSpring(duration: 0.6, bounce: 0),
+                    reduceMotion ? .none : SageDesign.Motion.countdownTick,
                     value: state.secondsRemaining
                 )
 
             // Seconds number in center
             Text("\(state.secondsRemaining)")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.orange)
+                .sageMicro(type.micro, weight: .semibold, design: .rounded)
+                .foregroundStyle(SageDesign.Palette.warning)
+                .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(
-                    reduceMotion ? .none : .interpolatingSpring(duration: 0.3, bounce: 0),
+                    reduceMotion ? .none : SageDesign.Motion.countdownTick,
                     value: state.secondsRemaining
                 )
         }

@@ -49,7 +49,8 @@ extension ModelClient {
                     try await performRetryWait(
                         attempt: attempt,
                         retryPolicy: policy,
-                        retryAfter: nil
+                        retryAfter: nil,
+                        reason: "Network error"
                     )
                     lastError = error
                     continue
@@ -79,7 +80,8 @@ extension ModelClient {
                 try await performRetryWait(
                     attempt: http.attempt,
                     retryPolicy: http.policy,
-                    retryAfter: retryAfter
+                    retryAfter: retryAfter,
+                    reason: "Rate limited"
                 )
                 lastError = error
                 return nil
@@ -91,7 +93,8 @@ extension ModelClient {
             try await performRetryWait(
                 attempt: http.attempt,
                 retryPolicy: http.policy,
-                retryAfter: nil
+                retryAfter: nil,
+                reason: "Server error"
             )
             lastError = error
             return nil
@@ -131,10 +134,17 @@ extension ModelClient {
     }
 
     /// Builds the SSE parsing stream from a URLSession byte stream.
+    ///
+    /// A stream that ends without either the `[DONE]` sentinel or a chunk
+    /// carrying `finish_reason` was cut off (proxy timeout, dropped
+    /// connection). It fails the turn instead of presenting a truncated
+    /// reply as complete; some gateways close cleanly after the finish
+    /// chunk without ever sending `[DONE]`, so either signal counts.
     func buildStream(from bytes: URLSession.AsyncBytes) -> AsyncThrowingStream<StreamDelta, Error> {
         AsyncThrowingStream { continuation in
             let parseTask = Task {
                 do {
+                    var sawFinishReason = false
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
                         guard line.hasPrefix("data: ") else { continue }
@@ -144,13 +154,32 @@ extension ModelClient {
                             continuation.finish()
                             return
                         }
-                        guard let data = payload.data(using: .utf8),
-                              let chunk = try? JSONDecoder().decode(StreamingChunk.self, from: data)
-                        else { continue }
-                        yieldStreamChunk(chunk, continuation: continuation)
+                        guard let data = payload.data(using: .utf8) else {
+                            throw ModelClientError.decoding("unreadable data line")
+                        }
+                        do {
+                            let chunk = try JSONDecoder().decode(StreamingChunk.self, from: data)
+                            if chunk.choices.contains(where: { $0.finishReason != nil }) {
+                                sawFinishReason = true
+                            }
+                            yieldStreamChunk(chunk, continuation: continuation)
+                        } catch {
+                            // Some providers surface failures mid-stream as an
+                            // in-band `{"error":{"message":…}}` object instead of
+                            // an HTTP status; prefer that message over a generic
+                            // parse error.
+                            if let message = Self.decodeProviderErrorMessage(from: data) {
+                                throw ModelClientError.providerError(message)
+                            }
+                            throw ModelClientError.decoding(String(payload.prefix(120)))
+                        }
                     }
-                    continuation.yield(.done)
-                    continuation.finish()
+                    if sawFinishReason {
+                        continuation.yield(.done)
+                        continuation.finish()
+                    } else {
+                        continuation.finish(throwing: ModelClientError.streamTruncated)
+                    }
                 } catch is CancellationError {
                     continuation.finish(throwing: CancellationError())
                 } catch {
@@ -161,6 +190,17 @@ extension ModelClient {
                 parseTask.cancel()
             }
         }
+    }
+
+    private static func decodeProviderErrorMessage(from data: Data) -> String? {
+        struct Envelope: Decodable {
+            struct Payload: Decodable {
+                let message: String?
+            }
+            let error: Payload?
+        }
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else { return nil }
+        return envelope.error?.message
     }
 
     func yieldStreamChunk(
@@ -193,23 +233,36 @@ extension ModelClient {
     }
 
     /// Waits with exponential backoff, emitting countdown ticks for UI feedback.
+    /// Sleeps in short slices so "Retry now" can end the backoff promptly
+    /// without waiting out the current whole second.
     func performRetryWait(
         attempt: Int,
         retryPolicy: RetryPolicy,
-        retryAfter: TimeInterval?
+        retryAfter: TimeInterval?,
+        reason: String
     ) async throws {
         let delay = retryPolicy.delay(attempt: attempt, retryAfter: retryAfter)
         let totalSeconds = Int(delay.rounded(.up))
 
         let callback = onRetryStatus
-        await callback?(.retrying(attempt: attempt + 1, total: retryPolicy.maxAttempts, afterDelay: delay))
+        await callback?(.retrying(
+            attempt: attempt + 1,
+            total: retryPolicy.maxAttempts,
+            afterDelay: delay,
+            reason: reason
+        ))
 
-        // Emit countdown ticks each second for UI
-        for remaining in stride(from: totalSeconds, through: 1, by: -1) {
+        skipRetryWaitRequested = false
+        countdown: for remaining in stride(from: totalSeconds, through: 1, by: -1) {
             try Task.checkCancellation()
             await callback?(.waiting(secondsRemaining: remaining))
-            try await Task.sleep(for: .seconds(1))
+            for _ in 0..<10 {
+                try Task.checkCancellation()
+                if skipRetryWaitRequested { break countdown }
+                try await Task.sleep(for: .milliseconds(100))
+            }
         }
+        skipRetryWaitRequested = false
 
         // Signal wait complete — clears the countdown UI before the next attempt starts.
         await callback?(.waiting(secondsRemaining: 0))
@@ -237,4 +290,15 @@ nonisolated struct ModelSettingsSnapshot: Sendable {
     let baseURL: String
     let model: String
     let apiKey: String
+    /// User-set sampling temperature; nil = provider default.
+    var temperature: Double? = nil
+    /// Per-request timeout in seconds.
+    var requestTimeout: TimeInterval = 120
+}
+
+/// Output ceilings for unsupervised sub-agent requests, in completion tokens.
+/// Kept at or below the output limit of common chat models so strict providers
+/// never reject the request; user-visible turns stay uncapped.
+nonisolated enum ModelOutputCaps {
+    static let subagent = 4_096
 }

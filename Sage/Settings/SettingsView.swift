@@ -9,12 +9,16 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @Bindable var settings: ModelSettings
     var onOpenSkills: ((AgentSession) -> Void)?
+    /// Registers a handler that applies deep-link presentation requests
+    /// (e.g. the Dashboard's MCP empty state) whenever Settings is shown.
+    var onPresentationRequest: (@escaping (SettingsPresentationRequest) -> Void) -> Void = { _ in }
 
     @State private var selectedPane: SettingsPane = .connection
     @State private var testState: SettingsConnectionTestState = .idle
     @State private var testTask: Task<Void, Never>?
     @State private var showMCPManage = false
-    @State private var eraseMessage: String?
+    /// `nil` = no erase attempted; the pane colors status from the outcome.
+    @State private var eraseSucceeded: Bool?
     /// Skills catalog session captured when Settings appears / manage opens.
     @State private var pinnedSkillsSession: AgentSession?
     @State private var openAtLogin = SageLoginItem.isEnabled
@@ -42,6 +46,10 @@ struct SettingsView: View {
         .onAppear {
             pinnedSkillsSession = appState.keySession
             refreshLoginItem()
+            // The window outlives its panes — don't replay a previous visit's
+            // erase outcome.
+            eraseSucceeded = nil
+            onPresentationRequest { applyPresentation($0) }
         }
         .onDisappear {
             testTask?.cancel()
@@ -56,20 +64,47 @@ struct SettingsView: View {
         }
     }
 
+    /// Applies a deep-link request: select the pane, then raise the sheet.
+    private func applyPresentation(_ request: SettingsPresentationRequest) {
+        if let pane = request.pane {
+            selectedPane = pane
+        }
+        if request.openMCPManage {
+            // Selecting the pane first keeps the sheet's context legible.
+            selectedPane = .capabilities
+            showMCPManage = true
+        }
+    }
+
     @ViewBuilder
     private var paneContent: some View {
         switch selectedPane {
         case .connection:
             SettingsConnectionSection(
                 settings: settings,
-                testState: testState,
                 onFieldChange: clearTestResult
             )
             Section {
-                Button("Test Connection") {
+                Button {
                     runConnectionTest()
+                } label: {
+                    if testState == .testing {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Testing…")
+                        }
+                    } else {
+                        Text("Test Connection")
+                    }
                 }
                 .disabled(!canTest || testState == .testing)
+                .help(
+                    canTest
+                        ? "Send a request to verify the connection"
+                        : "Enter Base URL, Model, and API Key first"
+                )
+            } footer: {
+                ConnectionStatusRow(settings: settings, testState: testState)
             }
 
         case .capabilities:
@@ -79,7 +114,7 @@ struct SettingsView: View {
                 onOpenSkills: onOpenSkills
             )
 
-        case .schedules:
+        case .startup:
             SettingsSchedulesSection(
                 openAtLogin: $openAtLogin,
                 loginItemHint: loginItemHint,
@@ -88,14 +123,12 @@ struct SettingsView: View {
 
         case .privacy:
             SettingsPrivacySection(
-                eraseMessage: eraseMessage,
+                eraseSucceeded: eraseSucceeded,
                 isBusy: appState.agent.state.isBusy
             ) {
                 Task {
                     let didErase = await appState.eraseAllLocalData()
-                    eraseMessage = didErase
-                        ? "Local history erased."
-                        : "Could not erase local history."
+                    eraseSucceeded = didErase
                 }
             }
         }

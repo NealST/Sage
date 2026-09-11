@@ -38,6 +38,14 @@ final class StreamingTextPump {
         playback?.setReservingWorkPlan(reserved)
     }
 
+    /// Visible reply text as currently seen on screen (published text plus
+    /// anything still coalescing). Read before `clear()` on a failed turn so
+    /// the partial the user watched stream in is not lost.
+    var currentVisibleText: String {
+        if let pendingText { return pendingText }
+        return playback?.text ?? ""
+    }
+
     func clear() {
         publishTask?.cancel()
         publishTask = nil

@@ -53,17 +53,27 @@ enum ProjectPanelActions {
         )
         gitButton.state = .on
 
-        let stack = NSStackView(views: [nameField, gitButton])
+        let validationLabel = NSTextField(labelWithString: "")
+        validationLabel.textColor = .systemRed
+        validationLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+
+        let stack = NSStackView(views: [nameField, validationLabel, gitButton])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
-        stack.frame = NSRect(x: 0, y: 0, width: 260, height: 56)
+        let stackSize = stack.fittingSize
+        stack.frame = NSRect(origin: .zero, size: stackSize)
         alert.accessoryView = stack
 
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return nil }
-        return NewProjectRequest(parent: parent, name: name, gitInit: gitButton.state == .on)
+        while alert.runModal() == .alertFirstButtonReturn {
+            let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+                return NewProjectRequest(parent: parent, name: name, gitInit: gitButton.state == .on)
+            }
+            // Re-present the same alert so the typed name and checkbox survive.
+            validationLabel.stringValue = "Enter a folder name to continue."
+        }
+        return nil
     }
 }
 

@@ -21,21 +21,18 @@ struct ReviewFindingsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-            Text(title)
-                .font(.system(size: type.body, weight: .semibold))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            header
 
             Text(message)
-                .font(.system(size: type.caption))
-                .foregroundStyle(.secondary)
+                .sageFont(type.caption, weight: isBlocking ? .medium : .regular)
+                .foregroundStyle(isBlocking ? .primary : .secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             switch mode {
             case .continuing:
                 Text("Sage will keep working on these.")
-                    .font(.system(size: type.caption))
+                    .sageFont(type.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -73,6 +70,29 @@ struct ReviewFindingsCard: View {
         }
     }
 
+    /// Must-fix findings block the reply; optional ones don't. The blocking
+    /// variant earns the warning treatment so severity reads at a glance.
+    private var isBlocking: Bool {
+        if case .optional = mode { return false }
+        return true
+    }
+
+    @ViewBuilder private var header: some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            // Distinct severity vocabulary: triangle for blocking issues,
+            // wand for non-blocking improvement suggestions.
+            Image(systemName: isBlocking ? "exclamationmark.triangle.fill" : "wand.and.stars")
+                .sageFont(type.body, weight: .semibold)
+                .foregroundStyle(isBlocking ? SageDesign.Palette.warning : Color.accentColor)
+                .accessibilityHidden(true)
+            Text(title)
+                .sageFont(type.body, weight: .semibold)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityAddTraits(.isHeader)
+    }
+
     private var accessibilityHint: String {
         switch mode {
         case .continuing:
@@ -95,23 +115,20 @@ struct ReviewFindingsCard: View {
     ) -> some View {
         HStack(spacing: SageDesign.Spacing.small) {
             if let secondaryTitle, let secondary {
-                Button(secondaryTitle, role: .cancel, action: secondary)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
+                Button(role: .cancel, action: secondary) {
+                    Text(secondaryTitle)
+                }
+                .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
+                .buttonStyle(.glass)
+                .controlSize(.regular)
             }
 
             Spacer(minLength: 0)
 
-            if bindsReturnShortcut {
-                Button(primaryTitle, action: primary)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            } else {
-                Button(primaryTitle, action: primary)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            }
+            Button(primaryTitle, action: primary)
+                .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
+                .buttonStyle(.glassProminent)
+                .controlSize(.regular)
         }
         .padding(.top, SageDesign.Spacing.extraSmall)
     }

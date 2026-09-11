@@ -19,11 +19,20 @@ struct ToolCallView: View {
     var previewAgainstDisk: Bool = false
     /// When true (plan awaiting confirmation), start expanded for file edits.
     var startExpandedIfFileEdit: Bool = false
+    /// Plan confirmation mode: mutating steps read warmer than read-only ones
+    /// so their weight is scannable before Run.
+    var highlightsSideEffects: Bool = false
 
     @Environment(\.pathGuardPolicy) var pathGuardPolicy
+    @Environment(\.sageTypography) var type
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State private var expanded: Bool
     /// `nil` = still loading; `.absent` = no file; `.text` / `.unreadable` once loaded.
     @State var diskState: DiskBeforeState = .pending
+
+    var isMutatingStep: Bool {
+        highlightsSideEffects && ToolDefinition.requiresConfirmation(forToolNamed: name)
+    }
 
     enum DiskBeforeState: Equatable {
         case pending
@@ -39,7 +48,8 @@ struct ToolCallView: View {
         status: StepStatus? = nil,
         resultContent: String? = nil,
         previewAgainstDisk: Bool = false,
-        startExpandedIfFileEdit: Bool = false
+        startExpandedIfFileEdit: Bool = false,
+        highlightsSideEffects: Bool = false
     ) {
         self.name = name
         self.argumentsJSON = argumentsJSON
@@ -48,6 +58,7 @@ struct ToolCallView: View {
         self.resultContent = resultContent
         self.previewAgainstDisk = previewAgainstDisk
         self.startExpandedIfFileEdit = startExpandedIfFileEdit
+        self.highlightsSideEffects = highlightsSideEffects
         let model = ToolCallPresentation.model(
             name: name,
             argumentsJSON: argumentsJSON,
@@ -76,35 +87,15 @@ struct ToolCallView: View {
         resultContent.flatMap(WriteFileResultCodec.payload(in:))
     }
 
-    var expandTransition: AnyTransition {
-        if AccessibilityPreferences.reduceMotion {
-            return .opacity
-        }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .top)),
-            removal: .opacity
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             if expanded, model.isExpandable {
                 previewBody
-                    .transition(expandTransition)
+                    .transition(ToolChipChrome.expandTransition)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-        )
-        .overlay {
-            if AccessibilityPreferences.increaseContrast {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .sageToolChipSurface(warning: isMutatingStep)
         .environment(\.openURL, PathTextSupport.openURLAction)
         .task(id: diskPreviewTaskID) {
             await loadDiskBeforeIfNeeded()
@@ -132,18 +123,28 @@ struct ToolCallView: View {
                         .frame(width: 14, alignment: .center)
                 } else {
                     Image(systemName: iconName)
-                        .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
+                        .sageFont(type.icon, weight: .semibold)
+                        // Same leading column as the status icon so titles
+                        // align whether or not a status has arrived yet.
+                        .frame(width: 14, alignment: .center)
                 }
 
                 Text(model.title)
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                if isMutatingStep {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .sageFont(type.icon, weight: .semibold)
+                        .foregroundStyle(SageDesign.Palette.warning)
+                        .help("This step changes your Mac")
+                }
+
                 if model.isExpandable {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+                        .sageFont(type.icon, weight: .semibold)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                 }
             }
@@ -151,13 +152,25 @@ struct ToolCallView: View {
             .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
-        .buttonStyle(ToolCallHeaderButtonStyle())
+        .buttonStyle(ToolChipHeaderButtonStyle())
         .foregroundStyle(.secondary)
         .disabled(!model.isExpandable)
-        .accessibilityLabel(expanded ? "Collapse tool call" : "Expand tool call")
-        .accessibilityValue(model.title)
+        .accessibilityLabel("\(model.title), \(statusAccessibilityText)")
+        .accessibilityValue(model.isExpandable ? (expanded ? "Expanded" : "Collapsed") : "")
         .help(model.isExpandable ? (expanded ? "Hide details" : "Show tool details") : model.title)
         .animation(SageDesign.Motion.expandAnimation, value: expanded)
+    }
+
+    /// Chip status for VoiceOver — the icon grammar is visual-only otherwise.
+    private var statusAccessibilityText: String {
+        switch status {
+        case .pending: return "waiting"
+        case .running: return "running"
+        case .succeeded: return "succeeded"
+        case .failed: return "failed"
+        case .skipped: return "skipped"
+        case nil: return "not started"
+        }
     }
 
     @ViewBuilder var previewBody: some View {

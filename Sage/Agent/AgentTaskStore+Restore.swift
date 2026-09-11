@@ -264,10 +264,35 @@ extension AgentTaskStore {
         await onTaskFailed?(task.id, message)
     }
 
-    func markFailed(_ message: String) async {
+    func markFailed(_ message: String, partialReply: String? = nil) async {
         state.retryState = nil
         state.enterFailed(message: message)
         guard var task = state.activeTask else { return }
+        // A stream that died mid-reply must not evaporate what the user
+        // watched stream in: persist the partial as an assistant event (with
+        // a cut-off marker) so it survives relaunch and Retry can continue
+        // from it as honest context.
+        if let partialReply, !partialReply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let marked = """
+            \(partialReply)
+
+            ---
+            *The connection dropped mid-reply.*
+            """
+            let committed = await commit(
+                appendEvents: [AgentEvent(kind: .assistantResponse, content: marked)],
+                deleteEventIDs: []
+            ) { task in
+                task.status = .failed
+                task.lastFailureMessage = message
+            }
+            if committed, let updated = state.activeTask {
+                task = updated
+                state.refreshSummary(for: updated)
+            }
+            await onTaskFailed?(task.id, message)
+            return
+        }
         task.status = .failed
         task.lastFailureMessage = message
         task.updatedAt = .now

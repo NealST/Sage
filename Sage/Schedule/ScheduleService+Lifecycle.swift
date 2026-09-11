@@ -16,7 +16,14 @@ extension ScheduleService {
         guard let known = records.first(where: { record in
             record.lastRunTaskID == taskID && record.status == .awaitingConfirmation
         }) else { return }
-        guard var record = try? await taskRepository.loadSchedule(id: known.id),
+        let liveRecord: ScheduleRecord?
+        do {
+            liveRecord = try await taskRepository.loadSchedule(id: known.id)
+        } catch {
+            PersistenceLogger.warn("schedule_settlement_reload_failed id=\(known.id)", error: error)
+            return
+        }
+        guard var record = liveRecord,
               record.lastRunTaskID == taskID,
               record.status == .awaitingConfirmation
         else { return }

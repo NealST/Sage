@@ -14,9 +14,11 @@ struct SageCodeBlockView: View {
 
     @Environment(AccessibilitySettings.self) private var accessibility
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.sageTypography) private var type
     @State private var copied = false
     @State private var expanded = false
     @State private var hovering = false
+    @FocusState private var copyFocused: Bool
 
     private var lineCount: Int {
         configuration.content.split(separator: "\n", omittingEmptySubsequences: false).count
@@ -33,13 +35,17 @@ struct SageCodeBlockView: View {
 
     private var cornerRadius: CGFloat { SageDesign.Markdown.codeBlockCornerRadius }
 
+    private var effectiveCodeFontSize: CGFloat {
+        SageDesign.Markdown.scaledCodeFontSize(readingSize: type.reading)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 codeScroll
                 if let languageLabel {
                     Text(languageLabel)
-                        .font(.system(size: 10, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .padding(.horizontal, 10)
@@ -69,6 +75,7 @@ struct SageCodeBlockView: View {
         }
         .animation(SageDesign.Motion.contentCrossFade, value: hovering)
         .animation(SageDesign.Motion.contentCrossFade, value: copied)
+        .animation(SageDesign.Motion.contentCrossFade, value: copyFocused)
         .onHover { hovering = $0 }
     }
 
@@ -79,7 +86,7 @@ struct SageCodeBlockView: View {
                 .relativeLineSpacing(.em(0.25))
                 .markdownTextStyle {
                     FontFamilyVariant(.monospaced)
-                    FontSize(SageDesign.Markdown.codeFontSize)
+                    FontSize(effectiveCodeFontSize)
                 }
                 .padding(
                     .top,
@@ -89,7 +96,9 @@ struct SageCodeBlockView: View {
                 .padding(.bottom, SageDesign.Markdown.codeBlockContentPadding)
                 .frame(
                     maxHeight: needsCollapse && !expanded
-                        ? SageDesign.Markdown.collapsedCodeContentHeight()
+                        ? SageDesign.Markdown.collapsedCodeContentHeight(
+                            fontSize: effectiveCodeFontSize
+                        )
                         : nil,
                     alignment: .top
                 )
@@ -97,11 +106,27 @@ struct SageCodeBlockView: View {
         }
         // Trackpad / Magic Mouse still scroll; hide the fat always-visible bar.
         .scrollIndicators(.hidden)
+        // Collapsed cut fades into the code surface so the fold reads as
+        // "more below" instead of an abrupt clip.
+        .overlay(alignment: .bottom) {
+            if needsCollapse && !expanded {
+                LinearGradient(
+                    colors: [
+                        Color(nsColor: .quaternarySystemFill).opacity(0),
+                        Color(nsColor: .quaternarySystemFill),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 28)
+                .allowsHitTesting(false)
+            }
+        }
     }
 
     private var chromeOpacity: Double {
-        if copied || accessibility.increaseContrast { return 1 }
-        return hovering ? 1 : 0.55
+        if copied || copyFocused || accessibility.increaseContrast { return 1 }
+        return hovering ? 1 : 0.85
     }
 
     private var copyButton: some View {
@@ -109,11 +134,22 @@ struct SageCodeBlockView: View {
             copyCode()
         }
         .labelStyle(.iconOnly)
-        .font(.system(size: 11, weight: .semibold))
+        .sageMicro(type.micro, weight: .semibold)
         .foregroundStyle(copied ? Color.secondary : Color.secondary.opacity(0.9))
         .frame(width: 26, height: 22)
         .sagePanelBackground(cornerRadius: 5, weight: .clear)
-        .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        // Keyboard focus reveals the chrome and draws its own ring — hover is
+        // not the only path to this button.
+        .overlay {
+            if copyFocused {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1)
+            }
+        }
+        .focused($copyFocused)
+        // Hit slop beyond the visual chip — small targets should not stay small.
+        .padding(4)
+        .contentShape(Rectangle())
         .buttonStyle(.plain)
         .help(copied ? "Copied" : "Copy code")
     }
@@ -127,9 +163,9 @@ struct SageCodeBlockView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(expanded ? "Show less" : "Show more")
-                    .font(.system(size: 11, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .sageFont(type.icon, weight: .semibold)
                     .rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(.secondary)

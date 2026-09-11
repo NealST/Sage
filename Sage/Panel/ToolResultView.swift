@@ -11,7 +11,11 @@ import SwiftUI
 struct ToolResultView: View {
     let content: String
 
+    /// Cap for the expanded plain-text body before it becomes scrollable.
+    static let expandedBodyMaxHeight: CGFloat = 320
+
     @Environment(\.pathGuardPolicy) private var pathGuardPolicy
+    @Environment(\.sageTypography) private var type
     @State private var expanded: Bool
 
     init(content: String) {
@@ -53,36 +57,16 @@ struct ToolResultView: View {
         return String(line.prefix(69)) + "…"
     }
 
-    private var expandTransition: AnyTransition {
-        if AccessibilityPreferences.reduceMotion {
-            return .opacity
-        }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .top)),
-            removal: .opacity
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             if expanded {
                 bodyContent
-                    .transition(expandTransition)
+                    .transition(ToolChipChrome.expandTransition)
             }
         }
         // Stable continuous corner — avoid morphing capsule↔rect while expanding.
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-        )
-        .overlay {
-            if AccessibilityPreferences.increaseContrast {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(SageDesign.Chrome.strokeOpacity), lineWidth: 1)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .sageToolChipSurface()
         .environment(\.openURL, PathTextSupport.openURLAction)
     }
 
@@ -94,21 +78,25 @@ struct ToolResultView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: isError ? SageDesign.Symbol.stepFailed : headerIcon)
-                    .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
+                    .sageFont(type.icon, weight: .semibold)
+                    .foregroundStyle(headerIconColor)
+                    // Pinned column so the title starts at the same x across
+                    // chips regardless of glyph width.
+                    .frame(width: 14, alignment: .center)
                 Text(title)
-                    .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .sageFont(type.icon, weight: .semibold)
                     .rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
-        .buttonStyle(ToolResultHeaderButtonStyle())
-        .foregroundStyle(isError ? Color.orange : Color.secondary)
+        .buttonStyle(ToolChipHeaderButtonStyle())
+        .foregroundStyle(isError ? SageDesign.Palette.danger : Color.secondary)
         .accessibilityLabel(expanded ? "Collapse tool result" : "Expand tool result")
         .accessibilityValue(title)
         .help(expanded ? "Hide details" : "Show full tool result")
@@ -116,7 +104,16 @@ struct ToolResultView: View {
     }
 
     private var headerIcon: String {
-        split.payload != nil ? "square.and.pencil" : SageDesign.Symbol.tools
+        if split.payload != nil { return "square.and.pencil" }
+        return SageDesign.Symbol.stepSuccess
+    }
+
+    /// Same status vocabulary as transcript step icons: green check for plain
+    /// successes, red cross for failures, neutral for diff previews.
+    private var headerIconColor: Color {
+        if isError { return SageDesign.Palette.danger }
+        if split.payload != nil { return .secondary }
+        return SageDesign.Palette.success
     }
 
     @ViewBuilder private var bodyContent: some View {
@@ -133,15 +130,52 @@ struct ToolResultView: View {
                     statsOverride: payload.stats
                 )
                 .padding(.bottom, 10)
+                .contextMenu { payloadContextMenu(payload) }
             } else {
-                Text(PathTextSupport.attributedString(from: split.summary, policy: pathGuardPolicy))
-                    .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 10)
-                    .contextMenu { pathContextMenu }
+                ScrollView {
+                    Text(PathTextSupport.attributedString(from: split.summary, policy: pathGuardPolicy))
+                        .sageFont(type.caption, design: .monospaced)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // Huge outputs (file dumps, long listings) scroll instead of
+                // stretching the transcript.
+                .frame(maxHeight: Self.expandedBodyMaxHeight)
+                // Fade at the fold — same composite as the chip surface, so it
+                // reads as "more below" and vanishes on short content.
+                .overlay(alignment: .bottom) {
+                    ZStack {
+                        Color(nsColor: .windowBackgroundColor)
+                        Color.primary.opacity(SageDesign.Chrome.pillFillOpacity)
+                    }
+                    .frame(height: 36)
+                    .mask {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    }
+                    .allowsHitTesting(false)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+                .contextMenu { pathContextMenu }
             }
+        }
+    }
+
+    /// Copy / Reveal affordances for write-diff results — the plain-text
+    /// branch has the same reachability.
+    @ViewBuilder private func payloadContextMenu(_ payload: WriteFileDiffPayload) -> some View {
+        let url = URL(fileURLWithPath: payload.path)
+        Button("Reveal “\(url.lastPathComponent)” in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        Divider()
+        Button("Copy New File Contents") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(payload.after, forType: .string)
+        }
+        Button("Copy Result") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(content, forType: .string)
         }
     }
 
@@ -179,19 +213,5 @@ struct ToolResultView: View {
         let lines = summary.split(separator: "\n", omittingEmptySubsequences: false)
         return summary.count <= SageDesign.Markdown.shortToolResultCharacterLimit
             && lines.count <= SageDesign.Markdown.shortToolResultLineLimit
-    }
-}
-
-private struct ToolResultHeaderButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.75 : 1)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .animation(
-                reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
-                value: configuration.isPressed
-            )
     }
 }

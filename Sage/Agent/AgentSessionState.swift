@@ -25,6 +25,13 @@ final class AgentSessionState {
     var retryState: RetryDisplayState?
     /// Cumulative token usage for the current task (cleared on beginNewTask).
     var tokenUsage = TokenUsage()
+    /// Context occupancy (0–1) of the last assembled execute prompt. Drives
+    /// the Dashboard budget bar; nil until the first request of a task.
+    var contextOccupancy: Double?
+    /// Occupancy at which the transcript surfaces the context-budget notice.
+    nonisolated static let contextNoticeThreshold = 0.8
+    /// Task whose context-budget notice was dismissed; re-arms on task switch.
+    var suppressedContextBudgetTaskID: UUID?
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     var contextHint: String?
     /// Non-blocking offer to peel the latest turn into a new task.
@@ -149,11 +156,18 @@ final class AgentSessionState {
         topicDriftOffer = nil
     }
 
+    func dismissContextBudgetNotice() {
+        if let taskID = activeTaskID {
+            suppressedContextBudgetTaskID = taskID
+        }
+    }
+
     func clearThreadRoutingNotices() {
         topicDriftOffer = nil
         suppressedDriftOfferTaskID = nil
         contextHint = nil
         forceFreshOnNextSubmit = false
+        suppressedContextBudgetTaskID = nil
         isReviewing = false
         reviewFeedback = nil
         steerInstruction = nil
@@ -163,6 +177,7 @@ final class AgentSessionState {
 
     func clearTokenUsage() {
         tokenUsage = TokenUsage()
+        contextOccupancy = nil
     }
 
     func addTokenUsage(_ usage: TokenUsage) {

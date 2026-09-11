@@ -10,6 +10,7 @@ import SwiftUI
 
 struct SkillSaveStatusIndicator: View {
     @Environment(AgentSession.self) private var session
+    @Environment(\.sageTypography) private var type
     @State private var showPopover = false
 
     private var jobs: [SkillSaveJob] {
@@ -55,7 +56,7 @@ struct SkillSaveStatusIndicator: View {
         HStack(spacing: 5) {
             chipIcon
             Text(chipTitle)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .lineLimit(1)
         }
         .foregroundStyle(chipForeground)
@@ -69,12 +70,12 @@ struct SkillSaveStatusIndicator: View {
 
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
-                .font(.system(size: 10, weight: .semibold))
+                .sageFont(type.icon, weight: .semibold)
                 .symbolRenderingMode(.hierarchical)
 
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
-                .font(.system(size: 10, weight: .semibold))
+                .sageFont(type.icon, weight: .semibold)
                 .symbolRenderingMode(.hierarchical)
         }
     }
@@ -100,7 +101,7 @@ struct SkillSaveStatusIndicator: View {
             return .secondary
 
         case .failed:
-            return .orange
+            return SageDesign.Palette.danger
         }
     }
 
@@ -110,7 +111,7 @@ struct SkillSaveStatusIndicator: View {
             return Color.primary.opacity(SageDesign.Chrome.pillFillOpacity)
 
         case .failed:
-            return Color.orange.opacity(0.14)
+            return SageDesign.Palette.danger.opacity(SageDesign.Chrome.diffFillOpacity)
         }
     }
 
@@ -132,7 +133,7 @@ struct SkillSaveStatusIndicator: View {
     private var popoverContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Skill saves")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                .sageMicro(type.micro, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, SageDesign.Spacing.medium)
                 .padding(.top, SageDesign.Spacing.medium)
@@ -162,12 +163,12 @@ struct SkillSaveStatusIndicator: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(jobDisplayTitle(job))
-                    .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                    .sageFont(type.caption, weight: .medium)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(jobDetail(job))
-                    .font(.system(size: SageDesign.Typography.microSize))
+                    .sageMicro(type.micro)
                     .foregroundStyle(detailForeground(job.status))
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -183,7 +184,7 @@ struct SkillSaveStatusIndicator: View {
                     }
                 }
                 .labelStyle(.iconOnly)
-                .font(.system(size: 9, weight: .bold))
+                .sageFont(type.icon, weight: .bold)
                 .foregroundStyle(.secondary)
                 .frame(width: 22, height: 22)
                 .buttonStyle(.plain)
@@ -228,14 +229,14 @@ struct SkillSaveStatusIndicator: View {
 
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
-                .font(.system(size: 12, weight: .semibold))
+                .sageFont(type.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .symbolRenderingMode(.hierarchical)
 
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.orange)
+                .sageFont(type.caption, weight: .semibold)
+                .foregroundStyle(SageDesign.Palette.danger)
                 .symbolRenderingMode(.hierarchical)
         }
     }
@@ -246,7 +247,7 @@ struct SkillSaveStatusIndicator: View {
             return .secondary
 
         case .failed:
-            return .orange
+            return SageDesign.Palette.danger
         }
     }
 }

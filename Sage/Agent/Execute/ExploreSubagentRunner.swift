@@ -81,7 +81,8 @@ enum ExploreSubagentRunner {
             let turn = try await client.complete(
                 events: events,
                 tools: definitions,
-                settings: request.settings
+                settings: request.settings,
+                maxTokens: ModelOutputCaps.subagent
             )
             let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let calls = turn.toolCalls.map { call in
@@ -108,7 +109,8 @@ enum ExploreSubagentRunner {
             tools: [],
             settings: request.settings,
             toolChoice: "none",
-            temperature: 0
+            temperature: 0,
+            maxTokens: ModelOutputCaps.subagent
         )
         return final.content?.trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty

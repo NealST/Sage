@@ -195,8 +195,11 @@ final class ExecuteAgent {
             streaming.clear()
             await handleStop?(nil)
         } catch {
+            // Read the partial before clearing the pump — a failed stream
+            // keeps the text the user already watched arrive.
+            let partial = streaming.currentVisibleText
             streaming.clear()
-            await taskStore.markFailed(error.localizedDescription)
+            await taskStore.markFailed(error.localizedDescription, partialReply: partial)
         }
     }
 }

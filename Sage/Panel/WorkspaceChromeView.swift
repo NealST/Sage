@@ -12,10 +12,15 @@ struct WorkspaceChromeView: View {
     @Environment(AppState.self) var appState
     @Environment(AgentSession.self) var session
     @Environment(\.sageTypography) private var type
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var gitBranch: String?
+    /// Prefetched in the background — building the menu must not shell out.
+    @Binding var gitBranches: [String]
     @Binding var branchSwitchError: String?
     @Binding var projectTab: ProjectWorkspaceTab
+    /// General window: full task-history browser sheet.
+    @State private var isBrowsingTasks = false
 
     var focused: ProjectRecord? { session.agent.state.focusedProject }
     var isProject: Bool { !session.isGeneral }
@@ -23,13 +28,13 @@ struct WorkspaceChromeView: View {
     var body: some View {
         HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             identityCluster
-                .font(.system(size: type.caption, weight: .medium))
+                .sageFont(type.caption, weight: .medium)
                 .foregroundStyle(.secondary)
 
             if showsDocumentCluster {
                 chromeSeparator
                 documentCluster
-                    .font(.system(size: type.caption, weight: .medium))
+                    .sageFont(type.caption, weight: .medium)
                     .foregroundStyle(.secondary)
             }
 
@@ -42,6 +47,14 @@ struct WorkspaceChromeView: View {
         .padding(.trailing, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)
         .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
+        .onReceive(NotificationCenter.default.publisher(for: .sageBrowseTaskHistory)) { note in
+            // Sheet lives in the General window only; project windows route
+            // the command to their History tab instead.
+            guard !isProject,
+                  note.object as? AgentSession.Kind == session.kind
+            else { return }
+            isBrowsingTasks = true
+        }
     }
 
     // MARK: - Zones
@@ -108,14 +121,18 @@ struct WorkspaceChromeView: View {
 
     @ViewBuilder var documentCluster: some View {
         HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
+            if isWorking {
+                workingBadge
+            }
+
             if case .awaitingConfirmation = session.agent.state.phase {
                 Text("Awaiting confirmation")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SageDesign.Palette.warning)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(Color.orange.opacity(0.14))
+                            .fill(SageDesign.Palette.warning.opacity(0.14))
                     )
             }
 
@@ -127,6 +144,32 @@ struct WorkspaceChromeView: View {
             }
         }
         .layoutPriority(0)
+    }
+
+    /// Long turns would otherwise read as a frozen window — this answers
+    /// "is this window doing anything" from across the room.
+    private var workingBadge: some View {
+        Label("Working", systemImage: "circle.dotted")
+            .foregroundStyle(.secondary)
+            .symbolEffect(
+                .variableColor.iterative,
+                options: .repeating,
+                isActive: !reduceMotion
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
+            )
+            .accessibilityLabel("Sage is working")
+    }
+
+    private var isWorking: Bool {
+        switch session.agent.state.phase {
+        case .thinking, .executing: return true
+        case .idle, .awaitingConfirmation, .completed, .failed: return false
+        }
     }
 
     @ViewBuilder var trailingCluster: some View {
@@ -141,10 +184,30 @@ struct WorkspaceChromeView: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .labelStyle(.titleAndIcon)
-                .font(.system(size: type.caption, weight: .medium))
+                .sageFont(type.caption, weight: .medium)
                 .foregroundStyle(.secondary)
                 .disabled(!session.agent.canStartFresh)
                 .help("Start a clean task in this window")
+            }
+
+            if !isProject, hasTaskHistory {
+                Button {
+                    isBrowsingTasks = true
+                } label: {
+                    Label("Browse Tasks", systemImage: "clock")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .labelStyle(.titleAndIcon)
+                .sageFont(type.caption, weight: .medium)
+                .foregroundStyle(.secondary)
+                .help("Search, open, and delete past tasks")
+                .sheet(isPresented: $isBrowsingTasks) {
+                    TaskHistorySheet(
+                        repository: appState.taskRepository,
+                        projectID: nil
+                    )
+                }
             }
 
             if isProject {
@@ -154,7 +217,12 @@ struct WorkspaceChromeView: View {
         .layoutPriority(1)
     }
 
+    private var hasTaskHistory: Bool {
+        session.agent.state.recentSummaries.contains { !$0.isScheduled }
+    }
+
     var showsDocumentCluster: Bool {
+        if isWorking { return true }
         if case .awaitingConfirmation = session.agent.state.phase { return true }
         if session.agent.state.threadTitle != nil,
            session.agent.state.activeTask?.events.isEmpty == false {

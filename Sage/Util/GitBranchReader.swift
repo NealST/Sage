@@ -55,25 +55,88 @@ nonisolated enum GitBranchReader {
         return detail.isEmpty ? "Could not switch to “\(trimmed)”." : detail
     }
 
-    /// Recent commits for the History tab (`hash\tsubject`), newest first.
+    /// Recent commits for the History tab (hash, date, author, subject), newest first.
     static func recentCommits(inProjectRoot root: URL, limit: Int = 50) -> [GitCommitSummary] {
         guard isGitRepository(root) else { return [] }
         let capped = max(1, min(limit, 100))
         let result = runGit(
-            ["log", "-n", "\(capped)", "--format=%h\t%s"],
+            ["log", "-n", "\(capped)", "--format=%h\t%H\t%cs\t%an\t%s"],
             in: root
         )
         guard result.exitCode == 0 else { return [] }
         return result.output
             .split(separator: "\n")
             .compactMap { line -> GitCommitSummary? in
-                let parts = line.split(separator: "\t", maxSplits: 1)
-                guard parts.count == 2 else { return nil }
+                let parts = line.split(separator: "\t", maxSplits: 4)
+                guard parts.count == 5 else { return nil }
                 let hash = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                let subject = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !hash.isEmpty else { return nil }
-                return GitCommitSummary(shortHash: hash, subject: subject)
+                let fullHash = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                let date = parts[2].trimmingCharacters(in: .whitespacesAndNewlines)
+                let author = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
+                let subject = parts[4].trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !hash.isEmpty, !fullHash.isEmpty else { return nil }
+                return GitCommitSummary(
+                    shortHash: hash,
+                    fullHash: fullHash,
+                    date: date,
+                    author: author,
+                    subject: subject
+                )
             }
+    }
+
+    /// Total commits reachable from HEAD. `nil` when unborn or not a repo.
+    static func commitCount(inProjectRoot root: URL) -> Int? {
+        guard isGitRepository(root) else { return nil }
+        let result = runGit(["rev-list", "--count", "HEAD"], in: root)
+        guard result.exitCode == 0,
+              let count = Int(result.output.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return nil }
+        return count
+    }
+
+    /// Uncommitted changes for the Files tab summary. `nil` when not a repo.
+    ///
+    /// Uses `-z` so paths with quotes/spaces parse verbatim; rename and copy
+    /// entries carry the original path as a trailing record, which is skipped.
+    static func workingTreeStatus(inProjectRoot root: URL) -> GitWorkingTreeSummary? {
+        guard isGitRepository(root) else { return nil }
+        let result = runGit(
+            ["status", "--porcelain", "-z", "--untracked-files=all"],
+            in: root
+        )
+        guard result.exitCode == 0 else { return nil }
+
+        var counts = GitWorkingTreeSummary.Counts()
+        var pathStatuses: [String: String] = [:]
+        var records = result.output.split(separator: "\0", omittingEmptySubsequences: true)
+            .makeIterator()
+        while let record = records.next() {
+            let line = String(record)
+            guard line.count > 3 else { continue }
+            let x = line[line.startIndex]
+            let y = line[line.index(after: line.startIndex)]
+            let path = String(line.dropFirst(3))
+            if x == "R" || x == "C" { _ = records.next() }
+
+            let letter: String
+            if x == "?" || y == "?" {
+                letter = "?"
+                counts.untracked += 1
+            } else if x == "A" || y == "A" || x == "C" {
+                letter = "A"
+                counts.added += 1
+            } else if x == "D" || y == "D" {
+                letter = "D"
+                counts.deleted += 1
+            } else {
+                // "M", "MM", "R", conflicts — all read as modified for a summary.
+                letter = "M"
+                counts.modified += 1
+            }
+            pathStatuses[path] = letter
+        }
+        return GitWorkingTreeSummary(counts: counts, pathStatuses: pathStatuses)
     }
 
     static func isGitRepository(_ root: URL) -> Bool {
@@ -136,5 +199,35 @@ nonisolated enum GitBranchReader {
 nonisolated struct GitCommitSummary: Identifiable, Equatable, Sendable {
     var id: String { shortHash }
     let shortHash: String
+    let fullHash: String
+    let date: String
+    let author: String
     let subject: String
+}
+
+/// Aggregated uncommitted-change info for the Files tab.
+nonisolated struct GitWorkingTreeSummary: Equatable, Sendable {
+    struct Counts: Equatable, Sendable {
+        var modified = 0
+        var added = 0
+        var deleted = 0
+        var untracked = 0
+    }
+
+    let counts: Counts
+    /// Repo-relative path → display letter ("M", "A", "D", "?").
+    let pathStatuses: [String: String]
+
+    var isClean: Bool { pathStatuses.isEmpty }
+
+    /// Status letter for any change contained inside a repo-relative directory.
+    /// Modified wins over other letters so a mixed directory reads as "touched".
+    func statusLetter(containedInDirectory dirPath: String) -> String? {
+        var found: String?
+        for (path, letter) in pathStatuses where path.hasPrefix(dirPath + "/") {
+            if letter == "M" { return "M" }
+            if found == nil { found = letter }
+        }
+        return found
+    }
 }

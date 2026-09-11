@@ -45,13 +45,14 @@ final class SessionLifecycle {
 
         await modelGateway.setRetryStatusHandler { [state] status in
             switch status {
-            case .retrying(let attempt, let total, let delay):
+            case .retrying(let attempt, let total, let delay, let reason):
                 let totalSec = Int(delay.rounded(.up))
                 state.retryState = RetryDisplayState(
                     attempt: attempt,
                     maxAttempts: total,
                     totalSeconds: totalSec,
-                    secondsRemaining: totalSec
+                    secondsRemaining: totalSec,
+                    reason: reason
                 )
 
             case .waiting(let seconds):

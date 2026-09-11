@@ -8,6 +8,26 @@
 
 import SwiftUI
 
+/// Shared between the SwiftUI editor and the window controller so the red
+/// close button / Cmd-W can veto close while edits are unsaved.
+@MainActor
+@Observable
+final class SkillsEditSession {
+    var isDirty = false
+    var canSave = false
+    /// Registered by the active editor pane.
+    var saveAction: (() async -> Bool)?
+    /// Bumped when the window tried to close while dirty.
+    var closeRequestID: UUID?
+
+    func reset() {
+        isDirty = false
+        canSave = false
+        saveAction = nil
+        closeRequestID = nil
+    }
+}
+
 struct SkillsManageView: View {
     @Environment(AppState.self) var appState
     @Environment(\.sageTypography) var type
@@ -16,6 +36,8 @@ struct SkillsManageView: View {
     var pinnedSession: AgentSession?
     /// Optional close handler for window presentation (falls back to `dismiss` in sheets).
     var onDone: (() -> Void)?
+    /// Dirty state shared with the owning window (close protection).
+    var editSession = SkillsEditSession()
 
     var session: AgentSession { pinnedSession ?? appState.keySession }
     @Environment(\.dismiss) var dismiss
@@ -25,9 +47,7 @@ struct SkillsManageView: View {
     @State var previewBody: String = ""
     @State var globalSkills: [SkillRecord] = []
     @State var projectSkills: [SkillRecord] = []
-    /// Frontmatter description starts collapsed when long so the body stays visible.
-    @State var descriptionExpanded = false
-    @State var editorDirty = false
+    @State var searchText = ""
     @State var pendingSelectedPath: String?
     @State var showDiscardAlert = false
     @State var closeAfterDiscard = false
@@ -46,16 +66,27 @@ struct SkillsManageView: View {
             toolbar
 
             if session.skillCatalog.skills.isEmpty {
-                ContentUnavailableView(
-                    "No Skills",
-                    systemImage: SageDesign.Symbol.skills,
-                    description: Text("Skills you save appear here, grouped by location.")
-                )
+                ContentUnavailableView {
+                    Label("No Skills", systemImage: SageDesign.Symbol.skills)
+                } description: {
+                    Text("Ask Sage in chat to save a skill, or drop a SKILL.md folder into the locations below.")
+                } actions: {
+                    Button {
+                        SkillFinderActions.openSkillsFolder(
+                            scope: session.agent.state.focusedProject != nil ? .project : .global,
+                            projectRoot: session.skillCatalog.currentProjectRoot
+                        )
+                    } label: {
+                        Label("Open Skills Folder", systemImage: "folder")
+                    }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.regular)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HStack(spacing: 0) {
                     skillList
-                        .frame(width: Self.sourceListWidth)
+                        .frame(width: sourceListWidth)
 
                     Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
@@ -98,23 +129,25 @@ struct SkillsManageView: View {
         } message: {
             Text(deleteError ?? "")
         }
-        .alert("Discard Unsaved Changes?", isPresented: $showDiscardAlert) {
+        .alert("Unsaved Changes", isPresented: $showDiscardAlert) {
             Button("Cancel", role: .cancel) {
                 pendingSelectedPath = nil
                 closeAfterDiscard = false
             }
+            Button(closeAfterDiscard ? "Save & Close" : "Save & Switch") {
+                Task { await saveAndContinue() }
+            }
+            .disabled(!editSession.canSave)
             Button("Discard Changes", role: .destructive) {
-                editorDirty = false
-                if closeAfterDiscard {
-                    closeAfterDiscard = false
-                    closeWindow()
-                } else {
-                    selectedPath = pendingSelectedPath
-                }
-                pendingSelectedPath = nil
+                discardAndContinue()
             }
         } message: {
             Text("Your edits to this skill have not been saved.")
+        }
+        .onChange(of: editSession.closeRequestID) { _, _ in
+            guard editSession.isDirty else { return }
+            closeAfterDiscard = true
+            showDiscardAlert = true
         }
         .onAppear {
             Task {
@@ -123,7 +156,8 @@ struct SkillsManageView: View {
         }
     }
 
-    static let sourceListWidth: CGFloat = 200
+    /// Sidebar width — scales with Dynamic Type alongside the list rows.
+    @ScaledMetric(relativeTo: .body) private var sourceListWidth: CGFloat = 200
 
     // MARK: - Chrome
 

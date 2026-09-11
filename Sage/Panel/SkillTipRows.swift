@@ -27,12 +27,12 @@ struct SkillSaveTipRow: View {
                     HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(bannerTitle)
-                                .font(.system(size: type.caption, weight: .medium))
+                                .sageFont(type.caption, weight: .medium)
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
 
                             Text(suggestion.skillDescription)
-                                .font(.system(size: type.micro))
+                                .sageMicro(type.micro)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
@@ -44,7 +44,7 @@ struct SkillSaveTipRow: View {
                                 ? suggestion.resolved(scope: resolvedScope)
                                 : suggestion)
                         }
-                        .font(.system(size: type.micro, weight: .semibold))
+                        .sageMicro(type.micro, weight: .semibold)
                         .buttonStyle(.plain)
                         .foregroundStyle(Color.accentColor)
                         .help(saveHelp)
@@ -57,7 +57,7 @@ struct SkillSaveTipRow: View {
                         scopeChooser
                     } else if suggestion.type == .enhance {
                         Text(enhanceScopeCaption)
-                            .font(.system(size: SageDesign.Typography.microSize))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -68,7 +68,7 @@ struct SkillSaveTipRow: View {
     private var scopeChooser: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Save location")
-                .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
 
             Picker("Save location", selection: Binding(
@@ -84,7 +84,7 @@ struct SkillSaveTipRow: View {
             .frame(maxWidth: 260)
 
             Text(scopeConsequence(for: resolvedScope))
-                .font(.system(size: SageDesign.Typography.microSize))
+                .sageMicro(type.micro)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .animation(SageDesign.Motion.expandAnimation, value: resolvedScope)
@@ -144,6 +144,7 @@ struct SkillSaveTipRow: View {
 struct SkillChooseTipRow: View {
     let choice: SkillActivationChoice
     @Environment(AgentSession.self) private var session
+    @Environment(\.sageTypography) private var type
 
     var body: some View {
         SkillTipChrome.row {
@@ -152,9 +153,9 @@ struct SkillChooseTipRow: View {
                     SkillTipChrome.icon(SageDesign.Symbol.skills)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Which skill should Sage use?")
-                            .font(.system(size: SageDesign.Typography.captionSize, weight: .medium))
+                            .sageFont(type.caption, weight: .medium)
                         Text("Several skills match this request. Choose one to load now.")
-                            .font(.system(size: SageDesign.Typography.microSize))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -169,17 +170,17 @@ struct SkillChooseTipRow: View {
                             HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(candidate.name)
-                                        .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                                        .sageMicro(type.micro, weight: .semibold)
                                         .lineLimit(1)
                                     Text(candidate.description)
-                                        .font(.system(size: SageDesign.Typography.microSize))
+                                        .sageMicro(type.micro)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer(minLength: 0)
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 9, weight: .semibold))
+                                    .sageFont(type.icon, weight: .semibold)
                                     .foregroundStyle(.tertiary)
                                     .padding(.top, 3)
                                     .accessibilityHidden(true)
@@ -198,7 +199,7 @@ struct SkillChooseTipRow: View {
                     Task { await session.agent.skipSkillActivation() }
                 } label: {
                     Text("Continue without a skill")
-                        .font(.system(size: SageDesign.Typography.microSize, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 2)

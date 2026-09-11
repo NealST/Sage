@@ -86,6 +86,11 @@ extension AgentComposerView {
         session.attachmentHint = hint
     }
 
+    func dismissAttachmentHint() {
+        attachmentHintGeneration &+= 1
+        session.attachmentHint = nil
+    }
+
     func selectAttachment(_ attachment: MessageAttachment) {
         guard let index = session.draftAttachments.firstIndex(where: { $0.id == attachment.id })
         else { return }
@@ -96,11 +101,53 @@ extension AgentComposerView {
     }
 
     func removeAttachment(_ attachment: MessageAttachment) {
-        session.draftAttachments.removeAll { $0.id == attachment.id }
-        MessageAttachment.deleteManagedCopies([attachment])
+        guard let index = session.draftAttachments.firstIndex(where: { $0.id == attachment.id })
+        else { return }
+        // A previous removal still in its undo window loses the window —
+        // only one level of undo, so its managed copies are reclaimed now.
+        commitAttachmentRemoval()
+        session.draftAttachments.remove(at: index)
+        removedAttachment = attachment
+        removedAttachmentIndex = index
         if session.draftAttachments.count < MessageAttachment.maxCount,
            session.attachmentHint == AttachmentImport.tooManyHint {
             session.attachmentHint = nil
         }
+        attachmentRemovalTask?.cancel()
+        attachmentRemovalTask = Task { [weak session] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            if session?.draftAttachments.contains(where: { $0.id == attachment.id }) != true {
+                commitAttachmentRemoval()
+            }
+        }
+    }
+
+    func undoAttachmentRemoval() {
+        attachmentRemovalTask?.cancel()
+        attachmentRemovalTask = nil
+        guard let attachment = removedAttachment else { return }
+        withAnimation(SageDesign.Motion.expandAnimation) {
+            if let index = removedAttachmentIndex,
+               index <= session.draftAttachments.count {
+                session.draftAttachments.insert(attachment, at: index)
+            } else {
+                session.draftAttachments.append(attachment)
+            }
+            removedAttachment = nil
+            removedAttachmentIndex = nil
+        }
+    }
+
+    /// Undo window closed — the managed copies can finally be reclaimed.
+    /// Also called from `submit()` so a sent turn never drags a pending
+    /// removal along.
+    func commitAttachmentRemoval() {
+        attachmentRemovalTask?.cancel()
+        attachmentRemovalTask = nil
+        guard let attachment = removedAttachment else { return }
+        MessageAttachment.deleteManagedCopies([attachment])
+        removedAttachment = nil
+        removedAttachmentIndex = nil
     }
 }

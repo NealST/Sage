@@ -11,6 +11,8 @@ import SwiftUI
 @MainActor
 final class SkillsManageWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
+    /// Shared with the SwiftUI editor — carries dirty state so close can be vetoed.
+    private let editSession = SkillsEditSession()
     private var window: NSWindow?
 
     init(appState: AppState) {
@@ -27,11 +29,14 @@ final class SkillsManageWindowController: NSObject, NSWindowDelegate {
     private func present(pinnedSession: AgentSession) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        editSession.reset()
 
         let hosting = NSHostingController(
             rootView: SkillsManageView(
-                pinnedSession: pinnedSession
-            ) { [weak self] in self?.window?.performClose(nil) }
+                pinnedSession: pinnedSession,
+                onDone: { [weak self] in self?.window?.performClose(nil) },
+                editSession: editSession
+            )
             .sageScaledTypography()
             .sageAccessibilityObservation()
             .environment(appState)
@@ -45,14 +50,16 @@ final class SkillsManageWindowController: NSObject, NSWindowDelegate {
         window.level = .normal
         window.collectionBehavior = [.moveToActiveSpace]
         if !window.setFrameUsingName("SageSkillsManageWindow") {
-            window.center()
+            window.setFrame(AppState.cascadeCenteredFrame(for: window), display: false)
         }
+        window.sageFadeInForPresentation()
         window.makeKeyAndOrderFront(nil)
     }
 
     private func makeWindow(hosting: NSViewController) -> NSWindow {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Skills"
+        window.identifier = NSUserInterfaceItemIdentifier(AppState.WindowIdentifier.skillsManage)
         window.titleVisibility = .visible
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.sageApplyLiquidGlass(customTitlebar: false)
@@ -66,12 +73,20 @@ final class SkillsManageWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
+    /// Red traffic light / Cmd-W while edits are unsaved: veto and let the
+    /// view present its save/discard alert. `onDone` re-triggers
+    /// `performClose` once the alert resolves.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if editSession.isDirty {
+            editSession.closeRequestID = UUID()
+            return false
+        }
+        return true
+    }
+
     func windowWillClose(_ notification: Notification) {
-        let otherOpen = NSApp.windows.contains { window in
-            (window.title == "Sage" || window.title == "Settings" || window.title == "Dashboard") && window.isVisible
-        }
-        if !otherOpen {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        AppState.demoteToAccessoryIfNeeded(
+            excluding: notification.object as? NSWindow
+        )
     }
 }

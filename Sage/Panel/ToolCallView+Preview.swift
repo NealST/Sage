@@ -25,7 +25,7 @@ extension ToolCallView {
                         ProgressView()
                             .controlSize(.mini)
                         Text("Comparing with current file…")
-                            .font(.system(size: SageDesign.Typography.microSize))
+                            .sageMicro(type.micro)
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 12)
@@ -51,11 +51,12 @@ extension ToolCallView {
             if let path {
                 HStack(spacing: 6) {
                     Image(systemName: "doc.text")
-                        .font(.system(size: SageDesign.Typography.iconSize, weight: .semibold))
+                        .sageFont(type.icon, weight: .semibold)
                     Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
-                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                        .sageFont(type.caption, design: .monospaced)
                         .textSelection(.enabled)
                         .lineLimit(2)
+                        .truncationMode(.middle)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
@@ -70,10 +71,10 @@ extension ToolCallView {
     func labeledText(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                .sageMicro(type.micro, weight: .semibold)
                 .foregroundStyle(.tertiary)
             Text(value)
-                .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                .sageFont(type.caption, design: .monospaced)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -85,10 +86,10 @@ extension ToolCallView {
             ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pair.key)
-                        .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
+                        .sageMicro(type.micro, weight: .semibold)
                         .foregroundStyle(.tertiary)
                     Text(PathTextSupport.attributedString(from: pair.value, policy: pathGuardPolicy))
-                        .font(.system(size: SageDesign.Typography.captionSize, design: .monospaced))
+                        .sageFont(type.caption, design: .monospaced)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -112,12 +113,15 @@ extension ToolCallView {
         }
     }
 
+    /// Status flips are causal moments — the symbol reacts on the frame they
+    /// land. Bounce celebrates completion, pulse flags failure; both are
+    /// dropped under Reduce Motion.
     @ViewBuilder
     func statusIcon(_ status: StepStatus) -> some View {
         switch status {
         case .pending:
             Image(systemName: SageDesign.Symbol.stepPending)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .regular))
+                .sageMicro(type.micro, weight: .regular)
                 .foregroundStyle(.tertiary)
 
         case .running:
@@ -126,17 +130,19 @@ extension ToolCallView {
 
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.green)
+                .sageMicro(type.micro, weight: .semibold)
+                .foregroundStyle(SageDesign.Palette.success)
+                .sageSymbolEffect(.bounce, value: status)
 
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
-                .font(.system(size: SageDesign.Typography.microSize, weight: .semibold))
-                .foregroundStyle(.red)
+                .sageMicro(type.micro, weight: .semibold)
+                .foregroundStyle(SageDesign.Palette.danger)
+                .sageSymbolEffect(.pulse, value: status)
 
         case .skipped:
             Image(systemName: "minus.circle")
-                .font(.system(size: SageDesign.Typography.microSize))
+                .sageMicro(type.micro)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -156,19 +162,5 @@ extension ToolCallView {
             return .unreadable
         }.value
         diskState = state
-    }
-}
-
-struct ToolCallHeaderButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.75 : 1)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .animation(
-                reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
-                value: configuration.isPressed
-            )
     }
 }

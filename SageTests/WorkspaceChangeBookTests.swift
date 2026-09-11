@@ -34,7 +34,8 @@ final class WorkspaceChangeBookTests: XCTestCase {
         let brief = book.snapshot().reviewBrief(maxChars: 2_000)
         XCTAssertTrue(brief.contains("README.md"))
         XCTAssertTrue(brief.contains("added"))
-        XCTAssertTrue(brief.contains("Non-file actions completed"))
+        // One opaque mutation renders the singular form.
+        XCTAssertTrue(brief.contains("Non-file action completed: 1"))
         XCTAssertFalse(brief.contains("Tool result"))
         XCTAssertFalse(brief.contains("write_text_file"))
     }

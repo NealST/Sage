@@ -24,18 +24,6 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    func toggle() {
-        if let window, window.isVisible {
-            if window.isKeyWindow {
-                window.orderOut(nil)
-            } else {
-                focus(window)
-            }
-        } else {
-            show()
-        }
-    }
-
     private func present() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -47,13 +35,9 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         window.level = .normal
         window.collectionBehavior = [.moveToActiveSpace]
         if !window.setFrameUsingName("SageDashboardWindow") {
-            window.center()
+            window.setFrame(AppState.cascadeCenteredFrame(for: window), display: false)
         }
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func focus(_ window: NSWindow) {
-        NSApp.activate(ignoringOtherApps: true)
+        window.sageFadeInForPresentation()
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -68,15 +52,17 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Dashboard"
+        window.identifier = NSUserInterfaceItemIdentifier(AppState.WindowIdentifier.dashboard)
         window.titleVisibility = .visible
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.sageApplyLiquidGlass(customTitlebar: false)
         window.hasShadow = true
-        window.isMovableByWindowBackground = true
+        // Log rows are text-selectable; background drags would fight selection.
+        window.isMovableByWindowBackground = false
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
-        window.minSize = NSSize(width: 360, height: 300)
-        window.setContentSize(NSSize(width: 400, height: 420))
+        window.minSize = NSSize(width: 360, height: 360)
+        window.setContentSize(NSSize(width: 420, height: 520))
         window.setFrameAutosaveName("SageDashboardWindow")
         return window
     }
@@ -84,11 +70,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
-        let otherOpen = NSApp.windows.contains { window in
-            (window.title == "Sage" || window.title == "Settings") && window.isVisible
-        }
-        if !otherOpen {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        AppState.demoteToAccessoryIfNeeded(
+            excluding: notification.object as? NSWindow
+        )
     }
 }

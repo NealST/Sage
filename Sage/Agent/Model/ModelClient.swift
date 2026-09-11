@@ -45,6 +45,8 @@ enum ModelClientError: LocalizedError {
     case httpStatus(Int, String)
     case rateLimited(retryAfter: TimeInterval?)
     case decoding(String)
+    case streamTruncated
+    case providerError(String)
 
     var errorDescription: String? {
         switch self {
@@ -65,6 +67,12 @@ enum ModelClientError: LocalizedError {
 
         case .decoding(let detail):
             return "Could not parse model response: \(detail)"
+
+        case .streamTruncated:
+            return "The connection to the model ended unexpectedly. The reply may be incomplete — try again."
+
+        case .providerError(let message):
+            return "The model service reported an error: \(message)"
         }
     }
 
@@ -140,7 +148,7 @@ nonisolated struct RetryPolicy: Sendable {
 /// Status updates emitted during retry waits so the UI can show progress.
 enum RetryStatus: Sendable {
     /// About to retry after a transient failure.
-    case retrying(attempt: Int, total: Int, afterDelay: TimeInterval)
+    case retrying(attempt: Int, total: Int, afterDelay: TimeInterval, reason: String?)
     /// Countdown tick — seconds remaining before next attempt.
     case waiting(secondsRemaining: Int)
 }
@@ -151,6 +159,15 @@ actor ModelClient {
 
     func setRetryStatusHandler(_ handler: @escaping @MainActor @Sendable (RetryStatus) -> Void) {
         onRetryStatus = handler
+    }
+
+    /// Set when the user asks to skip the visible countdown; consumed by the
+    /// active `performRetryWait`, which then proceeds to the next attempt.
+    var skipRetryWaitRequested = false
+
+    /// Ends the active retry backoff early so the next attempt fires immediately.
+    func requestImmediateRetry() {
+        skipRetryWaitRequested = true
     }
 
     /// Lightweight connectivity check against an OpenAI-compatible provider.
@@ -194,6 +211,7 @@ actor ModelClient {
         events: [AgentEvent],
         tools: [ToolDefinition],
         settings: ModelSettingsSnapshot,
+        maxTokens: Int? = nil,
         retryPolicy: RetryPolicy = .default
     ) async throws -> AsyncThrowingStream<StreamDelta, Error> {
         let url = try chatCompletionsURL(settings: settings)
@@ -203,13 +221,20 @@ actor ModelClient {
                 messages: APIMessage.messages(from: events),
                 tools: tools.isEmpty ? nil : tools.map(APITool.init),
                 toolChoice: tools.isEmpty ? nil : "auto",
+                temperature: settings.temperature,
+                maxTokens: maxTokens,
                 stream: true,
                 streamOptions: .init(includeUsage: true)
             )
         )
 
         return try await withHTTPRetry(policy: retryPolicy) { attempt in
-            let request = makeChatRequest(url: url, apiKey: settings.apiKey, body: encodedBody, timeout: 120)
+            let request = makeChatRequest(
+                url: url,
+                apiKey: settings.apiKey,
+                body: encodedBody,
+                timeout: settings.requestTimeout
+            )
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
             try Task.checkCancellation()
 
@@ -231,6 +256,7 @@ actor ModelClient {
         settings: ModelSettingsSnapshot,
         toolChoice: String? = nil,
         temperature: Double? = nil,
+        maxTokens: Int? = nil,
         retryPolicy: RetryPolicy = .default
     ) async throws -> ModelTurn {
         let url = try chatCompletionsURL(settings: settings)
@@ -246,12 +272,18 @@ actor ModelClient {
                 messages: APIMessage.messages(from: events),
                 tools: tools.isEmpty ? nil : tools.map(APITool.init),
                 toolChoice: resolvedChoice,
-                temperature: temperature
+                temperature: temperature ?? settings.temperature,
+                maxTokens: maxTokens
             )
         )
 
         return try await withHTTPRetry(policy: retryPolicy) { attempt in
-            let request = makeChatRequest(url: url, apiKey: settings.apiKey, body: encodedBody, timeout: 90)
+            let request = makeChatRequest(
+                url: url,
+                apiKey: settings.apiKey,
+                body: encodedBody,
+                timeout: settings.requestTimeout
+            )
             let (data, response) = try await URLSession.shared.data(for: request)
             try Task.checkCancellation()
 

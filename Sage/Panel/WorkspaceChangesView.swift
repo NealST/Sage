@@ -38,13 +38,17 @@ struct WorkspaceChangesView: View {
             }
             if changes.opaqueMutationCount > 0 {
                 Text(opaqueCaption)
-                    .font(.system(size: type.micro, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
             }
         }
-        .sagePanelBackground(cornerRadius: SageDesign.Glass.panel)
+        // Same material identity as the other transcript cards (card radius +
+        // materialize entrance), without sageGlassCard's extra padding — this
+        // view manages its own row insets.
+        .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
+        .sageGlassMaterialize()
         .accessibilityElement(children: .contain)
         .accessibilityLabel(headerAccessibilityLabel)
     }
@@ -52,11 +56,11 @@ struct WorkspaceChangesView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Changes")
-                .font(.system(size: type.body, weight: .semibold))
+                .sageFont(type.body, weight: .semibold)
                 .tracking(-0.2)
             Spacer(minLength: 8)
             Text(headerSummary)
-                .font(.system(size: type.micro, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
@@ -92,7 +96,7 @@ struct WorkspaceChangesView: View {
             } label: {
                 fileHeader(file, expanded: expanded)
             }
-            .buttonStyle(WorkspaceChangePressStyle())
+            .buttonStyle(ToolChipHeaderButtonStyle())
             .disabled(!file.hasLineDiff)
             .accessibilityAddTraits(file.hasLineDiff ? .isButton : [])
             .accessibilityHint(file.hasLineDiff ? (expanded ? "Collapse" : "Show changes") : "")
@@ -100,7 +104,7 @@ struct WorkspaceChangesView: View {
             if expanded, file.hasLineDiff {
                 fileDiff(file)
                     .padding(.bottom, 8)
-                    .transition(expandTransition)
+                    .transition(ToolChipChrome.expandTransition)
             }
         }
     }
@@ -108,34 +112,34 @@ struct WorkspaceChangesView: View {
     private func fileHeader(_ file: WorkspaceFileChange, expanded: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: file.kind.symbolName)
-                .font(.system(size: 12, weight: .semibold))
+                .sageFont(type.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(PathTextSupport.attributedString(from: file.path, policy: pathGuardPolicy))
-                    .font(.system(size: type.caption))
+                    .sageFont(type.caption)
                     .lineLimit(2)
                     .textSelection(.enabled)
                 if let previousPath = file.previousPath {
                     Text("from \(previousPath)")
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
             Text(file.kind.rowLabel)
-                .font(.system(size: type.micro, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
             if !file.stats.isIdentity {
                 Text(file.stats.summary)
-                    .font(.system(size: type.micro, weight: .medium))
+                    .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             if file.hasLineDiff {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .sageFont(type.icon, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
             }
@@ -149,7 +153,7 @@ struct WorkspaceChangesView: View {
     private func fileDiff(_ file: WorkspaceFileChange) -> some View {
         if file.kind == .removed, file.before == nil {
             Text("Previous contents weren’t captured.")
-                .font(.system(size: type.micro, weight: .medium))
+                .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
         } else {
@@ -180,28 +184,5 @@ struct WorkspaceChangesView: View {
         } else {
             expandedIDs = next
         }
-    }
-
-    private var expandTransition: AnyTransition {
-        if AccessibilityPreferences.reduceMotion {
-            return .opacity
-        }
-        return .asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .top)),
-            removal: .opacity
-        )
-    }
-}
-
-private struct WorkspaceChangePressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.55 : 1)
-            .animation(
-                AccessibilityPreferences.reduceMotion
-                    ? nil
-                    : .easeOut(duration: 0.1),
-                value: configuration.isPressed
-            )
     }
 }

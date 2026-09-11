@@ -7,11 +7,14 @@ import SwiftUI
 
 struct SettingsPrivacySection: View {
     @Environment(AppState.self) private var appState
-    var eraseMessage: String?
+    @Environment(\.sageTypography) private var type
+    /// `nil` = nothing attempted yet. Typed so failure styling never sniffs text.
+    var eraseSucceeded: Bool?
     var isBusy: Bool
     var onErase: () -> Void
     @State private var authorizationRefresh = 0
     @State private var showEraseConfirm = false
+    @State private var showRevokeAllConfirm = false
 
     var body: some View {
         Section {
@@ -39,7 +42,7 @@ struct SettingsPrivacySection: View {
                         .controlSize(.small)
                     }
                     Text(grant.detail)
-                        .font(.caption)
+                        .sageFont(type.caption)
                         .monospaced()
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
@@ -49,12 +52,24 @@ struct SettingsPrivacySection: View {
 
         Section {
             LabeledContent("Long-term permissions") {
-                Button("Revoke all") {
-                    ToolAuthorizationGrantStore.shared.removeAllLongTermGrants()
-                    authorizationRefresh += 1
+                Button("Revoke all…") {
+                    showRevokeAllConfirm = true
                 }
                 .controlSize(.small)
                 .disabled(ToolAuthorizationGrantStore.shared.longTermGrantCount == 0)
+                .confirmationDialog(
+                    "Revoke all long-term permissions?",
+                    isPresented: $showRevokeAllConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Revoke All", role: .destructive) {
+                        ToolAuthorizationGrantStore.shared.removeAllLongTermGrants()
+                        authorizationRefresh += 1
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Sage will ask for approval again the next time these tools run.")
+                }
             }
             Text(longTermPermissionSummary)
                 .foregroundStyle(.secondary)
@@ -76,10 +91,21 @@ struct SettingsPrivacySection: View {
                     Text(eraseDialogMessage)
                 }
             }
-            Text(eraseMessage ?? "Task events stay on this Mac.")
-                .foregroundStyle(
-                    eraseMessage?.hasPrefix("Could") == true ? Color.orange : Color.secondary
-                )
+            eraseStatusText
+        }
+    }
+
+    @ViewBuilder private var eraseStatusText: some View {
+        switch eraseSucceeded {
+        case .none:
+            Text("Task events stay on this Mac.")
+                .foregroundStyle(.secondary)
+        case .some(true):
+            Text("Local history erased.")
+                .foregroundStyle(.secondary)
+        case .some(false):
+            Text("Could not erase local history.")
+                .foregroundStyle(SageDesign.Palette.danger)
         }
     }
 

@@ -7,8 +7,16 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private let session: AgentSession
     private var window: NSWindow?
+    /// Increments on every show/hide/destroy — a stale fade-out completion
+    /// must not order the window out after a later show revived it.
+    private var fadeGeneration: UInt = 0
 
     var isVisible: Bool { window?.isVisible == true }
+
+    /// The user's attention is on this window right now. App activation alone
+    /// is the wrong signal — being in Settings or another project's window
+    /// keeps the app active while this transcript goes unwatched.
+    var isKey: Bool { window?.isKeyWindow == true }
 
     init(appState: AppState, session: AgentSession) {
         self.appState = appState
@@ -38,6 +46,11 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         }
 
         NSApp.setActivationPolicy(.regular)
+        // A pending fade-out's orderOut is voided by bumping the generation;
+        // if the fade was mid-flight the window continues back up from its
+        // current on-screen alpha instead of teleporting to fully visible.
+        fadeGeneration &+= 1
+        window.sageFadeIn(duration: SageDesign.Motion.windowFadeInDuration)
         focus(window)
         appState.noteSessionBecameKey(session)
         requestComposerFocus()
@@ -46,19 +59,34 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
     /// Hiding never cancels a pending plan — only explicit Cancel does.
     /// General window hides; project windows stay available until destroyed.
     func hide() {
-        window?.orderOut(nil)
+        guard let window else { return }
         appState.noteSessionHidden(session)
-        let anyVisible = NSApp.windows.contains { window in
-            window.isVisible && window.identifier?.rawValue.hasPrefix("SageAgentWindow") == true
+        fadeGeneration &+= 1
+        let generation = fadeGeneration
+        if AccessibilitySettings.shared.reduceMotion {
+            window.alphaValue = 1
+            window.orderOut(nil)
+            AppState.demoteToAccessoryIfNeeded()
+            return
         }
-        let settingsOpen = NSApp.windows.contains { $0.title == "Settings" && $0.isVisible }
-        if !anyVisible && !settingsOpen {
-            NSApp.setActivationPolicy(.accessory)
+        window.sageFade(to: 0, duration: SageDesign.Motion.windowFadeOutDuration)
+        // NSAnimationContext completions can fire early when the animation is
+        // replaced (fast toggle), so the generation token is the source of
+        // truth — orderOut only happens if no show/hide happened since.
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + SageDesign.Motion.windowFadeOutDuration + 0.01
+        ) { [weak self] in
+            guard let self, fadeGeneration == generation else { return }
+            window.orderOut(nil)
+            appState.noteSessionHidden(session)
+            AppState.demoteToAccessoryIfNeeded()
         }
     }
 
     /// Tear down the NSWindow (project window close).
     func destroy() {
+        fadeGeneration &+= 1
+        window?.alphaValue = 1
         window?.delegate = nil
         window?.orderOut(nil)
         window?.contentView = nil
@@ -124,7 +152,13 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
             offset = 0
 
         case .project:
-            offset = CGFloat(appState.projectSessions.count) * 22
+            // Keep cascaded windows fully on-screen, even with many projects
+            // or a small display.
+            let maxOffset = max(
+                0,
+                min(visible.width - size.width, visible.height - size.height) / 2
+            )
+            offset = min(CGFloat(appState.projectSessions.count) * 22, maxOffset)
         }
         let originX = visible.midX - size.width / 2 + offset
         let originY = visible.midY - size.height / 2 - offset
@@ -175,4 +209,10 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
 
 extension Notification.Name {
     static let sageFocusAgentInput = Notification.Name("sage.focusAgentInput")
+    /// Menu command → workspace tab switch. Object: `AgentSession.Kind`.
+    static let sageSelectWorkspaceTab = Notification.Name("sage.selectWorkspaceTab")
+    /// Menu command → open the task-history browser. Object: `AgentSession.Kind`.
+    static let sageBrowseTaskHistory = Notification.Name("sage.browseTaskHistory")
+    /// Menu command → open the transcript find bar. Object: `AgentSession.Kind`.
+    static let sageFindInTranscript = Notification.Name("sage.findInTranscript")
 }

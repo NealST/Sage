@@ -30,9 +30,6 @@ struct SagePressableChipButtonStyle: ButtonStyle {
             }
         }
         .scaleEffect(pressed && !reduceMotion ? 0.97 : 1)
-        .animation(
-            reduceMotion ? .easeOut(duration: 0.12) : SageDesign.Motion.contentCrossFade,
-            value: pressed
-        )
+        .animation(SageDesign.Motion.pressFeedback, value: pressed)
     }
 }

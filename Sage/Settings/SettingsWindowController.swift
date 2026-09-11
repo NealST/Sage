@@ -6,18 +6,33 @@
 import AppKit
 import SwiftUI
 
+/// Deep-link into a specific Settings pane, optionally raising a sheet.
+@MainActor
+struct SettingsPresentationRequest {
+    var pane: SettingsPane?
+    var openMCPManage: Bool
+}
+
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private var window: NSWindow?
     private lazy var skillsController = SkillsManageWindowController(appState: appState)
+    /// Delivered to the (recreated) SettingsView when the window is presented.
+    private var pendingPresentation: SettingsPresentationRequest?
 
     init(appState: AppState) {
         self.appState = appState
         super.init()
     }
 
-    func show() {
+    func show(pane: SettingsPane? = nil, openMCPManage: Bool = false) {
+        if pane != nil || openMCPManage {
+            pendingPresentation = SettingsPresentationRequest(
+                pane: pane,
+                openMCPManage: openMCPManage
+            )
+        }
         // MenuBarExtra actions need a turn of the run loop before a window can key.
         DispatchQueue.main.async { [weak self] in
             self?.present()
@@ -35,15 +50,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let window = window ?? makeWindow()
         self.window = window
         window.delegate = self
+        if let request = pendingPresentation {
+            pendingPresentation = nil
+            settingsPresentationHandler?(request)
+        }
 
         // Normal level: yields to other apps when Sage is inactive.
         window.level = .normal
         window.collectionBehavior = [.moveToActiveSpace]
         if !window.setFrameUsingName("SageSettingsWindow.sidebar") {
-            window.center()
+            window.setFrame(AppState.cascadeCenteredFrame(for: window), display: false)
         }
+        window.sageFadeInForPresentation()
         window.makeKeyAndOrderFront(nil)
     }
+
+    /// Set by the hosted SettingsView so a deep-link request (e.g. the
+    /// Dashboard's MCP empty state) lands after the view is on screen.
+    var settingsPresentationHandler: ((SettingsPresentationRequest) -> Void)?
 
     private func makeWindow() -> NSWindow {
         // Environments must wrap `.sageAccessibilityObservation()` — that modifier
@@ -52,6 +76,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             settings: appState.settings,
             onOpenSkills: { [weak self] session in
                 self?.showSkills(pinnedSession: session)
+            },
+            onPresentationRequest: { [weak self] handler in
+                self?.settingsPresentationHandler = handler
             }
         )
             .sageScaledTypography()
@@ -61,6 +88,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Settings"
+        window.identifier = NSUserInterfaceItemIdentifier(AppState.WindowIdentifier.settings)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.sageApplyLiquidGlass(customTitlebar: false)
         window.hasShadow = true
@@ -75,12 +103,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        let otherOpen = NSApp.windows.contains { window in
-            (window.title == "Sage" || window.title == "Skills" || window.title == "Dashboard") && window.isVisible
-        }
-        if !otherOpen {
-            NSApp.setActivationPolicy(.accessory)
-        }
+        AppState.demoteToAccessoryIfNeeded(
+            excluding: notification.object as? NSWindow
+        )
     }
 
     func windowDidResignKey(_ notification: Notification) {

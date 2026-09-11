@@ -58,12 +58,18 @@ final class TopicCoordinator {
         let repository = taskRepository
         Task { [weak self] in
             guard let self, !self.state.isTornDown else { return }
-            try? await repository.updateTopic(
-                taskID: taskID,
-                topic: result.topic,
-                abstract: result.abstract,
-                topicUpdatedAt: stampedAt
-            )
+            do {
+                try await repository.updateTopic(
+                    taskID: taskID,
+                    topic: result.topic,
+                    abstract: result.abstract,
+                    topicUpdatedAt: stampedAt
+                )
+            } catch {
+                // Without this write the task reverts to "New Task" after relaunch,
+                // so a silent failure is invisible data loss.
+                PersistenceLogger.warn("topic_persist_failed task=\(taskID)", error: error)
+            }
         }
     }
 }

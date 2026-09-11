@@ -17,75 +17,46 @@ struct PlanCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Text(plan.summary)
-                .font(.system(size: type.body, weight: .semibold))
+                .sageFont(type.body, weight: .semibold)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
 
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(plan.steps) { step in
+                ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
                     ToolCallView(
                         name: step.toolName,
                         argumentsJSON: step.argumentsJSON,
-                        titleOverride: step.title,
+                        titleOverride: "\(index + 1). \(step.title)",
                         status: step.status,
                         resultContent: step.result,
                         previewAgainstDisk: step.status == .pending || step.status == .running,
-                        startExpandedIfFileEdit: !isExecuting && step.status == .pending
+                        startExpandedIfFileEdit: !isExecuting && step.status == .pending,
+                        highlightsSideEffects: !isExecuting
                     )
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(step.title), \(accessibilityStatus(step.status))")
+                    .accessibilityLabel(
+                        "Step \(index + 1): \(step.title), \(accessibilityStatus(step.status))"
+                    )
                 }
             }
 
             if isExecuting {
-                HStack(spacing: SageDesign.Spacing.small) {
-                    Spacer(minLength: 0)
-                    if let onStop {
-                        Button("Stop", role: .cancel, action: onStop)
-                            .keyboardShortcut(.cancelAction)
-                            .buttonStyle(.glass)
-                            .controlSize(.regular)
-                    }
+                if let onStop {
+                    PlanStopRow(bindsShortcuts: bindsReturnShortcut, onStop: onStop)
                 }
-                .padding(.top, SageDesign.Spacing.extraSmall)
             } else {
-                confirmRow
+                PlanDecisionRow(
+                    onConfirm: onConfirm,
+                    onCancel: onCancel,
+                    bindsShortcuts: bindsReturnShortcut
+                )
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sageGlassCard()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Plan")
-    }
-
-    @ViewBuilder private var confirmRow: some View {
-        HStack(spacing: SageDesign.Spacing.small) {
-            if bindsReturnShortcut {
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
-            } else {
-                Button("Cancel", role: .cancel, action: onCancel)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
-            }
-
-            Spacer(minLength: 0)
-
-            if bindsReturnShortcut {
-                Button("Run", action: onConfirm)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            } else {
-                Button("Run", action: onConfirm)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
-            }
-        }
-        .padding(.top, SageDesign.Spacing.extraSmall)
     }
 
     private func accessibilityStatus(_ status: StepStatus) -> String {

@@ -17,6 +17,13 @@ struct AttachmentChipView: View {
 
     @Environment(\.sageTypography) private var type
     @State private var previewImage: NSImage?
+    /// Upward drag toward removal — tracks 1:1, commits by distance or velocity.
+    @State private var dragOffsetY: CGFloat = 0
+    @ScaledMetric(relativeTo: .caption) private var nameMaxWidth: CGFloat = 140
+
+    private var canDragRemove: Bool {
+        showsRemove && onRemove != nil
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -27,15 +34,15 @@ struct AttachmentChipView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
 
                     Text(attachment.displayName)
-                        .font(.system(size: type.micro, weight: .medium))
+                        .sageMicro(type.micro, weight: .medium)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .frame(maxWidth: 140, alignment: .leading)
+                        .frame(maxWidth: nameMaxWidth, alignment: .leading)
 
                     if !attachment.isAvailable {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.orange)
+                            .sageFont(type.icon, weight: .semibold)
+                            .foregroundStyle(SageDesign.Palette.warning)
                             .help("File is no longer available")
                             .accessibilityLabel("File missing")
                     }
@@ -55,9 +62,14 @@ struct AttachmentChipView: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
-                .font(.system(size: 8, weight: .bold))
+                .sageFont(type.icon, weight: .bold)
                 .foregroundStyle(.tertiary)
                 .frame(width: 18, height: 18)
+                // Hit slop beyond the visual glyph — small targets should not
+                // stay small. Stays inside the chip's padding budget.
+                .padding(5)
+                .contentShape(Rectangle())
+                .help("Remove \(attachment.displayName)")
             }
         }
         .padding(.leading, 5)
@@ -74,6 +86,9 @@ struct AttachmentChipView: View {
                     lineWidth: 1
                 )
         }
+        .gesture(dragRemoveGesture)
+        .offset(y: dragOffsetY)
+        .opacity(removalOpacity)
         .task(id: attachment.path) {
             guard attachment.kind == .image, attachment.isAvailable else {
                 previewImage = nil
@@ -85,6 +100,40 @@ struct AttachmentChipView: View {
             }.value
             previewImage = data.flatMap(NSImage.init(data:))
         }
+    }
+
+    /// Flick the chip up to remove it. Only vertical drags claim the gesture —
+    /// horizontal movement belongs to the surrounding chip scroll view.
+    private var dragRemoveGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard canDragRemove,
+                      abs(value.translation.height) > abs(value.translation.width)
+                else { return }
+                dragOffsetY = min(0, value.translation.height)
+            }
+            .onEnded { value in
+                guard canDragRemove else { return }
+                let shouldRemove = dragOffsetY < -32 || value.velocity.height < -600
+                if shouldRemove {
+                    onRemove?()
+                    // Keep the dragged offset while the removal animation takes over.
+                } else {
+                    withAnimation(
+                        SageDesign.Motion.dragSettle(
+                            velocity: value.velocity.height,
+                            from: dragOffsetY
+                        )
+                    ) {
+                        dragOffsetY = 0
+                    }
+                }
+            }
+    }
+
+    private var removalOpacity: Double {
+        guard dragOffsetY < 0 else { return 1 }
+        return 1 - min(0.8, Double(-dragOffsetY / 80))
     }
 
     private func selectOrPreview() {

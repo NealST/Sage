@@ -14,11 +14,34 @@ struct MarkdownContentView: View {
     var collapsible: Bool = false
     /// TreeSitter highlighting — disable on the streaming hot path.
     var syntaxHighlighting: Bool = true
+    /// Soft fade-in on first appear — for the streaming→commit hand-off where
+    /// syntax colors would otherwise pop in abruptly.
+    var appearsSoftly: Bool = false
 
-    @State private var expanded = false
+    @State private var expanded: Bool
     @State private var measuredHeight: CGFloat = 0
     /// Hash of the markdown that produced `measuredHeight` — skip remounting the measurer.
     @State private var measuredMarkdownID: Int = 0
+    @State private var revealOpacity: Double = 1
+    @Environment(\.sageTypography) private var type
+
+    /// - Parameter initiallyExpanded: long replies start expanded — used for
+    ///   the just-committed reply so the text the user was reading while it
+    ///   streamed doesn't snap shut on hand-off.
+    init(
+        markdown: String,
+        collapsible: Bool = false,
+        initiallyExpanded: Bool = false,
+        syntaxHighlighting: Bool = true,
+        appearsSoftly: Bool = false
+    ) {
+        self.markdown = markdown
+        self.collapsible = collapsible
+        self.syntaxHighlighting = syntaxHighlighting
+        self.appearsSoftly = appearsSoftly
+        _expanded = State(initialValue: initiallyExpanded)
+        _revealOpacity = State(initialValue: appearsSoftly ? 0 : 1)
+    }
 
     /// Presentation-only markdown (completed tasks softened). Source `markdown` is unchanged.
     private var displayMarkdown: String {
@@ -33,9 +56,16 @@ struct MarkdownContentView: View {
                 coreMarkdown
             }
         }
+        .opacity(revealOpacity)
+        .onAppear {
+            guard appearsSoftly, revealOpacity == 0 else { return }
+            withAnimation(SageDesign.Motion.streamingTransition) {
+                revealOpacity = 1
+            }
+        }
         .environment(\.openURL, PathTextSupport.openURLAction)
         .onChange(of: markdown) { _, _ in
-            expanded = false
+            // Content changed: re-measure, but keep the user's expand choice.
             measuredMarkdownID = 0
             measuredHeight = 0
         }
@@ -44,6 +74,13 @@ struct MarkdownContentView: View {
     /// Skip expensive dual-layout measure for short replies.
     private var mayNeedCollapse: Bool {
         displayMarkdown.count >= SageDesign.Markdown.assistantMeasureCharacterGate
+    }
+
+    /// Rough height estimate while the first real measurement is pending,
+    /// so the placeholder doesn't jump from zero.
+    private var measuredPlaceholderHeight: CGFloat {
+        let lineEstimate = CGFloat(displayMarkdown.count) / 60
+        return lineEstimate * (type.reading * 1.5)
     }
 
     private var shouldOfferCollapse: Bool {
@@ -59,11 +96,11 @@ struct MarkdownContentView: View {
         Group {
             if syntaxHighlighting {
                 Markdown(displayMarkdown)
-                    .markdownTheme(.sage)
+                    .markdownTheme(.sage(readingSize: type.reading))
                     .markdownCodeSyntaxHighlighter(TreeSitterCodeHighlighter())
             } else {
                 Markdown(displayMarkdown)
-                    .markdownTheme(.sage)
+                    .markdownTheme(.sage(readingSize: type.reading))
             }
         }
         .textSelection(.enabled)
@@ -73,7 +110,7 @@ struct MarkdownContentView: View {
     /// Offscreen measurer — same theme, no TreeSitter (highlighting isn't needed for height).
     private var measureMarkdown: some View {
         Markdown(displayMarkdown)
-            .markdownTheme(.sage)
+            .markdownTheme(.sage(readingSize: type.reading))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -96,19 +133,30 @@ struct MarkdownContentView: View {
                         }
                 }
 
-                coreMarkdown
-                    .frame(
-                        maxHeight: (!expanded && shouldOfferCollapse)
-                            ? SageDesign.Markdown.collapsedReplyHeight
-                            : nil,
-                        alignment: .top
-                    )
-                    .clipped()
-                    .overlay(alignment: .bottom) {
-                        if !expanded, shouldOfferCollapse {
-                            collapseFade
+                // Collapsed state waits for the first measurement — rendering
+                // before it shows a full-height frame that then snaps to the
+                // collapsed height (a visible flash on commit and re-materialize).
+                if expanded || !needsFreshMeasure {
+                    coreMarkdown
+                        .frame(
+                            maxHeight: (!expanded && shouldOfferCollapse)
+                                ? SageDesign.Markdown.collapsedReplyHeight
+                                : nil,
+                            alignment: .top
+                        )
+                        .clipped()
+                        .overlay(alignment: .bottom) {
+                            if !expanded, shouldOfferCollapse {
+                                collapseFade
+                            }
                         }
-                    }
+                } else {
+                    Color.clear
+                        .frame(height: min(
+                            measuredPlaceholderHeight,
+                            SageDesign.Markdown.collapsedReplyHeight
+                        ))
+                }
             }
             .onPreferenceChange(MarkdownHeightKey.self) { height in
                 measuredHeight = height

@@ -42,7 +42,7 @@ extension AgentComposerView {
         } else {
             next = []
         }
-        withAnimation(.easeOut(duration: 0.15)) {
+        withAnimation(SageDesign.Motion.scrollAnimation) {
             let resetIndex = slashSuggestions.isEmpty
             slashSuggestions = next
             if resetIndex || !next.indices.contains(selectedSuggestionIndex) {

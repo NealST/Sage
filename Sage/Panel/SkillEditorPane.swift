@@ -26,7 +26,8 @@ struct SkillEditorPane: View {
 
     let skill: SkillRecord
     let reloadSkills: () async -> Void
-    let onDirtyChanged: (Bool) -> Void
+    /// Shared dirty/save state so window close can be vetoed while editing.
+    let editSession: SkillsEditSession
 
     @Environment(\.sageTypography) private var type
     @State private var mode: Mode = .write
@@ -37,6 +38,10 @@ struct SkillEditorPane: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var detailsExpanded = false
+    /// Bumped on each successful save; drives the toolbar's "Saved" flash.
+    @State private var savedFlash = 0
+    @ScaledMetric(relativeTo: .body) private var modePickerWidth: CGFloat = 150
+    @State private var confirmRevert = false
 }
 
 extension SkillEditorPane {
@@ -63,10 +68,23 @@ extension SkillEditorPane {
             }
         }
         .task(id: skill.path) {
+            let pane = self
+            editSession.saveAction = { await pane.save() }
             await load()
         }
         .onChange(of: isDirty) { _, dirty in
-            onDirtyChanged(dirty)
+            editSession.isDirty = dirty
+            if dirty { savedFlash = 0 }
+        }
+        .task(id: savedFlash) {
+            guard savedFlash > 0 else { return }
+            try? await Task.sleep(for: .seconds(1.6))
+            if !Task.isCancelled, savedFlash > 0 {
+                withAnimation(SageDesign.Motion.contentCrossFade) { savedFlash = 0 }
+            }
+        }
+        .onChange(of: canSave) { _, savable in
+            editSession.canSave = savable
         }
         .alert("Couldn’t Save Skill", isPresented: Binding(
             get: { errorMessage != nil },
@@ -86,20 +104,38 @@ extension SkillEditorPane {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 150)
+            .frame(width: modePickerWidth)
 
             Spacer()
 
-            if isDirty {
+            if savedFlash > 0 {
+                Label("Saved", systemImage: "checkmark")
+                    .sageMicro(type.micro, weight: .medium)
+                    .foregroundStyle(SageDesign.Palette.success)
+                    .transition(SageDesign.Glass.appearTransition)
+            } else if isDirty {
                 Text("Edited")
-                    .font(.system(size: type.micro))
+                    .sageMicro(type.micro)
                     .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
 
             Button("Revert") {
-                draft = saved
+                confirmRevert = true
             }
             .disabled(!isDirty || isSaving)
+            .confirmationDialog(
+                "Discard your edits?",
+                isPresented: $confirmRevert,
+                titleVisibility: .visible
+            ) {
+                Button("Discard Changes", role: .destructive) {
+                    draft = saved
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your unsaved edits to this skill will be lost.")
+            }
 
             Button {
                 Task { await save() }
@@ -125,6 +161,14 @@ extension SkillEditorPane {
                 .lineLimit(2...5)
                 .textFieldStyle(.roundedBorder)
 
+            // Save stays disabled without it — explain why instead of letting
+            // the button just look broken.
+            if isDirty, draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Add a description — the agent reads it when deciding to use this skill.")
+                    .sageMicro(type.micro)
+                    .foregroundStyle(SageDesign.Palette.danger)
+            }
+
             DisclosureGroup("Details", isExpanded: $detailsExpanded) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     detailRow("License", text: $draft.license, prompt: "Optional")
@@ -139,8 +183,8 @@ extension SkillEditorPane {
                                 .lineLimit(2...5)
                             if !draft.metadata.isEmpty, metadataDictionary == nil {
                                 Text("Use one non-empty key=value pair per line.")
-                                    .font(.system(size: type.micro))
-                                    .foregroundStyle(.red)
+                                    .sageMicro(type.micro)
+                                    .foregroundStyle(SageDesign.Palette.danger)
                             }
                         }
                     }
@@ -148,7 +192,7 @@ extension SkillEditorPane {
                 .textFieldStyle(.roundedBorder)
                 .padding(.top, SageDesign.Spacing.small)
             }
-            .font(.system(size: type.caption))
+            .sageFont(type.caption)
 
             SkillSecretsEditor(skill: skill)
         }
@@ -184,7 +228,7 @@ extension SkillEditorPane {
             ScrollView {
                 if draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("No preview available.")
-                        .font(.system(size: type.caption))
+                        .sageFont(type.caption)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -260,12 +304,14 @@ private extension SkillEditorPane {
         draft = snapshot
         saved = snapshot
         modificationDate = loaded.1
-        onDirtyChanged(false)
+        editSession.isDirty = false
+        editSession.canSave = false
     }
 
     @MainActor
-    private func save() async {
-        guard canSave, let metadataDictionary else { return }
+    @discardableResult
+    private func save() async -> Bool {
+        guard canSave, let metadataDictionary else { return false }
         isSaving = true
         defer { isSaving = false }
         do {
@@ -285,10 +331,13 @@ private extension SkillEditorPane {
                 .resourceValues(forKeys: [.contentModificationDateKey])
                 .contentModificationDate
             saved = draft
-            onDirtyChanged(false)
+            editSession.isDirty = false
+            withAnimation(SageDesign.Motion.contentCrossFade) { savedFlash += 1 }
             await reloadSkills()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 }

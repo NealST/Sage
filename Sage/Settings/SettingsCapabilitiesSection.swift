@@ -10,6 +10,7 @@ struct SettingsCapabilitiesSection: View {
     @Binding var pinnedSkillsSession: AgentSession?
     @Binding var showMCPManage: Bool
     var onOpenSkills: ((AgentSession) -> Void)?
+    @State private var mutedTipKinds: Set<SkillTipKind> = []
 
     var body: some View {
         Section {
@@ -19,8 +20,12 @@ struct SettingsCapabilitiesSection: View {
                 onOpenSkills?(session)
             } label: {
                 LabeledContent("Skills") {
-                    Text("\(enabledSkillCount) of \(skillsCatalog.skills.count) enabled")
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: SageDesign.Spacing.small) {
+                        Text("\(enabledSkillCount) of \(skillsCatalog.skills.count) enabled")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        navigationChevron
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -42,12 +47,27 @@ struct SettingsCapabilitiesSection: View {
                 )
             }
 
+            if skillsCatalog.skills.count > 4 {
+                Button {
+                    let session = pinnedSkillsSession ?? appState.keySession
+                    pinnedSkillsSession = session
+                    onOpenSkills?(session)
+                } label: {
+                    Text("Show all \(skillsCatalog.skills.count) skills…")
+                        .monospacedDigit()
+                }
+            }
+
             Button {
                 showMCPManage = true
             } label: {
                 LabeledContent("MCP Servers") {
-                    Text("Full-trust · \(connectedMCPCount) connected")
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: SageDesign.Spacing.small) {
+                        Text("Full-trust · \(connectedMCPCount) connected")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        navigationChevron
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -64,7 +84,44 @@ struct SettingsCapabilitiesSection: View {
                     )
                 )
             }
+
+            if appState.mcpHub.mcpServers.count > 3 {
+                Button {
+                    showMCPManage = true
+                } label: {
+                    Text("Show all \(appState.mcpHub.mcpServers.count) servers…")
+                        .monospacedDigit()
+                }
+            }
+        } footer: {
+            if !mutedTipKinds.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Sage won’t suggest: \(mutedTipNames).")
+                    Button("Restore all suggestions") {
+                        SkillTipMuting.reset()
+                        mutedTipKinds = []
+                    }
+                    .controlSize(.small)
+                }
+            }
         }
+        .onAppear {
+            mutedTipKinds = SkillTipMuting.mutedKinds
+        }
+    }
+
+    private var mutedTipNames: String {
+        SkillTipKind.allCases
+            .filter { mutedTipKinds.contains($0) }
+            .map(\.suggestionName)
+            .joined(separator: ", ")
+    }
+
+    /// Rows that open another surface get the standard trailing chevron.
+    private var navigationChevron: some View {
+        Image(systemName: "chevron.right")
+            .sageFont(10, weight: .semibold)
+            .foregroundStyle(.tertiary)
     }
 
     private var skillsCatalog: SkillCatalog {

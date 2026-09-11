@@ -15,23 +15,12 @@ enum SkillTipChrome {
 
     @ViewBuilder
     static func icon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: SageDesign.Typography.captionSize, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .frame(width: 16, height: 16)
-            .padding(.top, 2)
-            .accessibilityHidden(true)
+        SkillTipChromeIcon(systemName: systemName)
     }
 
     @ViewBuilder
     static func dismissButton(action: @escaping () -> Void) -> some View {
-        Button("Dismiss", systemImage: "xmark", action: action)
-            .labelStyle(.iconOnly)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(.secondary)
-            .frame(width: 22, height: 22)
-            .buttonStyle(.plain)
-            .help("Dismiss")
+        SkillTipChromeDismissButton(action: action)
     }
 
     @ViewBuilder
@@ -49,8 +38,37 @@ enum SkillTipChrome {
         content()
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .sagePanelBackground(cornerRadius: 10, weight: .clear)
+            .sagePanelBackground(cornerRadius: SageDesign.Glass.card, weight: .clear)
             .sageGlassMaterialize()
+    }
+}
+
+private struct SkillTipChromeIcon: View {
+    let systemName: String
+    @Environment(\.sageTypography) private var type
+
+    var body: some View {
+        Image(systemName: systemName)
+            .sageFont(type.caption, weight: .semibold)
+            .foregroundStyle(.secondary)
+            .frame(width: 16, height: 16)
+            .padding(.top, 2)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SkillTipChromeDismissButton: View {
+    let action: () -> Void
+    @Environment(\.sageTypography) private var type
+
+    var body: some View {
+        Button("Dismiss", systemImage: "xmark", action: action)
+            .labelStyle(.iconOnly)
+            .sageFont(type.icon, weight: .bold)
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .buttonStyle(.plain)
+            .help("Dismiss")
     }
 }
 

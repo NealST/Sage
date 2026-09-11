@@ -41,6 +41,18 @@ nonisolated enum AppSupportPaths {
         sageDirectory().appendingPathComponent("skills-state.json")
     }
 
+    static func sessionDraftsDirectory(createIfNeeded: Bool = true) -> URL {
+        let dir = sageDirectory(createIfNeeded: createIfNeeded)
+            .appendingPathComponent("Drafts", isDirectory: true)
+        if createIfNeeded {
+            try? FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true
+            )
+        }
+        return dir
+    }
+
     static func attachmentsInbox(createIfNeeded: Bool = true) -> URL {
         let dir = sageDirectory(createIfNeeded: createIfNeeded)
             .appendingPathComponent("Attachments", isDirectory: true)

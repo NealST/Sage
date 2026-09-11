@@ -25,11 +25,13 @@ struct SettingsSchedulesSection: View {
                 }
             }
         } footer: {
-            Text(
-                loginItemHint ?? """
-                Schedules only run while Sage is open. Turn this on so Sage launches at login.
-                """
-            )
+            VStack(alignment: .leading, spacing: 6) {
+                if let loginItemHint {
+                    Label(loginItemHint, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(SageDesign.Palette.warning)
+                }
+                Text("Schedules only run while Sage is open. Turn this on so Sage launches at login. View and manage schedules in the Dashboard (⇧⌘D).")
+            }
         }
     }
 }

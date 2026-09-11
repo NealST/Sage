@@ -25,12 +25,10 @@ extension WorkspaceChromeView {
 
     var branchMenu: some View {
         Menu {
-            let root = focused?.rootURL
-            let branches = root.map { GitBranchReader.localBranches(inProjectRoot: $0) } ?? []
-            if branches.isEmpty {
+            if gitBranches.isEmpty {
                 Text("No local branches")
             } else {
-                ForEach(branches, id: \.self) { name in
+                ForEach(gitBranches, id: \.self) { name in
                     Button {
                         switchToBranch(name)
                     } label: {
@@ -141,11 +139,14 @@ extension WorkspaceChromeView {
         Task.detached(priority: .userInitiated) {
             let error = GitBranchReader.checkout(branch: name, inProjectRoot: rootURL)
             let refreshed = GitBranchReader.currentBranch(inProjectRoot: rootURL)
+            // The list is sorted current-first, so it must be refetched after checkout.
+            let refreshedBranches = GitBranchReader.localBranches(inProjectRoot: rootURL)
             await MainActor.run {
                 if let error {
                     branchSwitchError = error
                 } else {
                     gitBranch = refreshed
+                    gitBranches = refreshedBranches
                     branchSwitchError = nil
                 }
             }

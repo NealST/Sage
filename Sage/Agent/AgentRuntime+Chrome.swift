@@ -60,6 +60,32 @@ extension AgentRuntime {
         )
     }
 
+    /// Approvals still ahead in the in-flight batch, after the one on screen.
+    /// Mirrors the executor's `isApprovalMissing` gate (hook-ask not predicted).
+    var remainingApprovalCount: Int {
+        guard case .toolApproval(let callID, _, _, _) = state.pendingPrompt else { return 0 }
+        let steps = (planProgress.plan ?? state.activeTask?.pendingPlan)?.steps ?? []
+        guard let current = steps.firstIndex(where: { $0.toolCallID == callID }) else { return 0 }
+        return steps[(current + 1)...].filter { step in
+            guard step.status == .pending else { return false }
+            guard SessionToolAllowlist.needsGate(
+                name: step.toolName,
+                argumentsJSON: step.argumentsJSON,
+                policy: state.pathGuardPolicy,
+                skills: host.enabledSkills,
+                mcpTools: mcpHub?.mcpTools ?? []
+            ) else { return false }
+            return !state.sessionAllowlist.contains(
+                name: step.toolName,
+                argumentsJSON: step.argumentsJSON,
+                policy: state.pathGuardPolicy,
+                scopeID: state.authorizationScopeID,
+                skills: host.enabledSkills,
+                mcpTools: mcpHub?.mcpTools ?? []
+            )
+        }.count
+    }
+
     var blocksNewInput: Bool {
         switch state.phase {
         case .failed:
@@ -196,6 +222,25 @@ extension AgentRuntime {
         state.recentProjects = projects
     }
 
+    /// UI-driven reorder of the active task's todos. Accepts same-ids
+    /// reorders only — a list the agent rewrote mid-drag is never clobbered.
+    func reorderTodos(_ items: [AgentTodoItem]) async {
+        guard let taskID = state.activeTaskID, var task = state.activeTask else { return }
+        guard task.todos.count == items.count,
+              Set(task.todos.map(\.id)) == Set(items.map(\.id)),
+              task.todos != items
+        else { return }
+        task.todos = items
+        state.activeTask = task
+        do {
+            try await taskRepository.updateTodoList(taskID: taskID, items: items)
+        } catch {
+            // The reorder survives in memory; log so the disk/UI divergence
+            // is diagnosable after a relaunch.
+            PersistenceLogger.warn("todo_reorder_persist_failed task=\(taskID)", error: error)
+        }
+    }
+
     @discardableResult
     func startFresh() async -> UUID? {
         guard canStartFresh else { return nil }
@@ -223,6 +268,10 @@ extension AgentRuntime {
     func dismissContextHint() {
         state.contextHint = nil
         state.forceFreshOnNextSubmit = true
+    }
+
+    func dismissContextBudgetNotice() {
+        state.dismissContextBudgetNotice()
     }
 
     func dismissTopicDriftOffer() {
@@ -259,6 +308,11 @@ extension AgentRuntime {
     func stop() {
         guard canStop else { return }
         operations.requestStop()
+    }
+
+    /// Skips the remaining backoff of the visible retry countdown.
+    func retryNow() {
+        modelGateway.requestImmediateRetry()
     }
 
     func eraseAllData() async -> Bool {

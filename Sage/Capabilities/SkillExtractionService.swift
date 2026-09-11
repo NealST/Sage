@@ -126,6 +126,7 @@ actor SkillExtractionService {
                 events: events,
                 tools: [],
                 settings: settings,
+                maxTokens: ModelOutputCaps.subagent,
                 retryPolicy: RetryPolicy(maxAttempts: 2, baseDelay: 1.0, maxDelay: 10.0)
             )
 

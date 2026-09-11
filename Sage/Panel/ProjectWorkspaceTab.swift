@@ -21,4 +21,7 @@ enum ProjectWorkspaceTab: String, CaseIterable, Identifiable, Sendable {
         case .history: return "History"
         }
     }
+
+    /// UserInfo key carrying the rawValue across the menu-command bridge.
+    static let notificationKey = "tab"
 }
