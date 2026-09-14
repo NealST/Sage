@@ -37,9 +37,19 @@ struct AgentWorkspaceView: View {
     }
 
     var body: some View {
+        // No SwiftUI canvas paint: the window body IS the system Liquid Glass
+        // material, and painting `Color(.windowBackgroundColor)` here renders
+        // as a flat graphite slab (rgb 30,30,30) that clashes with the glass
+        // frame and chrome. Transparent content lets the material show.
         workspaceCanvas
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
+            // The titlebar row claims the window's own titlebar band: without
+            // this, the system's traffic-light safe area pushes the 52pt row
+            // below the buttons and leaves a dead strip above it (the "second
+            // stacked toolbar" the unified row exists to avoid). The row then
+            // insets its leading edge past the buttons; transcript content
+            // still starts below via the safeAreaInset.
+            .ignoresSafeArea(edges: .top)
             .safeAreaInset(edge: .top, spacing: 0) {
                 topChrome
             }
@@ -133,29 +143,34 @@ struct AgentWorkspaceView: View {
     }
 
     @ViewBuilder private var topChrome: some View {
-        VStack(spacing: 0) {
-            WorkspaceChromeView(
-                gitBranch: $gitBranch,
-                gitBranches: $gitBranches,
-                branchSwitchError: $branchSwitchError,
-                projectTab: $projectTab
-            )
-            if let branchSwitchError, !branchSwitchError.isEmpty {
-                branchErrorBanner(branchSwitchError)
-            }
-            if isWorkspaceReady, showsTaskPane {
-                TranscriptNoticeBar()
-                    .animation(
-                        SageDesign.Motion.expandAnimation,
-                        value: session.agent.state.topicDriftOffer?.triggeringUserEventID
-                    )
-                    .animation(
-                        SageDesign.Motion.expandAnimation,
-                        value: session.agent.state.contextHint
-                    )
+        // Floating chrome: no full-bleed toolbar glass — the controls are glass
+        // chips on the window material, and the transcript's soft scroll-edge
+        // effect fades content that passes underneath. The container lets
+        // neighboring chips blend into one material when the window narrows.
+        GlassEffectContainer(spacing: SageDesign.Glass.containerSpacing) {
+            VStack(spacing: 0) {
+                WorkspaceChromeView(
+                    gitBranch: $gitBranch,
+                    gitBranches: $gitBranches,
+                    branchSwitchError: $branchSwitchError,
+                    projectTab: $projectTab
+                )
+                if let branchSwitchError, !branchSwitchError.isEmpty {
+                    branchErrorBanner(branchSwitchError)
+                }
+                if isWorkspaceReady, showsTaskPane {
+                    TranscriptNoticeBar()
+                        .animation(
+                            SageDesign.Motion.expandAnimation,
+                            value: session.agent.state.topicDriftOffer?.triggeringUserEventID
+                        )
+                        .animation(
+                            SageDesign.Motion.expandAnimation,
+                            value: session.agent.state.contextHint
+                        )
+                }
             }
         }
-        .sageGlassToolbar()
     }
 
     private var bottomChrome: some View {
@@ -187,6 +202,12 @@ struct AgentWorkspaceView: View {
                 ProjectFilesBrowserView(rootURL: root)
                     .id("\(root.path)-\(gitBranch ?? "none")")
                     .sageScrollEdgeGlass()
+            } else {
+                ContentUnavailableView {
+                    Label("No Project", systemImage: "folder")
+                } description: {
+                    Text("Open a project to browse its files.")
+                }
             }
 
         case .history:
@@ -223,7 +244,7 @@ struct AgentWorkspaceView: View {
     }
 
     private func branchErrorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(SageDesign.Palette.warning)
                 .accessibilityHidden(true)
@@ -231,14 +252,14 @@ struct AgentWorkspaceView: View {
                 .sageMicro(type.micro)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 4)
+            Spacer(minLength: SageDesign.Spacing.extraSmall)
             Button {
                 branchSwitchError = nil
             } label: {
                 Text("Dismiss")
                     .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                     .contentShape(Capsule())
             }
             .buttonStyle(SagePressableChipButtonStyle())
@@ -306,21 +327,52 @@ struct AgentWorkspaceView: View {
     /// One attention signal per phase transition while the user's attention
     /// is elsewhere. Channels split by Apple's feedback kinds: decisions need
     /// a chime (the deadlock case — the agent waits on the user while the
-    /// user thinks Sage is working); completed/failed lean on their system
-    /// notification banner (which carries its own sound) plus the Dock
-    /// bounce, so no second sound stacks on top. App activation is too
-    /// coarse — the user focused in Settings or another project's window
-    /// still needs the signal for this transcript.
+    /// user thinks Sage is working) plus a banner, the visible channel a Dock
+    /// bounce can't reach (fullscreen, another Space, hidden Dock);
+    /// completed/failed lean on their system notification banner (which
+    /// carries its own sound) plus the Dock bounce, so no second sound stacks
+    /// on top. App activation is too coarse — the user focused in Settings
+    /// or another project's window still needs the signal for this
+    /// transcript.
     private func requestAttentionIfNeeded(_ phase: AgentPhase) {
-        guard appState.windowControllers[session.kind]?.isKey != true else { return }
         switch phase {
         case .awaitingConfirmation:
+            guard appState.windowControllers[session.kind]?.isKey != true else { return }
             NSSound(named: NSSound.Name("Ping"))?.play()
             NSApp.requestUserAttention(.informationalRequest)
-        case .failed, .completed:
+            postApprovalAttentionBanner()
+
+        case .failed, .completed, .thinking, .executing, .idle:
+            // A phase change away from awaitingConfirmation means the
+            // decision is made — retire the banner wherever it still sits.
+            TaskCompletionNotifier.clearApprovalAttention(projectID: session.projectID)
+            guard appState.windowControllers[session.kind]?.isKey != true else { return }
             NSApp.requestUserAttention(.informationalRequest)
-        case .thinking, .executing, .idle:
-            break
+        }
+    }
+
+    private func postApprovalAttentionBanner() {
+        let scope = session.agent.state.focusedProject?.name ?? "Sage"
+        TaskCompletionNotifier.postApprovalAttention(
+            ApprovalAttentionPayload(
+                projectID: session.projectID,
+                title: "\(scope) · waiting for you",
+                body: approvalAttentionBody
+            )
+        )
+    }
+
+    /// Plain-language restatement of what is pending. It names the *kind* of
+    /// decision, never enough detail to act on inline — Allow/Skip happens
+    /// in the transcript on unclipped arguments.
+    private var approvalAttentionBody: String {
+        switch session.agent.turnChrome {
+        case .toolApproval: return "Sage needs approval to run a tool."
+        case .toolRoundLimit: return "Sage reached a tool-round limit."
+        case .reviewFailed: return "A review failed and needs a decision."
+        case .reviewMustFix: return "A review wants the reply fixed."
+        case .reviewOptional: return "A review suggested improvements."
+        case .workPlan, .toolBatch, nil: return "A plan is ready for your decision."
         }
     }
 }
@@ -341,12 +393,12 @@ private struct TranscriptBootstrapSkeleton: View {
                 .sageMicro(type.micro)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
-                bar(width: 210, height: 32, radius: 16)
-                bar(width: 280, height: 14, radius: 7)
-                bar(width: 240, height: 14, radius: 7)
+                bar(width: 210, height: 32)
+                bar(width: 280, height: 14)
+                bar(width: 240, height: 14)
                 bar(width: 320, height: 64, radius: SageDesign.Glass.card)
-                bar(width: 200, height: 14, radius: 7)
-                bar(width: 150, height: 14, radius: 7)
+                bar(width: 200, height: 14)
+                bar(width: 150, height: 14)
             }
             .opacity(pulsing ? 0.45 : 0.8)
             .animation(
@@ -355,7 +407,7 @@ private struct TranscriptBootstrapSkeleton: View {
             )
             Spacer(minLength: 0)
         }
-        .padding(.vertical, SageDesign.Spacing.large)
+        .padding(SageDesign.Spacing.large)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             guard !reduceMotion else { return }
@@ -365,8 +417,8 @@ private struct TranscriptBootstrapSkeleton: View {
         .accessibilityLabel(isProjectWindow ? "Opening project" : "Starting Sage")
     }
 
-    private func bar(width: CGFloat, height: CGFloat, radius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: radius, style: .continuous)
+    private func bar(width: CGFloat, height: CGFloat, radius: CGFloat? = nil) -> some View {
+        RoundedRectangle(cornerRadius: radius ?? height / 2, style: .continuous)
             .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
             .frame(width: width, height: height)
             .accessibilityHidden(true)

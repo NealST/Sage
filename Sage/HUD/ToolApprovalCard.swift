@@ -29,11 +29,20 @@ struct ToolApprovalCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-            Text(title)
-                .sageFont(type.body, weight: .semibold)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.labelGap) {
+                // Same "needs you" vocabulary as the menu-bar badge and
+                // Dashboard rows (warning orange) — a glyph, not a card-wide
+                // tint, so the decision reads urgent without alarming.
+                Image(systemName: SageDesign.Symbol.pending)
+                    .sageFont(type.caption, weight: .semibold)
+                    .foregroundStyle(SageDesign.Palette.warning)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .sageFont(type.body, weight: .semibold)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
 
             Text(subtitle)
                 .sageFont(type.caption)
@@ -62,7 +71,7 @@ struct ToolApprovalCard: View {
             if !parameterFields.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(parameterFields.enumerated()), id: \.offset) { _, field in
-                        HStack(alignment: .top, spacing: 6) {
+                        HStack(alignment: .top, spacing: SageDesign.Spacing.extraSmall) {
                             Text(field.key)
                                 .foregroundStyle(.secondary)
                             Text(displayValue(field))
@@ -108,11 +117,12 @@ struct ToolApprovalCard: View {
 
             HStack(spacing: SageDesign.Spacing.small) {
                 Button(role: .cancel, action: onSkip) {
-                    Text("Skip")
+                    Text("Don't Run")
                 }
                 .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
                 .buttonStyle(.glass)
                 .controlSize(.regular)
+                .help("Decline this tool call. Sage continues the task without it.")
 
                 Spacer(minLength: 0)
 
@@ -123,7 +133,10 @@ struct ToolApprovalCard: View {
                 } label: {
                     Label("More approval options", systemImage: "ellipsis.circle")
                 }
-                .menuStyle(.borderlessButton)
+                // Same glass system as the sibling decision buttons — one
+                // row, one control vocabulary.
+                .buttonStyle(.glass)
+                .controlSize(.regular)
                 .labelStyle(.iconOnly)
                 .help("Always allow this permission (asks for confirmation)")
                 .accessibilityLabel("More approval options")
@@ -131,11 +144,15 @@ struct ToolApprovalCard: View {
                 Button("Allow for this task", action: onAllowSession)
                     .buttonStyle(.glass)
                     .controlSize(.regular)
+                    // Return and Escape already cover Allow once / Don't Run;
+                    // focusability brings this middle choice to Tab users too.
+                    .focusable(true)
 
                 Button("Allow once", action: onAllowOnce)
                     .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
                     .buttonStyle(.glassProminent)
                     .controlSize(.regular)
+                    .focusable(true)
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
         }

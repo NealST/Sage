@@ -64,11 +64,30 @@ struct ProjectFilesBrowserView: View {
                     }
                 }
                 .listStyle(.sidebar)
-                .searchable(
-                    text: $searchText,
-                    placement: .toolbar,
-                    prompt: "Search files"
-                )
+                // Same floating search pill as task history — the Files tab
+                // has no toolbar of its own, and `.searchable` would hunt for
+                // one. Content scrolls under it via the soft scroll-edge effect.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    SageInlineSearchField(prompt: "Search files", text: $searchText)
+                        .padding(.horizontal, SageDesign.Spacing.large)
+                        .padding(.vertical, SageDesign.Spacing.small)
+                }
+                .sageScrollEdgeGlass()
+                // Finder muscle memory: Space previews the selected row with
+                // the same semantics as double click. While filtering, space
+                // belongs to the search field.
+                .onKeyPress(.space) {
+                    guard !isFiltering,
+                          let selectedPath,
+                          let node = node(for: selectedPath)
+                    else { return .ignored }
+                    if node.isDirectory {
+                        NSWorkspace.shared.open(node.url)
+                    } else {
+                        QuickLookPresenter.shared.preview(url: node.url)
+                    }
+                    return .handled
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,8 +104,23 @@ struct ProjectFilesBrowserView: View {
         }
     }
 
+    private func node(for id: String) -> FileNode? {
+        for root in nodes {
+            if let found = Self.find(id, in: root) { return found }
+        }
+        return nil
+    }
+
+    private static func find(_ id: String, in node: FileNode) -> FileNode? {
+        if node.id == id { return node }
+        for child in node.children ?? [] {
+            if let found = find(id, in: child) { return found }
+        }
+        return nil
+    }
+
     private func fileRow(_ node: FileNode, showPath: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SageDesign.Spacing.labelGap) {
             Label {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(node.name)
@@ -105,7 +139,7 @@ struct ProjectFilesBrowserView: View {
                     .sageFont(type.icon)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 4)
+            Spacer(minLength: SageDesign.Spacing.extraSmall)
             if let letter = statusLetter(for: node) {
                 Text(letter)
                     .sageMicro(type.micro, design: .monospaced)
@@ -177,7 +211,7 @@ struct ProjectFilesBrowserView: View {
         switch letter {
         case "M": return SageDesign.Palette.warning
         case "D": return SageDesign.Palette.danger
-        default: return .green
+        default: return SageDesign.Palette.success
         }
     }
 

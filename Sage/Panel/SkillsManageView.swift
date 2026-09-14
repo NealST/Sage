@@ -8,8 +8,8 @@
 
 import SwiftUI
 
-/// Shared between the SwiftUI editor and the window controller so the red
-/// close button / Cmd-W can veto close while edits are unsaved.
+/// Shared between the hosting surface and the editor so unsaved edits can
+/// veto dismissal (sheet: interactive dismiss; Done routes through save).
 @MainActor
 @Observable
 final class SkillsEditSession {
@@ -17,14 +17,11 @@ final class SkillsEditSession {
     var canSave = false
     /// Registered by the active editor pane.
     var saveAction: (() async -> Bool)?
-    /// Bumped when the window tried to close while dirty.
-    var closeRequestID: UUID?
 
     func reset() {
         isDirty = false
         canSave = false
         saveAction = nil
-        closeRequestID = nil
     }
 }
 
@@ -34,9 +31,6 @@ struct SkillsManageView: View {
 
     /// Pinned when opened from Settings so mid-edit key-window changes don't swap catalogs.
     var pinnedSession: AgentSession?
-    /// Optional close handler for window presentation (falls back to `dismiss` in sheets).
-    var onDone: (() -> Void)?
-    /// Dirty state shared with the owning window (close protection).
     var editSession = SkillsEditSession()
 
     var session: AgentSession { pinnedSession ?? appState.keySession }
@@ -99,6 +93,7 @@ struct SkillsManageView: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .interactiveDismissDisabled(editSession.isDirty)
         .onAppear {
             refreshSkillSections()
             selectDefaultIfNeeded()
@@ -143,11 +138,6 @@ struct SkillsManageView: View {
             }
         } message: {
             Text("Your edits to this skill have not been saved.")
-        }
-        .onChange(of: editSession.closeRequestID) { _, _ in
-            guard editSession.isDirty else { return }
-            closeAfterDiscard = true
-            showDiscardAlert = true
         }
         .onAppear {
             Task {

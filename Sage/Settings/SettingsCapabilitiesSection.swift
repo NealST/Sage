@@ -7,9 +7,10 @@ import SwiftUI
 
 struct SettingsCapabilitiesSection: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.sageTypography) private var type
     @Binding var pinnedSkillsSession: AgentSession?
     @Binding var showMCPManage: Bool
-    var onOpenSkills: ((AgentSession) -> Void)?
+    @Binding var showSkillsManage: Bool
     @State private var mutedTipKinds: Set<SkillTipKind> = []
 
     var body: some View {
@@ -17,7 +18,7 @@ struct SettingsCapabilitiesSection: View {
             Button {
                 let session = pinnedSkillsSession ?? appState.keySession
                 pinnedSkillsSession = session
-                onOpenSkills?(session)
+                showSkillsManage = true
             } label: {
                 LabeledContent("Skills") {
                     HStack(spacing: SageDesign.Spacing.small) {
@@ -51,9 +52,9 @@ struct SettingsCapabilitiesSection: View {
                 Button {
                     let session = pinnedSkillsSession ?? appState.keySession
                     pinnedSkillsSession = session
-                    onOpenSkills?(session)
+                    showSkillsManage = true
                 } label: {
-                    Text("Show all \(skillsCatalog.skills.count) skills…")
+                    Text("Show All \(skillsCatalog.skills.count) Skills…")
                         .monospacedDigit()
                 }
             }
@@ -89,15 +90,15 @@ struct SettingsCapabilitiesSection: View {
                 Button {
                     showMCPManage = true
                 } label: {
-                    Text("Show all \(appState.mcpHub.mcpServers.count) servers…")
+                    Text("Show All \(appState.mcpHub.mcpServers.count) Servers…")
                         .monospacedDigit()
                 }
             }
         } footer: {
             if !mutedTipKinds.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                     Text("Sage won’t suggest: \(mutedTipNames).")
-                    Button("Restore all suggestions") {
+                    Button("Restore All Suggestions") {
                         SkillTipMuting.reset()
                         mutedTipKinds = []
                     }
@@ -120,7 +121,7 @@ struct SettingsCapabilitiesSection: View {
     /// Rows that open another surface get the standard trailing chevron.
     private var navigationChevron: some View {
         Image(systemName: "chevron.right")
-            .sageFont(10, weight: .semibold)
+            .sageFont(type.icon, weight: .semibold)
             .foregroundStyle(.tertiary)
     }
 

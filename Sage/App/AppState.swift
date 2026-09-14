@@ -8,6 +8,8 @@ import SwiftUI
 final class AppState {
     var isAgentWindowVisible: Bool = false
     var hotkeyRegistrationFailed: Bool = false
+    /// Configured global summon hotkey — menu/transcript display follows it.
+    var globalHotkey: SageHotkey = HotkeyManager.shared.current
 
     let settings: ModelSettings
     /// Shared MCP hub (connections live here). Skills catalogs are per-session.
@@ -32,6 +34,10 @@ final class AppState {
     var revealGeneralWhenReady = false
     /// Notification tap arrived before bootstrap finished.
     var pendingScheduleReveal: (projectID: UUID?, taskID: UUID)?
+
+    /// Entry point for App Intents and Services — set in init so a process
+    /// launched by an intent finds the coordinator before didFinishLaunching.
+    static weak var current: AppState?
 
     /// Session whose window is key (menu bar / hotkey target).
     var keySession: AgentSession
@@ -93,7 +99,7 @@ final class AppState {
         }
         if let schedule = attentionSchedule {
             return schedule.status == .failed
-                ? "Schedule failed — check the Dashboard"
+                ? "Schedule failed · check the Dashboard"
                 : "Schedule needs your review"
         }
         if let title = schedules.runningTitle {
@@ -110,19 +116,19 @@ final class AppState {
         case .awaitingConfirmation:
             switch agent.turnChrome {
             case .toolRoundLimit:
-                return "Tool round limit — continue or finish"
+                return "Tool round limit · continue or finish"
 
             case .toolApproval:
                 return "Tool waiting for approval"
 
             case .reviewFailed:
-                return "Review failed — retry or use this reply"
+                return "Review failed · retry or use this reply"
 
             case .reviewMustFix:
-                return "Review found issues — continue or keep this reply"
+                return "Review found issues · continue or keep this reply"
 
             case .reviewOptional:
-                return "Review found improvements — choose whether to apply"
+                return "Review found improvements · choose whether to apply"
 
             default:
                 return "Plan waiting for confirmation"
@@ -175,6 +181,7 @@ final class AppState {
             skillStateStore: skillStateStore
         )
         wireSkillsBroadcast(general)
+        Self.current = self
     }
 
     func clearDraft() {

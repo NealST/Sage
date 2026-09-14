@@ -76,7 +76,7 @@ nonisolated struct ListDirectoryTool: AgentTool {
             result += "\n(note: depth clamped to \(maxDepth), requested \(requestedDepth))"
         }
         if listing.truncated {
-            result += "\n… (truncated at \(Self.maxEntries) entries — narrow the path or reduce depth to see more)"
+            result += "\n… (truncated at \(Self.maxEntries) entries; narrow the path or reduce depth to see more)"
         }
         return result
     }

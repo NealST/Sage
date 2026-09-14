@@ -40,19 +40,24 @@ extension DashboardView {
                                 .sageFont(type.caption)
                                 .foregroundStyle(SageDesign.Palette.warning)
                                 .accessibilityHidden(true)
-                            Text("Notifications are off — Sage can’t alert you when a schedule finishes or fails.")
+                            Text("Notifications are off. Sage can’t alert you when a schedule finishes or fails.")
                                 .sageFont(type.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Button("System Settings…") {
+                            Button {
                                 if let url = URL(
                                     string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"
                                 ) {
                                     NSWorkspace.shared.open(url)
                                 }
+                            } label: {
+                                Text("System Settings…")
+                                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                                    .contentShape(Rectangle())
                             }
                             .controlSize(.small)
-                            .buttonStyle(DashboardActionButtonStyle())
+                            .buttonStyle(SagePlainActionButtonStyle())
                             .foregroundStyle(Color.accentColor)
                             .help("Open the Notifications pane in System Settings")
                         }
@@ -65,38 +70,47 @@ extension DashboardView {
                                 .sageFont(type.caption)
                                 .foregroundStyle(SageDesign.Palette.danger)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                            Button("Retry") {
+                            Button {
                                 Task { await appState.schedules.reload() }
+                            } label: {
+                                Text("Retry")
+                                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                                    .contentShape(Rectangle())
                             }
                             .controlSize(.small)
-                            .buttonStyle(DashboardActionButtonStyle())
+                            .buttonStyle(SagePlainActionButtonStyle())
                             .foregroundStyle(Color.accentColor)
-                            Button("Dismiss") {
+                            Button {
                                 appState.schedules.clearLastError()
+                            } label: {
+                                Text("Dismiss")
+                                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                                    .contentShape(Rectangle())
                             }
                             .controlSize(.small)
-                            .buttonStyle(DashboardActionButtonStyle())
+                            .buttonStyle(SagePlainActionButtonStyle())
                             .foregroundStyle(.secondary)
                         }
                         .padding(SageDesign.Spacing.medium)
                         .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
                     }
-                    // A load failure is not an empty list — only guide toward
-                    // creating schedules when the load actually succeeded.
-                    if records.isEmpty {
-                        if lastError == nil {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("No schedules")
-                                    .sageFont(type.body, weight: .medium)
-                                Text("In a chat window: /schedule for Sage, /schedule-script for a command.")
-                                    .sageFont(type.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            .padding(SageDesign.Spacing.medium)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
+                    // A load failure is not an empty list — and before the
+                    // first load lands, show nothing rather than flash the
+                    // empty state at schedules that are on their way in.
+                    if records.isEmpty, lastError == nil, appState.schedules.isLoaded {
+                        VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
+                            Text("No schedules")
+                                .sageFont(type.body, weight: .medium)
+                            Text("In a chat window: /schedule for Sage, /schedule-script for a command.")
+                                .sageFont(type.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(SageDesign.Spacing.medium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
                     } else {
                         ForEach(records) { record in
                             ScheduleDashboardRow(
@@ -191,14 +205,14 @@ private struct ScheduleDashboardRow: View {
     @State private var confirmDelete = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             HStack(spacing: SageDesign.Spacing.small) {
                 Circle()
                     .fill(statusColor)
-                    .frame(width: 8, height: 8)
+                    .frame(width: SageDesign.Control.statusDotDiameter, height: SageDesign.Control.statusDotDiameter)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                     Text(record.title)
                         .sageFont(type.body, weight: .medium)
                         .lineLimit(1)
@@ -220,12 +234,19 @@ private struct ScheduleDashboardRow: View {
                     .help(nextFireHelp)
 
                 if isRunning {
-                    Button("Stop") { onStop() }
-                        .controlSize(.small)
-                        .buttonStyle(DashboardActionButtonStyle())
-                        .foregroundStyle(.secondary)
-                        .help("Stop this run. The schedule stays on.")
-                        .accessibilityLabel("Stop schedule \(record.title)")
+                    Button {
+                        onStop()
+                    } label: {
+                        Text("Stop")
+                            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                            .contentShape(Rectangle())
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(SagePlainActionButtonStyle())
+                    .foregroundStyle(.secondary)
+                    .help("Stop this run. The schedule stays on.")
+                    .accessibilityLabel("Stop schedule \(record.title)")
                 }
 
                 Toggle(isOn: isOnBinding) {
@@ -242,64 +263,72 @@ private struct ScheduleDashboardRow: View {
                 )
                 .accessibilityValue(isPaused ? "Paused" : "On")
 
-                if canRunNow {
-                    Button("Run Now") { onRunNow() }
-                        .controlSize(.small)
-                        .buttonStyle(DashboardActionButtonStyle())
-                        .foregroundStyle(Color.accentColor)
-                        .help("Run this schedule once now, without changing its timing.")
-                        .accessibilityLabel("Run schedule \(record.title) now")
-                }
-
                 if record.lastRunTaskID != nil {
-                    Button("Open") { onOpenLastRun() }
-                        .controlSize(.small)
-                        .buttonStyle(DashboardActionButtonStyle())
-                        .foregroundStyle(
-                            record.status == .awaitingConfirmation
-                                ? SageDesign.Palette.warning
-                                : Color.secondary
-                        )
-                        .help(
-                            record.status == .awaitingConfirmation
-                                ? "Open the run that needs your review"
-                                : "Open the last run of this schedule"
-                        )
-                        .accessibilityLabel(
-                            record.status == .awaitingConfirmation
-                                ? "Review schedule \(record.title)"
-                                : "Open last run of \(record.title)"
-                        )
+                    Button {
+                        onOpenLastRun()
+                    } label: {
+                        Text("Open")
+                            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                            .contentShape(Rectangle())
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(SagePlainActionButtonStyle())
+                    .foregroundStyle(
+                        record.status == .awaitingConfirmation
+                            ? SageDesign.Palette.warning
+                            : Color.secondary
+                    )
+                    .help(
+                        record.status == .awaitingConfirmation
+                            ? "Open the run that needs your review"
+                            : "Open the last run of this schedule"
+                    )
+                    .accessibilityLabel(
+                        record.status == .awaitingConfirmation
+                            ? "Review schedule \(record.title)"
+                            : "Open last run of \(record.title)"
+                    )
                 }
 
-                if record.kind == .agent,
-                   record.status != .awaitingConfirmation,
-                   record.frozenWorkPlanJSON != nil || record.status == .failed {
-                    Button("Re-plan") { onReplan() }
-                        .controlSize(.small)
-                        .buttonStyle(DashboardActionButtonStyle())
-                        .foregroundStyle(.secondary)
-                        .help("Clear the frozen recipe. The next run will plan from scratch.")
-                        .accessibilityLabel("Re-plan schedule \(record.title)")
+                // Transient and infrequent actions fold into one menu so the
+                // resting row carries Open, the toggle, and this — a trailing
+                // cluster reads as a toolbar past four controls.
+                Menu {
+                    if canRunNow {
+                        Button("Run Now") { onRunNow() }
+                    }
+                    if canReplan {
+                        Button("Re-plan") { onReplan() }
+                    }
+                    Button("Delete…", role: .destructive) {
+                        confirmDelete = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .sageFont(type.caption)
+                        .frame(width: SageDesign.Control.iconButtonLarge, height: SageDesign.Control.iconButtonLarge)
+                        .sageHitSlop(visualSize: SageDesign.Control.iconButtonLarge)
                 }
-
-                Button("Delete", role: .destructive) {
-                    confirmDelete = true
-                }
-                .controlSize(.small)
-                .buttonStyle(DashboardActionButtonStyle())
-                .foregroundStyle(SageDesign.Palette.danger)
-                .accessibilityLabel("Delete schedule \(record.title)")
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .buttonStyle(.plain)
+                .help("More actions for this schedule")
+                .accessibilityLabel("More actions for schedule \(record.title)")
             }
         }
         .padding(SageDesign.Spacing.medium)
         .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
         .overlay {
-            if isFocused {
-                RoundedRectangle(cornerRadius: SageDesign.Glass.card)
-                    .stroke(Color.accentColor, lineWidth: 1.5)
-            }
+            RoundedRectangle(cornerRadius: SageDesign.Glass.card)
+                .strokeBorder(
+                    Color.accentColor.opacity(SageDesign.Chrome.accentRingOpacity),
+                    lineWidth: 1
+                )
+                .opacity(isFocused ? 1 : 0)
         }
+        .animation(SageDesign.Motion.expandAnimation, value: isFocused)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isFocused ? .isSelected : [])
         .confirmationDialog(
@@ -330,7 +359,7 @@ private struct ScheduleDashboardRow: View {
 
     var statusColor: Color {
         if isRunning { return SageDesign.Palette.warning }
-        if isQueued { return SageDesign.Palette.warning.opacity(0.7) }
+        if isQueued { return SageDesign.Palette.warning.opacity(SageDesign.Chrome.deemphasizedContentOpacity) }
         if isPaused { return Color.secondary }
         switch record.status {
         case .failed: return SageDesign.Palette.danger
@@ -354,9 +383,12 @@ private struct ScheduleDashboardRow: View {
         }
     }
 
+    /// The status word no longer lives in the subtitle (the dot and
+    /// next-fire text already say it); VoiceOver still gets it via the
+    /// title's accessibility label.
     var subtitle: String {
         let kind = record.kind == .agent ? "Sage" : "Script"
-        let statusLine = "\(kind) · \(record.cadence.shortLabel) · \(statusWord)"
+        let statusLine = "\(kind) · \(record.cadence.shortLabel)"
         if isFocused, let runLog, !runLog.isEmpty {
             return "\(statusLine)\n\(runLog)"
         }
@@ -371,6 +403,7 @@ private struct ScheduleDashboardRow: View {
         if isQueued { return "Queued" }
         if record.status == .awaitingConfirmation { return "Waiting on your review" }
         if record.status == .failed { return "Needs attention" }
+        if record.status == .needsFirstRun || record.status == .draft { return "Needs setup" }
         if isPaused { return "No next run" }
         guard let date = record.nextFireAt else { return "No next run" }
         let formatter = RelativeDateTimeFormatter()
@@ -400,43 +433,13 @@ private struct ScheduleDashboardRow: View {
             && !isQueued
             && record.status != .awaitingConfirmation
     }
-}
 
-// MARK: - Inline card actions
-
-/// Inline text action inside a dashboard card — hover tint + press feedback
-/// so quiet text actions read as interactive without chip capsules. The
-/// wrapper view gives hover a stable @State home (styles are recreated, so
-/// state can't live on the style itself).
-struct DashboardActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        DashboardActionButtonLabel(configuration: configuration)
-    }
-}
-
-private struct DashboardActionButtonLabel: View {
-    let configuration: ButtonStyleConfiguration
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
-    var body: some View {
-        configuration.label
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(fillOpacity))
-            )
-            .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .animation(SageDesign.Motion.contentCrossFade, value: hovering)
-            .animation(SageDesign.Motion.pressFeedback, value: configuration.isPressed)
-            .onHover { hovering = $0 }
-    }
-
-    private var fillOpacity: Double {
-        if configuration.isPressed { return 0.10 }
-        return hovering ? 0.05 : 0
+    /// Re-planning only makes sense for agent schedules with a frozen recipe
+    /// or a failed one worth clearing.
+    var canReplan: Bool {
+        record.kind == .agent
+            && record.status != .awaitingConfirmation
+            && (record.frozenWorkPlanJSON != nil || record.status == .failed)
     }
 }
 
@@ -454,7 +457,7 @@ struct MCPServerRow: View {
             HStack(spacing: SageDesign.Spacing.small) {
                 Circle()
                     .fill(serverStatusColor)
-                    .frame(width: 8, height: 8)
+                    .frame(width: SageDesign.Control.statusDotDiameter, height: SageDesign.Control.statusDotDiameter)
                     .accessibilityHidden(true)
 
                 Text(server.name)
@@ -465,12 +468,19 @@ struct MCPServerRow: View {
                 Spacer()
 
                 if server.status == .error || server.status == .reconnecting {
-                    Button("Connect") { onRetry() }
-                        .controlSize(.small)
-                        .buttonStyle(DashboardActionButtonStyle())
-                        .foregroundStyle(Color.accentColor)
-                        .help("Restart the connection to this server")
-                        .accessibilityLabel("Connect server \(server.name)")
+                    Button {
+                        onRetry()
+                    } label: {
+                        Text("Connect")
+                            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                            .contentShape(Rectangle())
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(SagePlainActionButtonStyle())
+                    .foregroundStyle(Color.accentColor)
+                    .help("Restart the connection to this server")
+                    .accessibilityLabel("Connect server \(server.name)")
                 }
 
                 if !server.recentLogs.isEmpty {
@@ -480,7 +490,7 @@ struct MCPServerRow: View {
                         }
                     }
                     .labelStyle(.iconOnly)
-                    .buttonStyle(DashboardActionButtonStyle())
+                    .buttonStyle(SagePlainActionButtonStyle())
                     .foregroundStyle(.secondary)
                     .sageMicro(type.micro, weight: .semibold)
                     .rotationEffect(.degrees(logsExpanded ? 90 : 0))
@@ -498,7 +508,7 @@ struct MCPServerRow: View {
                 Text(message)
                     .sageMicro(type.micro)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 8 + SageDesign.Spacing.small) // align with name
+                    .padding(.leading, SageDesign.Control.statusDotDiameter + SageDesign.Spacing.small) // align with name
                     .padding(.top, 2)
                     .contentTransition(.opacity)
             }

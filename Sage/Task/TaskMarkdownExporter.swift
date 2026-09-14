@@ -56,7 +56,7 @@ nonisolated enum TaskMarkdownExporter {
         for event in task.events where event.kind != .systemInstruction {
             switch event.kind {
             case .userInput:
-                lines.append("## You — \(timeFormatter.string(from: event.createdAt))")
+                lines.append("## You · \(timeFormatter.string(from: event.createdAt))")
                 lines.append("")
                 if !event.attachments.isEmpty {
                     let names = event.attachments.map(\.displayName).joined(separator: ", ")
@@ -67,7 +67,7 @@ nonisolated enum TaskMarkdownExporter {
 
             case .assistantResponse:
                 if !event.content.isEmpty {
-                    lines.append("## Sage — \(timeFormatter.string(from: event.createdAt))")
+                    lines.append("## Sage · \(timeFormatter.string(from: event.createdAt))")
                     lines.append("")
                     appendBody(event.content, to: &lines)
                 }
@@ -79,7 +79,7 @@ nonisolated enum TaskMarkdownExporter {
             case .toolResult:
                 let name = toolNames[event.toolCallID ?? ""] ?? "tool"
                 let excerpt = excerpt(of: event.content)
-                lines.append("> \(timeFormatter.string(from: event.createdAt)) · \(name) — \(excerpt)")
+                lines.append("> \(timeFormatter.string(from: event.createdAt)) · \(name): \(excerpt)")
                 lines.append("")
 
             case .systemInstruction:
@@ -93,7 +93,7 @@ nonisolated enum TaskMarkdownExporter {
     static func suggestedFileName(for task: TaskRecord, exportedAt: Date = .now) -> String {
         let title = sanitized(title(for: task))
         let stamp = stampFormatter.string(from: exportedAt)
-        return "Sage Task — \(title) (\(stamp)).md"
+        return "Sage Task · \(title) (\(stamp)).md"
     }
 
     /// Writes the transcript to a staging file, then moves that file into the

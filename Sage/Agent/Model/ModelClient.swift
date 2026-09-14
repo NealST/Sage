@@ -61,7 +61,7 @@ enum ModelClientError: LocalizedError {
 
         case .rateLimited(let retryAfter):
             if let seconds = retryAfter {
-                return "Rate limited — retry available in \(Int(seconds.rounded(.up)))s."
+                return "Rate limited. Retry available in \(Int(seconds.rounded(.up)))s."
             }
             return "Rate limited by the API. Wait a moment and try again."
 
@@ -69,7 +69,7 @@ enum ModelClientError: LocalizedError {
             return "Could not parse model response: \(detail)"
 
         case .streamTruncated:
-            return "The connection to the model ended unexpectedly. The reply may be incomplete — try again."
+            return "The connection to the model ended unexpectedly. The reply may be incomplete. Try again."
 
         case .providerError(let message):
             return "The model service reported an error: \(message)"
@@ -105,7 +105,7 @@ enum ModelClientError: LocalizedError {
             return "Request timed out (408). Check your network connection."
 
         case 429:
-            return "Rate limited (429). Too many requests — wait a moment."
+            return "Rate limited (429). Too many requests; wait a moment."
 
         case 500...599:
             let short = body.prefix(120)

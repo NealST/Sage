@@ -61,22 +61,30 @@ struct MenuBarStatusIcon: View {
                 badge("exclamationmark.triangle.fill", color: SageDesign.Palette.danger)
             case .working:
                 // Quiet activity marker — secondary, static (menu-bar items
-                // shouldn't animate); loud white-backed badges stay for
-                // attention states, which outrank running.
-                badge(SageDesign.Symbol.stepRunning, color: Color.secondary)
+                // shouldn't animate); attention states carry the color. A
+                // solid dot stays legible at badge scale where a dotted ring
+                // would smear.
+                Image(systemName: "circle.fill")
+                    .sageFont(8, weight: .bold)
+                    .foregroundStyle(Color.secondary)
+                    .offset(x: 2, y: 1)
+                    .accessibilityHidden(true)
             case .idle:
                 EmptyView()
             }
         }
-        .accessibilityLabel("Sage — \(statusDescription)")
+        .accessibilityLabel("Sage status: \(statusDescription)")
     }
 
+    /// Palette-rendered badge — white glyph on the semantic color, legible
+    /// over both menu-bar materials without the dated white circle plate.
+    /// 9pt is the floor at which a badge glyph stays readable next to the
+    /// 18pt bar icon.
     private func badge(_ symbol: String, color: Color) -> some View {
         Image(systemName: symbol)
-            .sageFont(8, weight: .bold)
-            .foregroundStyle(color)
-            .padding(1.5)
-            .background(Circle().fill(.white))
+            .sageFont(9, weight: .bold)
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(Color.white, color)
             .offset(x: 3, y: 1)
             .accessibilityHidden(true)
     }
@@ -107,7 +115,7 @@ struct MenuBarView: View {
             Label("Open Sage", systemImage: "macwindow")
         }
         .sageShortcut(
-            KeyboardShortcut(.space, modifiers: [.command, .shift]),
+            appState.globalHotkey.keyboardShortcut,
             enabled: !appState.hotkeyRegistrationFailed
         )
 
@@ -129,10 +137,7 @@ struct MenuBarView: View {
         Label(appState.statusHint, systemImage: "info.circle")
 
         if appState.hotkeyRegistrationFailed {
-            Label("⌘⇧Space could not be registered", systemImage: "exclamationmark.triangle")
-            Button("Open Settings…") {
-                onOpenSettings()
-            }
+            Label("\(appState.globalHotkey.symbolRepresentation) could not be registered", systemImage: "exclamationmark.triangle")
         }
 
         if let attention = appState.awaitingConfirmationSession {
@@ -158,16 +163,20 @@ struct MenuBarView: View {
                     Label("Retry", systemImage: "arrow.clockwise")
                 }
             }
-            if appState.isConfigurationFailure {
-                Button("Open Settings…") {
-                    onOpenSettings()
-                }
-            } else {
-                Button {
-                    appState.makeKeyAndShow(failed)
-                } label: {
-                    Label("Show Error…", systemImage: "exclamationmark.bubble")
-                }
+            Button {
+                appState.makeKeyAndShow(failed)
+            } label: {
+                Label("Show Error…", systemImage: "exclamationmark.triangle")
+            }
+        }
+
+        // One contextual Settings entry regardless of which failure needs
+        // it; the persistent Settings… item below covers everything else.
+        if appState.hotkeyRegistrationFailed || appState.isConfigurationFailure {
+            Button {
+                onOpenSettings()
+            } label: {
+                Label("Open Settings…", systemImage: SageDesign.Symbol.settings)
             }
         }
 
@@ -178,23 +187,14 @@ struct MenuBarView: View {
             } label: {
                 Label(
                     appState.attentionSchedule?.status == .failed
-                        ? "Schedule Failed — Open Dashboard…"
-                        : "Schedule Needs Review — Open Dashboard…",
+                        ? "Review Failed Schedule…"
+                        : "Review Schedule…",
                     systemImage: "clock.badge.exclamationmark"
                 )
             }
         }
 
         Divider()
-
-        Button {
-            appState.revealKeySession()
-            appState.clearDraft()
-            Task { await appState.agent.startFresh() }
-        } label: {
-            Label("Start Fresh", systemImage: "arrow.counterclockwise")
-        }
-        .disabled(!appState.agent.canStartFresh)
 
         Button {
             onOpenDashboard()
@@ -209,6 +209,15 @@ struct MenuBarView: View {
             Label("Settings…", systemImage: SageDesign.Symbol.settings)
         }
         .keyboardShortcut(",", modifiers: [.command])
+
+        Button {
+            appState.revealKeySession()
+            appState.clearDraft()
+            Task { await appState.agent.startFresh() }
+        } label: {
+            Label("Start Fresh", systemImage: "arrow.counterclockwise")
+        }
+        .disabled(!appState.agent.canStartFresh)
 
         Divider()
 
@@ -229,7 +238,11 @@ struct MenuBarView: View {
         switch agent.turnChrome {
         case .toolApproval:
             let remaining = agent.remainingApprovalCount
-            Button(remaining > 0 ? "Review Tool Approval… (+\(remaining) queued)" : "Review Tool Approval…") {
+            Button(
+                remaining > 0
+                    ? "Review \(remaining + 1) Tool Approvals…"
+                    : "Review Tool Approval…"
+            ) {
                 appState.makeKeyAndShow(session)
             }
 

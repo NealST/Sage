@@ -33,7 +33,7 @@ struct SkillSecretsEditor: View {
                             .sageMicro(type.micro, design: .monospaced)
                             .frame(width: nameLabelWidth, alignment: .leading)
                         SecureField(
-                            storedNames.contains(name) ? "Stored — enter to replace" : "Secret value",
+                            storedNames.contains(name) ? "Stored (enter to replace)" : "Secret value",
                             text: binding(for: name)
                         )
                         Button("Save") {

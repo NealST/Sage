@@ -17,6 +17,8 @@ extension SageDesign {
         static let card: CGFloat = 14
         /// Compact chips and code chrome.
         static let chip: CGFloat = 8
+        /// Sub-chip clips (attachment thumbnails).
+        static let mini: CGFloat = 4
         /// Nearby glass views merge when closer than this.
         static let containerSpacing: CGFloat = 16
 
@@ -68,10 +70,20 @@ extension View {
         scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
     }
 
-    /// Full-bleed titlebar / toolbar glass. Use once on the chrome stack — not
-    /// on each control inside it.
-    func sageGlassToolbar() -> some View {
-        modifier(SageGlassToolbarModifier())
+    /// Small interactive glass capsule for toolbar controls — the floating-chip
+    /// idiom Liquid Glass windows are built for. Hover and press show in the
+    /// material itself. Reduce Transparency falls back to the quiet pill fill;
+    /// Increase Contrast adds a hairline stroke.
+    func sageGlassChip() -> some View {
+        modifier(SageGlassChipModifier())
+    }
+
+    /// Tinted glass capsule for attention states — the material itself
+    /// carries the color (the one Liquid Glass capability the semantic
+    /// fills can't express). Reduce Transparency falls back to the tinted
+    /// fill; callers pick a foreground color that stays legible in both.
+    func sageTintedGlassCapsule(_ tint: Color) -> some View {
+        modifier(SageGlassTintedCapsuleModifier(tint: tint))
     }
 
     /// Materialize glass when the view is inserted, unless Reduce Motion is on.
@@ -121,7 +133,12 @@ extension NSWindow {
         sageApplyWindowMaterial()
     }
 
-    /// Reading canvas stays opaque. Glass is only the floating chrome.
+    /// On macOS 26 the system renders this as the Liquid Glass window body —
+    /// the same material Calculator and System Settings use — which is why the
+    /// reading canvas must stay unpainted in SwiftUI: a `Color(.windowBackgroundColor)`
+    /// fill resolves to flat graphite (rgb 30,30,30) and covers the material,
+    /// clashing with the glass frame and chrome. App-drawn glass stays reserved
+    /// for floating chrome and cards; the body material belongs to the system.
     func sageApplyWindowMaterial() {
         isOpaque = true
         backgroundColor = .windowBackgroundColor
@@ -215,24 +232,56 @@ private extension View {
     }
 }
 
-private struct SageGlassToolbarModifier: ViewModifier {
+private struct SageGlassChipModifier: ViewModifier {
     @Environment(AccessibilitySettings.self) private var accessibility
 
     func body(content: Content) -> some View {
+        let shape = Capsule(style: .continuous)
         Group {
             if accessibility.reduceTransparency {
                 content
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background {
+                        shape.fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
+                    }
             } else {
                 content
-                    .glassEffect(.regular, in: Rectangle())
+                    .glassEffect(.regular.interactive(), in: shape)
             }
         }
-        .overlay(alignment: .bottom) {
+        .overlay {
             if accessibility.increaseContrast {
-                Rectangle()
-                    .fill(Color.primary.opacity(accessibility.strokeOpacity))
-                    .frame(height: 1)
+                shape.strokeBorder(
+                    Color.primary.opacity(accessibility.strokeOpacity),
+                    lineWidth: 1
+                )
+            }
+        }
+    }
+}
+
+private struct SageGlassTintedCapsuleModifier: ViewModifier {
+    let tint: Color
+    @Environment(AccessibilitySettings.self) private var accessibility
+
+    func body(content: Content) -> some View {
+        let shape = Capsule(style: .continuous)
+        Group {
+            if accessibility.reduceTransparency {
+                content
+                    .background {
+                        shape.fill(tint.opacity(0.14))
+                    }
+            } else {
+                content
+                    .glassEffect(.regular.tint(tint), in: shape)
+            }
+        }
+        .overlay {
+            if accessibility.increaseContrast {
+                shape.strokeBorder(
+                    Color.primary.opacity(accessibility.strokeOpacity),
+                    lineWidth: 1
+                )
             }
         }
     }

@@ -10,12 +10,44 @@ import SwiftUI
 extension AppState {
     // MARK: - Windows
 
+    /// One row in the app's Window menu. Manual NSWindows have no automatic
+    /// window list — this is the wayfinding for "which Sage window is which".
+    struct WindowMenuEntry: Identifiable {
+        let id: AgentSession.Kind
+        let title: String
+        let isKey: Bool
+        let session: AgentSession
+    }
+
+    /// Visible agent windows, General first, projects in open order.
+    var windowMenuEntries: [WindowMenuEntry] {
+        var entries: [WindowMenuEntry] = []
+        if windowControllers[.general]?.isVisible == true {
+            entries.append(
+                WindowMenuEntry(id: .general, title: "Sage", isKey: keySession.kind == .general, session: generalSession)
+            )
+        }
+        for projectID in openProjectOrder {
+            guard let session = projectSessions[projectID],
+                  windowControllers[.project(projectID)]?.isVisible == true
+            else { continue }
+            entries.append(
+                WindowMenuEntry(
+                    id: .project(projectID),
+                    title: session.agent.state.focusedProject?.name ?? "Project",
+                    isKey: keySession.kind == .project(projectID),
+                    session: session
+                )
+            )
+        }
+        return entries
+    }
+
     /// Window identifiers used for presence checks. All start with "Sage" —
     /// see `anySageWindowVisible(excluding:)`.
     enum WindowIdentifier {
         static let settings = "SageSettingsWindow"
         static let dashboard = "SageDashboardWindow"
-        static let skillsManage = "SageSkillsManageWindow"
         static let agentPrefix = "SageAgentWindow"
     }
 
@@ -194,6 +226,17 @@ extension AppState {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Attention-banner tap for a pending decision — raises the owning
+    /// window without touching task activation (the decision is mid-task).
+    func revealSessionForApproval(projectID: UUID?) {
+        activateForExternalPanels()
+        if let projectID, let session = projectSessions[projectID] {
+            makeKeyAndShow(session)
+        } else {
+            showGeneralWindow()
+        }
+    }
+
     /// Opens the matching window and restores a task after a notification tap
     /// (schedule banner or interactive task banner — same reveal).
     func revealTask(projectID: UUID?, taskID: UUID) async {
@@ -239,6 +282,41 @@ extension AppState {
             return
         }
         makeKeyAndShow(generalSession)
+    }
+
+    /// External prompt entry (App Shortcut / Services menu). Brings General
+    /// up with the message: auto-sends when the composer is idle and empty —
+    /// the shortcut phrase already carries the user's full instruction —
+    /// otherwise loads the draft for review so a busy session, pending plan,
+    /// or in-progress draft is never silently overridden.
+    func askExternally(_ message: String, autoSend: Bool) async {
+        showGeneralWindow()
+        let session = generalSession
+        // A cold launch triggered by the intent: wait for bootstrap so the
+        // submit is not dropped by the not-ready session.
+        if !session.agent.state.didBootstrap {
+            for _ in 0..<100 where !session.agent.state.didBootstrap {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        guard session.agent.state.didBootstrap else {
+            session.draft = message
+            return
+        }
+        let draftIsEmpty = session.draft
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+        if autoSend,
+           draftIsEmpty,
+           !session.agent.blocksNewInput,
+           !session.agent.state.hasPendingPlan
+        {
+            session.recordSubmittedInput(message)
+            _ = await session.agent.submit(message, attachments: [])
+        } else {
+            session.draft = message
+        }
+        makeKeyAndShow(session)
     }
 
     /// Opens an existing directory as a project window (or focuses it if already open).
@@ -504,10 +582,11 @@ extension AppState {
                 TaskNotificationPayload(
                     projectID: session.projectID,
                     taskID: taskID,
-                    title: "\(scope) — finished",
+                    title: "\(scope) · finished",
                     body: subject
                 ),
-                playsSound: true
+                playsSound: true,
+                isFailure: false
             )
 
         case .failed(let message):
@@ -515,10 +594,11 @@ extension AppState {
                 TaskNotificationPayload(
                     projectID: session.projectID,
                     taskID: taskID,
-                    title: "\(scope) — failed",
+                    title: "\(scope) · failed",
                     body: String(message.prefix(160))
                 ),
-                playsSound: true
+                playsSound: true,
+                isFailure: true
             )
 
         case .cancelled:

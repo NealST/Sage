@@ -75,25 +75,30 @@ struct AgentTranscriptPane: View {
     @State var displayEvents: [AgentEvent] = []
     /// Matches the plan skeleton → confirmed plan card glass morph.
     @Namespace var planGlassNamespace
-    /// In-task find (⌘F). While active, the transcript filters to matching events.
+    /// In-task find (⌘F). While active, the transcript dims non-matching
+    /// events and keeps everything on screen.
     @State private var isFinding = false
     @State private var findText = ""
     @FocusState private var findFieldFocused: Bool
+    /// Index into `findMatches`; ⌘G / ⇧⌘G step through, the bar shows "n of m".
+    @State private var currentMatchIndex = 0
 
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
-                        if isFinding, !findText.isEmpty, visibleEvents.isEmpty {
+                        if isSearching, findMatches.isEmpty {
                             noFindMatches
                         } else if displayEvents.isEmpty {
                             emptyTranscript
                         }
 
-                        ForEach(visibleEvents) { event in
+                        ForEach(displayEvents) { event in
                             eventBubble(event, toolIndex: toolIndex)
                                 .id(event.id)
+                                .opacity(searchDim(event) ? SageDesign.Chrome.dimmedContentOpacity : 1)
+                                .allowsHitTesting(!searchDim(event))
                         }
 
                         if !isFinding {
@@ -106,6 +111,12 @@ struct AgentTranscriptPane: View {
                         }
                     }
                     .padding(SageDesign.Spacing.large)
+                    // Reading measure — content column stops at a comfortable
+                    // line length instead of stretching with the window.
+                    .frame(
+                        maxWidth: SageDesign.Panel.readingColumnWidth,
+                        alignment: .leading
+                    )
                     .animation(
                         SageDesign.Motion.expandAnimation,
                         value: session.agent.state.phase
@@ -120,11 +131,15 @@ struct AgentTranscriptPane: View {
                         SageDesign.Motion.expandAnimation,
                         value: session.agent.state.activeTask?.todos
                     )
+                    // Find-bar mount/unmount settles; per-keystroke dimming is
+                    // deliberately unanimated — a 0.3s spring on every keypress
+                    // lags the query and interrupts streaming mid-flight.
+                    .animation(SageDesign.Motion.expandAnimation, value: isFinding)
                 }
                 .sageScrollEdgeGlass()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if isFinding {
-                        findBar
+                        findBar(proxy: proxy)
                             .transition(SageDesign.Glass.appearTransition)
                     }
                 }
@@ -160,9 +175,15 @@ struct AgentTranscriptPane: View {
                     guard stickToBottom, !isFinding else { return }
                     scrollToLatest(using: proxy)
                 }
+                .onChange(of: findText) { _, _ in
+                    currentMatchIndex = 0
+                    guard let first = findMatches.first else { return }
+                    scrollToMatch(first.id, using: proxy)
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .sageFindInTranscript)) { note in
                     guard note.object as? AgentSession.Kind == session.kind else { return }
                     isFinding = true
+                    currentMatchIndex = 0
                     findFieldFocused = true
                 }
 
@@ -173,13 +194,16 @@ struct AgentTranscriptPane: View {
                     } label: {
                         Label("Jump to latest", systemImage: "arrow.down")
                             .sageMicro(type.micro, weight: .semibold)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.chipVertical)
                     }
                     // Quiet glass, not prominent — a tertiary navigation control
                     // must not carry the same weight as Send / Allow.
                     .buttonStyle(.glass)
                     .controlSize(.small)
+                    // End (Fn+→) — the scroll-to-bottom convention. ⌘↓ is
+                    // taken by the composer's input-history recall.
+                    .keyboardShortcut(.init("\u{F72B}"), modifiers: [])
                     .padding(.bottom, SageDesign.Spacing.medium)
                     .transition(SageDesign.Glass.appearTransition)
                     .accessibilityLabel("Jump to latest")
@@ -194,26 +218,58 @@ struct AgentTranscriptPane: View {
         return TranscriptEventRevision(count: events.count, lastID: events.last?.id)
     }
 
-    /// Find mode narrows the transcript to matching events — including their
-    /// tool chips, so a search for a tool name or argument still finds the turn.
-    var visibleEvents: [AgentEvent] {
-        guard isFinding, !findText.isEmpty else { return displayEvents }
+    /// Find keeps every event on screen and dims the non-matching ones — a
+    /// hit stays in context with the turns around it instead of the
+    /// transcript collapsing to just the matches.
+    var findMatches: [AgentEvent] {
+        guard isSearching else { return [] }
         let query = findText.lowercased()
-        return displayEvents.filter { event in
-            if event.content.lowercased().contains(query) { return true }
-            return event.toolCalls?.contains { call in
-                call.name.lowercased().contains(query)
-                    || call.argumentsJSON.lowercased().contains(query)
-            } ?? false
+        return displayEvents.filter { matchesQuery($0, query: query) }
+    }
+
+    private var isSearching: Bool {
+        isFinding && !findText.isEmpty
+    }
+
+    private func matchesQuery(_ event: AgentEvent, query: String) -> Bool {
+        if event.content.lowercased().contains(query) { return true }
+        return event.toolCalls?.contains { call in
+            call.name.lowercased().contains(query)
+                || call.argumentsJSON.lowercased().contains(query)
+        } ?? false
+    }
+
+    private func searchDim(_ event: AgentEvent) -> Bool {
+        guard isSearching else { return false }
+        return !matchesQuery(event, query: findText.lowercased())
+    }
+
+    private var matchCounterLabel: String {
+        let count = findMatches.count
+        guard count > 0 else { return "0 matches" }
+        return "\(min(currentMatchIndex, count - 1) + 1) of \(count)"
+    }
+
+    private func stepMatch(_ delta: Int, using proxy: ScrollViewProxy) {
+        let matches = findMatches
+        guard !matches.isEmpty else { return }
+        let count = matches.count
+        let clamped = min(currentMatchIndex, count - 1)
+        currentMatchIndex = (clamped + delta + count) % count
+        scrollToMatch(matches[currentMatchIndex].id, using: proxy)
+    }
+
+    private func scrollToMatch(_ id: UUID, using proxy: ScrollViewProxy) {
+        if let animation = SageDesign.Motion.streamingScroll {
+            withAnimation(animation) {
+                proxy.scrollTo(id, anchor: .center)
+            }
+        } else {
+            proxy.scrollTo(id, anchor: .center)
         }
     }
 
-    private var findMatchLabel: String {
-        let count = visibleEvents.count
-        return count == 1 ? "1 match" : "\(count) matches"
-    }
-
-    private var findBar: some View {
+    private func findBar(proxy: ScrollViewProxy) -> some View {
         HStack(spacing: SageDesign.Spacing.small) {
             Image(systemName: "magnifyingglass")
                 .sageFont(type.caption)
@@ -222,36 +278,55 @@ struct AgentTranscriptPane: View {
                 .sageFont(type.body)
                 .textFieldStyle(.plain)
                 .focused($findFieldFocused)
-            if isFinding, !findText.isEmpty {
-                Text(findMatchLabel)
+            if isSearching {
+                Text(matchCounterLabel)
                     .sageMicro(type.micro)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                Button {
+                    stepMatch(-1, using: proxy)
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .sageFont(type.caption)
+                        .frame(
+                            width: SageDesign.Control.iconButtonCompact,
+                            height: SageDesign.Control.iconButtonCompact
+                        )
+                        .sageHitSlop(visualSize: SageDesign.Control.iconButtonCompact)
+                }
+                .buttonStyle(.plain)
+                .disabled(findMatches.isEmpty)
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .accessibilityLabel("Previous match")
+                Button {
+                    stepMatch(1, using: proxy)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .sageFont(type.caption)
+                        .frame(
+                            width: SageDesign.Control.iconButtonCompact,
+                            height: SageDesign.Control.iconButtonCompact
+                        )
+                        .sageHitSlop(visualSize: SageDesign.Control.iconButtonCompact)
+                }
+                .buttonStyle(.plain)
+                .disabled(findMatches.isEmpty)
+                .keyboardShortcut("g", modifiers: .command)
+                .accessibilityLabel("Next match")
             }
-            Button {
-                endFinding()
-            } label: {
-                Image(systemName: "xmark")
-                    .sageFont(type.caption)
-                    .frame(width: 20, height: 20)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Close find (Esc)")
-            .accessibilityLabel("Close find")
+            SageDismissButton(
+                action: endFinding,
+                label: "Close find",
+                help: "Close find (Esc)"
+            )
         }
         .padding(.horizontal, SageDesign.Spacing.medium)
-        .padding(.vertical, 6)
+        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
         .background(
             RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
                 .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
         )
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.primary.opacity(SageDesign.Chrome.dividerOpacity))
-                .frame(height: 1)
-        }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.top, SageDesign.Spacing.small)
         .onKeyPress(.escape) {
@@ -345,7 +420,7 @@ struct AgentTranscriptPane: View {
                         object: session.kind
                     )
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SageDesign.Spacing.labelGap) {
                         Image(systemName: starter.icon)
                             .sageFont(type.caption)
                             .foregroundStyle(.secondary)
@@ -353,8 +428,8 @@ struct AgentTranscriptPane: View {
                             .sageFont(type.body, weight: .medium)
                             .foregroundStyle(.primary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.chipVertical)
                     .contentShape(Capsule())
                 }
                 .buttonStyle(SagePressableChipButtonStyle())
@@ -367,7 +442,7 @@ struct AgentTranscriptPane: View {
         if appState.hotkeyRegistrationFailed {
             return "Open Sage from the menu bar when the global shortcut isn’t available."
         }
-        return "Open anytime with ⌘⇧Space."
+        return "Open anytime with \(appState.globalHotkey.symbolRepresentation)."
     }
 }
 
@@ -400,14 +475,14 @@ struct ThinkingStreamAccessory: View {
                     Spacer(minLength: 0)
                 }
                 .accessibilityLabel(status)
-                .transition(.opacity)
+                .transition(SageDesign.Motion.streamingPhase)
             }
             if !streaming.thinking.isEmpty {
                 ThinkingProcessView(
                     text: streaming.thinking,
                     replyStarted: !streaming.text.isEmpty
                 )
-                .transition(.opacity)
+                .transition(SageDesign.Motion.streamingPhase)
             }
             if !streaming.text.isEmpty {
                 // Streaming always renders uncollapsed (block-cached + throttled).
@@ -415,7 +490,7 @@ struct ThinkingStreamAccessory: View {
                 // MarkdownContentView's onChange would tear down its measure
                 // cache every ~100ms and fight the user's expand choice.
                 StreamingContentView(text: streaming.text)
-                    .transition(.opacity)
+                    .transition(SageDesign.Motion.streamingPhase)
             } else if status == nil, streaming.thinking.isEmpty, !streaming.isReservingWorkPlan {
                 if let retry = retryState {
                     RetryCountdownView(
@@ -423,7 +498,7 @@ struct ThinkingStreamAccessory: View {
                         onStop: agentCanStop ? { onAgentStop() } : nil,
                         onRetryNow: onRetryNow
                     )
-                    .transition(.opacity)
+                    .transition(SageDesign.Motion.streamingPhase)
                 } else {
                     HStack(spacing: SageDesign.Spacing.small) {
                         ProgressView().controlSize(.small)
@@ -433,7 +508,7 @@ struct ThinkingStreamAccessory: View {
                             .monospacedDigit()
                         Spacer(minLength: 0)
                     }
-                    .transition(.opacity)
+                    .transition(SageDesign.Motion.streamingPhase)
                 }
             }
             if streaming.isReservingWorkPlan {
@@ -472,9 +547,11 @@ struct ThinkingStreamAccessory: View {
     }
 
     /// Silence for the first few seconds, then an elapsed count so long waits
-    /// read as progress instead of a frozen spinner.
+    /// read as progress instead of a frozen spinner. Same formatter as the
+    /// chrome's Working badge.
     private var thinkingLabel: String {
-        thinkingElapsedSeconds >= 5 ? "Thinking… \(thinkingElapsedSeconds)s" : "Thinking…"
+        SageDesign.Elapsed.label(thinkingElapsedSeconds).map { "Thinking… \($0)" }
+            ?? "Thinking…"
     }
 }
 

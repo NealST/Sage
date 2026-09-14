@@ -11,7 +11,7 @@ import SwiftUI
 enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
     case connection
     case capabilities
-    /// Startup behavior (login item). Schedule management itself lives in
+    /// General behavior (login item). Schedule management itself lives in
     /// the Dashboard — the case name must not promise schedule settings.
     case startup
     case privacy
@@ -22,7 +22,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .connection: "Connection"
         case .capabilities: "Capabilities"
-        case .startup: "Startup"
+        case .startup: "General"
         case .privacy: "Privacy"
         }
     }
@@ -31,7 +31,7 @@ enum SettingsPane: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .connection: "network"
         case .capabilities: "puzzlepiece.extension"
-        case .startup: "power"
+        case .startup: "gearshape"
         case .privacy: "hand.raised"
         }
     }

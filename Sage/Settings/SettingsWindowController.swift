@@ -13,11 +13,19 @@ struct SettingsPresentationRequest {
     var openMCPManage: Bool
 }
 
+/// Window dimensions shared by the NSWindow chrome and the SwiftUI content,
+/// so the hosted view's minimums can't drift from the window's minSize.
+enum SettingsWindowMetrics {
+    static let minWidth: CGFloat = 680
+    static let minHeight: CGFloat = 480
+    static let defaultWidth: CGFloat = 720
+    static let defaultHeight: CGFloat = 640
+}
+
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private var window: NSWindow?
-    private lazy var skillsController = SkillsManageWindowController(appState: appState)
     /// Delivered to the (recreated) SettingsView when the window is presented.
     private var pendingPresentation: SettingsPresentationRequest?
 
@@ -37,10 +45,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.present()
         }
-    }
-
-    func showSkills(pinnedSession: AgentSession) {
-        skillsController.show(pinnedSession: pinnedSession)
     }
 
     private func present() {
@@ -74,9 +78,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // reads `@Environment(AccessibilitySettings.self)` from ancestors, not content.
         let root = SettingsView(
             settings: appState.settings,
-            onOpenSkills: { [weak self] session in
-                self?.showSkills(pinnedSession: session)
-            },
             onPresentationRequest: { [weak self] handler in
                 self?.settingsPresentationHandler = handler
             }
@@ -96,8 +97,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = false
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
-        window.minSize = NSSize(width: 680, height: 480)
-        window.setContentSize(NSSize(width: 720, height: 640))
+        window.minSize = NSSize(
+            width: SettingsWindowMetrics.minWidth,
+            height: SettingsWindowMetrics.minHeight
+        )
+        window.setContentSize(NSSize(
+            width: SettingsWindowMetrics.defaultWidth,
+            height: SettingsWindowMetrics.defaultHeight
+        ))
         window.setFrameAutosaveName("SageSettingsWindow.sidebar")
         return window
     }

@@ -42,11 +42,12 @@ struct SageTasksSection: View {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .animation(SageDesign.Motion.expandAnimation, value: isExpanded)
                 }
-                .contentShape(Rectangle())
                 .padding(.horizontal, SageDesign.Spacing.large)
                 .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SagePlainActionButtonStyle())
             .accessibilityLabel("Sage tasks, \(recentUserTasks.count) recent")
             .accessibilityHint(isExpanded ? "Collapses the task list" : "Expands the task list")
 
@@ -155,18 +156,12 @@ struct TaskHistorySheet: View {
                 Text("Task History")
                     .sageFont(type.title, weight: .semibold)
                 Spacer(minLength: 0)
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .sageFont(type.caption, weight: .semibold)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Close")
+                SageDismissButton(
+                    action: { dismiss() },
+                    label: "Close task history",
+                    help: "Close"
+                )
                 .keyboardShortcut(.cancelAction)
-                .accessibilityLabel("Close task history")
             }
             .padding(.horizontal, SageDesign.Spacing.large)
             .padding(.top, SageDesign.Spacing.medium)

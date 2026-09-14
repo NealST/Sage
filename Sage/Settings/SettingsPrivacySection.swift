@@ -52,7 +52,7 @@ struct SettingsPrivacySection: View {
 
         Section {
             LabeledContent("Long-term permissions") {
-                Button("Revoke all…") {
+                Button("Revoke All…") {
                     showRevokeAllConfirm = true
                 }
                 .controlSize(.small)
@@ -101,10 +101,10 @@ struct SettingsPrivacySection: View {
             Text("Task events stay on this Mac.")
                 .foregroundStyle(.secondary)
         case .some(true):
-            Text("Local history erased.")
-                .foregroundStyle(.secondary)
+            Label("Local history erased.", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(SageDesign.Palette.success)
         case .some(false):
-            Text("Could not erase local history.")
+            Label("Could not erase local history.", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(SageDesign.Palette.danger)
         }
     }

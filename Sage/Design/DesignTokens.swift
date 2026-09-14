@@ -13,6 +13,19 @@ enum SageDesign {
         static let medium: CGFloat = 12
         static let large: CGFloat = 16
         static let extraLarge: CGFloat = 24
+        /// Inner padding for transcript chip headers (tool results, status
+        /// pills) — one value so same-density chips never drift apart.
+        static let chipHorizontal: CGFloat = 12
+        static let chipVertical: CGFloat = 8
+        /// Icon↔text gap inside chips and labels — optical, not grid-aligned.
+        static let labelGap: CGFloat = 6
+        /// Compact chrome chips (titlebar, notice-bar text actions) — denser
+        /// than transcript chips because their host bands are single-purpose.
+        static let compactChipHorizontal: CGFloat = 8
+        static let compactChipVertical: CGFloat = 4
+        /// Title-over-detail stack inside one label — deliberately tighter than
+        /// any layout gap so the pair reads as a single unit.
+        static let titleDetailGap: CGFloat = 2
     }
 
     /// Persistent agent workspace window.
@@ -21,6 +34,16 @@ enum SageDesign {
         static let height: CGFloat = 580
         /// Single unified titlebar row (aligns with traffic lights).
         static let titlebarContentHeight: CGFloat = 52
+        /// Leading clearance for the titlebar row: the traffic-light cluster
+        /// occupies roughly this width, so the identity cluster starts to its
+        /// right instead of underlapping it. Content rows keep the normal inset.
+        static let titlebarLeadingInset: CGFloat = 78
+        /// Reading measure for transcript content — wide or fullscreen
+        /// windows must not stretch reply lines past comfortable length.
+        static let readingColumnWidth: CGFloat = 720
+        /// Resize floor for the agent window (initial size is width/height).
+        static let minWidth: CGFloat = 560
+        static let minHeight: CGFloat = 440
     }
 
     enum Typography {
@@ -45,11 +68,53 @@ enum SageDesign {
         @MainActor
         static var pillFillOpacity: Double { AccessibilitySettings.shared.pillFillOpacity }
         @MainActor
+        static var selectionFillOpacity: Double { AccessibilitySettings.shared.selectionFillOpacity }
+        @MainActor
+        static var accentRingOpacity: Double { AccessibilitySettings.shared.accentRingOpacity }
+        @MainActor
         static var diffFillOpacity: Double { AccessibilitySettings.shared.diffFillOpacity }
         @MainActor
         static var strokeOpacity: Double { AccessibilitySettings.shared.strokeOpacity }
         @MainActor
         static var dividerOpacity: Double { AccessibilitySettings.shared.dividerOpacity }
+        /// Non-matching content while in-task find is active — stronger
+        /// de-emphasis under Increase Contrast so matches stand out further.
+        @MainActor
+        static var dimmedContentOpacity: Double {
+            AccessibilitySettings.shared.increaseContrast ? 0.15 : 0.3
+        }
+        /// Disabled custom-styled controls — styles that draw their own
+        /// chrome must dim themselves; the system treatment only covers
+        /// native control appearances.
+        @MainActor
+        static var disabledControlOpacity: Double {
+            AccessibilitySettings.shared.increaseContrast ? 0.3 : 0.45
+        }
+        /// De-emphasized but still-readable content (diff context lines,
+        /// completed checklist markers, queued status) — between secondary
+        /// and tertiary, stronger under Increase Contrast.
+        @MainActor
+        static var deemphasizedContentOpacity: Double {
+            AccessibilitySettings.shared.increaseContrast ? 0.55 : 0.7
+        }
+    }
+
+    /// Interactive-control metrics — icon frames, hit targets, status dots.
+    enum Control {
+        /// Pinned symbol column so chip titles start at the same x regardless
+        /// of glyph width.
+        static let iconColumnWidth: CGFloat = 14
+        /// Inline icon buttons in compact bars (find-bar steppers).
+        static let iconButtonCompact: CGFloat = 20
+        /// Standalone quiet icon buttons (attach, copy chips).
+        static let iconButton: CGFloat = 22
+        /// Prominent / overflow icon buttons (submit, retry ring, ellipsis).
+        static let iconButtonLarge: CGFloat = 24
+        /// macOS comfortable hit floor — small visual frames grow their
+        /// tappable area to reach this (`sageHitSlop`).
+        static let minimumHitTarget: CGFloat = 28
+        /// Status dot diameter (schedule rows, connection state).
+        static let statusDotDiameter: CGFloat = 8
     }
 
     /// Semantic colors — one meaning each so error treatments never drift.
@@ -60,6 +125,11 @@ enum SageDesign {
         static let danger = Color(nsColor: .systemRed)
         static let warning = Color(nsColor: .systemOrange)
         static let success = Color(nsColor: .systemGreen)
+        /// Quiet surface fill for markdown content (checklist cells, code
+        /// chrome) — the system fill that sits below `controlBackgroundColor`.
+        static let subtleFill = Color(nsColor: .quaternarySystemFill)
+        /// Hairline divider for markdown content blocks and code chrome.
+        static let hairline = Color(nsColor: .separatorColor)
     }
 
     enum Motion {
@@ -96,10 +166,16 @@ enum SageDesign {
         /// instead of stopping dead and then easing home. `velocity` is px/s
         /// on the animated axis; the API wants it normalized by remaining
         /// displacement per duration (clamped: a release just past the
-        /// threshold would otherwise produce an extreme kick).
-        static func dragSettle(velocity: CGFloat, from current: CGFloat) -> Animation? {
+        /// threshold would otherwise produce an extreme kick). Works for both
+        /// spring-back (target 0) and throw-out commits (target past the
+        /// threshold) so the commit path carries the gesture's momentum too.
+        static func dragSettle(
+            velocity: CGFloat,
+            from current: CGFloat,
+            to target: CGFloat = 0
+        ) -> Animation? {
             guard !AccessibilityPreferences.reduceMotion else { return nil }
-            let displacement = -current
+            let displacement = target - current
             guard abs(displacement) > 0.5 else { return dragSettle }
             let normalized = (Double(velocity) * 0.3) / Double(displacement)
             let clamped = min(max(normalized, -2), 2)
@@ -108,6 +184,21 @@ enum SageDesign {
 
         /// Brief settle after copy confirmation.
         static let copiedFeedback: Animation = .interpolatingSpring(duration: 0.28, bounce: 0)
+
+        /// Confirmation flashes (copied / saved chips) — one duration so
+        /// sibling feedback reads as the same idiom.
+        static let feedbackFlashDuration: TimeInterval = 1.4
+
+        /// Drag throw-out commits, shared by the attachment chip (up =
+        /// remove) and the tips banner (down = dismiss): the flick velocity
+        /// that commits past the distance threshold, how far past the release
+        /// point the throw carries, and the beat the element spends invisible
+        /// before the removal actually lands.
+        enum DragThrow {
+            static let flickVelocity: CGFloat = 600
+            static let distance: CGFloat = 110
+            static let removalDelay: TimeInterval = 0.22
+        }
 
         /// Press feedback (chip / header micro-scale) — a press is a physical
         /// interaction, so it springs instead of easing. Critically damped,
@@ -131,8 +222,33 @@ enum SageDesign {
             AccessibilityPreferences.reduceMotion ? nil : contentCrossFade
         }
 
+        /// Streaming phase swaps (status row → thinking → streaming text →
+        /// retry) — opacity plus a whisper of scale so the exchange reads as
+        /// one continuous surface re-forming instead of paging. Scale doesn't
+        /// affect layout, so scroll position is untouched. The plan skeleton
+        /// keeps plain opacity: its exit is the matched-glass morph into the
+        /// confirmed card, which is already the continuity.
+        static var streamingPhase: AnyTransition {
+            AccessibilityPreferences.reduceMotion
+                ? .opacity
+                : .opacity.combined(with: .scale(scale: 0.97))
+        }
+
         static var expandAnimation: Animation? {
             AccessibilityPreferences.reduceMotion ? reducedCrossFade : expandCollapse
+        }
+    }
+
+    /// Elapsed labels for long-running states. Silence for the first few
+    /// seconds, then a count so long waits read as progress, not a freeze.
+    enum Elapsed {
+        static let graceSeconds = 5
+
+        /// `nil` inside the grace window; "12s" under a minute; "3:07" after.
+        static func label(_ seconds: Int) -> String? {
+            guard seconds >= graceSeconds else { return nil }
+            if seconds < 60 { return "\(seconds)s" }
+            return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
         }
     }
 
@@ -159,6 +275,11 @@ enum SageDesign {
         static let codeBlockChromeClearance: CGFloat = 22
         /// Continuous corner radius aligned with github-markdown (6) + Apple continuous).
         static let codeBlockCornerRadius: CGFloat = 6
+        /// Fold-fade mask heights — clipped content dissolves into the surface
+        /// below instead of hitting a hard clip edge. Reading canvas is 14pt;
+        /// chip / code density is 12pt.
+        static let foldFadeHeight: CGFloat = 52
+        static let chipFoldFadeHeight: CGFloat = 36
 
         /// Code point size for a Dynamic Type–scaled reading size.
         static func scaledCodeFontSize(readingSize: CGFloat) -> CGFloat {
@@ -239,11 +360,18 @@ extension View {
     /// Keyboard shortcut bound only when enabled — one Button definition can
     /// support shortcut-suppressed contexts without cloning branches.
     @ViewBuilder
-    func sageShortcut(_ shortcut: KeyboardShortcut, enabled: Bool) -> some View {
-        if enabled {
+    func sageShortcut(_ shortcut: KeyboardShortcut?, enabled: Bool) -> some View {
+        if enabled, let shortcut {
             keyboardShortcut(shortcut)
         } else {
             self
         }
+    }
+
+    /// Hit slop so a small visual control reaches the comfortable 28pt
+    /// target — padding and tappable shape grow together.
+    func sageHitSlop(visualSize: CGFloat) -> some View {
+        padding(max(0, (SageDesign.Control.minimumHitTarget - visualSize) / 2))
+            .contentShape(Rectangle())
     }
 }

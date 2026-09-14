@@ -28,7 +28,7 @@ extension ToolCallView {
                             .sageMicro(type.micro)
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SageDesign.Spacing.medium)
                     proposedContent(content, language: language)
                 }
 
@@ -49,7 +49,7 @@ extension ToolCallView {
     func proposedContent(_ content: String, language: String?, path: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if let path {
-                HStack(spacing: 6) {
+                HStack(spacing: SageDesign.Spacing.labelGap) {
                     Image(systemName: "doc.text")
                         .sageFont(type.icon, weight: .semibold)
                     Text(PathTextSupport.attributedString(from: path, policy: pathGuardPolicy))
@@ -59,17 +59,17 @@ extension ToolCallView {
                         .truncationMode(.middle)
                 }
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SageDesign.Spacing.medium)
             }
             MarkdownContentView(
                 markdown: ToolCallPresentation.fencedMarkdown(content: content, language: language)
             )
-            .padding(.horizontal, 8)
+            .padding(.horizontal, SageDesign.Spacing.small)
         }
     }
 
     func labeledText(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             Text(label)
                 .sageMicro(type.micro, weight: .semibold)
                 .foregroundStyle(.tertiary)
@@ -78,13 +78,13 @@ extension ToolCallView {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, SageDesign.Spacing.medium)
     }
 
     func fieldsPreview(_ pairs: [(key: String, value: String)]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.titleDetailGap) {
                     Text(pair.key)
                         .sageMicro(type.micro, weight: .semibold)
                         .foregroundStyle(.tertiary)
@@ -95,7 +95,7 @@ extension ToolCallView {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, SageDesign.Spacing.medium)
     }
 
     var iconName: String {
@@ -121,7 +121,7 @@ extension ToolCallView {
         switch status {
         case .pending:
             Image(systemName: SageDesign.Symbol.stepPending)
-                .sageMicro(type.micro, weight: .regular)
+                .sageFont(type.icon)
                 .foregroundStyle(.tertiary)
 
         case .running:
@@ -130,19 +130,19 @@ extension ToolCallView {
 
         case .succeeded:
             Image(systemName: SageDesign.Symbol.stepSuccess)
-                .sageMicro(type.micro, weight: .semibold)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(SageDesign.Palette.success)
                 .sageSymbolEffect(.bounce, value: status)
 
         case .failed:
             Image(systemName: SageDesign.Symbol.stepFailed)
-                .sageMicro(type.micro, weight: .semibold)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(SageDesign.Palette.danger)
                 .sageSymbolEffect(.pulse, value: status)
 
         case .skipped:
             Image(systemName: "minus.circle")
-                .sageMicro(type.micro)
+                .sageFont(type.icon)
                 .foregroundStyle(.tertiary)
         }
     }

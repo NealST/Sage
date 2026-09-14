@@ -145,9 +145,19 @@ struct MarkdownContentView: View {
                             alignment: .top
                         )
                         .clipped()
-                        .overlay(alignment: .bottom) {
+                        .mask(alignment: .top) {
                             if !expanded, shouldOfferCollapse {
-                                collapseFade
+                                // Content fades out toward the fold instead of
+                                // being covered by a painted canvas color — the
+                                // reveal matches any surface, including the
+                                // translucent window material.
+                                VStack(spacing: 0) {
+                                    Color.black
+                                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                        .frame(height: SageDesign.Markdown.foldFadeHeight)
+                                }
+                            } else {
+                                Color.black
                             }
                         }
                 } else {
@@ -176,19 +186,6 @@ struct MarkdownContentView: View {
         }
     }
 
-    /// Fade into the reading canvas — same window fill, not a second material.
-    private var collapseFade: some View {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor).opacity(0),
-                Color(nsColor: .windowBackgroundColor),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: 52)
-        .allowsHitTesting(false)
-    }
 }
 
 private struct MarkdownHeightKey: PreferenceKey {

@@ -11,6 +11,9 @@ import Foundation
 @Observable
 final class ScheduleService {
     var records: [ScheduleRecord] = []
+    /// False until the first load completes — spares the Dashboard an
+    /// empty-state flash while records are still being read.
+    var isLoaded = false
     /// Jobs waiting in the in-process queue (not yet executing).
     var queuedIDs: Set<UUID> = []
     /// Jobs currently executing.
@@ -66,6 +69,7 @@ final class ScheduleService {
         } catch {
             lastError = "Couldn’t load schedules."
         }
+        isLoaded = true
     }
 
     /// Persists a recipe. When `runOnceNow` is true, also enqueues one trial run.
@@ -177,7 +181,7 @@ final class ScheduleService {
         record.setFrozenWorkPlan(nil)
         record.status = .needsFirstRun
         record.enabled = true
-        record.lastStatus = "Needs setup — next run will re-plan."
+        record.lastStatus = "Needs setup. The next run will re-plan."
         record.updatedAt = .now
         record.nextFireAt = ScheduleClock.nextFireDate(for: record.cadence)
         do {

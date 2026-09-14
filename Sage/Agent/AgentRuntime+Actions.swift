@@ -140,7 +140,7 @@ extension AgentRuntime {
 
     func skipToolApproval() async {
         guard !state.shouldDisableConfirmationActions else { return }
-        await failToolApproval(reason: "User skipped this tool.")
+        await failToolApproval(reason: "User declined this tool.")
     }
 
     private func failToolApproval(reason: String) async {

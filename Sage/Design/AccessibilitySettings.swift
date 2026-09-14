@@ -60,6 +60,11 @@ final class AccessibilitySettings {
     var fillOpacity: Double { increaseContrast ? 0.14 : 0.06 }
     var strongFillOpacity: Double { increaseContrast ? 0.20 : 0.10 }
     var pillFillOpacity: Double { increaseContrast ? 0.16 : 0.08 }
+    /// Selected chip fill — one step stronger than the resting pill fill.
+    var selectionFillOpacity: Double { increaseContrast ? 0.24 : 0.12 }
+    /// Accent hairline rings (focused composer, selected attachment, focused
+    /// recorder fields).
+    var accentRingOpacity: Double { increaseContrast ? 0.8 : 0.6 }
     /// Diff changed-line fills must read as a signal on any background, unlike
     /// the passive chrome tints above.
     var diffFillOpacity: Double { increaseContrast ? 0.22 : 0.14 }

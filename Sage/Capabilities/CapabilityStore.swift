@@ -233,7 +233,7 @@ final class CapabilityStore {
         let attempts = mcpServers[idx].reconnectAttempts
         if attempts >= Self.maxReconnectAttempts {
             mcpServers[idx].status = .error
-            mcpServers[idx].statusMessage = "Process exited — reconnect failed after \(attempts) attempts"
+            mcpServers[idx].statusMessage = "Process exited. Reconnect failed after \(attempts) attempts."
             return
         }
 

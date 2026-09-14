@@ -36,8 +36,8 @@ struct SkillSaveStatusIndicator: View {
             showPopover.toggle()
         } label: {
             chipLabel
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                 .background(
                     Capsule(style: .continuous)
                         .fill(chipFill)
@@ -145,6 +145,9 @@ struct SkillSaveStatusIndicator: View {
                 if index > 0 {
                     Divider()
                         .opacity(SageDesign.Chrome.dividerOpacity)
+                        // Aligns with the job rows' text column (row inset +
+                        // 16pt status-icon frame + row gap = 36), not the
+                        // popover edge.
                         .padding(.leading, 36)
                 }
                 jobRow(job)
@@ -158,10 +161,12 @@ struct SkillSaveStatusIndicator: View {
     private func jobRow(_ job: SkillSaveJob) -> some View {
         HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
             jobStatusIcon(job.status)
+                // Small inline status glyph — stays 16 (Control's icon frames
+                // are 20+) and anchors the divider's 36pt text column.
                 .frame(width: 16, height: 16)
                 .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.titleDetailGap) {
                 Text(jobDisplayTitle(job))
                     .sageFont(type.caption, weight: .medium)
                     .foregroundStyle(.primary)
@@ -177,22 +182,16 @@ struct SkillSaveStatusIndicator: View {
             Spacer(minLength: 0)
 
             if case .failed = job.status {
-                Button("Dismiss", systemImage: "xmark") {
+                SageDismissButton {
                     session.skills.dismissSkillSaveJob(job.id)
                     if session.skills.saveJobs.isEmpty {
                         showPopover = false
                     }
                 }
-                .labelStyle(.iconOnly)
-                .sageFont(type.icon, weight: .bold)
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .buttonStyle(.plain)
-                .help("Dismiss")
             }
         }
         .padding(.horizontal, SageDesign.Spacing.medium)
-        .padding(.vertical, 8)
+        .padding(.vertical, SageDesign.Spacing.small)
     }
 
     private func jobDisplayTitle(_ job: SkillSaveJob) -> String {

@@ -36,12 +36,12 @@ struct AgentComposerView: View {
     var body: some View {
         @Bindable var session = session
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if !slashSuggestions.isEmpty {
                 suggestionList
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 if !session.draftAttachments.isEmpty {
                     AttachmentChipBar(
                         attachments: session.draftAttachments,
@@ -61,21 +61,31 @@ struct AgentComposerView: View {
                 HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
                     attachButton
                     inputField
+                        // Slash-menu hint rides the field's trailing edge so
+                        // the send/stop anchor never shifts position when the
+                        // menu opens — the primary action is the composer's
+                        // one fixed point.
+                        .overlay(alignment: .trailing) {
+                            if !slashSuggestions.isEmpty {
+                                HStack(spacing: 2) {
+                                    Text("Select")
+                                    Image(systemName: SageDesign.Symbol.returnKey)
+                                }
+                                .sageMicro(type.micro, weight: .medium)
+                                .foregroundStyle(.secondary)
+                                .padding(.trailing, 2)
+                                .allowsHitTesting(false)
+                            }
+                        }
 
                     // Primary action: send morphs to stop while the turn is in
                     // flight. The composer never scrolls away, so this stays
                     // reachable during long streaming replies.
-                    if !slashSuggestions.isEmpty {
-                        Text("Select ⏎")
-                            .sageMicro(type.micro, weight: .medium)
-                            .foregroundStyle(.secondary)
-                    }
-
                     composerSubmitButton
                 }
             }
             .padding(.horizontal, SageDesign.Spacing.medium)
-            .padding(.vertical, 10)
+            .padding(.vertical, SageDesign.Spacing.medium)
             .sagePanelBackground(cornerRadius: SageDesign.Glass.panel)
             .overlay {
                 // Focus reads as a hairline tint on glass — the pre-glass
@@ -106,17 +116,10 @@ struct AgentComposerView: View {
                         .sageFont(type.caption)
                         .foregroundStyle(SageDesign.Palette.warning)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button {
-                        dismissAttachmentHint()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .sageMicro(type.micro, weight: .semibold)
-                            .padding(4)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Dismiss attachment notice")
+                    SageDismissButton(
+                        action: dismissAttachmentHint,
+                        label: "Dismiss attachment notice"
+                    )
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Attachment notice: \(hint)")
@@ -242,23 +245,26 @@ struct AgentComposerView: View {
             }
             .onKeyPress(.escape) { dismissSuggestionsIfNeeded() }
             .onKeyPress(.delete) { handleDeleteKey() }
+            .sageComposerSpellChecking(isFocused: isInputFocused)
             .accessibilityHint(composerAccessibilityHint)
+            .help("Return sends · Option-Return adds a new line")
     }
 
     private var attachButton: some View {
-        Button("Add files", systemImage: "plus") {
+        Button("Add files", systemImage: "paperclip") {
             pickAttachments()
         }
         .labelStyle(.iconOnly)
+        .symbolRenderingMode(.hierarchical)
         .sageFont(type.caption, weight: .semibold)
         .foregroundStyle(.secondary)
-        .frame(width: 22, height: 22)
+        .frame(
+            width: SageDesign.Control.iconButton,
+            height: SageDesign.Control.iconButton
+        )
         .buttonStyle(SagePressableChipButtonStyle())
-        // Hit slop beyond the visual chip — small targets should not stay small.
-        .padding(3)
-        .contentShape(Rectangle())
+        .sageHitSlop(visualSize: SageDesign.Control.iconButton)
         .disabled(blocksTyping || isPreparingAttachments)
-        .opacity(blocksTyping || isPreparingAttachments ? 0.45 : 1)
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .help("Add files to this message")
     }
@@ -276,14 +282,15 @@ struct AgentComposerView: View {
         } label: {
             Image(systemName: session.agent.canStop ? "stop.fill" : "arrow.up")
                 .sageFont(type.body, weight: .semibold)
-                .frame(width: 24, height: 24)
+                .frame(
+                    width: SageDesign.Control.iconButtonLarge,
+                    height: SageDesign.Control.iconButtonLarge
+                )
                 .sageSubmitSymbolReplaceTransition()
         }
         .buttonStyle(.glassProminent)
         .controlSize(.small)
-        // Hit slop beyond the visual chip — small targets should not stay small.
-        .padding(2)
-        .contentShape(Rectangle())
+        .sageHitSlop(visualSize: SageDesign.Control.iconButtonLarge)
         .disabled(!session.agent.canStop && !canSubmit)
         .sageShortcut(.cancelAction, enabled: session.agent.canStop)
         .animation(SageDesign.Motion.expandAnimation, value: session.agent.canStop)
@@ -298,8 +305,8 @@ struct AgentComposerView: View {
     }
 
     private var composerStrokeOpacity: Double {
-        if isDropTargeted { return 0.7 }
-        return isInputFocused ? 0.35 : 0
+        if isDropTargeted { return min(SageDesign.Chrome.accentRingOpacity + 0.1, 1) }
+        return isInputFocused ? SageDesign.Chrome.accentRingOpacity : 0
     }
 
     /// Forgiveness for a slip (Apple: "easy undo for slips"): the flick-to-
@@ -320,8 +327,8 @@ struct AgentComposerView: View {
             .sageMicro(type.micro, weight: .semibold)
             .foregroundStyle(Color.accentColor)
             .buttonStyle(.plain)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
             .contentShape(Rectangle())
             .accessibilityHint("Puts the removed attachment back")
         }
@@ -338,24 +345,26 @@ struct AgentComposerView: View {
                 Button {
                     applySuggestion(suggestion)
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SageDesign.Spacing.labelGap) {
                         Image(systemName: suggestion.systemImage)
                             .sageFont(type.icon)
                             .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                         Text(suggestion.title)
                             .sageFont(type.body, weight: .medium)
+                        Spacer(minLength: SageDesign.Spacing.small)
                         if !suggestion.description.isEmpty {
-                            Text("— \(suggestion.description)")
+                            Text(suggestion.description)
                                 .sageMicro(type.micro)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                        Spacer()
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.chipVertical)
                     .background(
-                        isSelected ? Color.accentColor.opacity(0.12) : Color.clear
+                        isSelected
+                            ? Color.accentColor.opacity(SageDesign.Chrome.selectionFillOpacity)
+                            : Color.clear
                     )
                     .contentShape(Rectangle())
                 }

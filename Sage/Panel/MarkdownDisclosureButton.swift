@@ -15,16 +15,16 @@ struct MarkdownDisclosureButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SageDesign.Spacing.extraSmall) {
                 Text(title)
                     .sageMicro(type.micro, weight: .semibold)
                 Image(systemName: "chevron.down")
                     .sageFont(type.icon, weight: .semibold)
                     .rotationEffect(.degrees(expanded ? 180 : 0))
             }
-            .foregroundStyle(.primary.opacity(0.75))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .foregroundStyle(.primary.opacity(SageDesign.Chrome.deemphasizedContentOpacity))
+            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal + SageDesign.Spacing.extraSmall)
+            .padding(.vertical, SageDesign.Spacing.compactChipVertical + SageDesign.Spacing.extraSmall)
             .contentShape(Capsule())
         }
         .buttonStyle(SagePressableChipButtonStyle(emphasized: hovering))

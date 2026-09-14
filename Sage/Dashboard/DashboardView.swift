@@ -24,7 +24,7 @@ struct DashboardView: View {
                         tokenUsageSection
                     }
                     .padding(.horizontal, SageDesign.Spacing.extraLarge)
-                    .padding(.top, 20)
+                    .padding(.top, SageDesign.Spacing.extraLarge)
                     .padding(.bottom, SageDesign.Spacing.large)
                 }
                 .sageScrollEdgeGlass()
@@ -71,7 +71,7 @@ struct DashboardView: View {
         dashboardSection("Task Tokens") {
             VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                         Text("Current Task")
                             .sageFont(type.body, weight: .medium)
                         Text(tokenSummary)
@@ -102,17 +102,18 @@ struct DashboardView: View {
     private func contextBudgetBar(_ occupancy: Double) -> some View {
         let percent = Int((occupancy * 100).rounded())
         let isHigh = occupancy >= 0.8
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             HStack {
                 Text("Context")
                     .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(isHigh ? "\(percent)% — consider starting fresh" : "\(percent)% of window")
+                Text(isHigh ? "\(percent)% · consider starting fresh" : "\(percent)% of window")
                     .sageMicro(type.micro)
                     .foregroundStyle(isHigh ? SageDesign.Palette.warning : .secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                    .animation(SageDesign.Motion.countdownTick, value: percent)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -133,7 +134,7 @@ struct DashboardView: View {
 
     private var tokenSummary: String {
         let usage = appState.agent.state.tokenUsage
-        return "In: \(formatTokenCount(usage.input)) • Out: \(formatTokenCount(usage.output))"
+        return "In \(formatTokenCount(usage.input)) · Out \(formatTokenCount(usage.output))"
     }
 
     // MARK: - MCP Servers
@@ -147,7 +148,7 @@ struct DashboardView: View {
                     .foregroundStyle(.secondary)
                 if servers.isEmpty {
                     VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                             Text("No servers configured")
                                 .sageFont(type.body, weight: .medium)
                             Text("MCP servers add tools like web search or docs to every project.")

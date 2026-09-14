@@ -14,7 +14,7 @@ extension AgentComposerView {
             return "Continue for more tool rounds, or finish"
 
         case .toolApproval:
-            return "Allow, skip, or stop this tool"
+            return "Allow, decline, or stop this tool"
 
         case .reviewFailed:
             return "Retry review, or use the current reply"
@@ -41,23 +41,16 @@ extension AgentComposerView {
         )
     }
 
+    /// One canonical string per state lives in the status row; the placeholder
+    /// only speaks for states the status row doesn't already announce.
     var composerPlaceholder: String {
-        if case .awaitingConfirmation = session.agent.state.phase {
-            return "Ask Sage…"
-        }
-        if session.agent.state.hasPendingPlan {
-            return "Finish the pending plan first…"
-        }
-        if blocksTyping {
-            return "Sage is working…"
-        }
         if isDropTargeted {
             return "Add to this message"
         }
         if !session.draftAttachments.isEmpty {
             return "Ask about these files…"
         }
-        return "Ask Sage… (type / for commands)"
+        return "Ask Sage…"
     }
 
     func restoreTurnInterruptDraft() {
@@ -78,7 +71,7 @@ extension AgentComposerView {
         if !slashSuggestions.isEmpty {
             return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
         }
-        return "Press Return to send. Command-Up recalls recent messages. Shift-Command-A adds files."
+        return "Press Return to send. Option-Return adds a new line. Command-Up recalls recent messages. Shift-Command-A adds files."
     }
 
     /// ⌘↑/⌘↓ recall. Positive `step` moves older, negative moves newer; the

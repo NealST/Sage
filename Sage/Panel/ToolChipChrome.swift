@@ -53,14 +53,52 @@ extension View {
     }
 }
 
-/// Header press feedback for disclosure chips — dim + micro-scale on press.
+/// Header press feedback for disclosure chips — dim + micro-scale on press,
+/// plus a light hover fill so the transcript's most-tappable element
+/// announces itself before the click (only when enabled: a non-expandable
+/// chip must not read as interactive).
 struct ToolChipHeaderButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     func makeBody(configuration: Configuration) -> some View {
+        ToolChipHeader(configuration: configuration)
+    }
+}
+
+private struct ToolChipHeader: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
+
+    var body: some View {
+        // Top corners match the chip radius; the square bottom edge is
+        // clipped by the chip's own rounded shape when collapsed.
+        let hoverShape = UnevenRoundedRectangle(
+            topLeadingRadius: SageDesign.Glass.card,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: SageDesign.Glass.card,
+            style: .continuous
+        )
         configuration.label
+            .background(
+                hoverShape.fill(
+                    Color.primary.opacity(
+                        isHovered && isEnabled
+                            ? SageDesign.Chrome.pillFillOpacity
+                            : 0
+                    )
+                )
+            )
             .opacity(configuration.isPressed ? 0.75 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .onHover { hovered in
+                isHovered = hovered && isEnabled
+            }
+            .animation(hoverAnimation, value: isHovered)
             .animation(SageDesign.Motion.pressFeedback, value: configuration.isPressed)
+    }
+
+    private var hoverAnimation: Animation? {
+        reduceMotion ? nil : SageDesign.Motion.reducedCrossFade
     }
 }

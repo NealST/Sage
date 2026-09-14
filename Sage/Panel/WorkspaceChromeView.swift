@@ -11,7 +11,9 @@ import SwiftUI
 struct WorkspaceChromeView: View {
     @Environment(AppState.self) var appState
     @Environment(AgentSession.self) var session
-    @Environment(\.sageTypography) private var type
+    @Environment(AccessibilitySettings.self) var accessibility
+    /// Shared with the +Identity extension file.
+    @Environment(\.sageTypography) var type
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var gitBranch: String?
@@ -21,6 +23,14 @@ struct WorkspaceChromeView: View {
     @Binding var projectTab: ProjectWorkspaceTab
     /// General window: full task-history browser sheet.
     @State private var isBrowsingTasks = false
+    /// Seconds in the current working stretch — feeds the badge's elapsed label.
+    @State private var workingElapsedSeconds = 0
+    /// Chrome control widths scale with Dynamic Type — hardcoded frames
+    /// truncate large type (used by the +Identity extension).
+    @ScaledMetric(relativeTo: .caption) var tabPickerMinWidth: CGFloat = 200
+    @ScaledMetric(relativeTo: .caption) var tabPickerIdealWidth: CGFloat = 220
+    @ScaledMetric(relativeTo: .caption) var tabPickerMaxWidth: CGFloat = 240
+    @ScaledMetric(relativeTo: .caption) var recentsMenuMaxWidth: CGFloat = 200
 
     var focused: ProjectRecord? { session.agent.state.focusedProject }
     var isProject: Bool { !session.isGeneral }
@@ -29,7 +39,8 @@ struct WorkspaceChromeView: View {
         HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             identityCluster
                 .sageFont(type.caption, weight: .medium)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
+                .symbolRenderingMode(.hierarchical)
 
             if showsDocumentCluster {
                 chromeSeparator
@@ -41,9 +52,12 @@ struct WorkspaceChromeView: View {
             Spacer(minLength: SageDesign.Spacing.medium)
 
             trailingCluster
+                .symbolRenderingMode(.hierarchical)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, SageDesign.Spacing.large)
+        // The row shares the band with the traffic lights — leading inset
+        // clears the button cluster; the trailing edge keeps the normal inset.
+        .padding(.leading, SageDesign.Panel.titlebarLeadingInset)
         .padding(.trailing, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)
         .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
@@ -68,15 +82,23 @@ struct WorkspaceChromeView: View {
     }
 
     var generalIdentity: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SageDesign.Spacing.labelGap) {
             Button(action: openProject) {
                 Label("Open Project", systemImage: "folder")
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                    .sageGlassChip()
             }
             .help("Open an existing project folder")
             .accessibilityLabel("Open Project")
 
             Button(action: createProject) {
                 Label("New Project", systemImage: "folder.badge.plus")
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                    .sageGlassChip()
             }
             .help("Create a new project folder")
             .accessibilityLabel("New Project")
@@ -87,11 +109,15 @@ struct WorkspaceChromeView: View {
                         Button {
                             Task { await appState.switchToProject(id: project.id) }
                         } label: {
-                            Text("\(project.name)  ·  \(ProjectPanelActions.displayPath(project.rootPath))")
+                            Text("\(project.name) · \(ProjectPanelActions.displayPath(project.rootPath))")
                         }
                     }
                 } label: {
                     Label("Recent Projects", systemImage: "clock")
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                        .sageGlassChip()
                 }
                 .menuStyle(.borderlessButton)
                 .help("Recent projects")
@@ -100,12 +126,11 @@ struct WorkspaceChromeView: View {
         }
         .buttonStyle(.borderless)
         .controlSize(.small)
-        .labelStyle(.titleAndIcon)
         .fixedSize(horizontal: true, vertical: false)
     }
 
     var projectIdentity: some View {
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.labelGap) {
             if let focused {
                 projectNameButton(focused)
             } else {
@@ -126,14 +151,21 @@ struct WorkspaceChromeView: View {
             }
 
             if case .awaitingConfirmation = session.agent.state.phase {
-                Text("Awaiting confirmation")
-                    .foregroundStyle(SageDesign.Palette.warning)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(SageDesign.Palette.warning.opacity(0.14))
+                // The one state that outranks every other chrome signal —
+                // tinted glass so the material itself carries the warning.
+                Label("Awaiting confirmation", systemImage: SageDesign.Symbol.pending)
+                    .sageFont(type.caption, weight: .semibold)
+                    // White on the tinted material; the Reduce-Transparency
+                    // fallback is a light fill, where the warning tone reads.
+                    .foregroundStyle(
+                        accessibility.reduceTransparency
+                            ? SageDesign.Palette.warning
+                            : Color.white
                     )
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                    .sageTintedGlassCapsule(SageDesign.Palette.warning)
             }
 
             if let title = session.agent.state.threadTitle,
@@ -147,22 +179,38 @@ struct WorkspaceChromeView: View {
     }
 
     /// Long turns would otherwise read as a frozen window — this answers
-    /// "is this window doing anything" from across the room.
+    /// "is this window doing anything" from across the room. After the grace
+    /// window the elapsed count appears (same formatter as the transcript's
+    /// thinking label), so a stuck turn is distinguishable from a fresh one.
     private var workingBadge: some View {
-        Label("Working", systemImage: "circle.dotted")
+        Label(workingTitle, systemImage: "circle.dotted")
             .foregroundStyle(.secondary)
+            .monospacedDigit()
             .symbolEffect(
                 .variableColor.iterative,
                 options: .repeating,
                 isActive: !reduceMotion
             )
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
             .background(
                 Capsule(style: .continuous)
                     .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
             )
             .accessibilityLabel("Sage is working")
+            .task(id: isWorking) {
+                guard isWorking else { return }
+                workingElapsedSeconds = 0
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    workingElapsedSeconds += 1
+                }
+            }
+    }
+
+    private var workingTitle: String {
+        SageDesign.Elapsed.label(workingElapsedSeconds).map { "Working \($0)" }
+            ?? "Working"
     }
 
     private var isWorking: Bool {
@@ -180,12 +228,15 @@ struct WorkspaceChromeView: View {
                     Task { await session.agent.startFresh() }
                 } label: {
                     Label("Start Fresh", systemImage: "plus")
+                        .labelStyle(.titleAndIcon)
+                        .sageFont(type.caption, weight: .medium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                        .sageGlassChip()
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .labelStyle(.titleAndIcon)
-                .sageFont(type.caption, weight: .medium)
-                .foregroundStyle(.secondary)
                 .disabled(!session.agent.canStartFresh)
                 .help("Start a clean task in this window")
             }
@@ -195,12 +246,15 @@ struct WorkspaceChromeView: View {
                     isBrowsingTasks = true
                 } label: {
                     Label("Browse Tasks", systemImage: "clock")
+                        .labelStyle(.titleAndIcon)
+                        .sageFont(type.caption, weight: .medium)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                        .sageGlassChip()
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .labelStyle(.titleAndIcon)
-                .sageFont(type.caption, weight: .medium)
-                .foregroundStyle(.secondary)
                 .help("Search, open, and delete past tasks")
                 .sheet(isPresented: $isBrowsingTasks) {
                     TaskHistorySheet(

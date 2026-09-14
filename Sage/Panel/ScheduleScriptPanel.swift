@@ -21,6 +21,8 @@ struct ScheduleScriptPanel: View {
     @State private var runOnceNow = false
     @State private var workingDirectoryIsAllowed = true
     @State private var filePickError: String?
+    /// Preset-insert of the hovered cadence chip — feeds the quiet hover fill.
+    @State private var hoveringCadence: String?
     @FocusState private var commandFocused: Bool
     /// Label column width — scales with Dynamic Type alongside the micro labels.
     @ScaledMetric(relativeTo: .caption) private var labelColumnWidth: CGFloat = 80
@@ -196,13 +198,28 @@ struct ScheduleScriptPanel: View {
         }
         .buttonStyle(.plain)
         .sageMicro(type.micro, weight: selected ? .semibold : .medium)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
         .background(
             RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
-                .fill(Color.accentColor.opacity(selected ? 0.14 : 0.05))
+                .fill(
+                    Color.accentColor.opacity(
+                        selected
+                            ? 0.14
+                            : (hoveringCadence == preset.insert ? 0.08 : 0.05)
+                    )
+                )
         )
-        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+        .foregroundStyle(
+            selected
+                ? Color.accentColor
+                : (hoveringCadence == preset.insert ? Color.primary : Color.secondary)
+        )
+        .onHover { hovering in
+            withAnimation(SageDesign.Motion.contentCrossFade) {
+                hoveringCadence = hovering ? preset.insert : nil
+            }
+        }
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityLabel(preset.description)
     }

@@ -145,10 +145,10 @@ extension ScheduleService {
     /// failure must read without expanding.
     static func notificationTitle(for record: ScheduleRecord) -> String {
         switch record.status {
-        case .failed: return "\(record.title) — failed"
-        case .awaitingConfirmation: return "\(record.title) — needs your review"
-        case .needsFirstRun: return "\(record.title) — needs setup"
-        case .armed, .paused, .draft: return "\(record.title) — finished"
+        case .failed: return "\(record.title) · failed"
+        case .awaitingConfirmation: return "\(record.title) · needs your review"
+        case .needsFirstRun: return "\(record.title) · needs setup"
+        case .armed, .paused, .draft: return "\(record.title) · finished"
         }
     }
 

@@ -20,7 +20,7 @@ enum SkillTipChrome {
 
     @ViewBuilder
     static func dismissButton(action: @escaping () -> Void) -> some View {
-        SkillTipChromeDismissButton(action: action)
+        SageDismissButton(action: action)
     }
 
     @ViewBuilder
@@ -36,8 +36,8 @@ enum SkillTipChrome {
     @ViewBuilder
     static func row<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+            .padding(.vertical, SageDesign.Spacing.chipVertical)
             .sagePanelBackground(cornerRadius: SageDesign.Glass.card, weight: .clear)
             .sageGlassMaterialize()
     }
@@ -54,21 +54,6 @@ private struct SkillTipChromeIcon: View {
             .frame(width: 16, height: 16)
             .padding(.top, 2)
             .accessibilityHidden(true)
-    }
-}
-
-private struct SkillTipChromeDismissButton: View {
-    let action: () -> Void
-    @Environment(\.sageTypography) private var type
-
-    var body: some View {
-        Button("Dismiss", systemImage: "xmark", action: action)
-            .labelStyle(.iconOnly)
-            .sageFont(type.icon, weight: .bold)
-            .foregroundStyle(.secondary)
-            .frame(width: 22, height: 22)
-            .buttonStyle(.plain)
-            .help("Dismiss")
     }
 }
 

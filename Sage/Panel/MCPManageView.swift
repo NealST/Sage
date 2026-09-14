@@ -219,7 +219,7 @@ struct MCPManageView: View {
                         .sageMicro(type.micro)
                         .foregroundStyle(SageDesign.Palette.danger)
                 } else if commandHasWhitespace {
-                    Text("Command can’t contain spaces — put the arguments in the Arguments field.")
+                    Text("Command can’t contain spaces. Put the arguments in the Arguments field.")
                         .sageMicro(type.micro)
                         .foregroundStyle(SageDesign.Palette.danger)
                 } else if let addError {
@@ -236,7 +236,7 @@ struct MCPManageView: View {
                     Text("The command runs with your full user privileges, outside the project sandbox. Only add servers you trust.")
                         .sageMicro(type.micro)
                         .foregroundStyle(.secondary)
-                    Text("Example — Command: npx · Arguments: -y @modelcontextprotocol/server-filesystem /Users/you")
+                    Text("Example: Command npx · Arguments -y @modelcontextprotocol/server-filesystem /Users/you")
                         .sageMicro(type.micro)
                         .foregroundStyle(.secondary)
                 }
@@ -284,7 +284,7 @@ struct MCPManageView: View {
             enabled: true
         )
         guard appState.mcpHub.addMCPServer(server) else {
-            addError = "Couldn’t add this server — check the name and command, then try again."
+            addError = "Couldn’t add this server. Check the name and command, then try again."
             return
         }
         draftName = ""
@@ -306,9 +306,9 @@ struct MCPManageView: View {
 
     private func statusIcon(_ status: MCPServerStatus) -> some View {
         Image(systemName: MCPServerStatusChrome.symbol(status))
-            .sageMicro(type.micro, weight: .semibold)
+            .sageFont(type.icon, weight: .semibold)
             .foregroundStyle(MCPServerStatusChrome.color(status))
-            .frame(width: 14)
+            .frame(width: SageDesign.Control.iconColumnWidth)
             .accessibilityLabel(MCPServerStatusChrome.accessibilityName(status))
     }
 
@@ -339,13 +339,14 @@ private enum MCPServerStatusChrome {
         }
     }
 
+    @MainActor
     static func color(_ status: MCPServerStatus) -> Color {
         switch status {
         case .connected: return SageDesign.Palette.success
         case .connecting, .reconnecting: return SageDesign.Palette.warning
         case .error: return SageDesign.Palette.danger
         case .disconnected: return .secondary
-        case .disabled: return Color.secondary.opacity(0.7)
+        case .disabled: return Color.secondary.opacity(SageDesign.Chrome.deemphasizedContentOpacity)
         }
     }
 

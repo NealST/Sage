@@ -70,10 +70,10 @@ nonisolated enum SkillCompositionError: LocalizedError {
             return "Merged skill saved, but couldn’t move to Trash: \(names.joined(separator: ", "))."
 
         case .hostUnavailable:
-            return "Could not save skill — the workspace is no longer available."
+            return "Could not save skill. The workspace is no longer available."
 
         case .sessionTornDown:
-            return "Could not save skill — the window was closed."
+            return "Could not save skill. The window was closed."
         }
     }
 }

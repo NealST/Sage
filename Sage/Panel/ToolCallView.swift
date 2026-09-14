@@ -117,16 +117,16 @@ struct ToolCallView: View {
                 expanded.toggle()
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: SageDesign.Spacing.labelGap) {
                 if let status {
                     statusIcon(status)
-                        .frame(width: 14, alignment: .center)
+                        .frame(width: SageDesign.Control.iconColumnWidth, alignment: .center)
                 } else {
                     Image(systemName: iconName)
                         .sageFont(type.icon, weight: .semibold)
                         // Same leading column as the status icon so titles
                         // align whether or not a status has arrived yet.
-                        .frame(width: 14, alignment: .center)
+                        .frame(width: SageDesign.Control.iconColumnWidth, alignment: .center)
                 }
 
                 Text(model.title)
@@ -148,8 +148,8 @@ struct ToolCallView: View {
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal + SageDesign.Spacing.extraSmall)
+            .padding(.vertical, SageDesign.Spacing.compactChipVertical + SageDesign.Spacing.extraSmall)
             .contentShape(Rectangle())
         }
         .buttonStyle(ToolChipHeaderButtonStyle())

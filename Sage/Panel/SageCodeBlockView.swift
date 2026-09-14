@@ -48,16 +48,16 @@ struct SageCodeBlockView: View {
                         .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .padding(.top, 8)
+                        .padding(.horizontal, SageDesign.Spacing.small)
+                        .padding(.top, SageDesign.Spacing.small)
                         .opacity(chromeOpacity)
                         .allowsHitTesting(false)
                 }
             }
             .overlay(alignment: .topTrailing) {
                 copyButton
-                    .padding(.trailing, 10)
-                    .padding(.top, 8)
+                    .padding(.trailing, SageDesign.Spacing.small)
+                    .padding(.top, SageDesign.Spacing.small)
                     .opacity(chromeOpacity)
             }
             if needsCollapse {
@@ -118,7 +118,7 @@ struct SageCodeBlockView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 28)
+                .frame(height: SageDesign.Markdown.chipFoldFadeHeight)
                 .allowsHitTesting(false)
             }
         }
@@ -135,21 +135,23 @@ struct SageCodeBlockView: View {
         }
         .labelStyle(.iconOnly)
         .sageMicro(type.micro, weight: .semibold)
-        .foregroundStyle(copied ? Color.secondary : Color.secondary.opacity(0.9))
-        .frame(width: 26, height: 22)
-        .sagePanelBackground(cornerRadius: 5, weight: .clear)
+        .foregroundStyle(copied ? SageDesign.Palette.success : Color.secondary)
+        .frame(width: SageDesign.Control.iconButton, height: SageDesign.Control.iconButton)
+        .sagePanelBackground(cornerRadius: SageDesign.Markdown.codeBlockCornerRadius, weight: .clear)
         // Keyboard focus reveals the chrome and draws its own ring — hover is
         // not the only path to this button.
         .overlay {
             if copyFocused {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1)
+                RoundedRectangle(
+                    cornerRadius: SageDesign.Markdown.codeBlockCornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(Color.accentColor.opacity(SageDesign.Chrome.accentRingOpacity), lineWidth: 1)
             }
         }
         .focused($copyFocused)
         // Hit slop beyond the visual chip — small targets should not stay small.
-        .padding(4)
-        .contentShape(Rectangle())
+        .sageHitSlop(visualSize: SageDesign.Control.iconButton)
         .buttonStyle(.plain)
         .help(copied ? "Copied" : "Copy code")
     }
@@ -169,12 +171,12 @@ struct SageCodeBlockView: View {
                     .rotationEffect(.degrees(expanded ? 180 : 0))
             }
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+            .padding(.vertical, SageDesign.Spacing.chipVertical)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SagePlainActionButtonStyle())
         .overlay(alignment: .top) {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
         }
@@ -190,7 +192,7 @@ struct SageCodeBlockView: View {
             copied = true
         }
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.4))
+            try? await Task.sleep(for: .seconds(SageDesign.Motion.feedbackFlashDuration))
             withAnimation(SageDesign.Motion.contentCrossFade) {
                 copied = false
             }

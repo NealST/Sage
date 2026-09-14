@@ -32,6 +32,8 @@ struct WorkspaceChangesView: View {
                 if index > 0 {
                     Divider()
                         .opacity(SageDesign.Chrome.dividerOpacity)
+                        // Aligns with the file rows' text column (chip inset +
+                        // 16pt symbol column + row gap = 36), not the card edge.
                         .padding(.leading, 36)
                 }
                 fileRow(file)
@@ -40,8 +42,8 @@ struct WorkspaceChangesView: View {
                 Text(opaqueCaption)
                     .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.chipVertical)
             }
         }
         // Same material identity as the other transcript cards (card radius +
@@ -54,16 +56,18 @@ struct WorkspaceChangesView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
             Text("Changes")
                 .sageFont(type.body, weight: .semibold)
                 .tracking(-0.2)
-            Spacer(minLength: 8)
+            Spacer(minLength: SageDesign.Spacing.small)
             Text(headerSummary)
                 .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+        // Outer header inset pair (10/6) — this card manages its own row
+        // insets, so these stay literal rather than chip-row tokens.
         .padding(.top, 10)
         .padding(.bottom, changes.files.isEmpty ? 10 : 6)
     }
@@ -103,17 +107,20 @@ struct WorkspaceChangesView: View {
 
             if expanded, file.hasLineDiff {
                 fileDiff(file)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, SageDesign.Spacing.chipVertical)
                     .transition(ToolChipChrome.expandTransition)
             }
         }
     }
 
     private func fileHeader(_ file: WorkspaceFileChange, expanded: Bool) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SageDesign.Spacing.small) {
             Image(systemName: file.kind.symbolName)
                 .sageFont(type.caption, weight: .semibold)
                 .foregroundStyle(.secondary)
+                // Pinned symbol column, deliberately 16 rather than
+                // Control.iconColumnWidth (14) — the 36pt divider inset above
+                // keys off the text column this width produces.
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(PathTextSupport.attributedString(from: file.path, policy: pathGuardPolicy))
@@ -127,7 +134,7 @@ struct WorkspaceChangesView: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: SageDesign.Spacing.small)
             Text(file.kind.rowLabel)
                 .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
@@ -144,8 +151,8 @@ struct WorkspaceChangesView: View {
                     .rotationEffect(.degrees(expanded ? 90 : 0))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+        .padding(.vertical, SageDesign.Spacing.chipVertical)
         .contentShape(Rectangle())
     }
 
@@ -155,7 +162,7 @@ struct WorkspaceChangesView: View {
             Text("Previous contents weren’t captured.")
                 .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
         } else {
             UnifiedDiffView(
                 before: file.before,

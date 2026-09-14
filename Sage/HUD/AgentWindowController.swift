@@ -52,6 +52,9 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
         fadeGeneration &+= 1
         window.sageFadeIn(duration: SageDesign.Motion.windowFadeInDuration)
         focus(window)
+        // Content-level presentation scale rides the same 0.18s as the alpha
+        // fade — the summon reads dimensional instead of a flat fade.
+        NotificationCenter.default.post(name: .sageWindowDidPresent, object: session.kind)
         appState.noteSessionBecameKey(session)
         requestComposerFocus()
     }
@@ -70,6 +73,9 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
             return
         }
         window.sageFade(to: 0, duration: SageDesign.Motion.windowFadeOutDuration)
+        // The exit mirrors the entrance: content scales back down while the
+        // window fades out, so dismiss and summon are the same path.
+        NotificationCenter.default.post(name: .sageWindowWillUnpresent, object: session.kind)
         // NSAnimationContext completions can fire early when the animation is
         // replaced (fast toggle), so the generation token is the source of
         // truth — orderOut only happens if no show/hide happened since.
@@ -116,6 +122,11 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
             : (session.agent.state.focusedProject?.name ?? "Opening…")
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenPrimary]
+        // Project windows tab together like sibling documents; `.automatic`
+        // defers to the system "Prefer tabs" setting instead of forcing it.
+        // General's toggle-to-hide flow owns its window — tabs would break it.
+        window.tabbingIdentifier = session.isGeneral ? "SageGeneral" : "SageProject"
+        window.tabbingMode = session.isGeneral ? .disallowed : .automatic
         window.minSize = NSSize(width: 560, height: 440)
         window.sageApplyLiquidGlass(customTitlebar: true)
         window.hasShadow = true
@@ -192,6 +203,11 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         appState.noteSessionBecameKey(session)
         NSApp.setActivationPolicy(.regular)
+        // The user is looking at this transcript — a pending-decision banner
+        // for it is answered in person now, so retire it.
+        if case .awaitingConfirmation = session.agent.state.phase {
+            TaskCompletionNotifier.clearApprovalAttention(projectID: session.projectID)
+        }
         // Clicking the transcript to select text also makes the window key.
         // Only the hotkey / show path requests composer focus.
     }
@@ -209,6 +225,12 @@ final class AgentWindowController: NSObject, NSWindowDelegate {
 
 extension Notification.Name {
     static let sageFocusAgentInput = Notification.Name("sage.focusAgentInput")
+    /// Window summoned — content rides a presentation scale with the window fade.
+    /// Object: `AgentSession.Kind`.
+    static let sageWindowDidPresent = Notification.Name("sage.windowDidPresent")
+    /// Window fading out — content mirrors the entrance scale on the way down.
+    /// Object: `AgentSession.Kind`.
+    static let sageWindowWillUnpresent = Notification.Name("sage.windowWillUnpresent")
     /// Menu command → workspace tab switch. Object: `AgentSession.Kind`.
     static let sageSelectWorkspaceTab = Notification.Name("sage.selectWorkspaceTab")
     /// Menu command → open the task-history browser. Object: `AgentSession.Kind`.

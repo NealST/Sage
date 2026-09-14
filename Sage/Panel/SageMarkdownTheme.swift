@@ -36,7 +36,7 @@ extension Theme {
         .code {
             FontFamilyVariant(.monospaced)
             FontSize(.em(0.88))
-            BackgroundColor(Color(nsColor: .quaternarySystemFill))
+            BackgroundColor(SageDesign.Palette.subtleFill)
         }
         // Modest top margins so a leading heading isn’t airy-empty (CSS first-child
         // collapse). Breathing between blocks comes mostly from previous bottom margins.
@@ -50,7 +50,7 @@ extension Theme {
                         FontWeight(.semibold)
                         FontSize(.em(1.65))
                     }
-                Divider().overlay(Color(nsColor: .separatorColor)).opacity(SageDesign.Chrome.dividerOpacity)
+                Divider().overlay(SageDesign.Palette.hairline).opacity(SageDesign.Chrome.dividerOpacity)
             }
         }
         .heading2 { configuration in
@@ -63,7 +63,7 @@ extension Theme {
                         FontWeight(.semibold)
                         FontSize(.em(1.35))
                     }
-                Divider().overlay(Color(nsColor: .separatorColor)).opacity(SageDesign.Chrome.dividerOpacity)
+                Divider().overlay(SageDesign.Palette.hairline).opacity(SageDesign.Chrome.dividerOpacity)
             }
         }
         .heading3 { configuration in
@@ -113,7 +113,7 @@ extension Theme {
         .blockquote { configuration in
             HStack(alignment: .top, spacing: 0) {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color(nsColor: .separatorColor))
+                    .fill(SageDesign.Palette.hairline)
                     .frame(width: 3)
                 configuration.label
                     .markdownTextStyle {
@@ -146,8 +146,8 @@ extension Theme {
             Image(systemName: configuration.isCompleted ? "checkmark.square.fill" : "square")
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(
-                    configuration.isCompleted ? Color.secondary.opacity(0.7) : Color.secondary,
-                    Color(nsColor: .quaternarySystemFill)
+                    configuration.isCompleted ? Color.secondary.opacity(SageDesign.Chrome.deemphasizedContentOpacity) : Color.secondary,
+                    SageDesign.Palette.subtleFill
                 )
                 .imageScale(.small)
                 .relativeFrame(minWidth: .em(1.6), alignment: .trailing)
@@ -156,11 +156,11 @@ extension Theme {
             ScrollView(.horizontal, showsIndicators: true) {
                 configuration.label
                     .fixedSize(horizontal: true, vertical: true)
-                    .markdownTableBorderStyle(.init(color: Color(nsColor: .separatorColor)))
+                    .markdownTableBorderStyle(.init(color: SageDesign.Palette.hairline))
                     .markdownTableBackgroundStyle(
                         .alternatingRows(
                             Color.clear,
-                            Color(nsColor: .quaternarySystemFill)
+                            SageDesign.Palette.subtleFill
                         )
                     )
             }
@@ -175,14 +175,14 @@ extension Theme {
                     BackgroundColor(nil)
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, 8)
+                .padding(.vertical, SageDesign.Spacing.small)
                 .padding(.horizontal, 14)
                 .relativeLineSpacing(.em(0.3))
         }
         .thematicBreak {
             Divider()
-                .overlay(Color(nsColor: .separatorColor))
-                .padding(.vertical, 8)
+                .overlay(SageDesign.Palette.hairline)
+                .padding(.vertical, SageDesign.Spacing.small)
                 .markdownMargin(top: 20, bottom: 20)
         }
     }

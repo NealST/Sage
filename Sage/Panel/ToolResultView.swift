@@ -12,7 +12,7 @@ struct ToolResultView: View {
     let content: String
 
     /// Cap for the expanded plain-text body before it becomes scrollable.
-    static let expandedBodyMaxHeight: CGFloat = 320
+    static let expandedBodyMaxHeight = SageDesign.Markdown.collapsedReplyHeight
 
     @Environment(\.pathGuardPolicy) private var pathGuardPolicy
     @Environment(\.sageTypography) private var type
@@ -35,8 +35,7 @@ struct ToolResultView: View {
         if isError {
             let detail = content.dropFirst("ERROR:".count)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if detail.isEmpty { return "Tool failed" }
-            return detail.count <= 72 ? "Failed: \(detail)" : "Failed: \(detail.prefix(66))…"
+            return detail.isEmpty ? "Tool failed" : "Failed: \(detail)"
         }
 
         var line = split.summary.split(separator: "\n", maxSplits: 1).first.map(String.init)
@@ -53,8 +52,7 @@ struct ToolResultView: View {
                 line = line.replacingOccurrences(of: payload.path, with: relative)
             }
         }
-        if line.count <= 72 { return line }
-        return String(line.prefix(69)) + "…"
+        return line
     }
 
     var body: some View {
@@ -82,17 +80,20 @@ struct ToolResultView: View {
                     .foregroundStyle(headerIconColor)
                     // Pinned column so the title starts at the same x across
                     // chips regardless of glyph width.
-                    .frame(width: 14, alignment: .center)
+                    .frame(width: SageDesign.Control.iconColumnWidth, alignment: .center)
                 Text(title)
                     .sageMicro(type.micro, weight: .medium)
+                    // Middle truncation keeps the trailing stats and the
+                    // leading verb visible when deep paths overflow.
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.down")
                     .sageFont(type.icon, weight: .semibold)
                     .rotationEffect(.degrees(expanded ? 180 : 0))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+            .padding(.vertical, SageDesign.Spacing.chipVertical)
             .contentShape(Rectangle())
         }
         .buttonStyle(ToolChipHeaderButtonStyle())
@@ -129,7 +130,7 @@ struct ToolResultView: View {
                     path: PathGuard.displayPath(payload.path, policy: pathGuardPolicy),
                     statsOverride: payload.stats
                 )
-                .padding(.bottom, 10)
+                .padding(.bottom, SageDesign.Spacing.chipVertical)
                 .contextMenu { payloadContextMenu(payload) }
             } else {
                 ScrollView {
@@ -141,21 +142,18 @@ struct ToolResultView: View {
                 // Huge outputs (file dumps, long listings) scroll instead of
                 // stretching the transcript.
                 .frame(maxHeight: Self.expandedBodyMaxHeight)
-                // Fade at the fold — same composite as the chip surface, so it
-                // reads as "more below" and vanishes on short content.
-                .overlay(alignment: .bottom) {
-                    ZStack {
-                        Color(nsColor: .windowBackgroundColor)
-                        Color.primary.opacity(SageDesign.Chrome.pillFillOpacity)
+                // Fade at the fold: the content itself dissolves into the chip
+                // surface below — works over any canvas, including the
+                // translucent window material.
+                .mask(alignment: .top) {
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: SageDesign.Markdown.chipFoldFadeHeight)
                     }
-                    .frame(height: 36)
-                    .mask {
-                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    }
-                    .allowsHitTesting(false)
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
+                .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                .padding(.bottom, SageDesign.Spacing.chipVertical)
                 .contextMenu { pathContextMenu }
             }
         }

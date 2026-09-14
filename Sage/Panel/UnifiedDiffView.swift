@@ -78,7 +78,7 @@ struct UnifiedDiffView: View {
                 Text("Preparing diff…")
                     .sageMicro(type.micro)
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
                     .accessibilityLabel("Preparing diff")
             }
         }
@@ -101,7 +101,7 @@ struct UnifiedDiffView: View {
         let remaining = diff.ops.count - displayed.count
         return VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             if showsPathHeader {
-                HStack(spacing: 6) {
+                HStack(spacing: SageDesign.Spacing.labelGap) {
                     if let path {
                         Image(systemName: created ? "doc.badge.plus" : "doc.text")
                             .sageFont(type.icon, weight: .semibold)
@@ -120,7 +120,7 @@ struct UnifiedDiffView: View {
                         .monospacedDigit()
                 }
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
             }
 
             if created, before == nil || before?.isEmpty == true {
@@ -130,53 +130,59 @@ struct UnifiedDiffView: View {
                         diffRow(operation)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .padding(.horizontal, 8)
+                .clipShape(RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous))
+                .padding(.horizontal, SageDesign.Spacing.small)
             } else if before == nil, !created {
                 Text("Previous contents unavailable (binary or unreadable). Showing proposed file.")
                     .sageMicro(type.micro)
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
                 MarkdownContentView(
                     markdown: ToolCallPresentation.fencedMarkdown(
                         content: after,
                         language: path.flatMap(ToolCallPresentation.language(forPath:))
                     )
                 )
-                .padding(.horizontal, 8)
+                .padding(.horizontal, SageDesign.Spacing.small)
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(displayed.enumerated()), id: \.offset) { _, operation in
                         diffRow(operation)
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .padding(.horizontal, 8)
+                .clipShape(RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous))
+                .padding(.horizontal, SageDesign.Spacing.small)
             }
 
             if truncated {
                 Text("Diff preview truncated for size.")
                     .sageMicro(type.micro)
                     .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
             }
 
             if diff.ops.count > collapsedLineLimit {
-                Button(expanded ? "Show less" : "Show \(remaining) more lines") {
+                Button {
                     withAnimation(SageDesign.Motion.expandAnimation) {
                         expanded.toggle()
                     }
+                } label: {
+                    Text(expanded ? "Show less" : "Show \(remaining) more lines")
+                        .sageMicro(type.micro, weight: .semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .sageMicro(type.micro, weight: .semibold)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .buttonStyle(SagePlainActionButtonStyle())
+                .padding(.horizontal, SageDesign.Spacing.extraSmall)
             }
         }
     }
 
     private func headerLabel(_ stats: LineDiff.Stats) -> String {
-        if created { return "new file · \(stats.insertions) lines" }
+        if created { return "new file, \(stats.insertions) lines" }
         if stats.isIdentity { return "no changes" }
         return stats.summary
     }
@@ -185,7 +191,12 @@ struct UnifiedDiffView: View {
     private func diffRow(_ operation: LineDiff.Operation) -> some View {
         switch operation {
         case let .equal(line):
-            textRow(prefix: " ", text: line, color: .primary.opacity(0.7), fill: Color.clear)
+            textRow(
+                prefix: " ",
+                text: line,
+                color: .primary.opacity(SageDesign.Chrome.deemphasizedContentOpacity),
+                fill: Color.clear
+            )
 
         case let .insert(line):
             textRow(
@@ -210,14 +221,14 @@ struct UnifiedDiffView: View {
             Text(prefix)
                 .sageFont(type.caption, weight: .semibold, design: .monospaced)
                 .foregroundStyle(color.opacity(0.85))
-                .frame(width: 14, alignment: .center)
+                .frame(width: SageDesign.Control.iconColumnWidth, alignment: .center)
             Text(text.isEmpty ? " " : text)
                 .sageFont(type.caption, design: .monospaced)
                 .foregroundStyle(color)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, SageDesign.Spacing.extraSmall)
         .padding(.vertical, 1)
         .background(fill)
         .accessibilityElement(children: .combine)

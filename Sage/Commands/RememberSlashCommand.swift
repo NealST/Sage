@@ -16,7 +16,7 @@ struct RememberSlashCommand: BuiltinSlashCommand {
         guard await host.ensureActiveTaskForCommand() else { return false }
 
         guard host.usableTranscriptEventCount >= 2 else {
-            host.reportCommandFailure("Nothing to remember yet — have a short conversation first.")
+            host.reportCommandFailure("Nothing to remember yet. Have a short conversation first.")
             return false
         }
 

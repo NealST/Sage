@@ -32,7 +32,7 @@ struct SkillSaveTipRow: View {
                                 .lineLimit(1)
 
                             Text(suggestion.skillDescription)
-                                .sageMicro(type.micro)
+                                .sageFont(type.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
@@ -57,8 +57,9 @@ struct SkillSaveTipRow: View {
                         scopeChooser
                     } else if suggestion.type == .enhance {
                         Text(enhanceScopeCaption)
-                            .sageMicro(type.micro)
-                            .foregroundStyle(.tertiary)
+                            .sageFont(type.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -66,7 +67,7 @@ struct SkillSaveTipRow: View {
     }
 
     private var scopeChooser: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.labelGap) {
             Text("Save location")
                 .sageMicro(type.micro, weight: .medium)
                 .foregroundStyle(.secondary)
@@ -84,8 +85,8 @@ struct SkillSaveTipRow: View {
             .frame(maxWidth: 260)
 
             Text(scopeConsequence(for: resolvedScope))
-                .sageMicro(type.micro)
-                .foregroundStyle(.tertiary)
+                .sageFont(type.caption)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .animation(SageDesign.Motion.expandAnimation, value: resolvedScope)
         }
@@ -111,10 +112,10 @@ struct SkillSaveTipRow: View {
     private var enhanceScopeCaption: String {
         switch suggestion.scope {
         case .global:
-            return "Folds this task into the global experience — available in every workspace."
+            return "Folds this task into the global experience, available in every workspace."
 
         case .project:
-            return "Folds this task into the project experience — only used in “\(projectDisplayName)”."
+            return "Folds this task into the project experience, only used in “\(projectDisplayName)”."
         }
     }
 
@@ -155,14 +156,14 @@ struct SkillChooseTipRow: View {
                         Text("Which skill should Sage use?")
                             .sageFont(type.caption, weight: .medium)
                         Text("Several skills match this request. Choose one to load now.")
-                            .sageMicro(type.micro)
+                            .sageFont(type.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                     ForEach(choice.candidates) { candidate in
                         Button {
                             Task { await session.agent.selectSkillActivation(named: candidate.name) }
@@ -170,10 +171,10 @@ struct SkillChooseTipRow: View {
                             HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(candidate.name)
-                                        .sageMicro(type.micro, weight: .semibold)
+                                        .sageFont(type.caption, weight: .medium)
                                         .lineLimit(1)
                                     Text(candidate.description)
-                                        .sageMicro(type.micro)
+                                        .sageFont(type.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -185,12 +186,12 @@ struct SkillChooseTipRow: View {
                                     .padding(.top, 3)
                                     .accessibilityHidden(true)
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.chipVertical)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(TipCandidateButtonStyle())
+                        .buttonStyle(SagePlainActionButtonStyle())
                         .accessibilityLabel("Use skill \(candidate.name)")
                     }
                 }
@@ -202,10 +203,11 @@ struct SkillChooseTipRow: View {
                         .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 2)
+                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SagePlainActionButtonStyle())
                 .help("Don’t auto-load any skill. Sage continues with the catalog only.")
             }
         }

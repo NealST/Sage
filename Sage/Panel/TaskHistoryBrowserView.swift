@@ -19,6 +19,9 @@ struct TaskHistoryBrowserView: View {
     @State private var deleteTarget: TaskSummary?
     @State private var isDeleting = false
     @State private var loadFailed = false
+    /// False until the first reload lands — spares the list an empty-state
+    /// flash while rows are still being read.
+    @State private var isLoaded = false
 
     private let repository: any TaskRepository
     private let projectID: UUID?
@@ -46,7 +49,7 @@ struct TaskHistoryBrowserView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text("The local database could not be read.")
                 )
-            } else if filtered.isEmpty {
+            } else if filtered.isEmpty, isLoaded {
                 emptyState
             } else {
                 List {
@@ -58,10 +61,11 @@ struct TaskHistoryBrowserView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if showsInlineSearch {
-                inlineSearchField
+                // Floating field with its own quiet fill — content scrolls
+                // under it and fades via the soft scroll-edge effect.
+                SageInlineSearchField(prompt: "Search tasks", text: $searchText)
                     .padding(.horizontal, SageDesign.Spacing.large)
                     .padding(.vertical, SageDesign.Spacing.small)
-                    .sageGlassToolbar()
             }
         }
         .task(id: projectID) { await reload() }
@@ -105,36 +109,6 @@ struct TaskHistoryBrowserView: View {
         }
     }
 
-    private var inlineSearchField: some View {
-        HStack(spacing: SageDesign.Spacing.small) {
-            Image(systemName: "magnifyingglass")
-                .sageFont(type.caption)
-                .foregroundStyle(.tertiary)
-            TextField("Search tasks", text: $searchText)
-                .sageFont(type.body)
-                .textFieldStyle(.plain)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .sageFont(type.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, SageDesign.Spacing.medium)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
-                .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Search tasks")
-    }
-
     private func row(for summary: TaskSummary) -> some View {
         HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
             Image(systemName: statusIcon(summary.status))
@@ -155,8 +129,8 @@ struct TaskHistoryBrowserView: View {
                 Text("Active")
                     .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
@@ -170,8 +144,9 @@ struct TaskHistoryBrowserView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .sageFont(type.caption)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+                        .frame(width: SageDesign.Control.iconButtonLarge, height: SageDesign.Control.iconButtonLarge)
+                        // Hit slop beyond the glyph — small targets should not stay small.
+                        .sageHitSlop(visualSize: SageDesign.Control.iconButtonLarge)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
@@ -206,6 +181,7 @@ struct TaskHistoryBrowserView: View {
         } catch {
             loadFailed = true
         }
+        isLoaded = true
     }
 
     private func activate(_ summary: TaskSummary) {
@@ -216,8 +192,16 @@ struct TaskHistoryBrowserView: View {
 
     private func exportTask(_ summary: TaskSummary) {
         Task {
-            guard let task = try? await repository.loadTask(id: summary.id) else { return }
-            TaskMarkdownExporter.exportThroughSavePanel(for: task)
+            do {
+                guard let task = try await repository.loadTask(id: summary.id) else {
+                    throw CocoaError(.fileReadNoSuchFile)
+                }
+                TaskMarkdownExporter.exportThroughSavePanel(for: task)
+            } catch {
+                session.agent.reportFailure(
+                    "Could not export the task: \(error.localizedDescription)"
+                )
+            }
         }
     }
 

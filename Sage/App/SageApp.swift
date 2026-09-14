@@ -115,6 +115,25 @@ struct SageApp: App {
             }
 
             CommandGroup(after: .windowList) {
+                Button("Bring All to Front") {
+                    NSApp.arrangeInFront(nil)
+                }
+                .disabled(appState.windowMenuEntries.isEmpty)
+
+                ForEach(appState.windowMenuEntries) { entry in
+                    Button {
+                        appState.makeKeyAndShow(entry.session)
+                    } label: {
+                        if entry.isKey {
+                            Label(entry.title, systemImage: "checkmark")
+                        } else {
+                            Text(entry.title)
+                        }
+                    }
+                }
+
+                Divider()
+
                 Button("Open Sage") {
                     appDelegate.showAgentWindow()
                 }

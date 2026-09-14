@@ -35,7 +35,7 @@ extension SkillToolExecutor {
         let bodyLines = body.components(separatedBy: "\n").count
         if bodyLines > 600 {
             throw ToolError.invalidArguments(
-                "Body has \(bodyLines) lines — exceeds the recommended 500-line limit. "
+                "Body has \(bodyLines) lines, exceeding the recommended 500-line limit. "
                 + "Move detailed reference material to separate files in references/."
             )
         }

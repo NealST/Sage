@@ -30,7 +30,7 @@ struct SkillConsolidateTipRow: View {
                         Text("These skills look overlapping")
                             .sageFont(type.caption, weight: .medium)
                         Text("Merge into one skill to keep the catalog clear.")
-                            .sageMicro(type.micro)
+                            .sageFont(type.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -39,7 +39,7 @@ struct SkillConsolidateTipRow: View {
                 }
 
                 if suggestion.candidates.count >= 2 {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                         Text("Keep")
                             .sageMicro(type.micro, weight: .medium)
                             .foregroundStyle(.secondary)
@@ -66,8 +66,8 @@ struct SkillConsolidateTipRow: View {
 
                         if let primary {
                             Text(mergeConsequence(keeping: primary, removing: removed))
-                                .sageMicro(type.micro)
-                                .foregroundStyle(.tertiary)
+                                .sageFont(type.caption)
+                                .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .animation(SageDesign.Motion.expandAnimation, value: primaryPath)
                         }
@@ -75,11 +75,16 @@ struct SkillConsolidateTipRow: View {
                 }
 
                 HStack(spacing: SageDesign.Spacing.small) {
-                    Button("Merge") {
+                    Button {
                         onMerge(suggestion.resolved(primaryPath: primaryPath))
+                    } label: {
+                        Text("Merge")
+                            .sageMicro(type.micro, weight: .semibold)
+                            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                            .contentShape(Rectangle())
                     }
-                    .sageMicro(type.micro, weight: .semibold)
-                    .buttonStyle(.plain)
+                    .buttonStyle(SagePlainActionButtonStyle())
                     .foregroundStyle(Color.accentColor)
                     .disabled(primary == nil)
                     .help(primary.map { "Merge into “\($0.name)” and move the others to Trash" } ?? "Merge")
@@ -131,7 +136,7 @@ struct SkillScheduleTipRow: View {
                             Text(draft.prompt.isEmpty
                                  ? "Write what Sage should do, or use this conversation."
                                  : draft.prompt)
-                                .sageMicro(type.micro)
+                                .sageFont(type.caption)
                                 .foregroundStyle(draft.prompt.isEmpty ? .tertiary : .secondary)
                                 .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -144,11 +149,16 @@ struct SkillScheduleTipRow: View {
 
                         Spacer(minLength: SageDesign.Spacing.small)
 
-                        Button(draft.runOnceNow ? "Save and run" : "Save") {
+                        Button {
                             onSave(draft)
+                        } label: {
+                            Text(draft.runOnceNow ? "Save and run" : "Save")
+                                .sageMicro(type.micro, weight: .semibold)
+                                .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                                .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                                .contentShape(Rectangle())
                         }
-                        .sageMicro(type.micro, weight: .semibold)
-                        .buttonStyle(.plain)
+                        .buttonStyle(SagePlainActionButtonStyle())
                         .foregroundStyle(Color.accentColor)
                         .disabled(draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .help(
@@ -166,13 +176,18 @@ struct SkillScheduleTipRow: View {
                     }
 
                     if let wording = conversationWording, wording != draft.prompt {
-                        Button("Use this conversation") {
+                        Button {
                             onUpdate { draft in
                                 draft.prompt = wording
                             }
+                        } label: {
+                            Text("Use this conversation")
+                                .sageMicro(type.micro, weight: .medium)
+                                .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                                .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                                .contentShape(Rectangle())
                         }
-                        .sageMicro(type.micro, weight: .medium)
-                        .buttonStyle(.plain)
+                        .buttonStyle(SagePlainActionButtonStyle())
                         .foregroundStyle(Color.accentColor)
                         .help("Use your latest request in this chat as the scheduled task.")
                         .accessibilityLabel("Use this conversation as the schedule")
@@ -194,19 +209,5 @@ struct SkillScheduleTipRow: View {
             }
         }
         .accessibilityElement(children: .contain)
-    }
-}
-
-struct TipCandidateButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0.04))
-            )
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-            .animation(SageDesign.Motion.pressFeedback, value: configuration.isPressed)
     }
 }

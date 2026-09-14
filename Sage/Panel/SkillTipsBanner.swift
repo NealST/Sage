@@ -18,6 +18,8 @@ struct SkillTipsBanner: View {
     @State private var pointerInsideBanner = false
     /// Vertical drag toward dismiss — tracks 1:1, then commits by distance or velocity.
     @State private var dragOffset: CGFloat = 0
+    /// Commit in flight: the banner is mid throw-out and no longer interactive.
+    @State private var isDismissing = false
 
     private var tips: SkillTipStore { session.skills.tips }
 
@@ -83,10 +85,12 @@ struct SkillTipsBanner: View {
             }
             .gesture(dragDismissGesture)
             .offset(y: dragOffset)
+            .opacity(isDismissing ? 0 : 1)
             .onAppear {
                 seedPrimaryDefaults()
                 scheduleAutoDismiss()
                 dragOffset = 0
+                isDismissing = false
             }
             .onChange(of: tips.revision) { _, _ in
                 pruneLocalState()
@@ -107,21 +111,16 @@ struct SkillTipsBanner: View {
     private var dragDismissGesture: some Gesture {
         DragGesture(minimumDistance: 12)
             .onChanged { value in
-                guard canDragDismiss else { return }
+                guard canDragDismiss, !isDismissing else { return }
                 // Downward-only, 1:1 with the pointer; upward pulls stay put.
                 dragOffset = max(0, value.translation.height)
             }
             .onEnded { value in
-                guard canDragDismiss else { return }
+                guard canDragDismiss, !isDismissing else { return }
                 let shouldDismiss = dragOffset > 80
-                    || (value.velocity.height > 600 && dragOffset > 16)
+                    || (value.velocity.height > SageDesign.Motion.DragThrow.flickVelocity && dragOffset > 16)
                 if shouldDismiss {
-                    withAnimation(SageDesign.Motion.expandAnimation) {
-                        scopeByID.removeAll()
-                        primaryPathByID.removeAll()
-                        tips.dismissAutoDismissable()
-                    }
-                    // Keep the dragged offset — the removal fade finishes from here.
+                    dismissWithThrow(velocity: value.velocity.height)
                 } else {
                     withAnimation(
                         SageDesign.Motion.dragSettle(
@@ -133,6 +132,38 @@ struct SkillTipsBanner: View {
                     }
                 }
             }
+    }
+
+    /// The commit continues the throw at the release velocity — the banner
+    /// follows the finger out instead of stopping dead to fade in place.
+    /// The actual dismissal lands a beat later, once the banner is already
+    /// invisible.
+    private func dismissWithThrow(velocity: CGFloat) {
+        guard let settle = SageDesign.Motion.dragSettle(
+            velocity: velocity,
+            from: dragOffset,
+            to: dragOffset + SageDesign.Motion.DragThrow.distance
+        ) else {
+            // Reduce Motion: no throw — dismiss immediately, as before.
+            commitDismiss()
+            return
+        }
+        withAnimation(settle) {
+            isDismissing = true
+            dragOffset += SageDesign.Motion.DragThrow.distance
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Int(SageDesign.Motion.DragThrow.removalDelay * 1000)))
+            commitDismiss()
+        }
+    }
+
+    private func commitDismiss() {
+        withAnimation(SageDesign.Motion.expandAnimation) {
+            scopeByID.removeAll()
+            primaryPathByID.removeAll()
+            tips.dismissAutoDismissable()
+        }
     }
 
     private var canDragDismiss: Bool {

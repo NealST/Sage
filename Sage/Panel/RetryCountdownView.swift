@@ -45,7 +45,7 @@ struct RetryCountdownView: View {
                     Text("Stop")
                 }
                 .buttonStyle(.glass)
-                .controlSize(.regular)
+                .controlSize(.small)
                 .keyboardShortcut(.cancelAction)
                 .help("Stop this turn instead of waiting for the next attempt (Esc)")
             }
@@ -54,7 +54,7 @@ struct RetryCountdownView: View {
                     Text("Retry Now")
                 }
                 .buttonStyle(.glass)
-                .controlSize(.regular)
+                .controlSize(.small)
                 .help("Skip the remaining wait and retry immediately")
             }
         }
@@ -62,13 +62,13 @@ struct RetryCountdownView: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    /// "Rate limited — retrying in 5s"; falls back to a bare countdown when
+    /// "Rate limited, retrying in 5s"; falls back to a bare countdown when
     /// the gateway didn't report a reason.
     var headline: String {
         guard let reason = state.reason?.nilIfEmpty else {
             return "Retrying in \(state.secondsRemaining)s"
         }
-        return "\(reason) — retrying in \(state.secondsRemaining)s"
+        return "\(reason), retrying in \(state.secondsRemaining)s"
     }
 
     var accessibilityText: String {
@@ -107,7 +107,10 @@ struct RetryCountdownView: View {
                     value: state.secondsRemaining
                 )
         }
-        .frame(width: 24, height: 24)
+        .frame(
+            width: SageDesign.Control.iconButtonLarge,
+            height: SageDesign.Control.iconButtonLarge
+        )
     }
 
     /// Progress from 0 (just started waiting) to 1 (about to retry).

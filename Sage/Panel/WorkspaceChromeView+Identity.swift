@@ -13,8 +13,12 @@ extension WorkspaceChromeView {
         Button {
             NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
         } label: {
+            // The window's identity: primary + semibold, so it outweighs the
+            // secondary chrome (actions, branch, tabs) it sits among.
             Label(project.name, systemImage: "folder")
                 .labelStyle(.titleAndIcon)
+                .sageFont(type.caption, weight: .semibold)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
         }
         .buttonStyle(.plain)
@@ -43,6 +47,9 @@ extension WorkspaceChromeView {
         } label: {
             Label(gitBranch ?? "", systemImage: "arrow.triangle.branch")
                 .labelStyle(.titleAndIcon)
+                .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+                .sageGlassChip()
                 .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
@@ -61,7 +68,11 @@ extension WorkspaceChromeView {
         }
         .pickerStyle(.segmented)
         .controlSize(.small)
-        .frame(minWidth: 200, idealWidth: 220, maxWidth: 240)
+        .frame(
+            minWidth: tabPickerMinWidth,
+            idealWidth: tabPickerIdealWidth,
+            maxWidth: tabPickerMaxWidth
+        )
         .labelsHidden()
         .accessibilityLabel("Workspace")
         .help("Switch between Task, Files, and History")
@@ -101,7 +112,7 @@ extension WorkspaceChromeView {
                 Text(currentTitle ?? "New Task")
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .frame(maxWidth: 200, alignment: .leading)
+                    .frame(maxWidth: recentsMenuMaxWidth, alignment: .leading)
             }
             .menuStyle(.borderlessButton)
             .controlSize(.small)
@@ -116,7 +127,7 @@ extension WorkspaceChromeView {
             Text(currentTitle)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: 200, alignment: .leading)
+                .frame(maxWidth: recentsMenuMaxWidth, alignment: .leading)
                 .help("Current task")
                 .accessibilityLabel("Current task \(currentTitle)")
         }

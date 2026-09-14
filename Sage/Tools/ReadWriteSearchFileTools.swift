@@ -228,7 +228,7 @@ nonisolated struct SearchFilesTool: AgentTool {
 
         var output = results.joined(separator: "\n")
         if results.count >= Self.maxResults {
-            output += "\n… (showing first \(Self.maxResults) matches — narrow the path or pattern for more)"
+            output += "\n… (showing first \(Self.maxResults) matches; narrow the path or pattern for more)"
         }
         return output
     }

@@ -37,12 +37,12 @@ struct SettingsConnectionSection: View {
                 validation: Self.modelError
             )
 
-            connectionField("Plan model", text: $settings.planModel, prompt: "same as Model")
+            connectionField("Planning model", text: $settings.planModel, prompt: "same as Model")
             connectionField("Execute model", text: $settings.executeModel, prompt: "same as Model")
             connectionField("Review model", text: $settings.reviewModel, prompt: "same as Model")
 
-            LabeledContent("API Key") {
-                VStack(alignment: .trailing, spacing: 4) {
+            LabeledContent("API key") {
+                VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                     SecureField("sk-…", text: $settings.apiKey)
                         .onChange(of: settings.apiKey) { _, _ in
                             touchedFields.insert("API Key")
@@ -57,7 +57,7 @@ struct SettingsConnectionSection: View {
             }
 
             LabeledContent("Temperature") {
-                HStack(spacing: 10) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Slider(
                         value: Binding(
                             get: { settings.temperature ?? Self.defaultTemperature },
@@ -121,7 +121,7 @@ struct SettingsConnectionSection: View {
         validation: ((ModelSettings) -> String?)? = nil
     ) -> some View {
         LabeledContent(title) {
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                 TextField(prompt, text: text)
                     .onChange(of: text.wrappedValue) { _, _ in
                         touchedFields.insert(title)
@@ -206,7 +206,7 @@ struct ConnectionStatusRow: View {
         if settings.isConfigured {
             return "Stored in Keychain · saves automatically"
         }
-        return "Not connected yet — paste your provider’s API key and model, then test the connection."
+        return "Not connected yet. Paste your provider’s API key and model, then test the connection."
     }
 
     private var accessibilityText: String {

@@ -78,7 +78,7 @@ extension SkillEditorPane {
         }
         .task(id: savedFlash) {
             guard savedFlash > 0 else { return }
-            try? await Task.sleep(for: .seconds(1.6))
+            try? await Task.sleep(for: .seconds(SageDesign.Motion.feedbackFlashDuration))
             if !Task.isCancelled, savedFlash > 0 {
                 withAnimation(SageDesign.Motion.contentCrossFade) { savedFlash = 0 }
             }
@@ -164,13 +164,13 @@ extension SkillEditorPane {
             // Save stays disabled without it — explain why instead of letting
             // the button just look broken.
             if isDirty, draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text("Add a description — the agent reads it when deciding to use this skill.")
+                Text("Add a description. The agent reads it when deciding to use this skill.")
                     .sageMicro(type.micro)
                     .foregroundStyle(SageDesign.Palette.danger)
             }
 
             DisclosureGroup("Details", isExpanded: $detailsExpanded) {
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                Grid(alignment: .leading, horizontalSpacing: SageDesign.Spacing.small, verticalSpacing: SageDesign.Spacing.small) {
                     detailRow("License", text: $draft.license, prompt: "Optional")
                     detailRow("Compatibility", text: $draft.compatibility, prompt: "Optional")
                     detailRow("Allowed tools", text: $draft.allowedTools, prompt: "Space-separated tool names")

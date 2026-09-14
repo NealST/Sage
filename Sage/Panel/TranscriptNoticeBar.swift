@@ -42,29 +42,23 @@ struct TranscriptNoticeBar: View {
 
     private var contextBudgetChip: some View {
         let percent = Int(((session.agent.state.contextOccupancy ?? 0) * 100).rounded())
-        return HStack(spacing: 8) {
+        return HStack(spacing: SageDesign.Spacing.small) {
             Image(systemName: "gauge.with.needle")
-                .sageMicro(type.micro, weight: .semibold)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(SageDesign.Palette.warning)
                 .accessibilityHidden(true)
 
-            Text("Context is \(percent)% full — early turns may be summarized. Start Fresh frees the window.")
+            Text("Context is \(percent)% full. Early turns may be summarized. Start Fresh frees the window.")
                 .sageMicro(type.micro, weight: .medium)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                session.agent.dismissContextBudgetNotice()
-            } label: {
-                Image(systemName: "xmark")
-                    .sageMicro(type.micro, weight: .semibold)
-                    .padding(6)
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(SagePressableChipButtonStyle())
-            .help("Hide for this task")
-            .accessibilityLabel("Hide context warning")
+            SageDismissButton(
+                action: { session.agent.dismissContextBudgetNotice() },
+                label: "Hide context warning",
+                help: "Hide for this task"
+            )
         }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.bottom, SageDesign.Spacing.small)
@@ -73,9 +67,9 @@ struct TranscriptNoticeBar: View {
     }
 
     private func topicDriftChip(_ offer: TopicDriftOffer) -> some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
             Image(systemName: "plus.square.on.square")
-                .sageMicro(type.micro, weight: .semibold)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
@@ -91,8 +85,8 @@ struct TranscriptNoticeBar: View {
             } label: {
                 Text("Start Fresh")
                     .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                     .contentShape(Capsule())
             }
             .buttonStyle(SagePressableChipButtonStyle())
@@ -105,18 +99,12 @@ struct TranscriptNoticeBar: View {
             .accessibilityLabel("Start Fresh")
             .accessibilityHint("Starts a new task with your last message")
 
-            Button {
-                session.agent.dismissTopicDriftOffer()
-            } label: {
-                Image(systemName: "xmark")
-                    .sageMicro(type.micro, weight: .semibold)
-                    .padding(6)
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(SagePressableChipButtonStyle())
+            SageDismissButton(
+                action: { session.agent.dismissTopicDriftOffer() },
+                label: "Keep going",
+                help: "Keep going in this task"
+            )
             .disabled(session.agent.state.isAcceptingTopicDrift)
-            .help("Keep going in this task")
-            .accessibilityLabel("Keep going")
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, SageDesign.Spacing.large)
@@ -125,22 +113,22 @@ struct TranscriptNoticeBar: View {
     }
 
     private func contextChip(_ hint: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SageDesign.Spacing.small) {
             Image(systemName: "link")
-                .sageMicro(type.micro, weight: .semibold)
+                .sageFont(type.icon, weight: .semibold)
                 .accessibilityHidden(true)
             Text(hint)
                 .sageMicro(type.micro, weight: .medium)
                 .lineLimit(1)
                 .accessibilityLabel(hint)
-            Spacer(minLength: 4)
+            Spacer(minLength: SageDesign.Spacing.extraSmall)
             Button {
                 session.agent.dismissContextHint()
             } label: {
                 Text("Don’t reuse")
                     .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
+                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
                     .contentShape(Capsule())
             }
             .buttonStyle(SagePressableChipButtonStyle())

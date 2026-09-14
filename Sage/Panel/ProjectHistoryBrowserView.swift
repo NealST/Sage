@@ -15,14 +15,20 @@ struct ProjectHistoryBrowserView: View {
     @Environment(\.sageTypography) private var type
     @State private var commits: [GitCommitSummary] = []
     @State private var totalCommits: Int?
-    @State private var hasGit = false
+    /// `nil` while the detached git check runs — distinguishing "not a
+    /// repository" from "still looking" spares a first-load empty-state flash.
+    @State private var hasGit: Bool?
     @State private var copiedHash: String?
     /// Hash chip currently hovered — underlines to reveal the copy affordance.
     @State private var hoveredHash: String?
 
     var body: some View {
         Group {
-            if !hasGit {
+            if hasGit == nil {
+                // Quiet hold until the check lands — a skeleton row would imply
+                // content that isn't coming in a repo-less project.
+                Color.clear
+            } else if hasGit == false {
                 ContentUnavailableView(
                     "No git repository",
                     systemImage: "arrow.triangle.branch",

@@ -102,7 +102,7 @@ nonisolated enum RecallTaskTranscriptTool {
         var output = lines.joined(separator: "\n\n")
         if output.utf8.count > maxOutputCharacters {
             output = ContextBudget.middleOut(output, maxUTF8Bytes: maxOutputCharacters)
-                + "\n\n… (recall truncated — request a narrower from_event_id/through_event_id range)"
+                + "\n\n… (recall truncated; request a narrower from_event_id/through_event_id range)"
         }
         return output
     }
