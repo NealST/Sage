@@ -55,10 +55,10 @@ struct WorkspaceChromeView: View {
                 .symbolRenderingMode(.hierarchical)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The row shares the band with the traffic lights — leading inset
-        // clears the button cluster; the trailing edge keeps the normal inset.
-        .padding(.leading, SageDesign.Panel.titlebarLeadingInset)
-        .padding(.trailing, SageDesign.Spacing.large)
+        // Page gutter — same 16pt as the composer, not the titlebar's
+        // traffic-light inset. Project name and the trailing tabs sit on
+        // the input field's left and right edges.
+        .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)
         .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
         .onReceive(NotificationCenter.default.publisher(for: .sageBrowseTaskHistory)) { note in
@@ -82,24 +82,18 @@ struct WorkspaceChromeView: View {
     }
 
     var generalIdentity: some View {
-        HStack(spacing: SageDesign.Spacing.labelGap) {
+        HStack(spacing: SageDesign.Spacing.small) {
             Button(action: openProject) {
                 Label("Open Project", systemImage: "folder")
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .sageGlassChip()
             }
+            .sageGlassButton()
             .help("Open an existing project folder")
             .accessibilityLabel("Open Project")
 
             Button(action: createProject) {
                 Label("New Project", systemImage: "folder.badge.plus")
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .sageGlassChip()
             }
+            .sageGlassButton()
             .help("Create a new project folder")
             .accessibilityLabel("New Project")
 
@@ -114,18 +108,12 @@ struct WorkspaceChromeView: View {
                     }
                 } label: {
                     Label("Recent Projects", systemImage: "clock")
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                        .sageGlassChip()
                 }
-                .menuStyle(.borderlessButton)
+                .sageGlassButton()
                 .help("Recent projects")
                 .accessibilityLabel("Recent Projects")
             }
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -228,15 +216,8 @@ struct WorkspaceChromeView: View {
                     Task { await session.agent.startFresh() }
                 } label: {
                     Label("Start Fresh", systemImage: "plus")
-                        .labelStyle(.titleAndIcon)
-                        .sageFont(type.caption, weight: .medium)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                        .sageGlassChip()
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .sageGlassButton()
                 .disabled(!session.agent.canStartFresh)
                 .help("Start a clean task in this window")
             }
@@ -246,15 +227,8 @@ struct WorkspaceChromeView: View {
                     isBrowsingTasks = true
                 } label: {
                     Label("Browse Tasks", systemImage: "clock")
-                        .labelStyle(.titleAndIcon)
-                        .sageFont(type.caption, weight: .medium)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                        .sageGlassChip()
                 }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
+                .sageGlassButton()
                 .help("Search, open, and delete past tasks")
                 .sheet(isPresented: $isBrowsingTasks) {
                     TaskHistorySheet(

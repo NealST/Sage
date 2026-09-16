@@ -139,6 +139,7 @@ struct ToolResultView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.never)
                 // Huge outputs (file dumps, long listings) scroll instead of
                 // stretching the transcript.
                 .frame(maxHeight: Self.expandedBodyMaxHeight)

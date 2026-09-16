@@ -32,8 +32,7 @@ struct MCPManageView: View {
                     Text("Add a stdio MCP server to expose its tools to Sage.")
                 } actions: {
                     Button("Add Server") { showingAdd = true }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.regular)
+                        .sageGlassProminentButton()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -249,7 +248,7 @@ struct MCPManageView: View {
                 Button("Add") {
                     addServer()
                 }
-                    .buttonStyle(.glassProminent)
+                    .sageGlassProminentButton()
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canAddDraft)
             }

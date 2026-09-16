@@ -5,8 +5,7 @@
 //  Messages-style attachment token: preview, name, remove.
 //
 
-import AppKit
-import QuickLookThumbnailing
+@preconcurrency import AppKit
 import SwiftUI
 
 struct AttachmentChipView: View {
@@ -123,13 +122,7 @@ struct AttachmentChipView: View {
                 }.value
                 previewImage = data.flatMap(NSImage.init(data:))
 
-            case .file:
-                // A real document preview beats the generic icon — the same
-                // Quick Look system the chip's click opens into.
-                previewImage = await Self.quickLookThumbnail(for: attachment.fileURL)
-
-            case .folder:
-                // Folders keep the system folder icon (the fallback below).
+            case .file, .folder:
                 previewImage = nil
             }
         }
@@ -152,24 +145,6 @@ struct AttachmentChipView: View {
         .sageHitSlop(visualSize: SageDesign.Control.iconButton)
         .onHover { hoveringRemove = $0 }
         .help("Remove \(attachment.displayName)")
-    }
-
-    /// Quick Look thumbnail at the chip's display size (2x for crispness).
-    /// Returns nil on failure so the caller falls back to the workspace icon.
-    private static func quickLookThumbnail(for url: URL) async -> NSImage? {
-        let request = QLThumbnailGenerator.Request(
-            fileAt: url,
-            size: CGSize(width: 22, height: 22),
-            scale: 2,
-            representationTypes: .thumbnail
-        )
-        return await withCheckedContinuation { continuation in
-            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
-                continuation.resume(
-                    returning: representation.map { NSImage(cgImage: $0.cgImage, size: request.size) }
-                )
-            }
-        }
     }
 
     /// Flick the chip up to remove it. Only vertical drags claim the gesture —

@@ -26,14 +26,14 @@ struct UnifiedDiffView: View {
     /// render (streaming ticks, expand toggles), so cache ops+stats by input.
     @State private var diffCache: DiffCache?
 
-    private struct DiffKey: Equatable {
+    nonisolated private struct DiffKey: Equatable, Sendable {
         let before: String?
         let after: String
         let created: Bool
         let statsOverride: LineDiff.Stats?
     }
 
-    private struct DiffCache {
+    nonisolated private struct DiffCache: Sendable {
         let key: DiffKey
         let ops: [LineDiff.Operation]
         let stats: LineDiff.Stats
@@ -50,7 +50,7 @@ struct UnifiedDiffView: View {
         return diffCache
     }
 
-    private static func compute(key: DiffKey) -> DiffCache {
+    nonisolated private static func compute(key: DiffKey) -> DiffCache {
         let prior = key.created ? "" : (key.before ?? "")
         let ops = LineDiff.withCollapsedContext(
             LineDiff.diff(before: prior, after: key.after),

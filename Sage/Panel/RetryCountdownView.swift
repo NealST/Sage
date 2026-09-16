@@ -44,8 +44,7 @@ struct RetryCountdownView: View {
                 Button(role: .cancel, action: onStop) {
                     Text("Stop")
                 }
-                .buttonStyle(.glass)
-                .controlSize(.small)
+                .sageGlassButton()
                 .keyboardShortcut(.cancelAction)
                 .help("Stop this turn instead of waiting for the next attempt (Esc)")
             }
@@ -53,8 +52,7 @@ struct RetryCountdownView: View {
                 Button(action: onRetryNow) {
                     Text("Retry Now")
                 }
-                .buttonStyle(.glass)
-                .controlSize(.small)
+                .sageGlassButton()
                 .help("Skip the remaining wait and retry immediately")
             }
         }

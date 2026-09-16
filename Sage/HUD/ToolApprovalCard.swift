@@ -120,8 +120,7 @@ struct ToolApprovalCard: View {
                     Text("Don't Run")
                 }
                 .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .sageGlassButton(.regular)
                 .help("Decline this tool call. Sage continues the task without it.")
 
                 Spacer(minLength: 0)
@@ -135,23 +134,20 @@ struct ToolApprovalCard: View {
                 }
                 // Same glass system as the sibling decision buttons — one
                 // row, one control vocabulary.
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .sageGlassButton(.regular)
                 .labelStyle(.iconOnly)
                 .help("Always allow this permission (asks for confirmation)")
                 .accessibilityLabel("More approval options")
 
                 Button("Allow for this task", action: onAllowSession)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
+                    .sageGlassButton(.regular)
                     // Return and Escape already cover Allow once / Don't Run;
                     // focusability brings this middle choice to Tab users too.
                     .focusable(true)
 
                 Button("Allow once", action: onAllowOnce)
                     .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
+                    .sageGlassProminentButton()
                     .focusable(true)
             }
             .padding(.top, SageDesign.Spacing.extraSmall)

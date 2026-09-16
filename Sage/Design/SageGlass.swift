@@ -17,6 +17,8 @@ extension SageDesign {
         static let card: CGFloat = 14
         /// Compact chips and code chrome.
         static let chip: CGFloat = 8
+        /// System glass buttons that stay a rounded rect, not a capsule.
+        static let button: CGFloat = 10
         /// Sub-chip clips (attachment thumbnails).
         static let mini: CGFloat = 4
         /// Nearby glass views merge when closer than this.
@@ -66,8 +68,9 @@ extension View {
     }
 
     /// Soft scroll-edge fade so content can pass under floating chrome.
-    func sageScrollEdgeGlass() -> some View {
-        scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+    func sageScrollEdgeGlass(edges: Edge.Set = [.top, .bottom]) -> some View {
+        scrollEdgeEffectStyle(.soft, for: edges)
+            .scrollIndicators(.never)
     }
 
     /// Small interactive glass capsule for toolbar controls — the floating-chip
@@ -76,6 +79,20 @@ extension View {
     /// Increase Contrast adds a hairline stroke.
     func sageGlassChip() -> some View {
         modifier(SageGlassChipModifier())
+    }
+
+    /// System Liquid Glass button — rounded rect, not a capsule.
+    func sageGlassButton(_ size: ControlSize = .small) -> some View {
+        buttonStyle(.glass)
+            .buttonBorderShape(.roundedRectangle(radius: SageDesign.Glass.button))
+            .controlSize(size)
+    }
+
+    /// Prominent sibling of `sageGlassButton` (Send / Run / Allow).
+    func sageGlassProminentButton(_ size: ControlSize = .regular) -> some View {
+        buttonStyle(.glassProminent)
+            .buttonBorderShape(.roundedRectangle(radius: SageDesign.Glass.button))
+            .controlSize(size)
     }
 
     /// Tinted glass capsule for attention states — the material itself

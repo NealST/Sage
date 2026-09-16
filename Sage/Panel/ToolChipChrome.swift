@@ -24,9 +24,10 @@ enum ToolChipChrome {
 struct ToolChipSurfaceModifier: ViewModifier {
     /// Mutating steps read warmer (warning tint) so their weight is scannable.
     var warning: Bool = false
+    var cornerRadius: CGFloat = SageDesign.Glass.card
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SageDesign.Glass.card, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .background(
                 shape.fill(
@@ -48,8 +49,11 @@ struct ToolChipSurfaceModifier: ViewModifier {
 }
 
 extension View {
-    func sageToolChipSurface(warning: Bool = false) -> some View {
-        modifier(ToolChipSurfaceModifier(warning: warning))
+    func sageToolChipSurface(
+        warning: Bool = false,
+        cornerRadius: CGFloat = SageDesign.Glass.card
+    ) -> some View {
+        modifier(ToolChipSurfaceModifier(warning: warning, cornerRadius: cornerRadius))
     }
 }
 

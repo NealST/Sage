@@ -162,8 +162,7 @@ struct DashboardView: View {
                                 object: nil
                             )
                         }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.regular)
+                        .sageGlassProminentButton()
                     }
                     .padding(SageDesign.Spacing.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)

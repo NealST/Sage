@@ -18,7 +18,7 @@ struct SagePressableChipButtonStyle: ButtonStyle {
             if accessibility.reduceTransparency {
                 configuration.label
                     .background {
-                        Capsule(style: .continuous)
+                        RoundedRectangle(cornerRadius: SageDesign.Glass.button, style: .continuous)
                             .fill(
                                 Color.primary.opacity(
                                     pressed
@@ -31,7 +31,10 @@ struct SagePressableChipButtonStyle: ButtonStyle {
                     }
             } else {
                 configuration.label
-                    .glassEffect(.clear.interactive(), in: .capsule)
+                    .glassEffect(
+                        .clear.interactive(),
+                        in: RoundedRectangle(cornerRadius: SageDesign.Glass.button, style: .continuous)
+                    )
             }
         }
         .opacity(isEnabled ? 1 : SageDesign.Chrome.disabledControlOpacity)

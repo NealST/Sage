@@ -5,7 +5,7 @@
 
 import Foundation
 
-extension ToolAuthorizationPolicy {
+nonisolated extension ToolAuthorizationPolicy {
     static func mcpRequirement(
         tool: MCPToolInfo,
         arguments: [String: Any],

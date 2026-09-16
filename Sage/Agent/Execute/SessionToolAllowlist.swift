@@ -284,7 +284,7 @@ final class SessionToolAllowlist {
     }
 }
 
-enum SessionToolApprovalScope: Equatable, Sendable {
+nonisolated enum SessionToolApprovalScope: Equatable, Sendable {
     /// Run this invocation only; the next matching call pauses again.
     case once
     /// Remember this exact tool + arguments for the rest of the task.

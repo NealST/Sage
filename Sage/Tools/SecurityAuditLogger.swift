@@ -57,7 +57,7 @@ nonisolated enum SecurityAuditLogger {
     }
 }
 
-private extension SessionToolApprovalScope {
+nonisolated private extension SessionToolApprovalScope {
     var auditLabel: String {
         switch self {
         case .once:

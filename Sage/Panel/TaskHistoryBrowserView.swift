@@ -79,7 +79,7 @@ struct TaskHistoryBrowserView: View {
         ) {
             Button("Move to Trash", role: .destructive) {
                 if let target = deleteTarget {
-                    Task { await deleteTask(target) }
+                    deleteTask(target)
                 }
             }
             Button("Cancel", role: .cancel) {

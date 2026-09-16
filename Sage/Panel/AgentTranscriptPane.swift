@@ -82,35 +82,49 @@ struct AgentTranscriptPane: View {
     @FocusState private var findFieldFocused: Bool
     /// Index into `findMatches`; ⌘G / ⇧⌘G step through, the bar shows "n of m".
     @State private var currentMatchIndex = 0
+    /// Jump-to-latest sets `stickToBottom` before the scroll lands. Ignore
+    /// the still-large distance-from-bottom so geometry doesn't unstick it.
+    @State var isJumpingToLatest = false
 
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
-                        if isSearching, findMatches.isEmpty {
-                            noFindMatches
-                        } else if displayEvents.isEmpty {
-                            emptyTranscript
-                        }
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
+                        LazyVStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
+                            if isSearching, findMatches.isEmpty {
+                                noFindMatches
+                            } else if displayEvents.isEmpty {
+                                emptyTranscript
+                            }
 
-                        ForEach(displayEvents) { event in
-                            eventBubble(event, toolIndex: toolIndex)
-                                .id(event.id)
-                                .opacity(searchDim(event) ? SageDesign.Chrome.dimmedContentOpacity : 1)
-                                .allowsHitTesting(!searchDim(event))
+                            ForEach(displayEvents) { event in
+                                eventBubble(event, toolIndex: toolIndex)
+                                    .id(event.id)
+                                    .opacity(searchDim(event) ? SageDesign.Chrome.dimmedContentOpacity : 1)
+                                    .allowsHitTesting(!searchDim(event))
+                            }
                         }
 
                         if !isFinding {
                             phaseAccessory {
-                                    guard stickToBottom else { return }
-                                    scrollToLatestStreaming(using: proxy)
+                                guard stickToBottom else { return }
+                                scrollToLatestStreaming(using: proxy)
                             }
                             .id("phase-accessory")
                             .transition(SageDesign.Glass.appearTransition)
                         }
+
+                        // Always in the tree (not inside LazyVStack) so Jump to
+                        // latest can find it after the user has scrolled up.
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.transcriptEndID)
+                            .accessibilityHidden(true)
                     }
-                    .padding(SageDesign.Spacing.large)
+                    .padding(.horizontal, SageDesign.Spacing.large)
+                    .padding(.top, SageDesign.Spacing.small)
+                    .padding(.bottom, SageDesign.Spacing.large)
                     // Reading measure — content column stops at a comfortable
                     // line length instead of stretching with the window.
                     .frame(
@@ -136,7 +150,7 @@ struct AgentTranscriptPane: View {
                     // lags the query and interrupts streaming mid-flight.
                     .animation(SageDesign.Motion.expandAnimation, value: isFinding)
                 }
-                .sageScrollEdgeGlass()
+                .sageScrollEdgeGlass(edges: .bottom)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if isFinding {
                         findBar(proxy: proxy)
@@ -158,7 +172,9 @@ struct AgentTranscriptPane: View {
                     let stickThreshold: CGFloat = 72
                     let unstickThreshold: CGFloat = 96
                     if stickToBottom {
-                        if distanceFromBottom > unstickThreshold { stickToBottom = false }
+                        if !isJumpingToLatest, distanceFromBottom > unstickThreshold {
+                            stickToBottom = false
+                        }
                     } else {
                         if distanceFromBottom <= stickThreshold { stickToBottom = true }
                     }
@@ -189,18 +205,11 @@ struct AgentTranscriptPane: View {
 
                 if !stickToBottom && !displayEvents.isEmpty && !isFinding {
                     Button {
-                        stickToBottom = true
-                        scrollToLatest(using: proxy)
+                        jumpToLatest(using: proxy)
                     } label: {
                         Label("Jump to latest", systemImage: "arrow.down")
-                            .sageMicro(type.micro, weight: .semibold)
-                            .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
-                            .padding(.vertical, SageDesign.Spacing.chipVertical)
                     }
-                    // Quiet glass, not prominent — a tertiary navigation control
-                    // must not carry the same weight as Send / Allow.
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
+                    .sageGlassButton(.large)
                     // End (Fn+→) — the scroll-to-bottom convention. ⌘↓ is
                     // taken by the composer's input-history recall.
                     .keyboardShortcut(.init("\u{F72B}"), modifiers: [])
@@ -376,7 +385,7 @@ struct AgentTranscriptPane: View {
     }
 
     var emptyTranscript: some View {
-        VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
+        VStack(alignment: .leading, spacing: SageDesign.Spacing.medium) {
             if let project = session.agent.state.focusedProject {
                 Text("Tell me what to do")
                     .sageFont(type.title, weight: .semibold)
@@ -388,16 +397,19 @@ struct AgentTranscriptPane: View {
                 Text("Ask Sage to work on your Mac")
                     .sageFont(type.title, weight: .semibold)
                 starterPromptChips
-                Text(hotkeyHint)
+            }
+            VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
+                if session.agent.state.focusedProject == nil {
+                    Text(hotkeyHint)
+                        .sageMicro(type.micro, weight: .medium)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
                     .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
             }
-            Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
-                .sageMicro(type.micro, weight: .medium)
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, SageDesign.Spacing.large)
         .accessibilityElement(children: .combine)
     }
 
@@ -420,19 +432,9 @@ struct AgentTranscriptPane: View {
                         object: session.kind
                     )
                 } label: {
-                    HStack(spacing: SageDesign.Spacing.labelGap) {
-                        Image(systemName: starter.icon)
-                            .sageFont(type.caption)
-                            .foregroundStyle(.secondary)
-                        Text(starter.prompt)
-                            .sageFont(type.body, weight: .medium)
-                            .foregroundStyle(.primary)
-                    }
-                    .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.chipVertical)
-                    .contentShape(Capsule())
+                    Label(starter.prompt, systemImage: starter.icon)
                 }
-                .buttonStyle(SagePressableChipButtonStyle())
+                .sageGlassButton()
                 .accessibilityHint("Fills the message box with this prompt")
             }
         }

@@ -22,15 +22,13 @@ struct PlanDecisionRow: View {
                 Text("Cancel")
             }
             .sageShortcut(.cancelAction, enabled: bindsShortcuts)
-            .buttonStyle(.glass)
-            .controlSize(.regular)
+            .sageGlassButton(.regular)
 
             Spacer(minLength: 0)
 
             Button("Run", action: onConfirm)
                 .sageShortcut(.defaultAction, enabled: bindsShortcuts)
-                .buttonStyle(.glassProminent)
-                .controlSize(.regular)
+                .sageGlassProminentButton()
         }
         .padding(.top, SageDesign.Spacing.extraSmall)
     }
@@ -47,8 +45,7 @@ struct PlanStopRow: View {
             Spacer(minLength: 0)
             Button("Stop", role: .cancel, action: onStop)
                 .sageShortcut(.cancelAction, enabled: bindsShortcuts)
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .sageGlassButton(.regular)
         }
         .padding(.top, SageDesign.Spacing.extraSmall)
     }

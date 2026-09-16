@@ -225,6 +225,7 @@ struct AgentComposerView: View {
             .textFieldStyle(.plain)
             .sageFont(type.input)
             .lineLimit(1...5)
+            .scrollIndicators(.never)
             .focused($isInputFocused)
             .disabled(blocksTyping)
             .onSubmit(handleComposerSubmit)
@@ -262,46 +263,59 @@ struct AgentComposerView: View {
             width: SageDesign.Control.iconButton,
             height: SageDesign.Control.iconButton
         )
-        .buttonStyle(SagePressableChipButtonStyle())
+        .sageGlassButton()
         .sageHitSlop(visualSize: SageDesign.Control.iconButton)
         .disabled(blocksTyping || isPreparingAttachments)
         .keyboardShortcut("a", modifiers: [.command, .shift])
         .help("Add files to this message")
     }
 
-    /// Send ↔ Stop: one prominent control whose symbol replaces itself when
-    /// the turn starts and ends, so the escape hatch lives in the same place
-    /// the user just clicked to send.
+    /// Send ↔ Stop: same quiet glass chip as the paperclip, so it sits in
+    /// the composer instead of a second prominent material. Accent lives on
+    /// the arrow, not a filled blue pill.
     @ViewBuilder private var composerSubmitButton: some View {
+        let isStop = session.agent.canStop
+        let isArmed = isStop || canSubmit
         Button {
-            if session.agent.canStop {
+            if isStop {
                 session.agent.stop()
             } else {
                 handleComposerSubmit()
             }
         } label: {
-            Image(systemName: session.agent.canStop ? "stop.fill" : "arrow.up")
-                .sageFont(type.body, weight: .semibold)
+            Image(systemName: isStop ? "stop.fill" : "arrow.up")
+                .sageFont(type.caption, weight: .semibold)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(submitForeground(isStop: isStop, isArmed: isArmed))
                 .frame(
-                    width: SageDesign.Control.iconButtonLarge,
-                    height: SageDesign.Control.iconButtonLarge
+                    width: SageDesign.Control.iconButton,
+                    height: SageDesign.Control.iconButton
                 )
                 .sageSubmitSymbolReplaceTransition()
         }
-        .buttonStyle(.glassProminent)
-        .controlSize(.small)
-        .sageHitSlop(visualSize: SageDesign.Control.iconButtonLarge)
-        .disabled(!session.agent.canStop && !canSubmit)
-        .sageShortcut(.cancelAction, enabled: session.agent.canStop)
-        .animation(SageDesign.Motion.expandAnimation, value: session.agent.canStop)
+        .sageGlassButton()
+        .sageHitSlop(visualSize: SageDesign.Control.iconButton)
+        .opacity(isArmed ? 1 : 0)
+        .allowsHitTesting(isArmed)
+        .disabled(!isArmed)
+        .accessibilityHidden(!isArmed)
+        .sageShortcut(.cancelAction, enabled: isStop)
+        .animation(SageDesign.Motion.expandAnimation, value: isArmed)
+        .animation(SageDesign.Motion.expandAnimation, value: isStop)
         .help(
-            session.agent.canStop
+            isStop
                 ? "Stop this turn (Esc)"
                 : "Send this message (Return)"
         )
         .accessibilityLabel(
-            session.agent.canStop ? "Stop this turn" : "Send this message"
+            isStop ? "Stop this turn" : "Send this message"
         )
+    }
+
+    private func submitForeground(isStop: Bool, isArmed: Bool) -> AnyShapeStyle {
+        if isStop { return AnyShapeStyle(.primary) }
+        if isArmed { return AnyShapeStyle(Color.accentColor) }
+        return AnyShapeStyle(.secondary)
     }
 
     private var composerStrokeOpacity: Double {

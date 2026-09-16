@@ -119,16 +119,14 @@ struct ReviewFindingsCard: View {
                     Text(secondaryTitle)
                 }
                 .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .sageGlassButton(.regular)
             }
 
             Spacer(minLength: 0)
 
             Button(primaryTitle, action: primary)
                 .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
-                .buttonStyle(.glassProminent)
-                .controlSize(.regular)
+                .sageGlassProminentButton()
         }
         .padding(.top, SageDesign.Spacing.extraSmall)
     }

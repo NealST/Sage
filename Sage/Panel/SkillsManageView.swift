@@ -73,8 +73,7 @@ struct SkillsManageView: View {
                     } label: {
                         Label("Open Skills Folder", systemImage: "folder")
                     }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
+                    .sageGlassProminentButton()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

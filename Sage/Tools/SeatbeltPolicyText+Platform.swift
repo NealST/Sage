@@ -5,7 +5,7 @@
 //  Platform-default Seatbelt rules, concatenated after SeatbeltPolicyText.base.
 //
 
-extension SeatbeltPolicyText {
+nonisolated extension SeatbeltPolicyText {
     static let platform = """
 
     ; Read access to standard system paths

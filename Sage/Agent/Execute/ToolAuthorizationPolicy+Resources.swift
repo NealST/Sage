@@ -6,7 +6,7 @@
 import CryptoKit
 import Foundation
 
-extension ToolAuthorizationPolicy {
+nonisolated extension ToolAuthorizationPolicy {
     static func directoryExists(at url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)

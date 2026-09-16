@@ -46,14 +46,9 @@ extension WorkspaceChromeView {
             }
         } label: {
             Label(gitBranch ?? "", systemImage: "arrow.triangle.branch")
-                .labelStyle(.titleAndIcon)
-                .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                .sageGlassChip()
                 .lineLimit(1)
         }
-        .menuStyle(.borderlessButton)
-        .controlSize(.small)
+        .sageGlassButton()
         .fixedSize()
         .help("Switch branch")
         .accessibilityLabel("Branch \(gitBranch ?? "")")

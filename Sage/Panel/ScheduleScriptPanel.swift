@@ -140,8 +140,7 @@ struct ScheduleScriptPanel: View {
                     Button(runOnceNow ? "Save and Run" : "Save") {
                         save()
                     }
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.small)
+                    .sageGlassProminentButton(.small)
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(!canSave)
                     .help("Save this timetable (⌘S). It runs in this window’s sandbox.")

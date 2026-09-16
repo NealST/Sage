@@ -34,15 +34,13 @@ struct ReviewFailedCard: View {
             HStack(spacing: SageDesign.Spacing.small) {
                 Button("Use this reply", action: onAccept)
                     .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
+                    .sageGlassButton(.regular)
 
                 Spacer(minLength: 0)
 
                 Button("Retry review", action: onRetry)
                     .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
+                    .sageGlassProminentButton()
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
         }

@@ -80,16 +80,10 @@ struct TranscriptNoticeBar: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
+            Button("Start Fresh") {
                 Task { await session.agent.startFresh() }
-            } label: {
-                Text("Start Fresh")
-                    .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .contentShape(Capsule())
             }
-            .buttonStyle(SagePressableChipButtonStyle())
+            .sageGlassButton()
             .disabled(!session.agent.canStartFresh)
             .help(
                 session.agent.state.isBusy
@@ -122,16 +116,10 @@ struct TranscriptNoticeBar: View {
                 .lineLimit(1)
                 .accessibilityLabel(hint)
             Spacer(minLength: SageDesign.Spacing.extraSmall)
-            Button {
+            Button("Don’t reuse") {
                 session.agent.dismissContextHint()
-            } label: {
-                Text("Don’t reuse")
-                    .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .contentShape(Capsule())
             }
-            .buttonStyle(SagePressableChipButtonStyle())
+            .sageGlassButton()
             .help("Next request starts without this prior context")
             .accessibilityHint("Next request starts without this prior context")
         }

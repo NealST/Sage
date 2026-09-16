@@ -41,23 +41,15 @@ struct AgentWorkspaceView: View {
         // material, and painting `Color(.windowBackgroundColor)` here renders
         // as a flat graphite slab (rgb 30,30,30) that clashes with the glass
         // frame and chrome. Transparent content lets the material show.
-        workspaceCanvas
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // The titlebar row claims the window's own titlebar band: without
-            // this, the system's traffic-light safe area pushes the 52pt row
-            // below the buttons and leaves a dead strip above it (the "second
-            // stacked toolbar" the unified row exists to avoid). The row then
-            // insets its leading edge past the buttons; transcript content
-            // still starts below via the safeAreaInset.
-            .ignoresSafeArea(edges: .top)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                topChrome
+        VStack(spacing: 0) {
+            topChrome
+            workspaceCanvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if isWorkspaceReady, showsTaskPane {
+                bottomChrome
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if isWorkspaceReady, showsTaskPane {
-                    bottomChrome
-                }
-            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.pathGuardPolicy, session.agent.state.pathGuardPolicy)
         .environment(session.agent.streamingPlayback)
         .onAppear {
@@ -143,11 +135,11 @@ struct AgentWorkspaceView: View {
     }
 
     @ViewBuilder private var topChrome: some View {
-        // Floating chrome: no full-bleed toolbar glass — the controls are glass
-        // chips on the window material, and the transcript's soft scroll-edge
-        // effect fades content that passes underneath. The container lets
-        // neighboring chips blend into one material when the window narrows.
-        GlassEffectContainer(spacing: SageDesign.Glass.containerSpacing) {
+        // Solid stacked bar — not a floating inset. Transcript content
+        // starts below this strip and cannot scroll through it. Glass
+        // chips stay on the bar; the container only blends neighboring
+        // chips when the window narrows.
+        GlassEffectContainer(spacing: SageDesign.Spacing.extraSmall) {
             VStack(spacing: 0) {
                 WorkspaceChromeView(
                     gitBranch: $gitBranch,
@@ -170,7 +162,10 @@ struct AgentWorkspaceView: View {
                         )
                 }
             }
+            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var bottomChrome: some View {
@@ -253,16 +248,10 @@ struct AgentWorkspaceView: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: SageDesign.Spacing.extraSmall)
-            Button {
+            Button("Dismiss") {
                 branchSwitchError = nil
-            } label: {
-                Text("Dismiss")
-                    .sageMicro(type.micro, weight: .semibold)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .contentShape(Capsule())
             }
-            .buttonStyle(SagePressableChipButtonStyle())
+            .sageGlassButton()
         }
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.bottom, SageDesign.Spacing.small)
@@ -407,7 +396,9 @@ private struct TranscriptBootstrapSkeleton: View {
             )
             Spacer(minLength: 0)
         }
-        .padding(SageDesign.Spacing.large)
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.top, SageDesign.Spacing.small)
+        .padding(.bottom, SageDesign.Spacing.large)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
             guard !reduceMotion else { return }

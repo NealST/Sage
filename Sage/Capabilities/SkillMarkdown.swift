@@ -95,7 +95,7 @@ nonisolated enum SkillMarkdown {
     }
 }
 
-extension SkillMarkdown {
+nonisolated extension SkillMarkdown {
     /// Parses YAML frontmatter scalars, including `|` / `>` block values.
     static func parseFrontmatter(_ text: String) -> ParsedFrontmatter {
         guard let range = frontmatterRange(text) else { return ParsedFrontmatter() }
@@ -306,7 +306,7 @@ extension SkillMarkdown {
     }
 }
 
-extension SkillMarkdown {
+nonisolated extension SkillMarkdown {
     private static func upsertFrontmatterFields(
         _ text: String,
         range: Range<String.Index>,

@@ -33,15 +33,13 @@ struct ToolRoundLimitCard: View {
             HStack(spacing: SageDesign.Spacing.small) {
                 Button("Finish", role: .cancel, action: onFinish)
                     .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
+                    .sageGlassButton(.regular)
 
                 Spacer(minLength: 0)
 
                 Button("Continue", action: onContinue)
                     .sageShortcut(.defaultAction, enabled: bindsReturnShortcut)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
+                    .sageGlassProminentButton()
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
         }

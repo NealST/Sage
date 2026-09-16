@@ -228,8 +228,7 @@ extension AgentTranscriptPane {
                 // cancelAction only sees Esc when nothing closer wants it —
                 // gating on composer focus would leave Esc dead instead.
                 .sageShortcut(.cancelAction, enabled: true)
-                .buttonStyle(.glass)
-                .controlSize(.regular)
+                .sageGlassButton(.regular)
                 .help(
                     session.agent.state.hasPendingPlan
                         ? "Abandon the pending plan"
@@ -242,8 +241,7 @@ extension AgentTranscriptPane {
                     } label: {
                         Text("Open Settings")
                     }
-                    .buttonStyle(.glass)
-                    .controlSize(.regular)
+                    .sageGlassButton(.regular)
                 }
 
                 Spacer(minLength: 0)
@@ -258,8 +256,7 @@ extension AgentTranscriptPane {
                     // Return belongs to the composer when the user is typing —
                     // same gate as the confirmation cards above.
                     .sageShortcut(.defaultAction, enabled: !composerFocused)
-                    .buttonStyle(.glassProminent)
-                    .controlSize(.regular)
+                    .sageGlassProminentButton()
                     .disabled(session.agent.state.isBusy)
                 }
             }
@@ -292,7 +289,7 @@ extension AgentTranscriptPane {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         // Reading-canvas content stays passive — same surface
                         // language as tool chips, no glass.
-                        .sageToolChipSurface()
+                        .sageToolChipSurface(cornerRadius: SageDesign.Glass.chip)
                         .textSelection(.enabled)
                 }
             }
@@ -373,25 +370,38 @@ extension AgentTranscriptPane {
         displayEvents.last?.id == event.id
     }
 
+    static let transcriptEndID = "transcript-end"
+
+    func jumpToLatest(using proxy: ScrollViewProxy) {
+        isJumpingToLatest = true
+        stickToBottom = true
+        scrollToLatest(using: proxy)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            isJumpingToLatest = false
+        }
+    }
+
     func scrollToLatest(using proxy: ScrollViewProxy) {
         // A long-transcript jump reads as a teleport on a fixed ease; the
         // critically damped streaming spring carries the travel instead.
+        // The end pin sits outside LazyVStack so it stays findable.
         if let animation = SageDesign.Motion.streamingScroll {
             withAnimation(animation) {
-                proxy.scrollTo("phase-accessory", anchor: .bottom)
+                proxy.scrollTo(Self.transcriptEndID, anchor: .bottom)
             }
         } else {
-            proxy.scrollTo("phase-accessory", anchor: .bottom)
+            proxy.scrollTo(Self.transcriptEndID, anchor: .bottom)
         }
     }
 
     func scrollToLatestStreaming(using proxy: ScrollViewProxy) {
         if let animation = SageDesign.Motion.streamingScroll {
             withAnimation(animation) {
-                proxy.scrollTo("phase-accessory", anchor: .bottom)
+                proxy.scrollTo(Self.transcriptEndID, anchor: .bottom)
             }
         } else {
-            proxy.scrollTo("phase-accessory", anchor: .bottom)
+            proxy.scrollTo(Self.transcriptEndID, anchor: .bottom)
         }
     }
 

@@ -11,7 +11,7 @@ import Security
 /// Sage is not App Sandboxed (`ENABLE_APP_SANDBOX = NO`). The data-protection
 /// keychain (`kSecUseDataProtectionKeychain`) is unavailable in that configuration
 /// and returns `errSecNotAvailable`, so we use the traditional keychain instead.
-enum KeychainStore {
+nonisolated enum KeychainStore {
     private static let service = "mozheng.Sage"
 
     static func set(_ value: String, account: String) throws {

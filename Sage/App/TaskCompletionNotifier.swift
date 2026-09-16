@@ -135,7 +135,7 @@ enum TaskCompletionNotifier {
             let settings = await center.notificationSettings()
             switch settings.authorizationStatus {
             case .notDetermined:
-                _ = try? await center.requestAuthorization(options: [.alert, .sound, .timeSensitive])
+                _ = try? await center.requestAuthorization(options: [.alert, .sound])
 
             case .denied:
                 return
@@ -171,7 +171,7 @@ enum TaskCompletionNotifier {
             let settings = await center.notificationSettings()
             switch settings.authorizationStatus {
             case .notDetermined:
-                _ = try? await center.requestAuthorization(options: [.alert, .sound, .timeSensitive])
+                _ = try? await center.requestAuthorization(options: [.alert, .sound])
 
             case .denied:
                 return

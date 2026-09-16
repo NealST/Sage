@@ -109,16 +109,16 @@ struct SettingsConnectionSection: View {
     private static let defaultTemperature = 0.7
 
     static func canTest(_ settings: ModelSettings) -> Bool {
-        baseURLError(in: settings) == nil
-            && modelError(in: settings) == nil
-            && apiKeyError(in: settings) == nil
+        baseURLError(settings.baseURL) == nil
+            && modelError(settings.model) == nil
+            && apiKeyError(settings.apiKey, persistenceError: settings.apiKeyPersistenceError) == nil
     }
 
     private func connectionField(
         _ title: String,
         text: Binding<String>,
         prompt: String,
-        validation: ((ModelSettings) -> String?)? = nil
+        validation: ((String) -> String?)? = nil
     ) -> some View {
         LabeledContent(title) {
             VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
@@ -127,7 +127,7 @@ struct SettingsConnectionSection: View {
                         touchedFields.insert(title)
                         onFieldChange()
                     }
-                if touchedFields.contains(title), let error = validation?(settings) {
+                if touchedFields.contains(title), let error = validation?(text.wrappedValue) {
                     Text(error)
                         .sageFont(type.caption)
                         .foregroundStyle(SageDesign.Palette.danger)
@@ -139,11 +139,11 @@ struct SettingsConnectionSection: View {
     private var apiKeyValidationError: String? {
         if settings.apiKeyPersistenceError != nil { return settings.apiKeyPersistenceError }
         guard touchedFields.contains("API Key") else { return nil }
-        return Self.apiKeyError(in: settings)
+        return Self.apiKeyError(settings.apiKey, persistenceError: settings.apiKeyPersistenceError)
     }
 
-    static func baseURLError(in settings: ModelSettings) -> String? {
-        let trimmed = settings.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    nonisolated static func baseURLError(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Base URL is required" }
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
@@ -155,17 +155,17 @@ struct SettingsConnectionSection: View {
         return nil
     }
 
-    static func modelError(in settings: ModelSettings) -> String? {
-        settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    nonisolated static func modelError(_ raw: String) -> String? {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "Model is required"
             : nil
     }
 
-    static func apiKeyError(in settings: ModelSettings) -> String? {
-        if settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+    nonisolated static func apiKeyError(_ raw: String, persistenceError: String?) -> String? {
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "API key is required"
         }
-        return settings.apiKeyPersistenceError
+        return persistenceError
     }
 }
 

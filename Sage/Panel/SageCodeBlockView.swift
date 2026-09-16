@@ -105,7 +105,7 @@ struct SageCodeBlockView: View {
                 .clipped()
         }
         // Trackpad / Magic Mouse still scroll; hide the fat always-visible bar.
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
         // Collapsed cut fades into the code surface so the fold reads as
         // "more below" instead of an abrupt clip.
         .overlay(alignment: .bottom) {
