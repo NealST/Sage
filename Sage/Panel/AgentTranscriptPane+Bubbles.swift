@@ -330,7 +330,7 @@ extension AgentTranscriptPane {
                                     for: call.id,
                                     isBusy: session.agent.state.isBusy
                                 ),
-                                resultContent: toolIndex.successContent(for: call.id),
+                                resultContent: toolIndex.content(for: call.id),
                                 previewAgainstDisk: toolIndex.shouldPreviewAgainstDisk(callID: call.id)
                             )
                         }

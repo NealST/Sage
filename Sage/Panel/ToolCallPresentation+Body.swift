@@ -105,7 +105,7 @@ nonisolated extension ToolCallPresentation {
         "cjs": "javascript",
         "ts": "typescript",
         "tsx": "tsx",
-        "jsx": "javascript",
+        "jsx": "tsx",
         "css": "css",
         "html": "html",
         "htm": "html",

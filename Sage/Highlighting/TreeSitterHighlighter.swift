@@ -33,24 +33,56 @@ import TreeSitterTypeScript
 ///
 /// Produces SwiftUI `Text` with Xcode-style colors via `SageCodeTheme`.
 /// Falls back to plain monospaced text for unsupported languages.
-struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
+///
+/// Default actor isolation is MainActor; highlighting is `nonisolated` so
+/// parse + cache fill can run off the expand path.
+nonisolated struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
     func highlightCode(_ code: String, language: String?) -> Text {
-        guard let language, let config = Self.languageConfig(for: language) else {
-            return Text(code).foregroundStyle(SageCodeTheme.plain)
-        }
+        Text(Self.attributedString(code: code, language: language))
+    }
 
-        do {
-            let highlights = try Self.highlight(code: code, config: config)
-            return Self.buildText(from: code, highlights: highlights)
-        } catch {
-            return Text(code).foregroundStyle(SageCodeTheme.plain)
-        }
+    /// Parse on a utility queue and pin the result so the first expand
+    /// of a tool chip does not hitch on the main thread.
+    static func preheat(code: String, language: String?) async {
+        guard let language, languageConfig(for: language) != nil else { return }
+        let key = HighlightCache.Key(language: language, code: code)
+        if highlightCache.contains(key) { return }
+        let snapshot = code
+        let lang = language
+        let attributed = await Task.detached(priority: .utility) {
+            Self.computeAttributedString(code: snapshot, language: lang)
+        }.value
+        highlightCache.store(key, attributed)
     }
 }
 
 // MARK: - Highlighting Engine
 
 private extension TreeSitterCodeHighlighter {
+    static func attributedString(code: String, language: String?) -> AttributedString {
+        let key = HighlightCache.Key(language: language ?? "", code: code)
+        if let cached = highlightCache.value(for: key) {
+            return cached
+        }
+        let computed = computeAttributedString(code: code, language: language)
+        highlightCache.store(key, computed)
+        return computed
+    }
+
+    static func computeAttributedString(code: String, language: String?) -> AttributedString {
+        var plain = AttributedString(code)
+        plain.foregroundColor = SageCodeTheme.plain
+        guard let language, let config = languageConfig(for: language) else {
+            return plain
+        }
+        do {
+            let highlights = try highlight(code: code, config: config)
+            return buildAttributedString(from: code, highlights: highlights)
+        } catch {
+            return plain
+        }
+    }
+
     /// Parses code and returns highlight ranges using tree-sitter.
     static func highlight(code: String, config: LanguageConfiguration) throws -> [NamedRange] {
         let parser = Parser()
@@ -69,41 +101,19 @@ private extension TreeSitterCodeHighlighter {
         return cursor.resolve(with: context).highlights()
     }
 
-    /// Builds a composed SwiftUI `Text` from source code and highlight ranges.
-    static func buildText(from code: String, highlights: [NamedRange]) -> Text {
-        guard !highlights.isEmpty else {
-            return Text(code).foregroundStyle(SageCodeTheme.plain)
-        }
-
-        let nsString = code as NSString
-        var result = Text("")
-        var lastEnd = 0
+    /// One `AttributedString` instead of concatenating a `Text` per token —
+    /// a medium file used to allocate thousands of views on expand.
+    static func buildAttributedString(from code: String, highlights: [NamedRange]) -> AttributedString {
+        var result = AttributedString(code)
+        result.foregroundColor = SageCodeTheme.plain
+        guard !highlights.isEmpty else { return result }
 
         for namedRange in highlights {
-            let range = namedRange.range
-
-            // Add any unhighlighted gap before this range
-            if range.location > lastEnd {
-                let gapRange = NSRange(location: lastEnd, length: range.location - lastEnd)
-                let gap = nsString.substring(with: gapRange)
-                result = Text("\(result)\(Text(gap).foregroundStyle(SageCodeTheme.plain))")
-            }
-
-            // Add the highlighted token
-            let token = nsString.substring(with: range)
-            let color = SageCodeTheme.color(for: namedRange.name)
-            result = Text("\(result)\(Text(token).foregroundStyle(color))")
-
-            lastEnd = range.location + range.length
+            guard let stringRange = Range(namedRange.range, in: code),
+                  let attrRange = Range(stringRange, in: result)
+            else { continue }
+            result[attrRange].foregroundColor = SageCodeTheme.color(for: namedRange.name)
         }
-
-        // Add any trailing unhighlighted text
-        if lastEnd < nsString.length {
-            let trailingRange = NSRange(location: lastEnd, length: nsString.length - lastEnd)
-            let trailing = nsString.substring(with: trailingRange)
-            result = Text("\(result)\(Text(trailing).foregroundStyle(SageCodeTheme.plain))")
-        }
-
         return result
     }
 }
@@ -119,10 +129,27 @@ private extension TreeSitterCodeHighlighter {
             return nil
         }
 
-        // Cache configurations to avoid repeated bundle lookups
         return configCache.value(for: normalized) {
-            try? LanguageConfiguration(entry.language, name: entry.name)
+            configuration(for: entry)
         }
+    }
+
+    static func configuration(for entry: LanguageEntry) -> LanguageConfiguration? {
+        if let bundleName = entry.bundleName,
+           let config = try? LanguageConfiguration(entry.language, name: entry.name, bundleName: bundleName) {
+            return config
+        }
+        if let config = try? LanguageConfiguration(entry.language, name: entry.name) {
+            return config
+        }
+        if let fallback = entry.fallbackBundleName {
+            return try? LanguageConfiguration(
+                entry.language,
+                name: entry.name,
+                bundleName: fallback
+            )
+        }
+        return nil
     }
 
     /// Maps common language identifiers to tree-sitter language functions.
@@ -142,7 +169,16 @@ private extension TreeSitterCodeHighlighter {
                 language: Language(tree_sitter_typescript()),
                 name: "TypeScript"
             ),
-            LanguageMapSeed(keys: ["tsx"], language: Language(tree_sitter_tsx()), name: "TSX"),
+            // tree-sitter-typescript ships TSX in the same package. The
+            // default bundle heuristic looks for TreeSitterTSX_TreeSitterTSX,
+            // which does not exist — queries live under the TypeScript package.
+            LanguageMapSeed(
+                keys: ["tsx", "typescriptreact", "jsx"],
+                language: Language(tree_sitter_tsx()),
+                name: "TSX",
+                bundleName: "TreeSitterTypeScript_TreeSitterTSX",
+                fallbackBundleName: "TreeSitterTypeScript_TreeSitterTypeScript"
+            ),
             LanguageMapSeed(keys: ["rust", "rs"], language: Language(tree_sitter_rust()), name: "Rust"),
             LanguageMapSeed(keys: ["go", "golang"], language: Language(tree_sitter_go()), name: "Go"),
             LanguageMapSeed(keys: ["c"], language: Language(tree_sitter_c()), name: "C"),
@@ -165,7 +201,12 @@ private extension TreeSitterCodeHighlighter {
         ]
 
         for entry in entries {
-            let langEntry = LanguageEntry(language: entry.language, name: entry.name)
+            let langEntry = LanguageEntry(
+                language: entry.language,
+                name: entry.name,
+                bundleName: entry.bundleName,
+                fallbackBundleName: entry.fallbackBundleName
+            )
             for key in entry.keys {
                 map[key] = langEntry
             }
@@ -180,12 +221,16 @@ private extension TreeSitterCodeHighlighter {
 private struct LanguageEntry {
     let language: Language
     let name: String
+    var bundleName: String?
+    var fallbackBundleName: String?
 }
 
 private struct LanguageMapSeed {
     let keys: [String]
     let language: Language
     let name: String
+    var bundleName: String?
+    var fallbackBundleName: String?
 }
 
 /// Thread-safe cache for language configurations.
@@ -207,4 +252,50 @@ private final class ConfigCache: @unchecked Sendable {
     }
 }
 
+/// Bounded result cache so expanding the same chip is a dictionary lookup.
+private final class HighlightCache: @unchecked Sendable {
+    struct Key: Hashable {
+        let language: String
+        let length: Int
+        let hash: Int
+
+        init(language: String, code: String) {
+            self.language = language.lowercased()
+            self.length = code.count
+            self.hash = code.hashValue
+        }
+    }
+
+    private var cache: [Key: AttributedString] = [:]
+    private var order: [Key] = []
+    private let lock = NSLock()
+    private let limit = 24
+
+    func contains(_ key: Key) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache[key] != nil
+    }
+
+    func value(for key: Key) -> AttributedString? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cache[key]
+    }
+
+    func store(_ key: Key, _ value: AttributedString) {
+        lock.lock()
+        defer { lock.unlock() }
+        if cache[key] == nil {
+            order.append(key)
+        }
+        cache[key] = value
+        while order.count > limit {
+            let evicted = order.removeFirst()
+            cache.removeValue(forKey: evicted)
+        }
+    }
+}
+
 private let configCache = ConfigCache()
+private let highlightCache = HighlightCache()

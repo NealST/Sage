@@ -87,18 +87,25 @@ struct ToolCallView: View {
         resultContent.flatMap(WriteFileResultCodec.payload(in:))
     }
 
+    var canExpand: Bool {
+        if let resultContent, !resultContent.isEmpty { return true }
+        return model.isExpandable
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            if expanded, model.isExpandable {
+            if expanded, canExpand {
                 previewBody
-                    .transition(ToolChipChrome.expandTransition)
             }
         }
         .sageToolChipSurface(warning: isMutatingStep)
         .environment(\.openURL, PathTextSupport.openURLAction)
         .task(id: diskPreviewTaskID) {
             await loadDiskBeforeIfNeeded()
+        }
+        .task(id: highlightPreheatID) {
+            await preheatSyntaxHighlighting()
         }
     }
 
@@ -112,10 +119,10 @@ struct ToolCallView: View {
 
     var header: some View {
         Button {
-            guard model.isExpandable else { return }
-            withAnimation(SageDesign.Motion.expandAnimation) {
-                expanded.toggle()
-            }
+            guard canExpand else { return }
+            // Chevron animates; the source body is not sprung in — TreeSitter
+            // + MarkdownUI on a 0.32s spring is what made expand hitch.
+            expanded.toggle()
         } label: {
             HStack(spacing: SageDesign.Spacing.labelGap) {
                 if let status {
@@ -142,10 +149,11 @@ struct ToolCallView: View {
                         .help("This step changes your Mac")
                 }
 
-                if model.isExpandable {
+                if canExpand {
                     Image(systemName: "chevron.down")
                         .sageFont(type.icon, weight: .semibold)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
+                        .animation(SageDesign.Motion.expandAnimation, value: expanded)
                 }
             }
             .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal + SageDesign.Spacing.extraSmall)
@@ -154,11 +162,27 @@ struct ToolCallView: View {
         }
         .buttonStyle(ToolChipHeaderButtonStyle())
         .foregroundStyle(.secondary)
-        .disabled(!model.isExpandable)
+        .disabled(!canExpand)
         .accessibilityLabel("\(model.title), \(statusAccessibilityText)")
-        .accessibilityValue(model.isExpandable ? (expanded ? "Expanded" : "Collapsed") : "")
-        .help(model.isExpandable ? (expanded ? "Hide details" : "Show tool details") : model.title)
-        .animation(SageDesign.Motion.expandAnimation, value: expanded)
+        .accessibilityValue(canExpand ? (expanded ? "Expanded" : "Collapsed") : "")
+        .help(canExpand ? (expanded ? "Hide details" : "Show tool details") : model.title)
+    }
+
+    var highlightPreheatID: String {
+        let language = ToolCallPresentation.extractArg(argumentsJSON, key: "path")
+            .flatMap(ToolCallPresentation.language(forPath:))
+            ?? ""
+        let body = resultContent ?? ""
+        return "\(name)|\(language)|\(body.count)|\(body.hashValue)"
+    }
+
+    func preheatSyntaxHighlighting() async {
+        guard let resultContent, !resultContent.isEmpty, !resultContent.hasPrefix("ERROR:") else {
+            return
+        }
+        let language = ToolCallPresentation.extractArg(argumentsJSON, key: "path")
+            .flatMap(ToolCallPresentation.language(forPath:))
+        await TreeSitterCodeHighlighter.preheat(code: resultContent, language: language)
     }
 
     /// Chip status for VoiceOver — the icon grammar is visual-only otherwise.
@@ -177,18 +201,24 @@ struct ToolCallView: View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
             Divider().opacity(SageDesign.Chrome.dividerOpacity)
 
-            switch model.body {
-            case let .fileEdit(path, content, language):
+            if writePayload != nil || previewAgainstDisk, case let .fileEdit(path, content, language) = model.body {
                 fileEditPreview(path: path, content: content, language: language)
+            } else if let resultContent, !resultContent.isEmpty {
+                resultPreview(resultContent)
+            } else {
+                switch model.body {
+                case let .fileEdit(path, content, language):
+                    fileEditPreview(path: path, content: content, language: language)
 
-            case let .text(label, value):
-                labeledText(label: label, value: value)
+                case let .text(label, value):
+                    labeledText(label: label, value: value)
 
-            case let .fields(pairs):
-                fieldsPreview(pairs)
+                case let .fields(pairs):
+                    fieldsPreview(pairs)
 
-            case .empty:
-                EmptyView()
+                case .empty:
+                    EmptyView()
+                }
             }
         }
         .padding(.bottom, 10)

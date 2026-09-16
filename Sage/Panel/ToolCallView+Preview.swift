@@ -68,6 +68,35 @@ extension ToolCallView {
         }
     }
 
+    func resultPreview(_ content: String) -> some View {
+        let isError = content.hasPrefix("ERROR:")
+        let language = name == "read_text_file"
+            ? ToolCallPresentation.extractArg(argumentsJSON, key: "path")
+                .flatMap(ToolCallPresentation.language(forPath:))
+            : nil
+        return ScrollView {
+            Group {
+                if name == "read_text_file", !isError {
+                    MarkdownContentView(
+                        markdown: ToolCallPresentation.fencedMarkdown(
+                            content: content,
+                            language: language
+                        )
+                    )
+                } else {
+                    Text(PathTextSupport.attributedString(from: content, policy: pathGuardPolicy))
+                        .sageFont(type.caption, design: .monospaced)
+                        .foregroundStyle(isError ? SageDesign.Palette.danger : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .scrollIndicators(.never)
+        .frame(maxHeight: SageDesign.Markdown.collapsedReplyHeight)
+        .padding(.horizontal, SageDesign.Spacing.small)
+    }
+
     func labeledText(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             Text(label)

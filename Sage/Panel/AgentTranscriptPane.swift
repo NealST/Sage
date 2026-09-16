@@ -12,31 +12,52 @@ import SwiftUI
 struct ToolResultIndex: Equatable {
     /// Successful (non-ERROR) tool results by call id.
     let successContentByCallID: [String: String]
+    /// Every tool result body, including errors — shown inside the call chip.
+    let contentByCallID: [String: String]
     /// Call ids that already have any tool result (including errors).
     let completedCallIDs: Set<String>
 
-    static let empty = Self(successContentByCallID: [:], completedCallIDs: [])
+    static let empty = Self(
+        successContentByCallID: [:],
+        contentByCallID: [:],
+        completedCallIDs: []
+    )
 
-    init(successContentByCallID: [String: String], completedCallIDs: Set<String>) {
+    init(
+        successContentByCallID: [String: String],
+        contentByCallID: [String: String],
+        completedCallIDs: Set<String>
+    ) {
         self.successContentByCallID = successContentByCallID
+        self.contentByCallID = contentByCallID
         self.completedCallIDs = completedCallIDs
     }
 
     init(events: [AgentEvent]) {
         var success: [String: String] = [:]
+        var content: [String: String] = [:]
         var completed = Set<String>()
         for event in events where event.kind == .toolResult {
             guard let callID = event.toolCallID else { continue }
             completed.insert(callID)
+            content[callID] = event.content
             if !event.content.hasPrefix("ERROR:") {
                 success[callID] = event.content
             }
         }
-        self.init(successContentByCallID: success, completedCallIDs: completed)
+        self.init(
+            successContentByCallID: success,
+            contentByCallID: content,
+            completedCallIDs: completed
+        )
     }
 
     func successContent(for callID: String) -> String? {
         successContentByCallID[callID]
+    }
+
+    func content(for callID: String) -> String? {
+        contentByCallID[callID]
     }
 
     func shouldPreviewAgainstDisk(callID: String) -> Bool {
@@ -245,6 +266,7 @@ struct AgentTranscriptPane: View {
         return event.toolCalls?.contains { call in
             call.name.lowercased().contains(query)
                 || call.argumentsJSON.lowercased().contains(query)
+                || (toolIndex.content(for: call.id)?.lowercased().contains(query) ?? false)
         } ?? false
     }
 
@@ -375,9 +397,14 @@ struct AgentTranscriptPane: View {
         let events = session.agent.state.events
         eventRevision = revision
         toolIndex = ToolResultIndex(events: events)
+        let attachedCallIDs = Set(events.flatMap { $0.toolCalls?.map(\.id) ?? [] })
         displayEvents = events.filter { event in
-            if event.kind == .toolResult { return true }
-            if event.kind == .assistantResponse, event.toolCalls != nil {
+            if event.kind == .toolResult {
+                // Results that belong to a tool-call chip render inside it
+                // when expanded — not as a second row of first-line titles.
+                if let callID = event.toolCallID, attachedCallIDs.contains(callID) {
+                    return false
+                }
                 return true
             }
             return event.kind == .userInput || event.kind == .assistantResponse

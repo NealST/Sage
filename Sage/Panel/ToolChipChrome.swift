@@ -24,7 +24,7 @@ enum ToolChipChrome {
 struct ToolChipSurfaceModifier: ViewModifier {
     /// Mutating steps read warmer (warning tint) so their weight is scannable.
     var warning: Bool = false
-    var cornerRadius: CGFloat = SageDesign.Glass.card
+    var cornerRadius: CGFloat = SageDesign.Glass.chip
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -51,7 +51,7 @@ struct ToolChipSurfaceModifier: ViewModifier {
 extension View {
     func sageToolChipSurface(
         warning: Bool = false,
-        cornerRadius: CGFloat = SageDesign.Glass.card
+        cornerRadius: CGFloat = SageDesign.Glass.chip
     ) -> some View {
         modifier(ToolChipSurfaceModifier(warning: warning, cornerRadius: cornerRadius))
     }
@@ -77,10 +77,10 @@ private struct ToolChipHeader: View {
         // Top corners match the chip radius; the square bottom edge is
         // clipped by the chip's own rounded shape when collapsed.
         let hoverShape = UnevenRoundedRectangle(
-            topLeadingRadius: SageDesign.Glass.card,
+            topLeadingRadius: SageDesign.Glass.chip,
             bottomLeadingRadius: 0,
             bottomTrailingRadius: 0,
-            topTrailingRadius: SageDesign.Glass.card,
+            topTrailingRadius: SageDesign.Glass.chip,
             style: .continuous
         )
         configuration.label

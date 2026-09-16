@@ -138,24 +138,6 @@ struct WorkspaceChromeView: View {
                 workingBadge
             }
 
-            if case .awaitingConfirmation = session.agent.state.phase {
-                // The one state that outranks every other chrome signal —
-                // tinted glass so the material itself carries the warning.
-                Label("Awaiting confirmation", systemImage: SageDesign.Symbol.pending)
-                    .sageFont(type.caption, weight: .semibold)
-                    // White on the tinted material; the Reduce-Transparency
-                    // fallback is a light fill, where the warning tone reads.
-                    .foregroundStyle(
-                        accessibility.reduceTransparency
-                            ? SageDesign.Palette.warning
-                            : Color.white
-                    )
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-                    .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-                    .sageTintedGlassCapsule(SageDesign.Palette.warning)
-            }
-
             if let title = session.agent.state.threadTitle,
                session.agent.state.activeTask?.events.isEmpty == false {
                 recentTasksControl(currentTitle: title)
@@ -251,7 +233,6 @@ struct WorkspaceChromeView: View {
 
     var showsDocumentCluster: Bool {
         if isWorking { return true }
-        if case .awaitingConfirmation = session.agent.state.phase { return true }
         if session.agent.state.threadTitle != nil,
            session.agent.state.activeTask?.events.isEmpty == false {
             return true
