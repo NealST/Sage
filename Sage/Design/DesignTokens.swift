@@ -34,10 +34,11 @@ enum SageDesign {
         static let height: CGFloat = 580
         /// Single unified titlebar row (aligns with traffic lights).
         static let titlebarContentHeight: CGFloat = 52
-        /// Traffic-light clearance when a control must sit in the titlebar
-        /// band. Page content (chrome row, transcript, composer) uses
-        /// `Spacing.large` instead, so those three share one left edge.
-        static let titlebarLeadingInset: CGFloat = 78
+        /// Traffic-light clearance for the titlebar chrome row: the lights
+        /// end at window x ≈ 80 on the unified toolbar band, so identity
+        /// content starts past them. Page content (transcript, composer)
+        /// keeps `Spacing.large` instead — those two share one left edge.
+        static let titlebarLeadingInset: CGFloat = 88
         /// Reading measure for transcript content — wide or fullscreen
         /// windows must not stretch reply lines past comfortable length.
         static let readingColumnWidth: CGFloat = 720

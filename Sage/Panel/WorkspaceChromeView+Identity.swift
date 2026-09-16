@@ -13,11 +13,12 @@ extension WorkspaceChromeView {
         Button {
             NSWorkspace.shared.activateFileViewerSelecting([project.rootURL])
         } label: {
-            // The window's identity: primary + semibold, so it outweighs the
-            // secondary chrome (actions, branch, tabs) it sits among.
+            // The window's identity: 13pt semibold — the system titlebar title
+            // treatment — so it outweighs the secondary chrome (actions,
+            // branch, tabs) it sits among.
             Label(project.name, systemImage: "folder")
                 .labelStyle(.titleAndIcon)
-                .sageFont(type.caption, weight: .semibold)
+                .sageFont(type.body, weight: .semibold)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
         }

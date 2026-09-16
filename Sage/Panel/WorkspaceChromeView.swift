@@ -25,6 +25,10 @@ struct WorkspaceChromeView: View {
     @State private var isBrowsingTasks = false
     /// Seconds in the current working stretch — feeds the badge's elapsed label.
     @State private var workingElapsedSeconds = 0
+    /// Horizontal container inset on the titlebar band — subtracted from the
+    /// traffic-light clearance so the identity cluster lands on window
+    /// coordinates regardless of how the system insets the band.
+    @State private var safeLeadingInset: CGFloat = 0
     /// Chrome control widths scale with Dynamic Type — hardcoded frames
     /// truncate large type (used by the +Identity extension).
     @ScaledMetric(relativeTo: .caption) var tabPickerMinWidth: CGFloat = 200
@@ -55,12 +59,22 @@ struct WorkspaceChromeView: View {
                 .symbolRenderingMode(.hierarchical)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Page gutter — same 16pt as the composer, not the titlebar's
-        // traffic-light inset. Project name and the trailing tabs sit on
-        // the input field's left and right edges.
-        .padding(.horizontal, SageDesign.Spacing.large)
+        // One row on the traffic-light centerline: the identity cluster
+        // clears the lights (window x ≈ 88); the trailing cluster keeps the
+        // 16pt page gutter the composer and transcript use.
+        .padding(.leading, leadingChromeInset)
+        .padding(.trailing, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)
         .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
+        // The band is SwiftUI chrome over the system toolbar area, so empty
+        // stretches of the row must still act like a titlebar: drag to move
+        // the window, double-click to zoom. A transparent AppKit layer
+        // behind the controls forwards the mouse-down the way a real
+        // titlebar would.
+        .background { TitlebarDragArea() }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { newValue in
+            safeLeadingInset = newValue
+        }
         .onReceive(NotificationCenter.default.publisher(for: .sageBrowseTaskHistory)) { note in
             // Sheet lives in the General window only; project windows route
             // the command to their History tab instead.
@@ -69,6 +83,17 @@ struct WorkspaceChromeView: View {
             else { return }
             isBrowsingTasks = true
         }
+    }
+
+    /// Window x where chrome content begins — past the traffic lights (they
+    /// end around x=80 on the unified toolbar band) with breathing room. The
+    /// row already carries the window's horizontal safe-area inset, so it is
+    /// subtracted to keep this a window-coordinate value.
+    private var leadingChromeInset: CGFloat {
+        max(
+            SageDesign.Panel.titlebarLeadingInset - safeLeadingInset,
+            SageDesign.Spacing.large
+        )
     }
 
     // MARK: - Zones
@@ -85,6 +110,7 @@ struct WorkspaceChromeView: View {
         HStack(spacing: SageDesign.Spacing.small) {
             Button(action: openProject) {
                 Label("Open Project", systemImage: "folder")
+                    .labelStyle(.iconOnly)
             }
             .sageGlassButton()
             .help("Open an existing project folder")
@@ -92,6 +118,7 @@ struct WorkspaceChromeView: View {
 
             Button(action: createProject) {
                 Label("New Project", systemImage: "folder.badge.plus")
+                    .labelStyle(.iconOnly)
             }
             .sageGlassButton()
             .help("Create a new project folder")
@@ -107,7 +134,10 @@ struct WorkspaceChromeView: View {
                         }
                     }
                 } label: {
-                    Label("Recent Projects", systemImage: "clock")
+                    // `clock.arrow.circlepath`, not `clock` — Browse Tasks
+                    // already owns the plain clock on the trailing side.
+                    Label("Recent Projects", systemImage: "clock.arrow.circlepath")
+                        .labelStyle(.iconOnly)
                 }
                 .sageGlassButton()
                 .help("Recent projects")
@@ -163,10 +193,7 @@ struct WorkspaceChromeView: View {
             )
             .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
             .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
-            )
+            .sageGlassChip()
             .accessibilityLabel("Sage is working")
             .task(id: isWorking) {
                 guard isWorking else { return }
@@ -198,6 +225,7 @@ struct WorkspaceChromeView: View {
                     Task { await session.agent.startFresh() }
                 } label: {
                     Label("Start Fresh", systemImage: "plus")
+                        .labelStyle(.iconOnly)
                 }
                 .sageGlassButton()
                 .disabled(!session.agent.canStartFresh)
@@ -209,6 +237,7 @@ struct WorkspaceChromeView: View {
                     isBrowsingTasks = true
                 } label: {
                     Label("Browse Tasks", systemImage: "clock")
+                        .labelStyle(.iconOnly)
                 }
                 .sageGlassButton()
                 .help("Search, open, and delete past tasks")
@@ -245,5 +274,29 @@ struct WorkspaceChromeView: View {
             .fill(Color.primary.opacity(SageDesign.Chrome.dividerOpacity))
             .frame(width: 1, height: 12)
             .accessibilityHidden(true)
+    }
+}
+
+/// Empty stretches of the titlebar band must behave like a real titlebar.
+/// The chrome row is SwiftUI content over the system toolbar area, so a
+/// transparent AppKit layer behind the controls forwards mouse-downs as a
+/// window drag (and double-click as zoom) the way the system titlebar does.
+private struct TitlebarDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragView {
+        DragView()
+    }
+
+    func updateNSView(_ nsView: DragView, context: Context) {}
+
+    final class DragView: NSView {
+        override var acceptsFirstResponder: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                window?.zoom(nil)
+            } else {
+                window?.performDrag(with: event)
+            }
+        }
     }
 }

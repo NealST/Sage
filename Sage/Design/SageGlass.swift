@@ -146,6 +146,13 @@ extension NSWindow {
         if customTitlebar {
             titleVisibility = .hidden
             titlebarAppearsTransparent = true
+            // An empty system toolbar reserves the standard unified-toolbar
+            // band and drops the traffic lights to their native position
+            // (x 18, centerline y 26 — matching Finder). Without it the lights
+            // sit high in a short band while SwiftUI chrome, pushed down by
+            // the hosting view's safe area, renders as a second stacked
+            // toolbar instead of one row with the lights.
+            toolbar = NSToolbar(identifier: "SageChrome")
         }
         sageApplyWindowMaterial()
     }

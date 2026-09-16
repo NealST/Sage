@@ -171,7 +171,9 @@ struct AgentTranscriptPane: View {
                     // lags the query and interrupts streaming mid-flight.
                     .animation(SageDesign.Motion.expandAnimation, value: isFinding)
                 }
-                .sageScrollEdgeGlass(edges: .bottom)
+                // Top edge fades under the floating toolbar chrome; bottom
+                // fades under the composer's glass panel.
+                .sageScrollEdgeGlass()
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if isFinding {
                         findBar(proxy: proxy)

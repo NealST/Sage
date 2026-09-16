@@ -42,7 +42,6 @@ struct AgentWorkspaceView: View {
         // as a flat graphite slab (rgb 30,30,30) that clashes with the glass
         // frame and chrome. Transparent content lets the material show.
         VStack(spacing: 0) {
-            topChrome
             workspaceCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if isWorkspaceReady, showsTaskPane {
@@ -50,6 +49,16 @@ struct AgentWorkspaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The toolbar chrome owns the titlebar band itself — one row on the
+        // traffic-light centerline — and the canvas scrolls under it with the
+        // system soft edge effect, the way native Liquid Glass toolbars work.
+        // Order matters: the inset places the chrome at the top of the canvas,
+        // and ignoring the container's top safe area afterwards extends the
+        // canvas (with its inset) up into the titlebar band.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            topChrome
+        }
+        .ignoresSafeArea(.container, edges: .top)
         .environment(\.pathGuardPolicy, session.agent.state.pathGuardPolicy)
         .environment(session.agent.streamingPlayback)
         .onAppear {
@@ -135,10 +144,10 @@ struct AgentWorkspaceView: View {
     }
 
     @ViewBuilder private var topChrome: some View {
-        // Solid stacked bar — not a floating inset. Transcript content
-        // starts below this strip and cannot scroll through it. Glass
-        // chips stay on the bar; the container only blends neighboring
-        // chips when the window narrows.
+        // Floating glass chrome over the system toolbar band — unpainted, so
+        // the window's Liquid Glass material carries the strip and the canvas
+        // scrolls under it with the soft edge fade. The container blends
+        // neighboring chips when the window narrows.
         GlassEffectContainer(spacing: SageDesign.Spacing.extraSmall) {
             VStack(spacing: 0) {
                 WorkspaceChromeView(
@@ -164,8 +173,6 @@ struct AgentWorkspaceView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var bottomChrome: some View {
