@@ -173,7 +173,7 @@ struct AgentTranscriptPane: View {
                 }
                 // Top edge fades under the floating toolbar chrome; bottom
                 // fades under the composer's glass panel.
-                .sageScrollEdgeGlass()
+                .sageScrollEdgeGlass(edges: .bottom)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if isFinding {
                         findBar(proxy: proxy)

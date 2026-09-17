@@ -49,16 +49,19 @@ struct AgentWorkspaceView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The toolbar chrome owns the titlebar band itself — one row on the
-        // traffic-light centerline — and the canvas scrolls under it with the
-        // system soft edge effect, the way native Liquid Glass toolbars work.
-        // Order matters: the inset places the chrome at the top of the canvas,
-        // and ignoring the container's top safe area afterwards extends the
-        // canvas (with its inset) up into the titlebar band.
+        // Notices sit below the titlebar and push the transcript down.
+        // The identity row overlays the system titlebar itself. Do not
+        // ignore the canvas's top safe area — that is what let rows
+        // scroll under the chrome. The band uses an opaque window
+        // background so it matches the conversation instead of showing
+        // through the transparent system titlebar.
         .safeAreaInset(edge: .top, spacing: 0) {
-            topChrome
+            topChromeAccessories
         }
-        .ignoresSafeArea(.container, edges: .top)
+        .overlay(alignment: .top) {
+            titlebarRow
+                .ignoresSafeArea(edges: .top)
+        }
         .environment(\.pathGuardPolicy, session.agent.state.pathGuardPolicy)
         .environment(session.agent.streamingPlayback)
         .onAppear {
@@ -143,36 +146,38 @@ struct AgentWorkspaceView: View {
         }
     }
 
-    @ViewBuilder private var topChrome: some View {
-        // Floating glass chrome over the system toolbar band — unpainted, so
-        // the window's Liquid Glass material carries the strip and the canvas
-        // scrolls under it with the soft edge fade. The container blends
-        // neighboring chips when the window narrows.
+    @ViewBuilder private var titlebarRow: some View {
         GlassEffectContainer(spacing: SageDesign.Spacing.extraSmall) {
-            VStack(spacing: 0) {
-                WorkspaceChromeView(
-                    gitBranch: $gitBranch,
-                    gitBranches: $gitBranches,
-                    branchSwitchError: $branchSwitchError,
-                    projectTab: $projectTab
-                )
-                if let branchSwitchError, !branchSwitchError.isEmpty {
-                    branchErrorBanner(branchSwitchError)
-                }
-                if isWorkspaceReady, showsTaskPane {
-                    TranscriptNoticeBar()
-                        .animation(
-                            SageDesign.Motion.expandAnimation,
-                            value: session.agent.state.topicDriftOffer?.triggeringUserEventID
-                        )
-                        .animation(
-                            SageDesign.Motion.expandAnimation,
-                            value: session.agent.state.contextHint
-                        )
-                }
-            }
+            WorkspaceChromeView(
+                gitBranch: $gitBranch,
+                gitBranches: $gitBranches,
+                branchSwitchError: $branchSwitchError,
+                projectTab: $projectTab
+            )
             .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    @ViewBuilder private var topChromeAccessories: some View {
+        VStack(spacing: 0) {
+            if let branchSwitchError, !branchSwitchError.isEmpty {
+                branchErrorBanner(branchSwitchError)
+            }
+            if isWorkspaceReady, showsTaskPane {
+                TranscriptNoticeBar()
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.topicDriftOffer?.triggeringUserEventID
+                    )
+                    .animation(
+                        SageDesign.Motion.expandAnimation,
+                        value: session.agent.state.contextHint
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var bottomChrome: some View {

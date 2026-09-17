@@ -17,6 +17,8 @@ extension SageDesign {
         static let card: CGFloat = 14
         /// Compact chips and code chrome.
         static let chip: CGFloat = 8
+        /// Hover help labels under chrome icons.
+        static let tooltip: CGFloat = 8
         /// System glass buttons that stay a rounded rect, not a capsule.
         static let button: CGFloat = 10
         /// Sub-chip clips (attachment thumbnails).
@@ -328,3 +330,4 @@ private struct SageGlassMaterializeModifier: ViewModifier {
         }
     }
 }
+

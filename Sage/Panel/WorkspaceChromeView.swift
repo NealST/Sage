@@ -68,9 +68,9 @@ struct WorkspaceChromeView: View {
         .frame(minHeight: SageDesign.Panel.titlebarContentHeight)
         // The band is SwiftUI chrome over the system toolbar area, so empty
         // stretches of the row must still act like a titlebar: drag to move
-        // the window, double-click to zoom. A transparent AppKit layer
-        // behind the controls forwards the mouse-down the way a real
-        // titlebar would.
+        // the window, double-click to zoom. An opaque AppKit layer behind
+        // the controls paints the window background and forwards mouse-down
+        // the way a real titlebar would.
         .background { TitlebarDragArea() }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { newValue in
             safeLeadingInset = newValue
@@ -113,7 +113,7 @@ struct WorkspaceChromeView: View {
                     .labelStyle(.iconOnly)
             }
             .sageGlassButton()
-            .help("Open an existing project folder")
+            .sageHelp("Open Project")
             .accessibilityLabel("Open Project")
 
             Button(action: createProject) {
@@ -121,7 +121,7 @@ struct WorkspaceChromeView: View {
                     .labelStyle(.iconOnly)
             }
             .sageGlassButton()
-            .help("Create a new project folder")
+            .sageHelp("New Project")
             .accessibilityLabel("New Project")
 
             if !session.agent.state.recentProjects.isEmpty {
@@ -140,7 +140,7 @@ struct WorkspaceChromeView: View {
                         .labelStyle(.iconOnly)
                 }
                 .sageGlassButton()
-                .help("Recent projects")
+                .sageHelp("Recent Projects")
                 .accessibilityLabel("Recent Projects")
             }
         }
@@ -229,7 +229,7 @@ struct WorkspaceChromeView: View {
                 }
                 .sageGlassButton()
                 .disabled(!session.agent.canStartFresh)
-                .help("Start a clean task in this window")
+                .sageHelp("Start Fresh")
             }
 
             if !isProject, hasTaskHistory {
@@ -240,7 +240,7 @@ struct WorkspaceChromeView: View {
                         .labelStyle(.iconOnly)
                 }
                 .sageGlassButton()
-                .help("Search, open, and delete past tasks")
+                .sageHelp("Browse Tasks")
                 .sheet(isPresented: $isBrowsingTasks) {
                     TaskHistorySheet(
                         repository: appState.taskRepository,
@@ -278,18 +278,51 @@ struct WorkspaceChromeView: View {
 }
 
 /// Empty stretches of the titlebar band must behave like a real titlebar.
-/// The chrome row is SwiftUI content over the system toolbar area, so a
-/// transparent AppKit layer behind the controls forwards mouse-downs as a
+/// The chrome row is SwiftUI content over the system toolbar area, so an
+/// opaque AppKit layer behind the controls forwards mouse-downs as a
 /// window drag (and double-click as zoom) the way the system titlebar does.
+/// The fill is `windowBackgroundColor` so the band matches the window and
+/// conversation instead of glass-blending through the transparent titlebar.
 private struct TitlebarDragArea: NSViewRepresentable {
     func makeNSView(context: Context) -> DragView {
         DragView()
     }
 
-    func updateNSView(_ nsView: DragView, context: Context) {}
+    func updateNSView(_ nsView: DragView, context: Context) {
+        nsView.refreshFill()
+    }
 
     final class DragView: NSView {
+        override var isOpaque: Bool { true }
+        override var wantsUpdateLayer: Bool { true }
         override var acceptsFirstResponder: Bool { false }
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            wantsLayer = true
+        }
+
+        override func updateLayer() {
+            refreshFill()
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            refreshFill()
+        }
+
+        func refreshFill() {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                layer?.backgroundColor = NSColor.windowBackgroundColor
+                    .withAlphaComponent(1)
+                    .cgColor
+            }
+        }
 
         override func mouseDown(with event: NSEvent) {
             if event.clickCount == 2 {

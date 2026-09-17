@@ -23,7 +23,7 @@ extension WorkspaceChromeView {
                 .lineLimit(1)
         }
         .buttonStyle(.plain)
-        .help(ProjectPanelActions.displayPath(project.rootPath))
+        .sageHelp(ProjectPanelActions.displayPath(project.rootPath))
         .accessibilityLabel("Project \(project.name)")
         .accessibilityHint("Show in Finder")
     }
@@ -51,7 +51,7 @@ extension WorkspaceChromeView {
         }
         .sageGlassButton()
         .fixedSize()
-        .help("Switch branch")
+        .sageHelp("Switch branch")
         .accessibilityLabel("Branch \(gitBranch ?? "")")
         .disabled(session.agent.state.isBusy)
     }
@@ -71,7 +71,7 @@ extension WorkspaceChromeView {
         )
         .labelsHidden()
         .accessibilityLabel("Workspace")
-        .help("Switch between Task, Files, and History")
+        .sageHelp("Switch between Task, Files, and History")
     }
 
     // MARK: - Recents
@@ -114,7 +114,7 @@ extension WorkspaceChromeView {
             .controlSize(.small)
             .fixedSize()
             .disabled(session.agent.state.isBusy)
-            .help("Switch to a recent task")
+            .sageHelp("Switch to a recent task")
             .accessibilityLabel(
                 currentTitle.map { "Current task \($0)" } ?? "Recent tasks"
             )
@@ -124,7 +124,7 @@ extension WorkspaceChromeView {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: recentsMenuMaxWidth, alignment: .leading)
-                .help("Current task")
+                .sageHelp("Current task")
                 .accessibilityLabel("Current task \(currentTitle)")
         }
     }

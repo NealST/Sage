@@ -10,7 +10,7 @@ import SwiftUI
 ///
 /// Colors use SwiftUI adaptive `Color` so they automatically respond to
 /// appearance changes (light/dark) and accessibility settings (high contrast).
-enum SageCodeTheme {
+nonisolated enum SageCodeTheme {
     // MARK: - Token Colors
 
     /// Keywords: `func`, `let`, `var`, `if`, `return`, `import`, etc.
@@ -147,7 +147,7 @@ enum SageCodeTheme {
 
 // MARK: - Adaptive Color Helper
 
-private extension Color {
+private nonisolated extension Color {
     /// Creates a color that adapts between light and dark appearances.
     init(light: NSColor, dark: NSColor) {
         self.init(nsColor: NSColor(name: nil) { appearance in

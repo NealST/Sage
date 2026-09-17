@@ -142,6 +142,14 @@ enum SageDesign {
         static let windowFadeInDuration: TimeInterval = 0.18
         static let windowFadeOutDuration: TimeInterval = 0.15
 
+        /// Chrome icon help labels. The system tooltip waits ~1s and draws a
+        /// square window; this is short enough to feel like a hover label.
+        static let helpShowDelay: TimeInterval = 0.2
+        /// Keep the current label up while the pointer crosses adjacent icons.
+        static let helpHideGrace: TimeInterval = 0.08
+        /// Gap between the control and the help label under it.
+        static let helpGap: CGFloat = 6
+
         /// Critically damped spring for streaming scroll — no overshoot, smooth
         /// settle. `nil` under Reduce Motion so callers animate without checks.
         static var streamingScroll: Animation? {

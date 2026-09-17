@@ -46,26 +46,26 @@ nonisolated struct TreeSitterCodeHighlighter: CodeSyntaxHighlighter {
     static func preheat(code: String, language: String?) async {
         guard let language, languageConfig(for: language) != nil else { return }
         let key = HighlightCache.Key(language: language, code: code)
-        if highlightCache.contains(key) { return }
+        if HighlightRuntime.highlightCache.contains(key) { return }
         let snapshot = code
         let lang = language
         let attributed = await Task.detached(priority: .utility) {
             Self.computeAttributedString(code: snapshot, language: lang)
         }.value
-        highlightCache.store(key, attributed)
+        HighlightRuntime.highlightCache.store(key, attributed)
     }
 }
 
 // MARK: - Highlighting Engine
 
-private extension TreeSitterCodeHighlighter {
+private nonisolated extension TreeSitterCodeHighlighter {
     static func attributedString(code: String, language: String?) -> AttributedString {
         let key = HighlightCache.Key(language: language ?? "", code: code)
-        if let cached = highlightCache.value(for: key) {
+        if let cached = HighlightRuntime.highlightCache.value(for: key) {
             return cached
         }
         let computed = computeAttributedString(code: code, language: language)
-        highlightCache.store(key, computed)
+        HighlightRuntime.highlightCache.store(key, computed)
         return computed
     }
 
@@ -120,7 +120,7 @@ private extension TreeSitterCodeHighlighter {
 
 // MARK: - Language Registry
 
-private extension TreeSitterCodeHighlighter {
+private nonisolated extension TreeSitterCodeHighlighter {
     /// Resolves a language identifier (from markdown fence info) to a tree-sitter configuration.
     static func languageConfig(for identifier: String) -> LanguageConfiguration? {
         let normalized = identifier.lowercased().trimmingCharacters(in: .whitespaces)
@@ -129,7 +129,7 @@ private extension TreeSitterCodeHighlighter {
             return nil
         }
 
-        return configCache.value(for: normalized) {
+        return HighlightRuntime.configCache.value(for: normalized) {
             configuration(for: entry)
         }
     }
@@ -218,14 +218,14 @@ private extension TreeSitterCodeHighlighter {
 
 // MARK: - Supporting Types
 
-private struct LanguageEntry {
+private nonisolated struct LanguageEntry: @unchecked Sendable {
     let language: Language
     let name: String
     var bundleName: String?
     var fallbackBundleName: String?
 }
 
-private struct LanguageMapSeed {
+private nonisolated struct LanguageMapSeed: @unchecked Sendable {
     let keys: [String]
     let language: Language
     let name: String
@@ -234,7 +234,7 @@ private struct LanguageMapSeed {
 }
 
 /// Thread-safe cache for language configurations.
-private final class ConfigCache: @unchecked Sendable {
+private nonisolated final class ConfigCache: @unchecked Sendable {
     private var cache: [String: LanguageConfiguration] = [:]
     private let lock = NSLock()
 
@@ -253,7 +253,7 @@ private final class ConfigCache: @unchecked Sendable {
 }
 
 /// Bounded result cache so expanding the same chip is a dictionary lookup.
-private final class HighlightCache: @unchecked Sendable {
+private nonisolated final class HighlightCache: @unchecked Sendable {
     struct Key: Hashable {
         let language: String
         let length: Int
@@ -297,5 +297,7 @@ private final class HighlightCache: @unchecked Sendable {
     }
 }
 
-private let configCache = ConfigCache()
-private let highlightCache = HighlightCache()
+private nonisolated enum HighlightRuntime {
+    static let configCache = ConfigCache()
+    static let highlightCache = HighlightCache()
+}
