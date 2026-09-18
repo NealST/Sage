@@ -17,6 +17,9 @@ struct MarkdownContentView: View {
     /// Soft fade-in on first appear — for the streaming→commit hand-off where
     /// syntax colors would otherwise pop in abruptly.
     var appearsSoftly: Bool = false
+    /// Fired after the user toggles Show more / Show less so a transcript can
+    /// keep this reply in view when the height collapses.
+    var onExpansionChange: ((Bool) -> Void)? = nil
 
     @State private var expanded: Bool
     @State private var measuredHeight: CGFloat = 0
@@ -33,12 +36,14 @@ struct MarkdownContentView: View {
         collapsible: Bool = false,
         initiallyExpanded: Bool = false,
         syntaxHighlighting: Bool = true,
-        appearsSoftly: Bool = false
+        appearsSoftly: Bool = false,
+        onExpansionChange: ((Bool) -> Void)? = nil
     ) {
         self.markdown = markdown
         self.collapsible = collapsible
         self.syntaxHighlighting = syntaxHighlighting
         self.appearsSoftly = appearsSoftly
+        self.onExpansionChange = onExpansionChange
         _expanded = State(initialValue: initiallyExpanded)
         _revealOpacity = State(initialValue: appearsSoftly ? 0 : 1)
     }
@@ -76,13 +81,6 @@ struct MarkdownContentView: View {
         displayMarkdown.count >= SageDesign.Markdown.assistantMeasureCharacterGate
     }
 
-    /// Rough height estimate while the first real measurement is pending,
-    /// so the placeholder doesn't jump from zero.
-    private var measuredPlaceholderHeight: CGFloat {
-        let lineEstimate = CGFloat(displayMarkdown.count) / 60
-        return lineEstimate * (type.reading * 1.5)
-    }
-
     private var shouldOfferCollapse: Bool {
         measuredHeight > SageDesign.Markdown.collapsedReplyHeight + 8
     }
@@ -118,57 +116,48 @@ struct MarkdownContentView: View {
 
     private var collapsibleBody: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
-            ZStack(alignment: .topLeading) {
-                if needsFreshMeasure {
-                    measureMarkdown
-                        .hidden()
-                        .accessibilityHidden(true)
-                        .background {
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: MarkdownHeightKey.self,
-                                    value: geo.size.height
-                                )
-                            }
+            coreMarkdown
+                .frame(
+                    maxHeight: clipsToCollapsedHeight
+                        ? SageDesign.Markdown.collapsedReplyHeight
+                        : nil,
+                    alignment: .top
+                )
+                .clipped()
+                .mask(alignment: .top) {
+                    if clipsToCollapsedHeight {
+                        // Content fades out toward the fold instead of
+                        // being covered by a painted canvas color — the
+                        // reveal matches any surface, including the
+                        // translucent window material.
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: SageDesign.Markdown.foldFadeHeight)
                         }
+                    } else {
+                        Color.black
+                    }
                 }
-
-                // Collapsed state waits for the first measurement — rendering
-                // before it shows a full-height frame that then snaps to the
-                // collapsed height (a visible flash on commit and re-materialize).
-                if expanded || !needsFreshMeasure {
-                    coreMarkdown
-                        .frame(
-                            maxHeight: (!expanded && shouldOfferCollapse)
-                                ? SageDesign.Markdown.collapsedReplyHeight
-                                : nil,
-                            alignment: .top
-                        )
-                        .clipped()
-                        .mask(alignment: .top) {
-                            if !expanded, shouldOfferCollapse {
-                                // Content fades out toward the fold instead of
-                                // being covered by a painted canvas color — the
-                                // reveal matches any surface, including the
-                                // translucent window material.
-                                VStack(spacing: 0) {
-                                    Color.black
-                                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                                        .frame(height: SageDesign.Markdown.foldFadeHeight)
+                .background(alignment: .top) {
+                    if needsFreshMeasure {
+                        measureMarkdown
+                            .hidden()
+                            .accessibilityHidden(true)
+                            .background {
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: MarkdownHeightKey.self,
+                                        value: geo.size.height
+                                    )
                                 }
-                            } else {
-                                Color.black
                             }
-                        }
-                } else {
-                    Color.clear
-                        .frame(height: min(
-                            measuredPlaceholderHeight,
-                            SageDesign.Markdown.collapsedReplyHeight
-                        ))
+                    }
                 }
-            }
             .onPreferenceChange(MarkdownHeightKey.self) { height in
+                // Removing the measurer republishes the key's default (0).
+                // Keep the last real height or Show less draws an empty hole.
+                guard height > 0 else { return }
                 measuredHeight = height
                 measuredMarkdownID = displayMarkdown.hashValue
             }
@@ -178,12 +167,20 @@ struct MarkdownContentView: View {
                     title: expanded ? "Show less" : "Show more",
                     expanded: expanded
                 ) {
+                    let next = !expanded
                     withAnimation(SageDesign.Motion.expandAnimation) {
-                        expanded.toggle()
+                        expanded = next
+                        onExpansionChange?(next)
                     }
                 }
             }
         }
+    }
+
+    /// Clip while collapsed, including the first measure pass so a long
+    /// reply never flashes at full height (or as an empty placeholder).
+    private var clipsToCollapsedHeight: Bool {
+        !expanded && (shouldOfferCollapse || needsFreshMeasure)
     }
 
 }

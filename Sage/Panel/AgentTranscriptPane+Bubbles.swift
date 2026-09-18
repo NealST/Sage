@@ -269,7 +269,11 @@ extension AgentTranscriptPane {
     }
 
     @ViewBuilder
-    func eventBubble(_ event: AgentEvent, toolIndex: ToolResultIndex) -> some View {
+    func eventBubble(
+        _ event: AgentEvent,
+        toolIndex: ToolResultIndex,
+        scrollProxy: ScrollViewProxy
+    ) -> some View {
         switch event.kind {
         case .userInput:
             VStack(alignment: .leading, spacing: SageDesign.Spacing.small) {
@@ -305,8 +309,16 @@ extension AgentTranscriptPane {
                         markdown: event.content,
                         collapsible: true,
                         initiallyExpanded: isLatestAssistantReply(event),
-                        appearsSoftly: true
+                        appearsSoftly: true,
+                        onExpansionChange: { isExpanded in
+                            // Show less shrinks a tall reply from the top.
+                            // Keep the fold + button in view so the scroll
+                            // offset doesn't land in the empty space below.
+                            guard !isExpanded else { return }
+                            scrollProxy.scrollTo(Self.replyScrollID(event.id), anchor: .bottom)
+                        }
                     )
+                    .id(Self.replyScrollID(event.id))
                     .contextMenu {
                         // Collapsed replies hide their text — whole-source
                         // copy is the one action selection can't cover.
@@ -368,6 +380,10 @@ extension AgentTranscriptPane {
     /// user just watched stream in.
     private func isLatestAssistantReply(_ event: AgentEvent) -> Bool {
         displayEvents.last?.id == event.id
+    }
+
+    static func replyScrollID(_ eventID: UUID) -> String {
+        "\(eventID.uuidString)-reply"
     }
 
     static let transcriptEndID = "transcript-end"

@@ -120,7 +120,7 @@ struct AgentTranscriptPane: View {
                             }
 
                             ForEach(displayEvents) { event in
-                                eventBubble(event, toolIndex: toolIndex)
+                                eventBubble(event, toolIndex: toolIndex, scrollProxy: proxy)
                                     .id(event.id)
                                     .opacity(searchDim(event) ? SageDesign.Chrome.dimmedContentOpacity : 1)
                                     .allowsHitTesting(!searchDim(event))
