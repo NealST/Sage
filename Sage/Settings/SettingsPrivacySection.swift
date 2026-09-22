@@ -102,10 +102,10 @@ struct SettingsPrivacySection: View {
                 .foregroundStyle(.secondary)
         case .some(true):
             Label("Local history erased.", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(SageDesign.Palette.success)
+                .foregroundStyle(SageDesign.Palette.successText)
         case .some(false):
             Label("Could not erase local history.", systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(SageDesign.Palette.danger)
+                .foregroundStyle(SageDesign.Palette.dangerText)
         }
     }
 

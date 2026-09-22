@@ -91,7 +91,7 @@ struct ScheduleScriptPanel: View {
                         Color.clear.frame(width: labelColumnWidth)
                         Text(filePickError)
                             .sageMicro(type.micro)
-                            .foregroundStyle(SageDesign.Palette.danger)
+                            .foregroundStyle(SageDesign.Palette.dangerText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -102,7 +102,7 @@ struct ScheduleScriptPanel: View {
                         Color.clear.frame(width: labelColumnWidth)
                         Text("Working directory must exist inside this window’s sandbox.")
                             .sageMicro(type.micro)
-                            .foregroundStyle(SageDesign.Palette.danger)
+                            .foregroundStyle(SageDesign.Palette.dangerText)
                     }
                 }
 

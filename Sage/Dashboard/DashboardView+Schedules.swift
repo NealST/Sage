@@ -68,7 +68,7 @@ extension DashboardView {
                         HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                             Text(message)
                                 .sageFont(type.caption)
-                                .foregroundStyle(SageDesign.Palette.danger)
+                                .foregroundStyle(SageDesign.Palette.dangerText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button {
                                 Task { await appState.schedules.reload() }
@@ -276,7 +276,7 @@ private struct ScheduleDashboardRow: View {
                     .buttonStyle(SagePlainActionButtonStyle())
                     .foregroundStyle(
                         record.status == .awaitingConfirmation
-                            ? SageDesign.Palette.warning
+                            ? SageDesign.Palette.warningText
                             : Color.secondary
                     )
                     .help(
@@ -413,8 +413,8 @@ private struct ScheduleDashboardRow: View {
 
     var nextFireColor: Color {
         switch record.status {
-        case .failed: return SageDesign.Palette.danger
-        case .awaitingConfirmation, .needsFirstRun, .draft: return SageDesign.Palette.warning
+        case .failed: return SageDesign.Palette.dangerText
+        case .awaitingConfirmation, .needsFirstRun, .draft: return SageDesign.Palette.warningText
         default: return .secondary
         }
     }

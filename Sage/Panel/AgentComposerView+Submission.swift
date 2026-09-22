@@ -71,7 +71,7 @@ extension AgentComposerView {
         if !slashSuggestions.isEmpty {
             return "Use Up and Down arrows to choose a command, Return to select, Escape to dismiss"
         }
-        return "Press Return to send. Option-Return adds a new line. Command-Up recalls recent messages. Shift-Command-A adds files."
+        return "Press Return to send. Option-Return adds a new line. Command-Up recalls recent messages. Command-U adds files."
     }
 
     /// ⌘↑/⌘↓ recall. Positive `step` moves older, negative moves newer; the

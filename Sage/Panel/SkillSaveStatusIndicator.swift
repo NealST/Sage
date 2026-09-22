@@ -101,7 +101,7 @@ struct SkillSaveStatusIndicator: View {
             return .secondary
 
         case .failed:
-            return SageDesign.Palette.danger
+            return SageDesign.Palette.dangerText
         }
     }
 
@@ -246,7 +246,7 @@ struct SkillSaveStatusIndicator: View {
             return .secondary
 
         case .failed:
-            return SageDesign.Palette.danger
+            return SageDesign.Palette.dangerText
         }
     }
 }

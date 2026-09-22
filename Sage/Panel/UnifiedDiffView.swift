@@ -202,7 +202,7 @@ struct UnifiedDiffView: View {
             textRow(
                 prefix: "+",
                 text: line,
-                color: SageDesign.Palette.success,
+                color: SageDesign.Palette.successText,
                 fill: SageDesign.Palette.success.opacity(SageDesign.Chrome.diffFillOpacity)
             )
 
@@ -210,7 +210,7 @@ struct UnifiedDiffView: View {
             textRow(
                 prefix: "−",
                 text: line,
-                color: SageDesign.Palette.danger,
+                color: SageDesign.Palette.dangerText,
                 fill: SageDesign.Palette.danger.opacity(SageDesign.Chrome.diffFillOpacity)
             )
         }

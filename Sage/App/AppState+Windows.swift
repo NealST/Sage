@@ -140,7 +140,7 @@ extension AppState {
         Task { await agent.startFresh() }
     }
 
-    /// Task ⌘E — exports the key session's active transcript as Markdown.
+    /// Task ⇧⌘E — exports the key session's active transcript as Markdown.
     func exportKeySessionTask() {
         guard let task = keySession.agent.state.activeTask, !task.events.isEmpty else { return }
         TaskMarkdownExporter.exportThroughSavePanel(for: task)
@@ -162,7 +162,7 @@ extension AppState {
         }
     }
 
-    /// Whether the key session's active task has transcript content (⌘E / ⌘F).
+    /// Whether the key session's active task has transcript content (⇧⌘E / ⌘F).
     var keySessionHasTranscript: Bool {
         keySession.agent.state.activeTask?.events.isEmpty == false
     }

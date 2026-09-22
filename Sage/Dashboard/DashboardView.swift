@@ -110,7 +110,7 @@ struct DashboardView: View {
                 Spacer()
                 Text(isHigh ? "\(percent)% · consider starting fresh" : "\(percent)% of window")
                     .sageMicro(type.micro)
-                    .foregroundStyle(isHigh ? SageDesign.Palette.warning : .secondary)
+                    .foregroundStyle(isHigh ? SageDesign.Palette.warningText : .secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(SageDesign.Motion.countdownTick, value: percent)

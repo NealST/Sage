@@ -291,7 +291,27 @@
       "Bash(grep -E \"\\(error|warning:|BUILD\\)\" /var/folders/35/x76k1_lx29db2xhszjqpx7700000gp/T/qoder-cli-502/-Users-mozheng-projects-Sage-project-Sage/91b6b6cb-dff0-47a0-8d46-a010c46bec68/tasks/bdvgnvlp1.output | tail -20)",
       "Bash(grep -c \"error:\" /var/folders/35/x76k1_lx29db2xhszjqpx7700000gp/T/qoder-cli-502/-Users-mozheng-projects-Sage-project-Sage/91b6b6cb-dff0-47a0-8d46-a010c46bec68/tasks/bdvgnvlp1.output; grep \"error:\" /var/folders/35/x76k1_lx29db2xhszjqpx7700000gp/T/qoder-cli-502/-Users-mozheng-projects-Sage-project-Sage/91b6b6cb-dff0-47a0-8d46-a010c46bec68/tasks/bdvgnvlp1.output)",
       "Read(//private/var/folders/35/x76k1_lx29db2xhszjqpx7700000gp/T/qoder-cli-502/-Users-mozheng-projects-Sage-project-Sage/91b6b6cb-dff0-47a0-8d46-a010c46bec68/tasks/**)",
-      "Bash(xcodebuild -project Sage.xcodeproj -scheme Sage -configuration Debug build 2>&1 | grep -E \"\\(error:|BUILD\\)\" ; echo \"exit: ${PIPESTATUS[0]}\")"
+      "Bash(xcodebuild -project Sage.xcodeproj -scheme Sage -configuration Debug build 2>&1 | grep -E \"\\(error:|BUILD\\)\" ; echo \"exit: ${PIPESTATUS[0]}\")",
+      "Bash(ls /Users/mozheng/projects/Sage-project/Sage && find /Users/mozheng/projects/Sage-project/Sage -maxdepth 2 -type d -not -path '*/.*' | head -40)",
+      "Bash(grep -rn \"NSEndFunctionKey\\\\|NSPageDownFunctionKey\" /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AppKit.framework/Headers/NSEvent.h 2>/dev/null | head -5; echo \"---\"; swift -e 'import AppKit; print\\(\"End:\", String\\(format:\"%X\", NSEndFunctionKey\\), \"PageDown:\", String\\(format:\"%X\", NSPageDownFunctionKey\\)\\)' 2>/dev/null)",
+      "Bash(xcodebuild -list -project Sage.xcodeproj 2>/dev/null | head -20)",
+      "Bash(xcodebuild -list -project Sage.xcodeproj 2>&1 | head -25; ls Sage.xcodeproj/xcshareddata/xcschemes/ 2>/dev/null)",
+      "Bash(xcrun --find swiftc 2>/dev/null && swiftc -parse Sage/Settings/SettingsHotkeySection.swift Sage/App/SageApp.swift Sage/Panel/AgentComposerView.swift Sage/Panel/AgentTranscriptPane.swift Sage/Panel/AgentComposerView+Submission.swift 2>&1 | head -20 && echo \"PARSE OK\")",
+      "Bash(grep -E \"kVK_\\(Space|Tab|F5|ANSI_[3456]\\)\\\\b\" /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Carbon.framework/Frameworks/HIToolbox.framework/Headers/Events.h | head -12)",
+      "Bash(find Sage -name \"*.swift\" | head -50 && echo \"---\" && find Sage -name \"*.swift\" | wc -l)",
+      "Bash(for f in $\\(grep -rl \"Image\\(systemName\" Sage --include=\"*.swift\"\\); do icons=$\\(grep -c \"Image\\(systemName\" \"$f\"\\); labels=$\\(grep -c \"accessibilityLabel\\\\|accessibilityHidden\\\\|Label\\(\" \"$f\"\\); echo \"$labels $icons $f\"; done | awk '$1 < $2/4 && $2 > 5 {print}' | sort -n)",
+      "Bash(for f in $\\(grep -rl \"Image\\(systemName\" Sage --include=\"*.swift\"\\); do icons=$\\(grep -c \"Image\\(systemName\" \"$f\"\\); labels=$\\(grep -c \"accessibilityLabel\\\\|accessibilityHidden\" \"$f\"\\); echo \"$labels $icons $f\"; done | awk '$2 >= 6 && $1 <= $2/3 {print}' | sort -n | head -30)",
+      "Bash(for f in $\\(grep -rl \"Image\\(systemName\" Sage --include=\"*.swift\"\\); do icons=$\\(grep -c \"Image\\(systemName\" \"$f\"\\); labels=$\\(grep -c \"accessibilityLabel\" \"$f\"\\); total=$\\(\\(icons\\)\\); if [ $icons -ge 8 ] && [ $labels -le $\\(\\(icons/5\\)\\) ]; then echo \"$labels/$icons $f\"; fi; done | sort)",
+      "Bash(for f in $\\(grep -rl \"Image\\(systemName\" Sage --include=\"*.swift\"\\); do icons=$\\(grep -c \"Image\\(systemName\" \"$f\"\\); labels=$\\(grep -c \"accessibilityLabel\" \"$f\"\\); echo \"$labels $icons $f\"; done | sort -rn -k2 | head -25)",
+      "Bash(ls /Users/mozheng/projects/Sage-project/Sage/ && ls /Users/mozheng/projects/Sage-project/Sage/*.xcodeproj 2>/dev/null || echo \"no xcodeproj at root\")",
+      "Bash(SDK=$\\(xcrun --sdk macosx --show-sdk-path 2>/dev/null\\); IFACE=\"$SDK/System/Library/Frameworks/AppKit.framework/Modules/AppKit.swiftmodule/arm64-apple-macos.swiftinterface\"; ls \"$IFACE\" 2>/dev/null && grep -n \"dynamicProvider\" \"$IFACE\" | head -5)",
+      "Bash(SDK=$\\(xcrun --sdk macosx --show-sdk-path 2>/dev/null\\); echo \"SDK: $SDK\"; find \"$SDK/System/Library/Frameworks/AppKit.framework/Modules\" -name \"*.swiftinterface\" 2>/dev/null | head; find \"$SDK/System/Library/Frameworks/AppKit.framework/Modules\" -name \"*.swiftmodule\" -type d 2>/dev/null | head)",
+      "Bash(xcode-select -p; ls /Applications | grep -i xcode)",
+      "Bash(SDK=\"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk\"; IFACE=$\\(find \"$SDK/System/Library/Frameworks/AppKit.framework/Modules\" -name \"arm64-apple-macos.swiftinterface\" 2>/dev/null | head -1\\); echo \"IFACE: $IFACE\"; [ -n \"$IFACE\" ] && grep -n \"dynamicProvider\" \"$IFACE\" | head -5)",
+      "Bash(xcodebuild -list -project Sage.xcodeproj 2>&1 | head -30)",
+      "Bash(swift --version 2>&1; echo \"---\"; xcrun --find swiftc 2>&1)",
+      "Bash(git diff Sage/Design/DesignTokens.swift | head -30)",
+      "Bash(wc:*)"
     ]
   }
 }

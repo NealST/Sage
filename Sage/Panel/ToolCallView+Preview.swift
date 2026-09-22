@@ -86,7 +86,7 @@ extension ToolCallView {
                 } else {
                     Text(PathTextSupport.attributedString(from: content, policy: pathGuardPolicy))
                         .sageFont(type.caption, design: .monospaced)
-                        .foregroundStyle(isError ? SageDesign.Palette.danger : .primary)
+                        .foregroundStyle(isError ? SageDesign.Palette.dangerText : .primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

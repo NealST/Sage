@@ -84,7 +84,9 @@ struct SageApp: App {
                 Button("Export Task as Markdown…") {
                     appState.exportKeySessionTask()
                 }
-                .keyboardShortcut("e", modifiers: [.command])
+                // ⇧⌘E, not ⌘E — the standard ⌘E ("use selection for find")
+                // belongs to Find, and this app has Find and selectable text.
+                .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(!appState.keySessionHasTranscript)
 
                 Button("Find in Task…") {

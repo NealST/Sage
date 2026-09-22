@@ -97,7 +97,7 @@ struct ToolResultView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(ToolChipHeaderButtonStyle())
-        .foregroundStyle(isError ? SageDesign.Palette.danger : Color.secondary)
+        .foregroundStyle(isError ? SageDesign.Palette.dangerText : Color.secondary)
         .accessibilityLabel(expanded ? "Collapse tool result" : "Expand tool result")
         .accessibilityValue(title)
         .help(expanded ? "Hide details" : "Show full tool result")

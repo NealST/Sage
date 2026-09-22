@@ -28,7 +28,7 @@ struct SettingsSchedulesSection: View {
             VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                 if let loginItemHint {
                     Label(loginItemHint, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(SageDesign.Palette.warning)
+                        .foregroundStyle(SageDesign.Palette.warningText)
                 }
                 Text("Schedules only run while Sage is open. Turn this on so Sage launches at login. View and manage schedules in the Dashboard (⇧⌘D).")
                     .fixedSize(horizontal: false, vertical: true)

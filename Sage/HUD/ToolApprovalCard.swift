@@ -117,7 +117,7 @@ struct ToolApprovalCard: View {
 
             HStack(spacing: SageDesign.Spacing.small) {
                 Button(role: .cancel, action: onSkip) {
-                    Text("Don't Run")
+                    Text("Don’t Run")
                 }
                 .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
                 .sageGlassButton(.regular)

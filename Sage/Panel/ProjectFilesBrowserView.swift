@@ -209,9 +209,9 @@ struct ProjectFilesBrowserView: View {
 
     private func statusColor(for letter: String) -> Color {
         switch letter {
-        case "M": return SageDesign.Palette.warning
-        case "D": return SageDesign.Palette.danger
-        default: return SageDesign.Palette.success
+        case "M": return SageDesign.Palette.warningText
+        case "D": return SageDesign.Palette.dangerText
+        default: return SageDesign.Palette.successText
         }
     }
 

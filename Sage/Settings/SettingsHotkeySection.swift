@@ -39,12 +39,12 @@ struct SettingsHotkeySection: View {
                         "\(appState.globalHotkey.symbolRepresentation) could not be registered. Another app may already use it; record a different combination.",
                         systemImage: "exclamationmark.triangle.fill"
                     )
-                    .foregroundStyle(SageDesign.Palette.warning)
+                    .foregroundStyle(SageDesign.Palette.warningText)
                 } else if let validationHint {
                     Label(validationHint, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(SageDesign.Palette.warning)
+                        .foregroundStyle(SageDesign.Palette.warningText)
                 }
-                Text("Summon the Sage window from any app. Click the shortcut, then press a new combination; press Esc to cancel.")
+                Text("Summon the Sage window from any app. Click the shortcut, then press a new combination; press Esc to cancel. Shortcuts other apps rely on (⌘Q, ⌘Space…) are refused.")
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -140,6 +140,14 @@ struct SettingsHotkeySection: View {
             validationHint = "Include ⌘ or ⌃. A combination without them would fire while typing."
             return nil
         }
+        if let conflict = Self.reservedSystemShortcutReason(
+            keyCode: Int(event.keyCode),
+            carbonModifiers: carbonModifiers,
+            character: event.charactersIgnoringModifiers
+        ) {
+            validationHint = conflict
+            return nil
+        }
 
         let hotkey = SageHotkey(
             keyCode: UInt32(event.keyCode),
@@ -159,6 +167,62 @@ struct SettingsHotkeySection: View {
         appState.globalHotkey = hotkey
         appState.hotkeyRegistrationFailed = false
         validationHint = nil
+    }
+
+    // MARK: - Reserved combinations
+
+    /// System-reserved combinations from the HIG standard-shortcut table. A
+    /// Carbon registration is global and outranks app menus, so accepting one
+    /// of these would break it everywhere — ⌘Q would stop quitting every app.
+    /// Returning a reason refuses the recording; the recorder keeps listening.
+    private static func reservedSystemShortcutReason(
+        keyCode: Int,
+        carbonModifiers: UInt32,
+        character: String?
+    ) -> String? {
+        let hasCmd = carbonModifiers & UInt32(cmdKey) != 0
+        let hasCtrl = carbonModifiers & UInt32(controlKey) != 0
+        let hasShift = carbonModifiers & UInt32(shiftKey) != 0
+
+        switch keyCode {
+        case kVK_Space:
+            // Spotlight and input-source switching: ⌘Space, ⌃Space, ⌥⌘Space,
+            // ⌃⌘Space, ⌃⌥Space. ⇧ variants are free (⌘⇧Space is the default).
+            if (hasCmd || hasCtrl) && !hasShift {
+                return "macOS uses this for Spotlight or switching input sources. Keep ⇧ in the combination, or pick another key."
+            }
+
+        case kVK_Tab:
+            // ⌘Tab / ⇧⌘Tab cycle apps; ⌃Tab cycles control groups in dialogs.
+            if hasCmd || hasCtrl {
+                return "Tab with ⌘ or ⌃ switches apps or dialogs. Pick another key."
+            }
+
+        case kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5, kVK_ANSI_6:
+            // Screenshots: ⇧⌘3/4 (plus ⌃ for clipboard copies), ⇧⌘5, ⇧⌘6.
+            if hasCmd && hasShift {
+                return "⇧⌘3 through ⇧⌘6 take screenshots. Pick another key."
+            }
+
+        case kVK_F5:
+            if carbonModifiers == UInt32(cmdKey) {
+                return "⌘F5 turns VoiceOver on or off. Pick another key."
+            }
+
+        default:
+            break
+        }
+
+        // Bare ⌘ + a typeable character (⌘Q, ⌘S, ⌘1…) is a standard command in
+        // nearly every app. ⇧ or ⌥ variants stay available.
+        if carbonModifiers == UInt32(cmdKey),
+           let character,
+           character.unicodeScalars.count == 1,
+           let scalar = character.unicodeScalars.first,
+           (0x21...0x7E).contains(scalar.value) {
+            return "⌘ plus a letter or number is a standard command (Copy, Save, Quit…) in most apps. Add ⇧ or ⌥."
+        }
+        return nil
     }
 
     // MARK: - Key naming

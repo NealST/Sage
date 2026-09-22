@@ -433,7 +433,7 @@ struct AgentTranscriptPane: View {
                         .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                 }
-                Text("Drop files, paste a screenshot, or press ⇧⌘A to attach.")
+                Text("Drop files, paste a screenshot, or press ⌘U to attach.")
                     .sageMicro(type.micro, weight: .medium)
                     .foregroundStyle(.secondary)
             }

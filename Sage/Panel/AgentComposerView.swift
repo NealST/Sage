@@ -114,7 +114,7 @@ struct AgentComposerView: View {
                 HStack(alignment: .top, spacing: SageDesign.Spacing.small) {
                     Text(hint)
                         .sageFont(type.caption)
-                        .foregroundStyle(SageDesign.Palette.warning)
+                        .foregroundStyle(SageDesign.Palette.warningText)
                         .fixedSize(horizontal: false, vertical: true)
                     SageDismissButton(
                         action: dismissAttachmentHint,
@@ -200,7 +200,7 @@ struct AgentComposerView: View {
                 // warning saturation instead of micro.
                 Label(pendingConfirmationHint, systemImage: SageDesign.Symbol.pending)
                     .sageFont(type.caption, weight: .semibold)
-                    .foregroundStyle(SageDesign.Palette.warning)
+                    .foregroundStyle(SageDesign.Palette.warningText)
                     .labelStyle(.titleAndIcon)
             } else if session.agent.canStop || blocksTyping {
                 Text(
@@ -266,7 +266,9 @@ struct AgentComposerView: View {
         .sageGlassButton()
         .sageHitSlop(visualSize: SageDesign.Control.iconButton)
         .disabled(blocksTyping || isPreparingAttachments)
-        .keyboardShortcut("a", modifiers: [.command, .shift])
+        // ⌘U, not ⇧⌘A (Deselect All): Underline is meaningless here — no rich
+        // text anywhere in Sage — and ⌘U-for-attach matches the Slack idiom.
+        .keyboardShortcut("u", modifiers: [.command])
         .help("Add files to this message")
     }
 

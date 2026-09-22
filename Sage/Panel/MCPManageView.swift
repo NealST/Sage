@@ -216,15 +216,15 @@ struct MCPManageView: View {
                 if hasDuplicateDraftName {
                     Text("Server names must be unique.")
                         .sageMicro(type.micro)
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 } else if commandHasWhitespace {
                     Text("Command can’t contain spaces. Put the arguments in the Arguments field.")
                         .sageMicro(type.micro)
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 } else if let addError {
                     Text(addError)
                         .sageMicro(type.micro)
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 } else if missingRequiredFields {
                     Text("Enter a name and a command to add this server.")
                         .sageMicro(type.micro)

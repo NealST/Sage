@@ -111,7 +111,7 @@ extension SkillEditorPane {
             if savedFlash > 0 {
                 Label("Saved", systemImage: "checkmark")
                     .sageMicro(type.micro, weight: .medium)
-                    .foregroundStyle(SageDesign.Palette.success)
+                    .foregroundStyle(SageDesign.Palette.successText)
                     .transition(SageDesign.Glass.appearTransition)
             } else if isDirty {
                 Text("Edited")
@@ -166,7 +166,7 @@ extension SkillEditorPane {
             if isDirty, draft.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("Add a description. The agent reads it when deciding to use this skill.")
                     .sageMicro(type.micro)
-                    .foregroundStyle(SageDesign.Palette.danger)
+                    .foregroundStyle(SageDesign.Palette.dangerText)
             }
 
             DisclosureGroup("Details", isExpanded: $detailsExpanded) {
@@ -184,7 +184,7 @@ extension SkillEditorPane {
                             if !draft.metadata.isEmpty, metadataDictionary == nil {
                                 Text("Use one non-empty key=value pair per line.")
                                     .sageMicro(type.micro)
-                                    .foregroundStyle(SageDesign.Palette.danger)
+                                    .foregroundStyle(SageDesign.Palette.dangerText)
                             }
                         }
                     }

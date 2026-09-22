@@ -122,15 +122,76 @@ enum SageDesign {
     /// Warnings and transient attention states (awaiting confirmation, retrying,
     /// connecting, budget low) stay orange; `danger` is for failures only.
     /// `success` covers completions and diff insertions (green = added).
+    ///
+    /// Two tiers: the plain colors are for icons, status dots, and fills;
+    /// the `*Text` variants are for any view whose meaning is carried by
+    /// text drawn directly on a content surface.
     nonisolated enum Palette {
         static let danger = Color(nsColor: .systemRed)
         static let warning = Color(nsColor: .systemOrange)
         static let success = Color(nsColor: .systemGreen)
+
+        /// Text-bearing variants: small text needs 4.5:1 (HIG) and the
+        /// light-mode system orange/green sit near 2.2:1 on the light window
+        /// material (red ~3.4:1). Light uses fixed dark shades that hold
+        /// 4.5:1+ even over the 14% diff-row tints; dark keeps the system
+        /// colors, which are contrast-engineered for dark surfaces and
+        /// strengthen under Increase Contrast.
+        static let dangerText = textSafe(red: 0xB6, green: 0x24, blue: 0x2B, dark: .danger)
+        static let warningText = textSafe(red: 0xA6, green: 0x3D, blue: 0x00, dark: .warning)
+        static let successText = textSafe(red: 0x11, green: 0x63, blue: 0x29, dark: .success)
+
         /// Quiet surface fill for markdown content (checklist cells, code
         /// chrome) — the system fill that sits below `controlBackgroundColor`.
         static let subtleFill = Color(nsColor: .quaternarySystemFill)
         /// Hairline divider for markdown content blocks and code chrome.
         static let hairline = Color(nsColor: .separatorColor)
+
+        /// Which system color the dark half of a text-safe pair resolves to.
+        private enum TextSafeDark: Sendable {
+            case danger, warning, success
+
+            var systemColor: NSColor {
+                switch self {
+                case .danger: return .systemRed
+                case .warning: return .systemOrange
+                case .success: return .systemGreen
+                }
+            }
+        }
+
+        /// The provider closure may be retained by AppKit and invoked on any
+        /// appearance change, so it only captures Sendable values (the enum
+        /// and the raw components) and builds NSColors inside.
+        private static func textSafe(
+            red: UInt8,
+            green: UInt8,
+            blue: UInt8,
+            dark: TextSafeDark
+        ) -> Color {
+            Color(nsColor: NSColor(name: nil) { appearance in
+                if isDarkAppearance(appearance) {
+                    return dark.systemColor
+                }
+                return NSColor(
+                    srgbRed: CGFloat(red) / 255,
+                    green: CGFloat(green) / 255,
+                    blue: CGFloat(blue) / 255,
+                    alpha: 1
+                )
+            })
+        }
+
+        private static func isDarkAppearance(_ appearance: NSAppearance) -> Bool {
+            switch appearance.name {
+            case .darkAqua, .accessibilityHighContrastDarkAqua:
+                return true
+            case .aqua, .accessibilityHighContrastAqua:
+                return false
+            default:
+                return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            }
+        }
     }
 
     enum Motion {

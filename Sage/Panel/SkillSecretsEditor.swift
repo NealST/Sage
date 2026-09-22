@@ -52,7 +52,7 @@ struct SkillSecretsEditor: View {
                 if let errorMessage {
                     Text(errorMessage)
                         .sageMicro(type.micro)
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 }
             }
             .confirmationDialog(

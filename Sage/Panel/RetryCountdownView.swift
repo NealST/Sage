@@ -97,7 +97,7 @@ struct RetryCountdownView: View {
             // Seconds number in center
             Text("\(state.secondsRemaining)")
                 .sageMicro(type.micro, weight: .semibold, design: .rounded)
-                .foregroundStyle(SageDesign.Palette.warning)
+                .foregroundStyle(SageDesign.Palette.warningText)
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .animation(

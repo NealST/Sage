@@ -51,7 +51,7 @@ struct SettingsConnectionSection: View {
                     if let apiKeyValidationError {
                         Text(apiKeyValidationError)
                             .sageFont(type.caption)
-                            .foregroundStyle(SageDesign.Palette.danger)
+                            .foregroundStyle(SageDesign.Palette.dangerText)
                     }
                 }
             }
@@ -130,7 +130,7 @@ struct SettingsConnectionSection: View {
                 if touchedFields.contains(title), let error = validation?(text.wrappedValue) {
                     Text(error)
                         .sageFont(type.caption)
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 }
             }
         }
@@ -179,7 +179,7 @@ struct ConnectionStatusRow: View {
         Group {
             if let persistenceError = settings.apiKeyPersistenceError {
                 Label(persistenceError, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(SageDesign.Palette.danger)
+                    .foregroundStyle(SageDesign.Palette.dangerText)
             } else {
                 switch testState {
                 case .idle:
@@ -191,11 +191,11 @@ struct ConnectionStatusRow: View {
 
                 case .success:
                     Label("Connection succeeded", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(SageDesign.Palette.success)
+                        .foregroundStyle(SageDesign.Palette.successText)
 
                 case .failure(let message):
                     Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(SageDesign.Palette.danger)
+                        .foregroundStyle(SageDesign.Palette.dangerText)
                 }
             }
         }
