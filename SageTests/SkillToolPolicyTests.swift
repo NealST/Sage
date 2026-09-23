@@ -40,6 +40,7 @@ final class SkillToolPolicyTests: XCTestCase {
         XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("shell"), "run_shell_command")
         XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("read"), "read_text_file")
         XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("write"), "write_text_file")
+        XCTAssertEqual(SkillToolPolicy.canonicalizeToolName("patch"), "apply_patch")
         XCTAssertEqual(
             SkillToolPolicy.canonicalizeToolName("run_shell_command"),
             "run_shell_command"

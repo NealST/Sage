@@ -15,6 +15,9 @@ nonisolated extension ToolCallPresentation {
         case "write_text_file":
             return writeFileBody(args, policy: policy)
 
+        case "apply_patch":
+            return applyPatchBody(args)
+
         case "read_text_file":
             return readFileBody(args, policy: policy)
 
@@ -30,6 +33,12 @@ nonisolated extension ToolCallPresentation {
         default:
             return fieldsBody(args, policy: policy)
         }
+    }
+
+    static func applyPatchBody(_ args: [String: JSONValue]) -> Body {
+        let patch = display(args["input"]) ?? display(args["patch"]) ?? ""
+        guard !patch.isEmpty else { return .empty }
+        return .text(label: "patch", value: patch)
     }
 
     static func writeFileBody(_ args: [String: JSONValue], policy: PathGuard.Policy) -> Body {

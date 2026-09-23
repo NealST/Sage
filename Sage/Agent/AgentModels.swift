@@ -251,6 +251,10 @@ struct RetryDisplayState: Equatable {
 nonisolated struct TokenUsage: Equatable, Sendable {
     var input: Int = 0
     var output: Int = 0
+    /// Last API-reported prompt tokens. Used for hybrid occupancy.
+    var lastInput: Int = 0
+    /// Last API-reported completion tokens.
+    var lastOutput: Int = 0
     var total: Int { input + output }
 }
 

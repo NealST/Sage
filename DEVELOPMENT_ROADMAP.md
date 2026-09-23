@@ -8,7 +8,7 @@
 
 **已落地：**
 
-- **Agent Runtime**：Plan → Execute（ReAct）→ Review；`act` 策略确认一次；observe/answer 不能走副作用工具
+- **Agent Runtime**：Plan → Execute → Review。Execute 是 `Sage/Agent/Execute/Harness/` 里的循环（`RegularTask` / `Turn.run`）：回合内连续工具，观察可并行，写入 / shell / MCP / todo 串行；安全阀默认 32 批、上限 64。`act` 策略确认一次；observe/answer 不能走副作用工具
 - **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是 Plan 给出的非阻塞提示；chrome Recents 菜单显式切线程
 - **Transcript**：点回复时放开输入框焦点；窗口变 key 不抢焦点，便于选中复制
 - **主题**：从首条用户消息确定性截取 topic + abstract（无本地模型）
@@ -238,13 +238,13 @@ Python / JavaScript / CSS 语法器用本地包（`ThirdParty/tree-sitter-*`）�
 
 ### 5.2 高级 Agent 规划
 
-当前 work plan 是策略卡片，工具批是扁平步骤列表。
+当前 work plan 是策略卡片。Execute 不再把「8 批 + 步骤图」当主循环；工具批仍是 pendingPlan 上的扁平步骤，用来暂停、审批和恢复。
 
 - [ ] 条件分支（if tool result contains X, then...）
 - [ ] 循环检测与终止
 - [ ] 子任务分解（大任务拆分为多个小 task）
 - [ ] 基于工具结果的计划修订
-- [ ] 步骤并行执行
+- [x] 步骤并行执行（观察类可并行；写入 / shell / MCP / todo / Mac 突变串行）
 
 ### 5.3 自动化 / 定时任务
 

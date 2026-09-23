@@ -46,7 +46,7 @@ final class ContextCompactor {
         inFlightTaskID = nil
     }
 
-    /// After a turn: silently fold if occupancy is high and a span exists.
+    /// After a turn: fold if occupancy is high and a span exists.
     func considerBackground(
         occupancy: Double,
         tools: [ToolDefinition]
@@ -54,54 +54,19 @@ final class ContextCompactor {
         guard inFlight == nil else { return }
         guard let taskID = state.activeTaskID else { return }
         guard occupancy >= threshold(for: taskID) else { return }
-        let events = state.events
-        let existing = state.activeTask?.workingMemory
-        guard ConversationFold.span(in: events, existing: existing) != nil else { return }
-
-        let snapshot = settings.snapshot(for: .execute)
-        inFlightTaskID = taskID
-        inFlight = Task { [weak self] in
-            guard let self else { return nil }
-            let memory = await self.buildSnapshot(
-                taskID: taskID,
-                events: events,
-                existing: existing,
-                settings: snapshot,
-                tools: tools
-            )
-            await self.finish(memory, for: taskID)
-            return memory
-        }
+        startJob(taskID: taskID, tools: tools)
     }
 
-    /// Foreground path when lossless assembly still overflowed.
-    /// Reuses an in-flight job when one exists.
+    /// Foreground path when lossless assembly still overflowed or occupancy
+    /// crossed the auto-compact threshold. Reuses an in-flight job when one exists.
     @discardableResult
     func handleOverflow(tools: [ToolDefinition]) async -> TaskWorkingMemory? {
         if let inFlight {
             return await inFlight.value
         }
         guard let taskID = state.activeTaskID else { return nil }
-        let events = state.events
-        let existing = state.activeTask?.workingMemory
-        guard ConversationFold.span(in: events, existing: existing) != nil else { return nil }
-
-        let snapshot = settings.snapshot(for: .execute)
-        inFlightTaskID = taskID
-        let job = Task { [weak self] () -> TaskWorkingMemory? in
-            guard let self else { return nil }
-            let memory = await self.buildSnapshot(
-                taskID: taskID,
-                events: events,
-                existing: existing,
-                settings: snapshot,
-                tools: tools
-            )
-            await self.finish(memory, for: taskID)
-            return memory
-        }
-        inFlight = job
-        return await job.value
+        startJob(taskID: taskID, tools: tools)
+        return await inFlight?.value
     }
 
     // MARK: - Internals
@@ -110,17 +75,55 @@ final class ContextCompactor {
         compactedTaskIDs.contains(taskID) ? warmThreshold : Self.coldStartThreshold
     }
 
-    private func finish(_ memory: TaskWorkingMemory?, for taskID: UUID) async {
+    private func startJob(taskID: UUID, tools: [ToolDefinition]) {
+        let events = state.events
+        let existing = state.activeTask?.workingMemory
+        guard ConversationFold.span(in: events, existing: existing) != nil else { return }
+
+        let snapshot = settings.snapshot(for: .execute)
+        inFlightTaskID = taskID
+        inFlight = Task { [weak self] in
+            guard let self else { return nil }
+            let result = await self.buildSnapshot(
+                taskID: taskID,
+                events: events,
+                existing: existing,
+                settings: snapshot,
+                tools: tools
+            )
+            await self.finish(result, for: taskID)
+            if case .memory(let memory) = result {
+                return memory
+            }
+            return nil
+        }
+    }
+
+    private func finish(_ result: CompactBuildResult, for taskID: UUID) async {
         if inFlightTaskID == taskID {
             inFlight = nil
             inFlightTaskID = nil
         }
-        guard let memory, memory.hasContent else { return }
         guard state.activeTaskID == taskID else { return }
-        let occupancy = await modelGateway.occupancyIgnoringWorkingMemory()
-        guard Self.shouldKeepSnapshot(occupancyIgnoringMemory: occupancy) else { return }
-        if await taskStore.applyWorkingMemory(memory, to: taskID) {
-            compactedTaskIDs.insert(taskID)
+        switch result {
+        case .skipped:
+            return
+
+        case .failed(let reason):
+            state.compactNotice = CompactTask.Outcome.failed(reason).notice
+
+        case .memory(let memory):
+            guard memory.hasContent else { return }
+            let occupancy = await modelGateway.occupancyIgnoringWorkingMemory()
+            guard Self.shouldKeepSnapshot(occupancyIgnoringMemory: occupancy) else { return }
+            if await taskStore.applyWorkingMemory(memory, to: taskID) {
+                compactedTaskIDs.insert(taskID)
+                state.compactNotice = nil
+            } else {
+                state.compactNotice = CompactTask.Outcome.failed(
+                    "could not save the working-memory snapshot"
+                ).notice
+            }
         }
     }
 
@@ -135,10 +138,12 @@ final class ContextCompactor {
         existing: TaskWorkingMemory?,
         settings: ModelSettingsSnapshot,
         tools: [ToolDefinition]
-    ) async -> TaskWorkingMemory? {
+    ) async -> CompactBuildResult {
         do {
             try Task.checkCancellation()
-            guard let span = ConversationFold.span(in: events, existing: existing) else { return nil }
+            guard let span = ConversationFold.span(in: events, existing: existing) else {
+                return .skipped
+            }
             var compactEvents: [AgentEvent] = []
             if let existing, existing.hasContent {
                 compactEvents.append(
@@ -156,9 +161,11 @@ final class ContextCompactor {
                 reservedOutputTokens: 512,
                 reservedToolTokens: 0
             )
-            compactEvents.append(contentsOf: ContextBudget.select(from: slice, budget: spanBudget))
             compactEvents.append(
-                AgentEvent(kind: .userInput, content: Self.compactInstruction)
+                contentsOf: CompactTask.selectFoldSlice(slice, budget: spanBudget)
+            )
+            compactEvents.append(
+                AgentEvent(kind: .userInput, content: CompactTask.compactInstruction)
             )
 
             let compactTools = tools.filter { $0.name != RecallTaskTranscriptTool.name }
@@ -167,28 +174,29 @@ final class ContextCompactor {
                 tools: compactTools
             )
             try Task.checkCancellation()
-            guard state.activeTaskID == taskID else { return nil }
+            guard state.activeTaskID == taskID else { return .skipped }
 
-            return WorkingMemoryParser.parse(
+            guard let memory = WorkingMemoryParser.parse(
                 raw,
                 foldedFromEventID: existing?.foldedFromEventID ?? span.fromEventID,
                 foldedThroughEventID: span.throughEventID,
                 sourceModel: settings.model
-            )
+            ), memory.hasContent else {
+                return .failed("the compressor returned an empty snapshot")
+            }
+            return .memory(memory)
         } catch is CancellationError {
-            return nil
+            return .skipped
         } catch {
-            return nil
+            return .failed(error.localizedDescription)
         }
     }
 
-    /// Appended after a cloned history so the prefix can hit prompt cache.
-    static let compactInstruction = """
-    Fold the earlier turns into a working-memory snapshot. Do not call tools.
-    First write a short <analysis> of the current state, then a <summary> block.
-    Prefer a JSON object in <summary> with keys: overview, architecture, touchedFiles, \
-    troubleshooting, progress, focus, recentActions, nextSteps.
-    Each value is a concise paragraph. Omit unknown keys.
-    If you cannot fill JSON, put a plain paragraph in <summary> instead.
-    """
+    static let compactInstruction = CompactTask.compactInstruction
+}
+
+private enum CompactBuildResult {
+    case memory(TaskWorkingMemory)
+    case skipped
+    case failed(String)
 }

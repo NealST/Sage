@@ -10,6 +10,11 @@ final class SeatbeltSandboxTests: XCTestCase {
         XCTAssertTrue(profile.readableRoots.isEmpty)
         XCTAssertFalse(profile.deniesHomeReads)
         XCTAssertFalse(profile.skipsShellStartupFiles)
+        XCTAssertTrue(profile.allowsNetwork)
+        XCTAssertEqual(
+            profile.protectedWriteRoots,
+            [".git", ".sage", ".agents"].map { "\(PathGuard.resolvedHomePath)/\($0)" }
+        )
     }
 
     func testProjectProfileDeniesHomeAndReallowsRoots() {
@@ -18,10 +23,16 @@ final class SeatbeltSandboxTests: XCTestCase {
             for: .project(root: root),
             readAllowlist: ["/tmp/skill-dir"],
         )
-        XCTAssertEqual(profile.writableRoots, ["/tmp/sage-proj"])
-        XCTAssertEqual(profile.readableRoots, ["/tmp/sage-proj", "/tmp/skill-dir"])
+        let resolvedRoot = root.resolvingSymlinksInPath().path
+        let resolvedSkill = URL(fileURLWithPath: "/tmp/skill-dir").resolvingSymlinksInPath().path
+        XCTAssertEqual(profile.writableRoots, [resolvedRoot])
+        XCTAssertEqual(profile.readableRoots, [resolvedRoot, resolvedSkill])
         XCTAssertTrue(profile.deniesHomeReads)
         XCTAssertTrue(profile.skipsShellStartupFiles)
+        XCTAssertEqual(
+            profile.protectedWriteRoots,
+            [".git", ".sage", ".agents"].map { "\(resolvedRoot)/\($0)" }
+        )
     }
 
     // MARK: - Rendering
@@ -43,6 +54,40 @@ final class SeatbeltSandboxTests: XCTestCase {
             rendered.parameters.map(\.value),
             ["/tmp/fake-home", "/tmp/fake-home/proj", "/tmp/fake-home/proj"],
         )
+    }
+
+    func testReadOnlyProfileOmitsWritableRootsAndDeniesNetwork() {
+        let profile = SeatbeltSandbox.workspaceWriteProfile(
+            policy: .home,
+            bits: [],
+            readAllowlist: []
+        )
+        XCTAssertTrue(profile.writableRoots.isEmpty)
+        XCTAssertTrue(profile.protectedWriteRoots.isEmpty)
+        XCTAssertFalse(profile.allowsNetwork)
+        let rendered = SeatbeltSandbox.render(profile)
+        XCTAssertTrue(rendered.text.contains("(deny network*)"))
+        XCTAssertFalse(rendered.text.contains("WRITABLE_ROOT_"))
+    }
+
+    func testWorkspaceWriteKeepsGitReadOnlyUntilMetadataBit() {
+        let root = URL(fileURLWithPath: "/tmp/sage-proj")
+        let locked = SeatbeltSandbox.workspaceWriteProfile(
+            policy: .project(root: root),
+            bits: [.writes],
+            readAllowlist: []
+        )
+        let resolvedRoot = root.resolvingSymlinksInPath().path
+        XCTAssertEqual(locked.writableRoots, [resolvedRoot])
+        XCTAssertFalse(locked.allowsNetwork)
+        XCTAssertTrue(locked.protectedWriteRoots.contains("\(resolvedRoot)/.git"))
+
+        let unlocked = SeatbeltSandbox.workspaceWriteProfile(
+            policy: .project(root: root),
+            bits: [.writes, .protectedMetadataWrites],
+            readAllowlist: []
+        )
+        XCTAssertTrue(unlocked.protectedWriteRoots.isEmpty)
     }
 
     func testRenderKeepsWritableAnchorDeniesLast() {
@@ -109,6 +154,31 @@ final class SeatbeltSandboxTests: XCTestCase {
                 atPath: fixture.appendingPathComponent("home/blocked.txt").path
             )
         )
+    }
+
+    func testSandboxedGitWriteDeniedUnderWorkspaceWrite() async throws {
+        try XCTSkipUnless(SeatbeltSandbox.isAvailable)
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let project = fixture.appendingPathComponent("proj")
+        let gitDir = project.appendingPathComponent(".git")
+        try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+
+        let result = try await runSandboxed(
+            "echo leaked > .git/HEAD",
+            in: project,
+            profile: SeatbeltSandbox.workspaceWriteProfile(
+                policy: .project(root: project),
+                bits: [.writes],
+                readAllowlist: []
+            ),
+        )
+        XCTAssertNotEqual(result.exitCode, 0)
+        let head = try? String(
+            contentsOf: gitDir.appendingPathComponent("HEAD"),
+            encoding: .utf8
+        )
+        XCTAssertFalse(head?.contains("leaked") == true)
     }
 
     func testSandboxedSystemBinaryExecutes() async throws {

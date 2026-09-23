@@ -33,6 +33,10 @@ nonisolated enum SeatbeltSandbox {
         var deniesHomeReads: Bool
         /// Whether zsh skips startup files (Project mode; home is unreadable).
         var skipsShellStartupFiles: Bool
+        /// Write-denied roots inside a writable tree (`.git` / `.sage` / `.agents`).
+        var protectedWriteRoots: [String] = []
+        /// When false, later SBPL rules deny `network*`.
+        var allowsNetwork: Bool = true
     }
 
     /// Hardcoded so a PATH-injected lookalike cannot replace the sandbox.
@@ -50,29 +54,74 @@ nonisolated enum SeatbeltSandbox {
 
     /// Maps the active PathGuard policy to sandbox inputs.
     static func profile(for policy: PathGuard.Policy, readAllowlist: [String]) -> Profile {
+        workspaceWriteProfile(
+            policy: policy,
+            bits: [.writes, .network],
+            readAllowlist: readAllowlist
+        )
+    }
+
+    /// Codex workspace-write: writable root = focus root; `.git` stays
+    /// read-only unless `protectedMetadataWrites` is set.
+    static func workspaceWriteProfile(
+        policy: PathGuard.Policy,
+        bits: SandboxPermissionBits,
+        readAllowlist: [String],
+        extraReadableRoots: [URL] = []
+    ) -> Profile {
+        let focusRoot = policy.defaultWorkingDirectory
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+            .path
         switch policy {
         case .home:
             return Profile(
                 homePath: PathGuard.resolvedHomePath,
-                readableRoots: [],
-                writableRoots: [PathGuard.resolvedHomePath],
+                readableRoots: extraReadableRoots.map {
+                    $0.standardizedFileURL.resolvingSymlinksInPath().path
+                },
+                writableRoots: bits.contains(.writes) ? [focusRoot] : [],
                 deniesHomeReads: false,
                 skipsShellStartupFiles: false,
+                protectedWriteRoots: protectedWriteRoots(
+                    focusRoot: focusRoot,
+                    bits: bits
+                ),
+                allowsNetwork: bits.contains(.network)
             )
 
         case .project(let root):
             let resolvedRoot = root.resolvingSymlinksInPath().path
-            let readable = [resolvedRoot] + readAllowlist.map { path in
-                URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-            }
+            let readable = [resolvedRoot]
+                + readAllowlist.map { path in
+                    URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+                }
+                + extraReadableRoots.map {
+                    $0.standardizedFileURL.resolvingSymlinksInPath().path
+                }
             return Profile(
                 homePath: PathGuard.resolvedHomePath,
                 readableRoots: readable,
-                writableRoots: [resolvedRoot],
+                writableRoots: bits.contains(.writes) ? [focusRoot] : [],
                 deniesHomeReads: true,
                 skipsShellStartupFiles: true,
+                protectedWriteRoots: protectedWriteRoots(
+                    focusRoot: focusRoot,
+                    bits: bits
+                ),
+                allowsNetwork: bits.contains(.network)
             )
         }
+    }
+
+    private static func protectedWriteRoots(
+        focusRoot: String,
+        bits: SandboxPermissionBits
+    ) -> [String] {
+        guard bits.contains(.writes), !bits.contains(.protectedMetadataWrites) else {
+            return []
+        }
+        return [".git", ".sage", ".agents"].map { "\(focusRoot)/\($0)" }
     }
 
     /// SBPL text plus `-D` parameters for a profile. Split out for tests.
@@ -105,6 +154,23 @@ nonisolated enum SeatbeltSandbox {
             let key = "WRITABLE_ROOT_\(index)"
             parameters.append((key: key, value: root))
             sections.append("(allow file-write* (subpath (param \"\(key)\")))")
+        }
+
+        for (index, root) in profile.protectedWriteRoots.enumerated() {
+            let key = "PROTECTED_WRITE_ROOT_\(index)"
+            parameters.append((key: key, value: root))
+            sections.append("(deny file-write* (subpath (param \"\(key)\")))")
+        }
+        if profile.protectedWriteRoots.contains(where: { root in
+            [".git", ".sage", ".agents"].contains(where: { root.hasSuffix("/\($0)") })
+        }) {
+            sections.append(#"(deny file-write* (regex #"/\.git(/|$)"))"#)
+            sections.append(#"(deny file-write* (regex #"/\.sage(/|$)"))"#)
+            sections.append(#"(deny file-write* (regex #"/\.agents(/|$)"))"#)
+        }
+
+        if !profile.allowsNetwork {
+            sections.append("(deny network*)")
         }
 
         // Anchor denies stay last: no broader allow may reopen unlink/rename of

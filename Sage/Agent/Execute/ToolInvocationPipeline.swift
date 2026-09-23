@@ -10,6 +10,12 @@ import Foundation
 nonisolated enum ToolInvocationPipeline {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
+        try await ToolOrchestrator.execute(request)
+    }
+
+    /// Validate, hook, capability, observe. The orchestrator's first hop.
+    @MainActor
+    static func prepare(_ request: ToolInvocationRequest) async throws -> ToolInvocationRequest {
         let request = request.resolvingAuthorization()
         let definition = try validateForAuthorization(request)
         try await assertHookAuthorized(request)
@@ -22,27 +28,40 @@ nonisolated enum ToolInvocationPipeline {
             workPlanKind: request.workPlanKind,
             requiresConfirmation: definition.requiresConfirmation || writesLocally
         )
+        return request
+    }
 
-        let timeout = timeoutDuration(for: request.name)
-        let operation = Task { @MainActor in
-            try await ToolInvocationDispatcher.dispatch(request)
+    @MainActor
+    static func dispatchTimed(_ request: ToolInvocationRequest) async throws -> String {
+        try await withTimeout(name: request.name) {
+            capToolResult(try await ToolInvocationDispatcher.dispatch(request))
         }
-        defer { operation.cancel() }
-        let result = try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask { try await operation.value }
+    }
+
+    @MainActor
+    static func withTimeout<T: Sendable>(
+        name: String,
+        operation: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
+        let timeout = timeoutDuration(for: name)
+        let work = Task { @MainActor in
+            try await operation()
+        }
+        defer { work.cancel() }
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work.value }
             group.addTask {
                 try await Task.sleep(for: timeout)
                 throw ToolError.operationFailed(
-                    "Tool '\(request.name)' timed out after \(Int(timeout.components.seconds))s"
+                    "Tool '\(name)' timed out after \(Int(timeout.components.seconds))s"
                 )
             }
             guard let result = try await group.next() else {
-                throw ToolError.operationFailed("Tool '\(request.name)' produced no result.")
+                throw ToolError.operationFailed("Tool '\(name)' produced no result.")
             }
             group.cancelAll()
             return result
         }
-        return capToolResult(result)
     }
 
     @MainActor

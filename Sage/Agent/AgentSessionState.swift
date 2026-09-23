@@ -34,6 +34,8 @@ final class AgentSessionState {
     var suppressedContextBudgetTaskID: UUID?
     /// Soft chip when Sage resumes related prior work (not ordinary continuity).
     var contextHint: String?
+    /// Visible compact outcome. Nil when folding succeeded or never ran.
+    var compactNotice: String?
     /// Non-blocking offer to peel the latest turn into a new task.
     var topicDriftOffer: TopicDriftOffer?
     /// After “Keep Going”, don’t re-offer on this task until a new thread starts.
@@ -61,6 +63,8 @@ final class AgentSessionState {
     var didBootstrap = false
     /// Exact shell / MCP invocations approved for the current task.
     let sessionAllowlist = SessionToolAllowlist()
+    /// Tool calls the user approved to rerun outside Seatbelt.
+    var unsandboxedToolCallIDs: Set<String> = []
     /// Attachment-bearing events retained in the most recently assembled model context.
     var modelVisibleAttachmentEventIDs: Set<UUID> = []
     /// Round-limit or per-tool approval sitting in front of the execute loop.
@@ -166,6 +170,7 @@ final class AgentSessionState {
         topicDriftOffer = nil
         suppressedDriftOfferTaskID = nil
         contextHint = nil
+        compactNotice = nil
         forceFreshOnNextSubmit = false
         suppressedContextBudgetTaskID = nil
         isReviewing = false
@@ -178,12 +183,19 @@ final class AgentSessionState {
     func clearTokenUsage() {
         tokenUsage = TokenUsage()
         contextOccupancy = nil
+        compactNotice = nil
     }
 
     func addTokenUsage(_ usage: TokenUsage) {
         guard usage.input > 0 || usage.output > 0 else { return }
         tokenUsage.input += usage.input
         tokenUsage.output += usage.output
+        if usage.input > 0 {
+            tokenUsage.lastInput = usage.input
+        }
+        if usage.output > 0 {
+            tokenUsage.lastOutput = usage.output
+        }
     }
 
     func refreshSummary(for task: TaskRecord) {

@@ -16,6 +16,10 @@ struct TranscriptNoticeBar: View {
             topicDriftChip(offer)
                 .sageGlassMaterialize()
                 .transition(noticeTransition)
+        } else if let notice = session.agent.state.compactNotice {
+            compactNoticeChip(notice)
+                .sageGlassMaterialize()
+                .transition(noticeTransition)
         } else if showsContextBudgetNotice {
             contextBudgetChip
                 .sageGlassMaterialize()
@@ -104,6 +108,31 @@ struct TranscriptNoticeBar: View {
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.bottom, SageDesign.Spacing.small)
         .accessibilityElement(children: .contain)
+    }
+
+    private func compactNoticeChip(_ notice: String) -> some View {
+        HStack(spacing: SageDesign.Spacing.small) {
+            Image(systemName: "exclamationmark.triangle")
+                .sageFont(type.icon, weight: .semibold)
+                .foregroundStyle(SageDesign.Palette.warning)
+                .accessibilityHidden(true)
+
+            Text(notice)
+                .sageMicro(type.micro, weight: .medium)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            SageDismissButton(
+                action: { session.agent.state.compactNotice = nil },
+                label: "Hide compact warning",
+                help: "Hide for this task"
+            )
+        }
+        .padding(.horizontal, SageDesign.Spacing.large)
+        .padding(.bottom, SageDesign.Spacing.small)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(notice)
     }
 
     private func contextChip(_ hint: String) -> some View {

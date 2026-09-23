@@ -28,6 +28,7 @@ final class ToolImpactTests: XCTestCase {
     func testMutatingToolsRequireConfirmation() {
         for name in [
             "write_text_file",
+            "apply_patch",
             "delete_file",
             "run_shell_command",
             "set_clipboard",
@@ -48,6 +49,12 @@ final class ToolImpactTests: XCTestCase {
         XCTAssertThrowsError(
             try ToolInvocationDispatcher.assertMutatingToolsAllowed(
                 for: "write_text_file",
+                workPlanKind: .observe
+            )
+        )
+        XCTAssertThrowsError(
+            try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+                for: "apply_patch",
                 workPlanKind: .observe
             )
         )

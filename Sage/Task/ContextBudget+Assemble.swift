@@ -9,16 +9,23 @@ nonisolated extension ContextBudget {
     /// Schedules system slices and transcript events into `layout.budget.usableTokens`.
     static func assemble(_ layout: PromptLayout) -> PromptAssembly {
         let prepared = prepareAssembly(layout)
-        if prepared.remaining <= 0 || prepared.totalGrow == 0 {
-            return assemblePinnedOverflow(
+        var assembly = if prepared.remaining <= 0 || prepared.totalGrow == 0 {
+            assemblePinnedOverflow(
                 remaining: prepared.remaining,
                 grow: prepared.growUser,
                 pin: (prepared.parts.currentUser, prepared.parts.latestTurn),
                 system: prepared.system,
                 overflow: (prepared.pinOverflow, layout.budget.usableTokens)
             )
+        } else {
+            assembleFlexShares(prepared.flexInput(usableTokens: layout.budget.usableTokens))
         }
-        return assembleFlexShares(prepared.flexInput(usableTokens: layout.budget.usableTokens))
+        let system = assembly.events.first { $0.kind == .systemInstruction }?.content ?? ""
+        assembly.contractPreserved = CompactTask.contractIsPreserved(
+            system: system,
+            layout: layout
+        )
+        return assembly
     }
 
     struct PreparedAssembly {
@@ -279,7 +286,9 @@ nonisolated extension ContextBudget {
             prefixOrder: []
         )
         for (index, event) in sanitized.enumerated() {
-            if folded.contains(event.id) { continue }
+            // Folded history is replaced by working memory, but activated
+            // skill payloads stay — they are contract, not compact fodder.
+            if folded.contains(event.id), !event.protected { continue }
             if let lastUserIndex, index > lastUserIndex {
                 parts.latestTurn.append(event)
                 continue

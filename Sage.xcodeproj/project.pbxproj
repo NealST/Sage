@@ -26,6 +26,9 @@
 		A10TSRSF0000000000000000 /* TreeSitterRust in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSRSP0000000000000000 /* TreeSitterRust */; };
 		A10TSSWIFTF0000000000000 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSSWIFTP0000000000000 /* TreeSitterSwift */; };
 		A10TSTSF0000000000000000 /* TreeSitterTypeScript in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSTSP0000000000000000 /* TreeSitterTypeScript */; };
+		A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
+		A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */ = {isa = PBXBuildFile; productRef = A10RUNTIMPROD000000000001 /* ToolsRuntimes */; };
+		A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +51,9 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Agent/Execute/Harness/Package.swift,
+				Agent/Execute/Harness/apply-patch,
+				Agent/Execute/Harness/tools/runtimes,
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
 		};
@@ -93,6 +99,8 @@
 				A10TSRBF0000000000000000 /* TreeSitterRuby in Frameworks */,
 				A10TSJAVAF00000000000000 /* TreeSitterJava in Frameworks */,
 				A10TSKTF0000000000000000 /* TreeSitterKotlin in Frameworks */,
+				A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */,
+				A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +108,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -163,6 +172,8 @@
 				A10TSRBP0000000000000000 /* TreeSitterRuby */,
 				A10TSJAVAP00000000000000 /* TreeSitterJava */,
 				A10TSKTP0000000000000000 /* TreeSitterKotlin */,
+				A10APPLYPROD0000000000001 /* ApplyPatch */,
+				A10RUNTIMPROD000000000001 /* ToolsRuntimes */,
 			);
 			productName = Sage;
 			productReference = 30ACE9D53001EBF5006F8C54 /* Sage.app */;
@@ -186,6 +197,7 @@
 			);
 			name = SageTests;
 			packageProductDependencies = (
+				A10APPLYPROD0000000000001 /* ApplyPatch */,
 			);
 			productName = SageTests;
 			productReference = A10TESTPROD000000000001 /* SageTests.xctest */;
@@ -239,6 +251,7 @@
 				A10TSRBPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-ruby" */,
 				A10TSJAVAPKG000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-java" */,
 				A10TSKTPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-kotlin" */,
+				A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 30ACE9D63001EBF5006F8C54 /* Products */;
@@ -575,6 +588,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "ThirdParty/tree-sitter-python";
 		};
+		A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Sage/Agent/Execute/Harness";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -795,6 +812,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10TSTSPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-typescript" */;
 			productName = TreeSitterTypeScript;
+		};
+		A10APPLYPROD0000000000001 /* ApplyPatch */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			productName = ApplyPatch;
+		};
+		A10RUNTIMPROD000000000001 /* ToolsRuntimes */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			productName = ToolsRuntimes;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -162,7 +162,36 @@ final class ContextBudgetTests: XCTestCase {
         let system = assembly.events.first { $0.kind == .systemInstruction }?.content ?? ""
         XCTAssertTrue(system.contains("You are Sage."))
         XCTAssertTrue(system.contains("Confirmed work plan") || system.contains("Intent: keep going"))
+        XCTAssertTrue(assembly.contractPreserved)
         XCTAssertFalse(system.contains("**alpha**"))
+        XCTAssertTrue(assembly.events.contains { $0.id == current.id })
+    }
+
+    func testProtectedSkillSurvivesAFoldRange() {
+        let first = AgentEvent(kind: .userInput, content: "old user")
+        let skill = AgentEvent(
+            kind: .toolResult,
+            content: "SKILL BODY from load_skill",
+            protected: true
+        )
+        let second = AgentEvent(kind: .assistantResponse, content: "old assistant")
+        let current = AgentEvent(kind: .userInput, content: "now")
+        let memory = TaskWorkingMemory.makeSimple(
+            foldedFromEventID: first.id,
+            foldedThroughEventID: second.id,
+            narrative: "folded prefix"
+        )
+        let assembly = ContextBudget.assemble(
+            PromptLayout(
+                budget: .default,
+                baseInstructions: "You are Sage.",
+                workingMemory: memory,
+                events: [first, skill, second, current]
+            )
+        )
+        XCTAssertTrue(assembly.contractPreserved)
+        XCTAssertTrue(assembly.events.contains { $0.protected && $0.content.contains("SKILL BODY") })
+        XCTAssertFalse(assembly.events.contains { $0.id == first.id })
         XCTAssertTrue(assembly.events.contains { $0.id == current.id })
     }
 

@@ -17,7 +17,18 @@ extension AgentModelGateway {
         let collected = try await collectStream(stream)
         streaming.flush(collected.content)
         streaming.flushThinking(collected.thinking)
-        compact?.considerBackground(occupancy: req.occupancy, tools: req.tools)
+        state.addTokenUsage(collected.usage)
+        if collected.usage.input > 0 {
+            state.contextOccupancy = CompactTask.occupancy(
+                assembledTokens: req.assembledTokens,
+                usableTokens: req.usableTokens,
+                reportedInputTokens: collected.usage.input
+            )
+        }
+        compact?.considerBackground(
+            occupancy: state.contextOccupancy ?? req.occupancy,
+            tools: req.tools
+        )
         return ModelTurn(
             content: collected.recovered.content,
             toolCalls: collected.recovered.calls,

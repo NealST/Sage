@@ -19,7 +19,7 @@ nonisolated enum ConversationFold {
         in events: [AgentEvent],
         existing: TaskWorkingMemory?
     ) -> (fromEventID: UUID, throughEventID: UUID)? {
-        let timeline = events.filter { $0.kind != .systemInstruction }
+        let timeline = events.filter { $0.kind != .systemInstruction && !$0.protected }
         guard !timeline.isEmpty else { return nil }
 
         let userIndices = timeline.indices.filter { timeline[$0].kind == .userInput }

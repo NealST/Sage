@@ -3,6 +3,7 @@
 //  Sage
 //
 
+import ApplyPatch
 import Foundation
 
 /// Shared parsing + titles for tool-call UI (transcript pills and plan steps).
@@ -115,6 +116,13 @@ nonisolated enum ToolCallPresentation {
         if name == "rename_file" {
             return "Rename to \(display(args["new_name"]) ?? "…")"
         }
+        if name == "apply_patch" {
+            let patch = display(args["input"]) ?? display(args["patch"]) ?? ""
+            if let parsed = try? parsePatch(patch), let first = parsed.hunks.first {
+                return "Patch \(shortPath(first.path(), policy: policy) ?? "files")"
+            }
+            return "Patch files"
+        }
         guard let verb = fileToolVerbs[name] else { return nil }
         let pathKey = (name == "move_file" || name == "copy_file") ? "source" : "path"
         let fallback: String
@@ -136,6 +144,7 @@ nonisolated enum ToolCallPresentation {
         "search_files": "Search",
         "read_text_file": "Read",
         "write_text_file": "Write",
+        "apply_patch": "Patch",
         "copy_file": "Copy",
         "delete_file": "Delete",
     ]

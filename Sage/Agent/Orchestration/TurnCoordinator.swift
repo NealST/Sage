@@ -24,11 +24,11 @@ final class TurnCoordinator {
     let topicCoordinator: TopicCoordinator
     let skills: SkillSessionController
     let planner: PlanAgent
-    let execute: ExecuteAgent
+    let execute: RegularTask
     let reviewer: ReviewAgent
 
     weak var slashHost: SlashCommandHost?
-    var executeToolBatch: ((Bool) async -> Void)?
+    var executeToolBatch: ((Bool) async -> ToolBatchExecutor.WaveOutcome)?
     var handleStop: ((AgentPlan?) async -> Void)?
     /// User approved a side-effect work plan this turn. Scoped to `turnLoopTaskID`.
     var planApproved = false
@@ -76,7 +76,7 @@ final class TurnCoordinator {
         self.skills = skills
         self.planner = PlanAgent(state: state, modelGateway: modelGateway)
         self.reviewer = ReviewAgent(state: state, modelGateway: modelGateway)
-        self.execute = ExecuteAgent(
+        self.execute = RegularTask(
             state: state,
             planProgress: planProgress,
             taskStore: taskStore,
@@ -87,7 +87,7 @@ final class TurnCoordinator {
 
     func bind(
         slashHost: SlashCommandHost,
-        executeToolBatch: @escaping (Bool) async -> Void,
+        executeToolBatch: @escaping (Bool) async -> ToolBatchExecutor.WaveOutcome,
         handleStop: @escaping (AgentPlan?) async -> Void
     ) {
         self.slashHost = slashHost
@@ -95,8 +95,8 @@ final class TurnCoordinator {
         self.handleStop = handleStop
         reviewer.skillHost = slashHost as? SkillToolHost
         execute.bind(
-            executeTools: { [weak self] in
-                await self?.executeToolBatch?(false)
+            runToolBatch: { [weak self] retryFailed in
+                await self?.executeToolBatch?(retryFailed) ?? .persistFailed
             },
             onCandidateReply: { [weak self] text in
                 await self?.reviewAndFinish(text)

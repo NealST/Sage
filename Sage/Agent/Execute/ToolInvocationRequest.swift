@@ -42,6 +42,9 @@ struct ToolInvocationRequest {
     var mcpAllowsProtectedMetadataWrites = false
     /// Extra read-only paths (user attachments). Merged with skill dirs at dispatch.
     var extraReadAllowlist: [String] = []
+    var toolCallID: String = "exec"
+    /// Set after the user approves a sandbox-escalation card for this call.
+    var allowUnsandboxedRetry = false
 
     func resolvingAuthorization() -> Self {
         guard !didResolveAuthorization else { return self }

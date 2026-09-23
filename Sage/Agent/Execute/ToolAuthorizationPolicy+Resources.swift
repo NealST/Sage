@@ -118,6 +118,9 @@ nonisolated extension ToolAuthorizationPolicy {
         policy: PathGuard.Policy
     ) -> [String] {
         switch name {
+        case "apply_patch":
+            return applyPatchWriteRoots(arguments: arguments, policy: policy)
+
         case "move_file", "copy_file":
             return transferWriteRoots(arguments: arguments, policy: policy, includeSourceParent: name == "move_file")
 
@@ -144,6 +147,21 @@ nonisolated extension ToolAuthorizationPolicy {
                 return []
             }
             return [normalized(writeRoot(name: name, url: url))]
+        }
+    }
+
+    private static func applyPatchWriteRoots(
+        arguments: [String: Any],
+        policy: PathGuard.Policy
+    ) -> [String] {
+        let patch = (arguments["input"] as? String) ?? (arguments["patch"] as? String) ?? ""
+        let cwd = policy.defaultWorkingDirectory
+        let urls = ApplyPatchHandler.hunkPaths(in: patch, cwd: cwd)
+        return urls.compactMap { url in
+            guard let allowed = try? PathGuard.resolveAllowed(url.path, policy: policy, access: .read) else {
+                return nil
+            }
+            return normalized(allowed.deletingLastPathComponent())
         }
     }
 

@@ -14,7 +14,9 @@ extension AgentRuntime {
 
     func confirmToolBatch() async {
         guard !state.shouldDisableConfirmationActions else { return }
-        _ = await operations.run { await self.executeCurrentPlanUnlocked(retryFailedSteps: false) }
+        _ = await operations.run {
+            await self.turns.execute.resumePausedBatch(retryFailedSteps: false)
+        }
     }
 
     func confirmToolRoundLimit() async {
@@ -31,11 +33,14 @@ extension AgentRuntime {
 
     func confirmToolApproval(scope: SessionToolApprovalScope) async {
         guard !state.shouldDisableConfirmationActions else { return }
-        guard case .toolApproval(_, let name, let args, _) = state.pendingPrompt else { return }
+        guard case .toolApproval(let callID, let name, let args, let title) = state.pendingPrompt else { return }
         let hookDecision = await preToolUseDecision(name: name, argumentsJSON: args)
         if case .deny(let reason) = hookDecision {
             await failToolApproval(reason: "Blocked by PreToolUse hook: \(reason)")
             return
+        }
+        if SandboxEscalation.isEscalation(title) {
+            state.unsandboxedToolCallIDs.insert(callID)
         }
         await recordToolApproval(
             scope: scope,
@@ -66,7 +71,7 @@ extension AgentRuntime {
             )
         }
         _ = await operations.run {
-            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+            await self.turns.execute.resumePausedBatch(retryFailedSteps: false)
         }
     }
 
@@ -181,7 +186,7 @@ extension AgentRuntime {
                     task.status = .active
                 }
             ) else { return }
-            await self.executeCurrentPlanUnlocked(retryFailedSteps: false)
+            await self.turns.execute.resumePausedBatch(retryFailedSteps: false)
         }
     }
 
@@ -258,13 +263,14 @@ extension AgentRuntime {
         state.activatedSkillNames.formUnion(names)
     }
 
-    func executeCurrentPlanUnlocked(retryFailedSteps: Bool = false) async {
+    func executeCurrentPlanUnlocked(retryFailedSteps: Bool = false) async -> ToolBatchExecutor.WaveOutcome {
         let plan = planProgress.plan ?? state.activeTask?.pendingPlan
-        guard let initialPlan = plan else { return }
-        await ToolBatchExecutor.execute(
+        guard let initialPlan = plan else { return .persistFailed }
+        return await ToolBatchExecutor.execute(
             initialPlan: initialPlan,
             services: makeExecuteServices(),
-            retryFailedSteps: retryFailedSteps
+            retryFailedSteps: retryFailedSteps,
+            followUp: .yieldToCaller
         )
     }
 

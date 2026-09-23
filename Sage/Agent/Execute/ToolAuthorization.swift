@@ -22,6 +22,7 @@ nonisolated enum ToolAuthorizationPolicy {
         "move_file",
         "rename_file",
         "write_text_file",
+        "apply_patch",
     ]
 
     static func requirement(

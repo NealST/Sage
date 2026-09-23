@@ -1,0 +1,352 @@
+//
+//  lib.swift
+//  ApplyPatch
+//
+//  Port of codex-rs/apply-patch/src/lib.rs (Apache-2.0).
+//  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//
+//  Apply parsed hunks to a local filesystem. Seatbelt / PathGuard live in the
+//  tool handler, not here.
+//
+
+import Foundation
+
+public enum ApplyPatchFileUpdateMode: Equatable {
+    case normalizeToLf
+    case preserveLineEndings
+}
+
+public struct ApplyPatchOptions: Equatable {
+    public var updateFileMode: ApplyPatchFileUpdateMode
+    public var followSymlinks: Bool
+
+    public init(updateFileMode: ApplyPatchFileUpdateMode, followSymlinks: Bool) {
+        self.updateFileMode = updateFileMode
+        self.followSymlinks = followSymlinks
+    }
+
+    public static let `default` = ApplyPatchOptions(
+        updateFileMode: .normalizeToLf,
+        followSymlinks: true
+    )
+}
+
+public enum ApplyPatchError: Error, Equatable, LocalizedError {
+    case parse(ParseError)
+    case io(context: String, message: String)
+    case computeReplacements(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .parse(let error):
+            return error.localizedDescription
+        case .io(let context, let message):
+            return "\(context): \(message)"
+        case .computeReplacements(let message):
+            return message
+        }
+    }
+}
+
+public struct ApplyPatchArgs: Equatable {
+    public var patch: String
+    public var hunks: [Hunk]
+    public var workdir: String?
+    public var environmentID: String?
+
+    public init(patch: String, hunks: [Hunk], workdir: String?, environmentID: String?) {
+        self.patch = patch
+        self.hunks = hunks
+        self.workdir = workdir
+        self.environmentID = environmentID
+    }
+}
+
+struct AffectedPaths: Equatable {
+    var added: [String] = []
+    var modified: [String] = []
+    var deleted: [String] = []
+}
+
+public struct AppliedPatchChange: Equatable {
+    public var path: URL
+    public var kind: AppliedPatchFileChange
+
+    public init(path: URL, kind: AppliedPatchFileChange) {
+        self.path = path
+        self.kind = kind
+    }
+}
+
+public enum AppliedPatchFileChange: Equatable {
+    case add(content: String, overwrittenContent: String?)
+    case delete(content: String)
+    case update(movePath: URL?, oldContent: String, overwrittenMoveContent: String?, newContent: String)
+}
+
+public struct AppliedPatchDelta: Equatable {
+    public var changes: [AppliedPatchChange] = []
+    public var exact = true
+
+    public init(changes: [AppliedPatchChange] = [], exact: Bool = true) {
+        self.changes = changes
+        self.exact = exact
+    }
+
+    public var isEmpty: Bool { changes.isEmpty }
+}
+
+public struct ApplyPatchFailure: Error, LocalizedError {
+    public var error: ApplyPatchError
+    public var delta: AppliedPatchDelta
+
+    public init(error: ApplyPatchError, delta: AppliedPatchDelta) {
+        self.error = error
+        self.delta = delta
+    }
+
+    public var errorDescription: String? { error.localizedDescription }
+}
+
+protocol ApplyPatchFileSystem {
+    func readFileText(_ url: URL) throws -> String
+    func writeFile(_ url: URL, contents: String) throws
+    func createDirectory(_ url: URL) throws
+    func removeFile(_ url: URL) throws
+    func metadata(_ url: URL) throws -> ApplyPatchMetadata
+}
+
+struct ApplyPatchMetadata: Equatable {
+    var exists: Bool
+    var isFile: Bool
+    var isDirectory: Bool
+    var isSymlink: Bool
+}
+
+enum LocalApplyPatchFileSystem: ApplyPatchFileSystem {
+    case shared
+
+    func readFileText(_ url: URL) throws -> String {
+        let data = try Data(contentsOf: url)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw ApplyPatchError.io(context: "Failed to read file \(url.path)", message: "not UTF-8")
+        }
+        return text
+    }
+
+    func writeFile(_ url: URL, contents: String) throws {
+        try contents.data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    func createDirectory(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    func removeFile(_ url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    func metadata(_ url: URL) throws -> ApplyPatchMetadata {
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        if !exists {
+            return ApplyPatchMetadata(exists: false, isFile: false, isDirectory: false, isSymlink: false)
+        }
+        let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
+        return ApplyPatchMetadata(
+            exists: true,
+            isFile: values.isRegularFile == true,
+            isDirectory: isDirectory.boolValue,
+            isSymlink: values.isSymbolicLink == true
+        )
+    }
+}
+
+public func applyPatch(
+    _ patch: String,
+    cwd: URL,
+    options: ApplyPatchOptions = .default
+) throws -> (delta: AppliedPatchDelta, summary: String) {
+    try applyPatch(
+        patch,
+        cwd: cwd,
+        options: options,
+        fileSystem: LocalApplyPatchFileSystem.shared
+    )
+}
+
+func applyPatch(
+    _ patch: String,
+    cwd: URL,
+    options: ApplyPatchOptions = .default,
+    fileSystem: ApplyPatchFileSystem
+) throws -> (delta: AppliedPatchDelta, summary: String) {
+    let parsed: ApplyPatchArgs
+    do {
+        parsed = try parsePatch(patch)
+    } catch let error as ParseError {
+        throw ApplyPatchFailure(error: .parse(error), delta: AppliedPatchDelta())
+    }
+    return try applyHunks(parsed.hunks, cwd: cwd, options: options, fileSystem: fileSystem)
+}
+
+public func applyHunks(
+    _ hunks: [Hunk],
+    cwd: URL,
+    options: ApplyPatchOptions = .default
+) throws -> (delta: AppliedPatchDelta, summary: String) {
+    try applyHunks(
+        hunks,
+        cwd: cwd,
+        options: options,
+        fileSystem: LocalApplyPatchFileSystem.shared
+    )
+}
+
+func applyHunks(
+    _ hunks: [Hunk],
+    cwd: URL,
+    options: ApplyPatchOptions = .default,
+    fileSystem: ApplyPatchFileSystem
+) throws -> (delta: AppliedPatchDelta, summary: String) {
+    var delta = AppliedPatchDelta()
+    do {
+        let affected = try applyHunksToFiles(
+            hunks,
+            cwd: cwd,
+            options: options,
+            fileSystem: fileSystem,
+            delta: &delta
+        )
+        return (delta, printSummary(affected))
+    } catch let failure as ApplyPatchFailure {
+        throw failure
+    } catch let error as ApplyPatchError {
+        throw ApplyPatchFailure(error: error, delta: delta)
+    } catch {
+        throw ApplyPatchFailure(
+            error: .io(context: "I/O error", message: error.localizedDescription),
+            delta: delta
+        )
+    }
+}
+
+func applyHunksToFiles(
+    _ hunks: [Hunk],
+    cwd: URL,
+    options: ApplyPatchOptions,
+    fileSystem: ApplyPatchFileSystem,
+    delta: inout AppliedPatchDelta
+) throws -> AffectedPaths {
+    guard !hunks.isEmpty else {
+        throw ApplyPatchError.computeReplacements("No files were modified.")
+    }
+
+    var added: [String] = []
+    var modified: [String] = []
+    var deleted: [String] = []
+
+    for hunk in hunks {
+        let displayed = hunk.path()
+        let path = hunk.resolveSourcePath(cwd: cwd)
+        switch hunk {
+        case .addFile(_, let contents):
+            let overwritten = try? fileSystem.readFileText(path)
+            try writeFileCreatingParents(path, contents: contents, fileSystem: fileSystem, delta: &delta)
+            delta.changes.append(
+                AppliedPatchChange(path: path, kind: .add(content: contents, overwrittenContent: overwritten))
+            )
+            added.append(displayed)
+
+        case .deleteFile:
+            try ensureNotDirectory(path, fileSystem: fileSystem)
+            let deletedContent = try fileSystem.readFileText(path)
+            try fileSystem.removeFile(path)
+            delta.changes.append(AppliedPatchChange(path: path, kind: .delete(content: deletedContent)))
+            deleted.append(displayed)
+
+        case .updateFile(_, let movePath, let chunks):
+            let applied = try deriveNewContentsFromChunks(
+                path: path,
+                chunks: chunks,
+                updateFileMode: options.updateFileMode,
+                fileSystem: fileSystem
+            )
+            if let dest = movePath {
+                let destURL = ApplyPatchPaths.resolve(dest, cwd: cwd)
+                let overwrittenMove = try? fileSystem.readFileText(destURL)
+                try writeFileCreatingParents(
+                    destURL,
+                    contents: applied.newContents,
+                    fileSystem: fileSystem,
+                    delta: &delta
+                )
+                try ensureNotDirectory(path, fileSystem: fileSystem)
+                try fileSystem.removeFile(path)
+                delta.changes.append(
+                    AppliedPatchChange(
+                        path: path,
+                        kind: .update(
+                            movePath: destURL,
+                            oldContent: applied.originalContents,
+                            overwrittenMoveContent: overwrittenMove,
+                            newContent: applied.newContents
+                        )
+                    )
+                )
+                modified.append(displayed)
+            } else {
+                try fileSystem.writeFile(path, contents: applied.newContents)
+                delta.changes.append(
+                    AppliedPatchChange(
+                        path: path,
+                        kind: .update(
+                            movePath: nil,
+                            oldContent: applied.originalContents,
+                            overwrittenMoveContent: nil,
+                            newContent: applied.newContents
+                        )
+                    )
+                )
+                modified.append(displayed)
+            }
+        }
+    }
+
+    return AffectedPaths(added: added, modified: modified, deleted: deleted)
+}
+
+func printSummary(_ affected: AffectedPaths) -> String {
+    var lines = ["Success. Updated the following files:"]
+    for path in affected.added { lines.append("A \(path)") }
+    for path in affected.modified { lines.append("M \(path)") }
+    for path in affected.deleted { lines.append("D \(path)") }
+    return lines.joined(separator: "\n") + "\n"
+}
+
+private func writeFileCreatingParents(
+    _ url: URL,
+    contents: String,
+    fileSystem: ApplyPatchFileSystem,
+    delta: inout AppliedPatchDelta
+) throws {
+    do {
+        try fileSystem.writeFile(url, contents: contents)
+    } catch {
+        let parent = url.deletingLastPathComponent()
+        do {
+            try fileSystem.createDirectory(parent)
+            try fileSystem.writeFile(url, contents: contents)
+        } catch {
+            delta.exact = false
+            throw error
+        }
+    }
+}
+
+private func ensureNotDirectory(_ url: URL, fileSystem: ApplyPatchFileSystem) throws {
+    let metadata = try fileSystem.metadata(url)
+    if metadata.isDirectory {
+        throw ApplyPatchError.io(context: "Failed to delete file \(url.path)", message: "path is a directory")
+    }
+}

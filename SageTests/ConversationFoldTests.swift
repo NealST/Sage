@@ -13,6 +13,18 @@ final class ConversationFoldTests: XCTestCase {
         XCTAssertEqual(span?.throughEventID, events[1].id)
     }
 
+    func testIgnoresProtectedSkillsWhenChoosingASpan() {
+        let skill = AgentEvent(
+            kind: .toolResult,
+            content: "loaded skill",
+            protected: true
+        )
+        let events = [skill] + dialogue(3)
+        let span = ConversationFold.span(in: events, existing: nil)
+        XCTAssertEqual(span?.fromEventID, events[1].id)
+        XCTAssertEqual(span?.throughEventID, events[2].id)
+    }
+
     func testIgnoresSystemInstructionsWhenChoosingASpan() {
         let system = AgentEvent(kind: .systemInstruction, content: "sys")
         let events = [system] + dialogue(3)

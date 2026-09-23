@@ -56,6 +56,17 @@ final class ToolBatchWaveTests: XCTestCase {
         )
     }
 
+    func testApplyPatchStaysSerial() {
+        XCTAssertEqual(
+            ToolBatchWave.partition([
+                step("1", "read_text_file"),
+                step("2", "apply_patch"),
+                step("3", "list_directory"),
+            ]),
+            [.serial(0), .serial(1), .serial(2)]
+        )
+    }
+
     private func step(_ id: String, _ name: String) -> AgentStep {
         AgentStep(toolCallID: id, toolName: name, argumentsJSON: "{}", title: name)
     }
@@ -132,13 +143,6 @@ final class ManageTodoListToolTests: XCTestCase {
             AgentTodoItem(id: 1, title: "Ship it", status: .completed),
         ])
         XCTAssertTrue(appendix.contains("manage_todo_list"))
-    }
-}
-
-final class ExecuteAgentLimitTests: XCTestCase {
-    func testDefaultLimitAndExtensionCap() {
-        XCTAssertEqual(ExecuteAgent.defaultToolBatchLimit, 8)
-        XCTAssertEqual(ExecuteAgent.maxToolBatchLimit, 64)
     }
 }
 

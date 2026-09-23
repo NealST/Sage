@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// Expandable tool-call chip used in the transcript and plan card.
-/// File edits (`write_text_file`) expand to a before/after unified diff when possible.
+/// File edits (`write_text_file`, `apply_patch`) expand to a before/after unified diff when possible.
 struct ToolCallView: View {
     let name: String
     let argumentsJSON: String

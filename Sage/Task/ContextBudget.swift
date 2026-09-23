@@ -31,6 +31,8 @@ nonisolated struct PromptAssembly: Sendable {
     var occupancy: Double
     var assembledTokens: Int
     var usableTokens: Int
+    /// False when shrink would have dropped the work plan or capability reminder.
+    var contractPreserved: Bool = true
 }
 
 /// Caps history sent to cloud models. Prefer recent, paired turns over raw truncation.

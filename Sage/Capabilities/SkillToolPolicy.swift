@@ -31,6 +31,8 @@ nonisolated enum SkillToolPolicy {
         "read_file": "read_text_file",
         "write": "write_text_file",
         "write_file": "write_text_file",
+        "patch": "apply_patch",
+        "apply_patch": "apply_patch",
         "list": "list_directory",
         "ls": "list_directory",
         "search": "search_files",

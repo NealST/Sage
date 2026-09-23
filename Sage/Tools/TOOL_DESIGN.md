@@ -58,7 +58,8 @@
 - **act** 策略需确认一次；确认后文件工具可直接跑。`run_shell_command` 与 MCP 工具在本任务第一次出现该精确调用时仍会暂停（允许一次 / 允许本调用 / 允许该工具本任务 / 跳过）。定时任务的无人值守执行跳过这层门
 - 工具失败会把 ERROR 结果交给模型并继续本批次其余步骤，而不是整批停住等人 Retry
 - 连续的观察类工具可并行；写入 / shell / MCP / todo 仍串行
-- 工具轮次默认 8 批，到达上限后询问是否再开 8 批（最多 64）。若模型在上限时仍给出 tool calls，先收进 pendingPlan，Continue 再执行
+- Execute 是 `Harness/`（`RegularTask` + `session/turn.swift`）：回合内连续调用工具，直到模型收手或用户停止。安全阀默认 32 批，到顶后询问是否再开，上限 64。模型在上限时仍给出 tool calls 时，先收进 pendingPlan，Continue 再执行
+- 改仓库里已有的文件优先 `apply_patch`。`write_text_file` 留给新建短文件和非补丁配置。shell 用来构建、测试、git 和其他非文件 CLI
 - `manage_todo_list` 只在 act 计划下暴露，用来跟踪剩余步骤，不重写 work plan
 - **answer / observe** 不确认，直接进入执行
 

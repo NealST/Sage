@@ -256,6 +256,7 @@ nonisolated struct ToolRegistry: Sendable {
             CopyFileTool(),
             ReadTextFileTool(),
             WriteTextFileTool(),
+            ApplyPatchHandler(),
             SearchFilesTool(),
             RunShellCommandTool(),
             GetClipboardTool(),

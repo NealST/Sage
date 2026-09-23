@@ -50,8 +50,16 @@ struct ExecuteServices {
         await taskStore.persistPlanStepStatus(step, in: plan)
     }
 
-    func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {
-        let request = try await preparedInvocation(name: name, argumentsJSON: argumentsJSON)
+    func executeToolInvocation(
+        name: String,
+        argumentsJSON: String,
+        toolCallID: String? = nil
+    ) async throws -> String {
+        var request = try await preparedInvocation(name: name, argumentsJSON: argumentsJSON)
+        if let toolCallID {
+            request.toolCallID = toolCallID
+            request.allowUnsandboxedRetry = state.unsandboxedToolCallIDs.contains(toolCallID)
+        }
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(request)
         }

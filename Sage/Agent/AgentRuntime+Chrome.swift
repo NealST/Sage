@@ -121,7 +121,7 @@ extension AgentRuntime {
         turns.bind(
             slashHost: host,
             executeToolBatch: { [weak self] retryFailed in
-                await self?.executeCurrentPlanUnlocked(retryFailedSteps: retryFailed)
+                await self?.executeCurrentPlanUnlocked(retryFailedSteps: retryFailed) ?? .persistFailed
             },
             handleStop: { [weak self] plan in
                 guard let self else { return }

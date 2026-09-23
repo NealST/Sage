@@ -12,6 +12,8 @@ struct PreparedModelRequest: Sendable {
     let tools: [ToolDefinition]
     let settings: ModelSettingsSnapshot
     let occupancy: Double
+    var assembledTokens: Int
+    var usableTokens: Int
 }
 
 /// Owns the remote `ModelClient` and builds/streams chat completions.
@@ -135,7 +137,8 @@ final class AgentModelGateway {
             workingMemory: state.activeTask?.workingMemory,
             skillResult: skillResult
         )
-        if assembly.didExceedBudget {
+        if assembly.didExceedBudget
+            || assembly.occupancy >= CompactTask.autoCompactThreshold {
             _ = await compact?.handleOverflow(tools: resolvedTools)
             if includeTools {
                 resolvedTools = availableToolDefinitions(includeSkills: true)
@@ -151,13 +154,19 @@ final class AgentModelGateway {
         )
         // Only the execute path calls prepareRequest, so this is the live
         // conversation's occupancy — sub-agent requests never touch it.
-        state.contextOccupancy = assembly.occupancy
+        state.contextOccupancy = CompactTask.occupancy(
+            assembledTokens: assembly.assembledTokens,
+            usableTokens: assembly.usableTokens,
+            reportedInputTokens: nil
+        )
 
         return PreparedModelRequest(
             events: assembly.events,
             tools: resolvedTools,
             settings: snapshot,
-            occupancy: assembly.occupancy
+            occupancy: state.contextOccupancy ?? assembly.occupancy,
+            assembledTokens: assembly.assembledTokens,
+            usableTokens: assembly.usableTokens
         )
     }
 

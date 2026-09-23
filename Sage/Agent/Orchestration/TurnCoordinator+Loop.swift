@@ -64,7 +64,7 @@ extension TurnCoordinator {
         case .retryToolBatch:
             guard let plan = state.activeTask?.pendingPlan ?? planProgress.plan else { return }
             planProgress.replace(plan)
-            await executeToolBatch?(true)
+            await execute.resumePausedBatch(retryFailedSteps: true)
 
         case .confirmWorkPlan:
             state.enterAwaitingConfirmation()

@@ -20,20 +20,30 @@ enum ToolBatchExecutor {
         case success(String)
         case failure(String)
         case cancelled
+        case needsEscalationApproval(String)
+    }
+
+    /// Who asks the model for the next step after a batch finishes.
+    enum FollowUp: Equatable {
+        /// `session/turn.swift` samples again. This is the execute harness path.
+        case yieldToCaller
+        /// The batch runner samples and feeds `continueTurn`. Kept for comparison.
+        case sampleNextTurn
     }
 
     static func execute(
         initialPlan: AgentPlan,
         services: ExecuteServices,
-        retryFailedSteps: Bool = false
-    ) async {
+        retryFailedSteps: Bool = false,
+        followUp: FollowUp = .yieldToCaller
+    ) async -> WaveOutcome {
         // Always normalize before Run/Retry so Dismiss→Run and relaunch can't skip
         // remaining steps or duplicate ERROR tool results.
         guard var plan = await prepareForResume(
             plan: initialPlan,
             services: services,
             retryFailedSteps: retryFailedSteps
-        ) else { return }
+        ) else { return .persistFailed }
         services.planProgress.replace(plan)
         services.state.enterExecuting()
 
@@ -48,30 +58,41 @@ enum ToolBatchExecutor {
                     continue
 
                 case .paused:
-                    return
+                    return .paused
 
                 case .persistFailed:
-                    return
+                    return .persistFailed
 
                 case .cancelled:
                     throw CancellationError()
                 }
             }
             try Task.checkCancellation()
-            let finished = try await finishSuccessfulBatch(plan: plan, services: services)
+            let finished = try await finishSuccessfulBatch(
+                plan: plan,
+                services: services,
+                followUp: followUp
+            )
             if finished {
                 stopPlan = nil
             }
+            return finished ? .succeeded : .persistFailed
         } catch is CancellationError {
             services.clearStream()
             await handleStop(plan: stopPlan, services: services)
+            return .cancelled
         } catch {
             services.clearStream()
             await services.markFailed(error.localizedDescription)
+            return .persistFailed
         }
     }
 
-    static func finishSuccessfulBatch(plan: AgentPlan, services: ExecuteServices) async throws -> Bool {
+    static func finishSuccessfulBatch(
+        plan: AgentPlan,
+        services: ExecuteServices,
+        followUp: FollowUp = .yieldToCaller
+    ) async throws -> Bool {
         guard await services.commit(
             appendEvents: [],
             deleteEventIDs: [],
@@ -86,6 +107,9 @@ enum ToolBatchExecutor {
             return false
         }
         services.planProgress.clear()
+        if followUp == .yieldToCaller {
+            return true
+        }
         if !services.allowToolsAfterExecute() {
             await services.pauseForToolRoundLimit()
             return true

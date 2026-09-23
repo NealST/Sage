@@ -8,6 +8,7 @@ import Foundation
 enum TurnChangeSetRecording {
     private static let fileTools: Set<String> = [
         "write_text_file",
+        "apply_patch",
         "delete_file",
         "move_file",
         "rename_file",
@@ -49,6 +50,9 @@ enum TurnChangeSetRecording {
         case "write_text_file":
             applyWrite(result: result, to: &book)
 
+        case "apply_patch":
+            applyPatch(result: result, to: &book)
+
         case "delete_file":
             applyDelete(argumentsJSON: argumentsJSON, result: result, to: &book)
 
@@ -78,6 +82,24 @@ enum TurnChangeSetRecording {
             after: payload.after,
             created: payload.created
         )
+    }
+
+    private static func applyPatch(result: String, to book: inout WorkspaceChangeBook) {
+        for payload in WriteFileResultCodec.payloads(in: result) {
+            if let previous = payload.previousPath, previous != payload.path {
+                book.applyMove(from: previous, to: payload.path)
+            }
+            if payload.after.isEmpty, payload.before != nil, !payload.created, payload.previousPath == nil {
+                book.applyDelete(path: payload.path)
+                continue
+            }
+            book.applyWrite(
+                path: payload.path,
+                before: payload.before,
+                after: payload.after,
+                created: payload.created
+            )
+        }
     }
 
     private static func applyDelete(

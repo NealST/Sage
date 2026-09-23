@@ -435,7 +435,7 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertFalse(runtime.planProgress.hasPlan)
         XCTAssertEqual(runtime.turns.reviewRounds, 0)
         XCTAssertEqual(runtime.turns.execute.toolBatchCount, 0)
-        XCTAssertEqual(runtime.turns.execute.toolBatchLimit, ExecuteAgent.defaultToolBatchLimit)
+        XCTAssertEqual(runtime.turns.execute.toolBatchLimit, RegularTask.defaultToolBatchLimit)
         XCTAssertNil(runtime.state.steerInstruction)
         XCTAssertFalse(runtime.turns.planApproved)
         XCTAssertNil(runtime.state.activeTask?.workPlan)

@@ -52,8 +52,8 @@ final class AgentRuntime {
     A separate planner already produced the work plan — follow it. Use tools as you go.
     Expand ~ paths when useful. Follow Active sandbox and Confirmed work plan. \
     Runtime lists live skills, MCP, and todos.
-    Prefer file tools for reads and writes. After tools run, you will see their results — \
-    then continue or give a short summary.
+    Prefer file tools for reads. For repository edits prefer apply_patch hunks, not a full-file rewrite. \
+    After tools run, you will see their results — then continue or give a short summary.
     For code work, compile and run the project's checks yourself before you finish. \
     Keep going until they are green — Review will not compile or test.
     For multi-step act work, track remaining steps with manage_todo_list — do not rewrite the work plan.

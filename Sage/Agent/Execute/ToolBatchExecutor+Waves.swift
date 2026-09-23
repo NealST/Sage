@@ -48,6 +48,18 @@ extension ToolBatchExecutor {
         }
 
         let outcome = await invoke(step, services: services)
+        if case .needsEscalationApproval(let reason) = outcome {
+            plan.steps[index].status = .pending
+            let card = AgentStep(
+                id: step.id,
+                toolCallID: step.toolCallID,
+                toolName: step.toolName,
+                argumentsJSON: step.argumentsJSON,
+                title: SandboxEscalation.title(reason: reason, original: step.title),
+                status: .pending
+            )
+            return await pauseForApproval(card, plan: plan, services: services)
+        }
         return await applyOutcome(outcome, at: index, plan: &plan, services: services)
     }
 
@@ -345,11 +357,17 @@ extension ToolBatchExecutor {
             try Task.checkCancellation()
             let raw = try await services.executeToolInvocation(
                 name: step.toolName,
-                argumentsJSON: step.argumentsJSON
+                argumentsJSON: step.argumentsJSON,
+                toolCallID: step.toolCallID
             )
             return .success(raw)
         } catch is CancellationError {
             return .cancelled
+        } catch let error as HarnessToolError {
+            if case .needsEscalationApproval(let reason) = error {
+                return .needsEscalationApproval(reason)
+            }
+            return .failure(error.localizedDescription)
         } catch {
             return .failure(error.localizedDescription)
         }
@@ -422,7 +440,7 @@ extension ToolBatchExecutor {
                 protected: isSkillContext
             )
 
-        case .cancelled:
+        case .cancelled, .needsEscalationApproval:
             plan.steps[index].status = .pending
             return nil
 

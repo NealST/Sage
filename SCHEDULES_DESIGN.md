@@ -167,7 +167,7 @@ Replay（armed）
   execute → review
 ```
 
-**冻的是策略，不是工具清单。** `WorkPlan.intent` / `approach` / `kind` / `skillNames` 可复用；当天的 tool 序列仍由 ExecuteAgent 按现实 ReAct。
+**冻的是策略，不是工具清单。** `WorkPlan.intent` / `approach` / `kind` / `skillNames` 可复用；当天的 tool 序列仍由 Execute harness（`RegularTask`）按当时的仓库和系统来选。
 
 Review **保留** 在 replay：用来发现世界已经变了，不重新做意图分析。
 

@@ -2,7 +2,8 @@
 //  ExploreSubagentRunner.swift
 //  Sage
 //
-//  Read-only nested agent for focused filesystem exploration.
+//  Read-only nested agent. The loop lives on ExploreTask / Turn.run;
+//  this file keeps the tool definition, request decode, and invoke helpers.
 //
 
 import Foundation
@@ -30,7 +31,8 @@ nonisolated enum ExploreSubagentTool {
 
 @MainActor
 enum ExploreSubagentRunner {
-    static let maxToolRounds = 6
+    static let maxToolRounds = ExploreTask.maxToolRounds
+    static let allowedNames = ExploreTask.allowedNames
 
     private struct Args: Decodable {
         var task: String
@@ -67,54 +69,9 @@ enum ExploreSubagentRunner {
     }
 
     static func runTask(_ request: ExploreSubagentRequest) async throws -> String {
-        let allowedNames: Set<String> = [
-            "list_directory",
-            "read_text_file",
-            "search_files",
-        ]
-        let definitions = request.tools.definitions.filter { allowedNames.contains($0.name) }
-        let client = ModelClient()
-        var events = initialEvents(for: request)
-
-        for _ in 0..<maxToolRounds {
-            try Task.checkCancellation()
-            let turn = try await client.complete(
-                events: events,
-                tools: definitions,
-                settings: request.settings,
-                maxTokens: ModelOutputCaps.subagent
-            )
-            let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let calls = turn.toolCalls.map { call in
-                ToolCallRecord(id: call.id, name: call.name, argumentsJSON: call.argumentsJSON)
-            }
-            events.append(AgentEvent(kind: .assistantResponse, content: text, toolCalls: calls))
-            guard !turn.toolCalls.isEmpty else {
-                return text.isEmpty ? "The Explore subagent returned no findings." : text
-            }
-            for call in turn.toolCalls {
-                let result = try await invokeExploreCall(call, allowedNames: allowedNames, request: request)
-                events.append(AgentEvent(kind: .toolResult, content: result, toolCallID: call.id))
-            }
-        }
-
-        events.append(
-            AgentEvent(
-                kind: .userInput,
-                content: "Tool-round limit reached. Summarize the evidence gathered so far without tools."
-            )
-        )
-        let final = try await client.complete(
-            events: events,
-            tools: [],
-            settings: request.settings,
-            toolChoice: "none",
-            temperature: 0,
-            maxTokens: ModelOutputCaps.subagent
-        )
-        return final.content?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
-            ?? "The Explore subagent reached its limit without a summary."
+        let task = ExploreTask(request: request)
+        await Turn.run(task, includeTools: true)
+        return try task.finish()
     }
 
     static func initialEvents(for request: ExploreSubagentRequest) -> [AgentEvent] {

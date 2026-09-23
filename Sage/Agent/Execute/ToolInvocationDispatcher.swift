@@ -6,7 +6,7 @@ import Foundation
 nonisolated enum ToolInvocationDispatcher {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
-        try await ToolInvocationPipeline.execute(request)
+        try await ToolOrchestrator.execute(request)
     }
 
     /// Dispatches an invocation after `ToolInvocationPipeline` applies policy and schema checks.

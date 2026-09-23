@@ -129,7 +129,7 @@ extension ToolCallView {
 
     var iconName: String {
         switch name {
-        case "write_text_file": return "square.and.pencil"
+        case "write_text_file", "apply_patch": return "square.and.pencil"
         case "read_text_file": return "doc.text"
         case "run_shell_command": return "terminal"
         case "delete_file": return "trash"

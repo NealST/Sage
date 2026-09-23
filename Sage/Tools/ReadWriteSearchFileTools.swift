@@ -110,8 +110,9 @@ nonisolated struct WriteTextFileTool: AgentTool {
         description: """
             Write UTF-8 text to a file inside the active sandbox (home ~/ or project root). \
             Creates parent folders if needed. \
-            WARNING: Overwrites the file if it already exists — read it first if you need to preserve content. \
-            Content must be the complete file — there is no append or patch mode.
+            Prefer apply_patch when changing existing repository files — that tool sends hunks, not a full rewrite. \
+            Use this for new short files, config, or other non-patch writes. \
+            WARNING: Overwrites the file if it already exists — read it first if you need to preserve content.
             """,
         parameters: .schemaObject(
             properties: [

@@ -16,6 +16,8 @@ nonisolated struct WriteFileDiffPayload: Codable, Equatable, Sendable {
     var deletions: Int
     /// True when before/after were clipped to fit the tool-result size budget.
     var truncated: Bool
+    /// Source path when this write is a move / rename.
+    var previousPath: String? = nil
 
     var stats: LineDiff.Stats {
         LineDiff.Stats(insertions: insertions, deletions: deletions)
@@ -58,9 +60,18 @@ nonisolated enum WriteFileResultCodec {
     }
 
     static func embed(summary: String, payload: WriteFileDiffPayload) -> String {
-        guard let data = try? JSONEncoder().encode(payload),
-              let json = String(data: data, encoding: .utf8)
-        else {
+        embed(summary: summary, payloads: [payload])
+    }
+
+    static func embed(summary: String, payloads: [WriteFileDiffPayload]) -> String {
+        guard !payloads.isEmpty else { return summary }
+        let encoded: Data?
+        if payloads.count == 1 {
+            encoded = try? JSONEncoder().encode(payloads[0])
+        } else {
+            encoded = try? JSONEncoder().encode(payloads)
+        }
+        guard let data = encoded, let json = String(data: data, encoding: .utf8) else {
             return summary
         }
         return summary + beginMarker + json + endMarker
@@ -80,16 +91,36 @@ nonisolated enum WriteFileResultCodec {
         let summary = String(content[..<begin.lowerBound])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let json = String(content[begin.upperBound..<end.lowerBound])
-        guard let data = json.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(WriteFileDiffPayload.self, from: data)
-        else {
+        guard let data = json.data(using: .utf8) else {
             return (summary.isEmpty ? content : summary, nil)
         }
-        return (summary.isEmpty ? content : summary, payload)
+        if let payload = try? JSONDecoder().decode(WriteFileDiffPayload.self, from: data) {
+            return (summary.isEmpty ? content : summary, payload)
+        }
+        if let payloads = try? JSONDecoder().decode([WriteFileDiffPayload].self, from: data) {
+            return (summary.isEmpty ? content : summary, payloads.first)
+        }
+        return (summary.isEmpty ? content : summary, nil)
     }
 
     static func payload(in content: String) -> WriteFileDiffPayload? {
         split(content).payload
+    }
+
+    static func payloads(in content: String) -> [WriteFileDiffPayload] {
+        guard let begin = content.range(of: beginMarker),
+              let end = content.range(of: endMarker, range: begin.upperBound..<content.endIndex),
+              let data = String(content[begin.upperBound..<end.lowerBound]).data(using: .utf8)
+        else {
+            return []
+        }
+        if let payloads = try? JSONDecoder().decode([WriteFileDiffPayload].self, from: data) {
+            return payloads
+        }
+        if let payload = try? JSONDecoder().decode(WriteFileDiffPayload.self, from: data) {
+            return [payload]
+        }
+        return []
     }
 
     // MARK: - Budget
