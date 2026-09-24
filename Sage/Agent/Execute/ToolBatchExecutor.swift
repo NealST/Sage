@@ -50,22 +50,18 @@ enum ToolBatchExecutor {
         // After the batch is committed, Stop must not re-attach this finished plan.
         var stopPlan: AgentPlan? = plan
         do {
-            for wave in ToolBatchWave.partition(plan.steps) {
+            switch await runAdmittedBatch(plan: &plan, services: services) {
+            case .succeeded:
                 try Task.checkCancellation()
-                switch await runWave(wave, plan: &plan, services: services) {
-                case .succeeded:
-                    try Task.checkCancellation()
-                    continue
 
-                case .paused:
-                    return .paused
+            case .paused:
+                return .paused
 
-                case .persistFailed:
-                    return .persistFailed
+            case .persistFailed:
+                return .persistFailed
 
-                case .cancelled:
-                    throw CancellationError()
-                }
+            case .cancelled:
+                throw CancellationError()
             }
             try Task.checkCancellation()
             let finished = try await finishSuccessfulBatch(

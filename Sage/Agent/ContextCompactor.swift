@@ -116,7 +116,7 @@ final class ContextCompactor {
             guard memory.hasContent else { return }
             let occupancy = await modelGateway.occupancyIgnoringWorkingMemory()
             guard Self.shouldKeepSnapshot(occupancyIgnoringMemory: occupancy) else { return }
-            if await taskStore.applyWorkingMemory(memory, to: taskID) {
+            if await taskStore.replaceFoldedHistory(memory, to: taskID) {
                 compactedTaskIDs.insert(taskID)
                 state.compactNotice = nil
             } else {

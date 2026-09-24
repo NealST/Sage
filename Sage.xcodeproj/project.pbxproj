@@ -27,8 +27,14 @@
 		A10TSSWIFTF0000000000000 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSSWIFTP0000000000000 /* TreeSitterSwift */; };
 		A10TSTSF0000000000000000 /* TreeSitterTypeScript in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSTSP0000000000000000 /* TreeSitterTypeScript */; };
 		A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
+		A10FSFRM0000000000000001 /* FileSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A10FSPROD00000000000001 /* FileSystem */; };
 		A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */ = {isa = PBXBuildFile; productRef = A10RUNTIMPROD000000000001 /* ToolsRuntimes */; };
 		A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
+		A10FSFRMT000000000000001 /* FileSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A10FSPROD00000000000001 /* FileSystem */; };
+		A10PROTOFRM0000000000001 /* CodexProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* CodexProtocol */; };
+		A10PROTOFRMT000000000001 /* CodexProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* CodexProtocol */; };
+		A10UTILSFRM0000000000001 /* CodexUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* CodexUtils */; };
+		A10UTILSFRMT000000000001 /* CodexUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* CodexUtils */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +59,7 @@
 				Info.plist,
 				Agent/Execute/Harness/Package.swift,
 				Agent/Execute/Harness/apply-patch,
+				Agent/Execute/Harness/file-system,
 				Agent/Execute/Harness/tools/runtimes,
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
@@ -100,7 +107,10 @@
 				A10TSJAVAF00000000000000 /* TreeSitterJava in Frameworks */,
 				A10TSKTF0000000000000000 /* TreeSitterKotlin in Frameworks */,
 				A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */,
+				A10FSFRM0000000000000001 /* FileSystem in Frameworks */,
 				A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */,
+				A10PROTOFRM0000000000001 /* CodexProtocol in Frameworks */,
+				A10UTILSFRM0000000000001 /* CodexUtils in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +119,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */,
+				A10FSFRMT000000000000001 /* FileSystem in Frameworks */,
+				A10PROTOFRMT000000000001 /* CodexProtocol in Frameworks */,
+				A10UTILSFRMT000000000001 /* CodexUtils in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -173,7 +186,10 @@
 				A10TSJAVAP00000000000000 /* TreeSitterJava */,
 				A10TSKTP0000000000000000 /* TreeSitterKotlin */,
 				A10APPLYPROD0000000000001 /* ApplyPatch */,
+				A10FSPROD00000000000001 /* FileSystem */,
 				A10RUNTIMPROD000000000001 /* ToolsRuntimes */,
+				A10PROTOPROD000000000001 /* CodexProtocol */,
+				A10UTILSPROD000000000001 /* CodexUtils */,
 			);
 			productName = Sage;
 			productReference = 30ACE9D53001EBF5006F8C54 /* Sage.app */;
@@ -198,6 +214,9 @@
 			name = SageTests;
 			packageProductDependencies = (
 				A10APPLYPROD0000000000001 /* ApplyPatch */,
+				A10FSPROD00000000000001 /* FileSystem */,
+				A10PROTOPROD000000000001 /* CodexProtocol */,
+				A10UTILSPROD000000000001 /* CodexUtils */,
 			);
 			productName = SageTests;
 			productReference = A10TESTPROD000000000001 /* SageTests.xctest */;
@@ -818,10 +837,25 @@
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = ApplyPatch;
 		};
+		A10FSPROD00000000000001 /* FileSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			productName = FileSystem;
+		};
 		A10RUNTIMPROD000000000001 /* ToolsRuntimes */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = ToolsRuntimes;
+		};
+		A10PROTOPROD000000000001 /* CodexProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			productName = CodexProtocol;
+		};
+		A10UTILSPROD000000000001 /* CodexUtils */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			productName = CodexUtils;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

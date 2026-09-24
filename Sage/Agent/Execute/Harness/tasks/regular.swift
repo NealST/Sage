@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tasks/regular.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  Codex `RegularTask::run` calls `run_turn`, then repeats while the session
 //  input queue still has user input. Sage keeps that queue on `TurnInputQueue`
@@ -26,14 +27,16 @@ final class RegularTask: ExecuteTurnLoop {
     var runToolBatch: ((Bool) async -> ToolBatchExecutor.WaveOutcome)?
     var onCandidateReply: ((String) async -> Void)?
     var handleStop: ((AgentPlan?) async -> Void)?
+    /// Connect enabled MCP servers that are not already running. Codex starts
+    /// them inside `run_turn`, before the model is asked.
+    var ensureMCPConnected: (() async -> Void)?
     /// Test seam for `ModelClientSession::stream`. Production uses `modelGateway`.
     var modelSampler: ((Bool) async throws -> ModelTurn)?
 
     private(set) var toolBatchCount = 0
-    private(set) var toolBatchLimit = RegularTask.defaultToolBatchLimit
-    /// Safety valve, not the product loop. Raised above the old 8-batch stop.
-    nonisolated static let defaultToolBatchLimit = 32
-    nonisolated static let maxToolBatchLimit = 64
+    /// Codex `stop_hook_active`: a Stop hook continuation is not blocked again.
+    private var stopHookActive = false
+    private var abortReason: String?
 
     init(
         state: AgentSessionState,
@@ -52,29 +55,25 @@ final class RegularTask: ExecuteTurnLoop {
     func bind(
         runToolBatch: @escaping (Bool) async -> ToolBatchExecutor.WaveOutcome,
         onCandidateReply: @escaping (String) async -> Void,
-        handleStop: @escaping (AgentPlan?) async -> Void
+        handleStop: @escaping (AgentPlan?) async -> Void,
+        ensureMCPConnected: (() async -> Void)? = nil
     ) {
         self.runToolBatch = runToolBatch
         self.onCandidateReply = onCandidateReply
         self.handleStop = handleStop
+        self.ensureMCPConnected = ensureMCPConnected
     }
 
     func resetLoop() {
         toolBatchCount = 0
-        toolBatchLimit = Self.defaultToolBatchLimit
+        stopHookActive = false
+        abortReason = nil
     }
 
-    var canOfferMoreTools: Bool {
-        toolBatchCount < toolBatchLimit
-    }
+    /// Execute keeps going until the model stops or the user stops. Explore still caps its own rounds.
+    var canOfferMoreTools: Bool { true }
 
-    var nextToolBatchLimit: Int {
-        min(toolBatchLimit + Self.defaultToolBatchLimit, Self.maxToolBatchLimit)
-    }
-
-    func extendToolBatchLimit() {
-        toolBatchLimit = nextToolBatchLimit
-    }
+    func extendToolBatchLimit() {}
 
     /// Codex `RegularTask::run` → `run_turn`.
     func start() async {
@@ -110,16 +109,23 @@ final class RegularTask: ExecuteTurnLoop {
         case .finished:
             return
         case .needsFollowUp:
-            guard canOfferMoreTools else {
-                await pauseForToolRoundLimit()
-                return
-            }
             await Turn.run(self, includeTools: true)
         }
     }
 
     func willSample(includeTools: Bool) async {
         state.enterThinking()
+        await modelGateway.compactBeforeSampling(includeTools: includeTools)
+        await ensureMCPConnected?()
+        if let pending = GuardianInputBudget.checkPending(
+            events: state.events,
+            usableTokens: PromptBudget.forModel(modelGateway.settings.snapshot(for: .review).model).usableTokens
+        ) {
+            abortReason = pending
+        }
+        if abortReason == nil {
+            abortReason = HookRuntime.sessionStartDenial(projectRoot: projectRoot)
+        }
     }
 
     func didCancel() async {
@@ -133,27 +139,21 @@ final class RegularTask: ExecuteTurnLoop {
         await taskStore.markFailed(error.localizedDescription, partialReply: partial)
     }
 
-    func pauseForToolRoundLimit() async {
-        let prompt = AgentPendingPrompt.toolRoundLimit(
-            currentLimit: toolBatchLimit,
-            nextLimit: nextToolBatchLimit
-        )
-        guard await taskStore.commit(
-            appendEvents: [],
-            deleteEventIDs: [],
-            mutate: { task in
-                task.pendingPrompt = prompt
-                task.status = .awaitingApproval
-            }
-        ) else { return }
-        state.enterAwaitingConfirmation()
-    }
+    func pauseForToolRoundLimit() async {}
 
     func sample(includeTools: Bool) async throws -> ModelTurn {
+        if let abortReason {
+            throw HarnessToolError.rejected(abortReason)
+        }
         if let modelSampler {
             return try await modelSampler(includeTools)
         }
         return try await modelGateway.streamComplete(includeTools: includeTools)
+    }
+
+    private var projectRoot: URL? {
+        if case .project(let root) = state.pathGuardPolicy { return root }
+        return nil
     }
 
     var hasUnexecutedPendingBatch: Bool {
@@ -165,10 +165,6 @@ final class RegularTask: ExecuteTurnLoop {
     private func runPausedBatch(retryFailedSteps: Bool) async {
         let outcome = await runToolBatch?(retryFailedSteps) ?? .persistFailed
         guard outcome == .succeeded else { return }
-        guard canOfferMoreTools else {
-            await pauseForToolRoundLimit()
-            return
-        }
         await Turn.run(self, includeTools: true)
     }
 
@@ -190,6 +186,18 @@ final class RegularTask: ExecuteTurnLoop {
 
     func consume(_ turn: ModelTurn) async -> Turn.StepResult {
         if turn.toolCalls.isEmpty {
+            if let prompt = HookRuntime.stopContinuation(
+                projectRoot: projectRoot,
+                alreadyActive: stopHookActive
+            ) {
+                stopHookActive = true
+                guard await taskStore.commit(
+                    appendEvents: [AgentEvent(kind: .userInput, content: prompt)],
+                    deleteEventIDs: [],
+                    mutate: { _ in }
+                ) else { return .finished }
+                return .needsFollowUp
+            }
             await onCandidateReply?(
                 turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             )
@@ -210,19 +218,11 @@ final class RegularTask: ExecuteTurnLoop {
     }
 
     private func runToolTurn(_ turn: ModelTurn, recordAssistant: Bool) async -> Turn.StepResult {
-        let atCap = !canOfferMoreTools
-        let prompt: AgentPendingPrompt? = atCap
-            ? .toolRoundLimit(currentLimit: toolBatchLimit, nextLimit: nextToolBatchLimit)
-            : nil
         guard await persistIncomingToolBatch(
             turn,
-            pendingPrompt: prompt,
+            pendingPrompt: nil,
             recordAssistant: recordAssistant
         ) else { return .finished }
-        if atCap {
-            state.enterAwaitingConfirmation()
-            return .finished
-        }
         toolBatchCount += 1
         let outcome = await runToolBatch?(false) ?? .persistFailed
         return outcome == .succeeded ? .needsFollowUp : .finished

@@ -214,6 +214,44 @@ extension AgentTaskStore {
         return true
     }
 
+    /// Codex compact replaces the folded history with one summary event.
+    @discardableResult
+    func replaceFoldedHistory(_ memory: TaskWorkingMemory, to taskID: UUID) async -> Bool {
+        guard memory.hasContent, state.activeTaskID == taskID, var task = state.activeTask else {
+            return false
+        }
+        guard let from = task.events.firstIndex(where: { $0.id == memory.foldedFromEventID }),
+              let through = task.events.firstIndex(where: { $0.id == memory.foldedThroughEventID }),
+              from <= through
+        else {
+            return await applyWorkingMemory(memory, to: taskID)
+        }
+        let removed = Array(task.events[from...through])
+        let summary = AgentEvent(
+            kind: .systemInstruction,
+            content: memory.promptAppendix,
+            protected: true
+        )
+        var stored = memory
+        stored.foldedFromEventID = summary.id
+        stored.foldedThroughEventID = summary.id
+        task.events.replaceSubrange(from...through, with: [summary])
+        task.workingMemory = stored
+        do {
+            try await taskRepository.replaceFoldedEvents(
+                taskID: taskID,
+                deleteEventIDs: removed.map(\.id),
+                summary: summary
+            )
+            try await taskRepository.updateWorkingMemory(taskID: taskID, memory: stored)
+        } catch {
+            return false
+        }
+        guard state.activeTaskID == taskID else { return false }
+        adoptTaskInMemory(task)
+        return true
+    }
+
     /// Persist a single step status/result and keep in-memory plan in sync.
     @discardableResult
     func persistPlanStepStatus(_ step: AgentStep, in plan: AgentPlan) async -> Bool {

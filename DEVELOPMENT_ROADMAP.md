@@ -8,7 +8,7 @@
 
 **已落地：**
 
-- **Agent Runtime**：Plan → Execute → Review。Execute 是 `Sage/Agent/Execute/Harness/` 里的循环（`RegularTask` / `Turn.run`）：回合内连续工具，观察可并行，写入 / shell / MCP / todo 串行；安全阀默认 32 批、上限 64。`act` 策略确认一次；observe/answer 不能走副作用工具
+- **Agent Runtime**：Plan → Execute → Review。Execute 是 `Sage/Agent/Execute/Harness/` 里的循环（`RegularTask` / `Turn.run`）：回合内连续工具，直到模型收手或用户停止；问之前压缩（摘要换掉折过的记录）并启动 MCP，工具钩子在跑工具时执行。观察可并行，写入 / shell / MCP / todo 串行。`act` 策略确认一次；observe/answer 不能走副作用工具
 - **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是 Plan 给出的非阻塞提示；chrome Recents 菜单显式切线程
 - **Transcript**：点回复时放开输入框焦点；窗口变 key 不抢焦点，便于选中复制
 - **主题**：从首条用户消息确定性截取 topic + abstract（无本地模型）

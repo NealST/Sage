@@ -31,10 +31,11 @@ nonisolated enum ConversationFold {
 
         let startIndex: Int
         if let existing {
-            guard let end = timeline.firstIndex(where: { $0.id == existing.foldedThroughEventID }) else {
-                return nil
+            if let end = timeline.firstIndex(where: { $0.id == existing.foldedThroughEventID }) {
+                startIndex = end + 1
+            } else {
+                startIndex = 0
             }
-            startIndex = end + 1
         } else {
             startIndex = 0
         }

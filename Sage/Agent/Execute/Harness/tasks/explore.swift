@@ -2,6 +2,8 @@
 //  explore.swift
 //  Sage
 //
+//  Sage addition (no codex counterpart).
+//
 //  Read-only Explore subagent on the same `ExecuteTurnLoop` as RegularTask.
 //  Isolated events and ModelClient — nothing is written to the parent
 //  transcript or occupancy. Codex multi-agent v2 is out of scope.

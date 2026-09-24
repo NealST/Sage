@@ -126,6 +126,9 @@ extension AgentRuntime {
             handleStop: { [weak self] plan in
                 guard let self else { return }
                 await ToolBatchExecutor.handleStop(plan: plan, services: self.makeExecuteServices())
+            },
+            ensureMCPConnected: { [weak self] in
+                await self?.mcpHub?.ensureEnabledServersConnected()
             }
         )
     }

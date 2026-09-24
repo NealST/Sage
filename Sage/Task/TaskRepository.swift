@@ -105,6 +105,12 @@ nonisolated protocol TaskRepository: Sendable {
         deleteEventIDs: [UUID],
         setActive: Bool
     ) async throws
+    /// Drop a folded range and insert the summary at that range's first sequence.
+    func replaceFoldedEvents(
+        taskID: UUID,
+        deleteEventIDs: [UUID],
+        summary: AgentEvent
+    ) async throws
     /// Move a suffix of events (and optional plan) onto a new task in one transaction.
     func splitOffTurn(
         closingTask: TaskRecord,

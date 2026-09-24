@@ -5,7 +5,13 @@ import XCTest
 final class ExecuteHarnessOrchestratorTests: XCTestCase {
     private var tempDirectory: URL?
 
+    override func setUp() async throws {
+        try await super.setUp()
+        GuardianReviewSession.shared.complete = nil
+    }
+
     override func tearDown() async throws {
+        GuardianReviewSession.shared.complete = nil
         if let tempDirectory {
             try? FileManager.default.removeItem(at: tempDirectory)
         }
@@ -66,17 +72,23 @@ final class ExecuteHarnessOrchestratorTests: XCTestCase {
         XCTAssertNil(approver.calls.first?.retryReason)
     }
 
-    func testProjectModeKeepsSeatbeltOnEscalate() async throws {
+    func testProjectModeDoesNotDropSeatbelt() async throws {
         let runtime = ScriptedRuntime(failFirst: true)
         let approver = RecordingApprover(decision: .approved)
-        _ = try await ToolOrchestrator().run(
-            tool: runtime,
-            request: .write,
-            ctx: .project,
-            approver: approver
-        )
-        XCTAssertEqual(runtime.attempts.count, 2)
-        XCTAssertEqual(runtime.attempts[0], runtime.attempts[1])
+        do {
+            _ = try await ToolOrchestrator().run(
+                tool: runtime,
+                request: .write,
+                ctx: .project,
+                approver: approver
+            )
+            XCTFail("Project mode keeps the sandbox denial")
+        } catch let error as HarnessToolError {
+            guard case .sandboxDenied = error else {
+                return XCTFail("Unexpected error \(error)")
+            }
+        }
+        XCTAssertEqual(runtime.attempts.count, 1)
         XCTAssertEqual(approver.calls.count, 1)
     }
 
@@ -141,6 +153,38 @@ final class ExecuteHarnessOrchestratorTests: XCTestCase {
         )
         XCTAssertEqual(output, "[exit 0]\nok")
         XCTAssertEqual(runtime.attempts, [.none])
+    }
+
+    func testProjectReadStillGoesThroughGuardian() async throws {
+        let runtime = ScriptedRuntime()
+        let approver = RecordingApprover()
+        _ = try await ToolOrchestrator().run(
+            tool: runtime,
+            request: .readOnly,
+            ctx: .project,
+            approver: approver
+        )
+        XCTAssertEqual(approver.calls.count, 1)
+    }
+
+    func testGuardianDenyStopsTheCommand() async throws {
+        GuardianReviewSession.shared.complete = { _ in "DENY secrets would leave the workspace" }
+        let runtime = ScriptedRuntime()
+        do {
+            _ = try await ToolOrchestrator().run(
+                tool: runtime,
+                request: .write,
+                ctx: .general,
+                approver: RecordingApprover(decision: .approved)
+            )
+            XCTFail("Guardian should deny")
+        } catch let error as HarnessToolError {
+            guard case .rejected(let reason) = error else {
+                return XCTFail("Unexpected error \(error)")
+            }
+            XCTAssertTrue(reason.contains("secrets"))
+        }
+        XCTAssertEqual(runtime.attempts.count, 0)
     }
 
     func testPipelineTimeoutDurationForShellStaysAtTheOuterCap() {

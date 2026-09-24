@@ -9,9 +9,8 @@ import Foundation
 
 /// A high-density working-memory snapshot for one task.
 ///
-/// Replaces a contiguous prefix of `TaskRecord.events` when assembling a
-/// model request. The original events stay in SQLite; the user-visible
-/// transcript is unchanged.
+/// After compact, the folded prefix is replaced by one summary event in
+/// SQLite, matching Codex's local history swap.
 ///
 /// Distinct from `WorkPlan` (a user-confirmed strategy, frozen onto
 /// schedules) and from `TaskRecord.summary` / `topic` (chrome titles).

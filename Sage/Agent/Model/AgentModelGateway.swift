@@ -131,24 +131,12 @@ final class AgentModelGateway {
             toolDefinitions = []
         }
 
-        var resolvedTools = toolDefinitions
-        var assembly = await assemblePrompt(
+        let resolvedTools = toolDefinitions
+        let assembly = await assemblePrompt(
             tools: resolvedTools,
             workingMemory: state.activeTask?.workingMemory,
             skillResult: skillResult
         )
-        if assembly.didExceedBudget
-            || assembly.occupancy >= CompactTask.autoCompactThreshold {
-            _ = await compact?.handleOverflow(tools: resolvedTools)
-            if includeTools {
-                resolvedTools = availableToolDefinitions(includeSkills: true)
-            }
-            assembly = await assemblePrompt(
-                tools: resolvedTools,
-                workingMemory: state.activeTask?.workingMemory,
-                skillResult: skillResult
-            )
-        }
         state.modelVisibleAttachmentEventIDs = Set(
             assembly.events.filter { !$0.attachments.isEmpty }.map(\.id)
         )
@@ -168,6 +156,24 @@ final class AgentModelGateway {
             assembledTokens: assembly.assembledTokens,
             usableTokens: assembly.usableTokens
         )
+    }
+
+    /// Codex compacts before the next sample, inside the turn. Fold when the
+    /// window is already over budget so the following `prepareRequest` sees it.
+    func compactBeforeSampling(includeTools: Bool) async {
+        let tools = includeTools
+            ? availableToolDefinitions(includeSkills: true)
+            : []
+        let skillResult = skillRecall.cachedResult
+        let assembly = await assemblePrompt(
+            tools: tools,
+            workingMemory: state.activeTask?.workingMemory,
+            skillResult: skillResult
+        )
+        guard assembly.didExceedBudget
+            || assembly.occupancy >= CompactTask.autoCompactThreshold
+        else { return }
+        _ = await compact?.handleOverflow(tools: tools)
     }
 
     /// Occupancy as if the fold were expanded. Used to discard a snapshot when

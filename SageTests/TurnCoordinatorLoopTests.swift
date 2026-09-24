@@ -423,7 +423,6 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         let runtime = try makeRuntime()
         await seedUnexecutedReadBatch(on: runtime)
         runtime.turns.reviewRounds = 2
-        runtime.turns.execute.extendToolBatchLimit()
 
         let steered = await runtime.turns.persistSteerTurn(
             QueuedUserTurn(text: "改读 INSTALL", attachments: [])
@@ -435,7 +434,6 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         XCTAssertFalse(runtime.planProgress.hasPlan)
         XCTAssertEqual(runtime.turns.reviewRounds, 0)
         XCTAssertEqual(runtime.turns.execute.toolBatchCount, 0)
-        XCTAssertEqual(runtime.turns.execute.toolBatchLimit, RegularTask.defaultToolBatchLimit)
         XCTAssertNil(runtime.state.steerInstruction)
         XCTAssertFalse(runtime.turns.planApproved)
         XCTAssertNil(runtime.state.activeTask?.workPlan)

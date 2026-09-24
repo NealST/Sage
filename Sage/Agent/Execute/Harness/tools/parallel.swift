@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tools/parallel.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  Codex admits tools through an RWLock: parallel-capable calls take a
 //  read lock, serial calls take a write lock. Sage already schedules by
@@ -61,46 +62,41 @@ enum ParallelToolRuntime {
         return waves
     }
 
-    /// Run one isolated batch. Parallel-capable names share a read lock;
-    /// serial names take the write lock and wait for in-flight reads.
-    /// Results stay in call order. A thrown error cancels later waves.
+    /// Start every call at once. Parallel-capable names take a read lock;
+    /// serial names take the write lock. Results stay in call order.
     @MainActor
     static func run(
         calls: [ToolCallProposal],
         invoke: @escaping @MainActor (ToolCallProposal) async throws -> String
     ) async throws -> [String] {
         let gate = ParallelAdmission()
-        var results = [String?](repeating: nil, count: calls.count)
-        for wave in partition(calls.map(\.name)) {
-            try Task.checkCancellation()
-            switch wave {
-            case .serial(let index):
-                results[index] = try await gate.write {
+        let tasks = calls.indices.map { index in
+            Task { @MainActor in
+                try Task.checkCancellation()
+                if supportsParallel(calls[index].name) {
+                    return try await gate.read {
+                        try await invoke(calls[index])
+                    }
+                }
+                return try await gate.write {
                     try await invoke(calls[index])
-                }
-
-            case .parallel(let indices):
-                let tasks = indices.map { index in
-                    Task { @MainActor in
-                        try await gate.read {
-                            try await invoke(calls[index])
-                        }
-                    }
-                }
-                do {
-                    try await withTaskCancellationHandler {
-                        for (index, task) in zip(indices, tasks) {
-                            results[index] = try await task.value
-                        }
-                    } onCancel: {
-                        for task in tasks { task.cancel() }
-                    }
-                } catch {
-                    for task in tasks { task.cancel() }
-                    throw error
                 }
             }
         }
+        var results = [String?](repeating: nil, count: calls.count)
+        var firstError: Error?
+        try await withTaskCancellationHandler {
+            for (index, task) in tasks.enumerated() {
+                do {
+                    results[index] = try await task.value
+                } catch {
+                    if firstError == nil { firstError = error }
+                }
+            }
+        } onCancel: {
+            for task in tasks { task.cancel() }
+        }
+        if let firstError { throw firstError }
         return results.map { $0! }
     }
 }

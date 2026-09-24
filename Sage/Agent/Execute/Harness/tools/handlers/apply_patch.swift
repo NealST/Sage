@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tools/handlers/apply_patch.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  JSON-tool entry for Execute. Parses the Codex patch language, PathGuards
 //  every path, then hands the hunks to ToolsRuntimes.ApplyPatchRuntime.
@@ -231,24 +232,105 @@ struct ApplyPatchToolRuntime: ToolRuntime {
                 }
                 return urls
             }
-            if attempt.sandbox == .seatbelt, paths.contains(where: WorkspaceMetadataPaths.isProtected) {
-                let path = paths.first(where: WorkspaceMetadataPaths.isProtected)?.path ?? cwd.path
-                throw HarnessToolError.sandboxDenied(
-                    output: "[exit 1]\nOperation not permitted: \(path)"
-                )
-            }
             for path in paths {
                 _ = try PathGuard.resolveAllowed(path.path, policy: policy, access: .write)
             }
-            let result = try ApplyPatchRuntime.run(
-                ApplyPatchRequest(
-                    cwd: cwd,
-                    hunks: parsed.hunks,
-                    options: ApplyPatchOptions(updateFileMode: .preserveLineEndings, followSymlinks: true)
-                )
+            let droppedSandbox = attempt.sandbox == .none && attempt.sandboxRequested
+            let sandbox = FileSystemSandboxContext(
+                cwd: cwd,
+                workspaceRoots: [attempt.workspaceRoot, cwd],
+                denyProtectedWrites: attempt.sandbox == .seatbelt,
+                followSymlinks: !droppedSandbox
             )
-            return ApplyPatchHandler.encodeApplied(summary: result.summary, delta: result.delta)
+            let inner: any ApplyPatchFileSystem = attempt.sandbox == .seatbelt
+                ? SeatbeltApplyPatchFileSystem(profile: attempt.profile)
+                : LocalApplyPatchFileSystem.shared
+            do {
+                let result = try ApplyPatchRuntime.run(
+                    ApplyPatchRequest(
+                        cwd: cwd,
+                        hunks: parsed.hunks,
+                        options: ApplyPatchOptions(
+                            updateFileMode: .preserveLineEndings,
+                            followSymlinks: sandbox.followSymlinks
+                        ),
+                        fileSystem: SandboxedApplyPatchFileSystem(inner: inner, sandbox: sandbox)
+                    )
+                )
+                return ApplyPatchHandler.encodeApplied(summary: result.summary, delta: result.delta)
+            } catch let error as ApplyPatchError {
+                if case .io(_, let message) = error, message.lowercased().contains("not permitted") {
+                    throw HarnessToolError.sandboxDenied(
+                        output: "[exit 1]\nOperation not permitted"
+                    )
+                }
+                throw error
+            } catch let failure as ApplyPatchFailure {
+                if case .io(_, let message) = failure.error, message.lowercased().contains("not permitted") {
+                    throw HarnessToolError.sandboxDenied(
+                        output: "[exit 1]\nOperation not permitted"
+                    )
+                }
+                throw failure
+            }
         }
+    }
+}
+
+/// Writes go through `sandbox-exec` so apply_patch is not an in-process write.
+struct SeatbeltApplyPatchFileSystem: ApplyPatchFileSystem {
+    var profile: SeatbeltSandbox.Profile
+
+    func readFileText(_ url: URL) throws -> String {
+        try LocalApplyPatchFileSystem.shared.readFileText(url)
+    }
+
+    func writeFile(_ url: URL, contents: String) throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try contents.write(to: tmp, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let parent = url.deletingLastPathComponent().path
+        try runSandboxed(
+            "mkdir -p -- \(Self.quote(parent)) && /bin/cp -- \(Self.quote(tmp.path)) \(Self.quote(url.path))"
+        )
+    }
+
+    func createDirectory(_ url: URL) throws {
+        try runSandboxed("mkdir -p -- \(Self.quote(url.path))")
+    }
+
+    func removeFile(_ url: URL) throws {
+        try runSandboxed("/bin/rm -f -- \(Self.quote(url.path))")
+    }
+
+    func metadata(_ url: URL) throws -> ApplyPatchMetadata {
+        try LocalApplyPatchFileSystem.shared.metadata(url)
+    }
+
+    private func runSandboxed(_ command: String) throws {
+        let invocation = SeatbeltSandbox.invocation(command: command, profile: profile)
+        let process = Process()
+        process.executableURL = invocation.executable
+        process.arguments = invocation.arguments
+        process.environment = invocation.environment
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
+        if process.terminationStatus != 0 {
+            if HarnessToolError.isSandboxDenial(exitCode: process.terminationStatus, output: output) {
+                throw ApplyPatchError.io(context: command, message: "Operation not permitted")
+            }
+            throw ApplyPatchError.io(context: command, message: output)
+        }
+    }
+
+    private static func quote(_ path: String) -> String {
+        "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 }
 
@@ -257,5 +339,9 @@ enum WorkspaceMetadataPaths {
         url.standardizedFileURL.pathComponents.contains { component in
             component == ".git" || component == ".sage" || component == ".agents"
         }
+    }
+
+    static func isSymlink(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
     }
 }

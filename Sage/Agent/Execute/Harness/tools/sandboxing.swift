@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tools/sandboxing.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  Shared approval + sandbox traits for tool runtimes. Guardian, Windows
 //  Landlock, and the network proxy stay out; Mac Seatbelt + PathGuard remain

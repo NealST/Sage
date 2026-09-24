@@ -4,11 +4,13 @@
 //
 //  Port of codex-rs/apply-patch/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: faithful
 //
 //  Apply parsed hunks to a local filesystem. Seatbelt / PathGuard live in the
 //  tool handler, not here.
 //
 
+@_exported import FileSystem
 import Foundation
 
 public enum ApplyPatchFileUpdateMode: Equatable {
@@ -108,7 +110,7 @@ public struct ApplyPatchFailure: Error, LocalizedError {
     public var errorDescription: String? { error.localizedDescription }
 }
 
-protocol ApplyPatchFileSystem {
+public protocol ApplyPatchFileSystem {
     func readFileText(_ url: URL) throws -> String
     func writeFile(_ url: URL, contents: String) throws
     func createDirectory(_ url: URL) throws
@@ -116,17 +118,17 @@ protocol ApplyPatchFileSystem {
     func metadata(_ url: URL) throws -> ApplyPatchMetadata
 }
 
-struct ApplyPatchMetadata: Equatable {
+public struct ApplyPatchMetadata: Equatable {
     var exists: Bool
     var isFile: Bool
     var isDirectory: Bool
     var isSymlink: Bool
 }
 
-enum LocalApplyPatchFileSystem: ApplyPatchFileSystem {
+public enum LocalApplyPatchFileSystem: ApplyPatchFileSystem {
     case shared
 
-    func readFileText(_ url: URL) throws -> String {
+    public func readFileText(_ url: URL) throws -> String {
         let data = try Data(contentsOf: url)
         guard let text = String(data: data, encoding: .utf8) else {
             throw ApplyPatchError.io(context: "Failed to read file \(url.path)", message: "not UTF-8")
@@ -134,19 +136,19 @@ enum LocalApplyPatchFileSystem: ApplyPatchFileSystem {
         return text
     }
 
-    func writeFile(_ url: URL, contents: String) throws {
+    public func writeFile(_ url: URL, contents: String) throws {
         try contents.data(using: .utf8)?.write(to: url, options: .atomic)
     }
 
-    func createDirectory(_ url: URL) throws {
+    public func createDirectory(_ url: URL) throws {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
 
-    func removeFile(_ url: URL) throws {
+    public func removeFile(_ url: URL) throws {
         try FileManager.default.removeItem(at: url)
     }
 
-    func metadata(_ url: URL) throws -> ApplyPatchMetadata {
+    public func metadata(_ url: URL) throws -> ApplyPatchMetadata {
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
         if !exists {
@@ -193,13 +195,14 @@ func applyPatch(
 public func applyHunks(
     _ hunks: [Hunk],
     cwd: URL,
-    options: ApplyPatchOptions = .default
+    options: ApplyPatchOptions = .default,
+    fileSystem: ApplyPatchFileSystem? = nil
 ) throws -> (delta: AppliedPatchDelta, summary: String) {
     try applyHunks(
         hunks,
         cwd: cwd,
         options: options,
-        fileSystem: LocalApplyPatchFileSystem.shared
+        fileSystem: fileSystem ?? LocalApplyPatchFileSystem.shared
     )
 }
 
@@ -340,6 +343,59 @@ private func writeFileCreatingParents(
         } catch {
             delta.exact = false
             throw error
+        }
+    }
+}
+
+public struct SandboxedApplyPatchFileSystem: ApplyPatchFileSystem {
+    private let inner: any ApplyPatchFileSystem
+    private let sandbox: FileSystemSandboxContext
+
+    public init(
+        inner: any ApplyPatchFileSystem = LocalApplyPatchFileSystem.shared,
+        sandbox: FileSystemSandboxContext
+    ) {
+        self.inner = inner
+        self.sandbox = sandbox
+    }
+
+    public func readFileText(_ url: URL) throws -> String {
+        try check(url, write: false)
+        return try inner.readFileText(url)
+    }
+
+    public func writeFile(_ url: URL, contents: String) throws {
+        try check(url, write: true)
+        try inner.writeFile(url, contents: contents)
+    }
+
+    public func createDirectory(_ url: URL) throws {
+        try check(url, write: true)
+        try inner.createDirectory(url)
+    }
+
+    public func removeFile(_ url: URL) throws {
+        try check(url, write: true)
+        try inner.removeFile(url)
+    }
+
+    public func metadata(_ url: URL) throws -> ApplyPatchMetadata {
+        try check(url, write: false)
+        return try inner.metadata(url)
+    }
+
+    private func check(_ url: URL, write: Bool) throws {
+        do {
+            try sandbox.assertAllowed(url, write: write)
+        } catch let error as FileSystemSandboxError {
+            switch error {
+            case .notPermitted(let path, let writing):
+                let verb = writing ? "write" : "access"
+                throw ApplyPatchError.io(
+                    context: "Failed to \(verb) \(path)",
+                    message: "Operation not permitted"
+                )
+            }
         }
     }
 }

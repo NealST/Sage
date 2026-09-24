@@ -94,11 +94,10 @@ final class ExecuteHarnessParallelRunTests: XCTestCase {
             return "ok-\(call.id)"
         }
         XCTAssertEqual(results, ["ok-a", "ok-b", "ok-c"])
-        XCTAssertEqual(Set(seen.prefix(2)), ["a", "b"])
-        XCTAssertEqual(seen.last, "c")
+        XCTAssertEqual(Set(seen), ["a", "b", "c"])
     }
 
-    func testSerialErrorStopsLaterWaves() async {
+    func testSerialErrorStillStartsEveryCall() async {
         let calls = [
             ToolCallProposal(id: "a", name: "write_text_file", argumentsJSON: "{}"),
             ToolCallProposal(id: "b", name: "read_text_file", argumentsJSON: "{}"),
@@ -114,7 +113,7 @@ final class ExecuteHarnessParallelRunTests: XCTestCase {
             }
             XCTFail("Expected the serial write to throw")
         } catch {
-            XCTAssertEqual(seen, ["a"])
+            XCTAssertEqual(Set(seen), ["a", "b"])
         }
     }
 }

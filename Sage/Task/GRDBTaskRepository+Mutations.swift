@@ -82,6 +82,35 @@ extension GRDBTaskRepository {
         }
     }
 
+    func replaceFoldedEvents(
+        taskID: UUID,
+        deleteEventIDs: [UUID],
+        summary: AgentEvent
+    ) throws {
+        let pool = try database()
+        try pool.write { database in
+            var sequence = 0
+            for eventID in deleteEventIDs {
+                if let found = try Int.fetchOne(
+                    database,
+                    sql: "SELECT sequence FROM events WHERE id = ? AND task_id = ?",
+                    arguments: [eventID.uuidString, taskID.uuidString]
+                ) {
+                    if sequence == 0 || found < sequence {
+                        sequence = found
+                    }
+                }
+            }
+            for eventID in deleteEventIDs {
+                try database.execute(
+                    sql: "DELETE FROM events WHERE id = ? AND task_id = ?",
+                    arguments: [eventID.uuidString, taskID.uuidString]
+                )
+            }
+            try insertEvent(summary, taskID: taskID, sequence: sequence, database: database)
+        }
+    }
+
     func splitOffTurn(
         closingTask: TaskRecord,
         openingTask: TaskRecord,

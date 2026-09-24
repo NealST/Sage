@@ -2,15 +2,16 @@
 //  turn.swift
 //  Sage
 //
-//  Port of codex-rs/core/src/session/turn.rs `run_turn` (Apache-2.0).
+//  Port of codex-rs/core/src/session/turn.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: partial
 //
-//  The Codex function samples, runs tool calls, and samples again while
-//  `needs_follow_up` is set. Sage keeps the same shape: stream a completion,
-//  hand tool calls to the existing batch runner, then sample again until the
-//  model stops, the safety valve trips, or the user stops the turn.
-//  Explore reuses this loop with a read-only tool set. Compaction, MCP
-//  startup, and Guardian stay out of this file.
+//  Skeleton of `run_turn` only; the full 3,105-line turn loop is Phase 5.
+//
+//  Codex `run_turn` asks the model, runs tool calls, then asks again while
+//  the model still wants tools. Before each question it compacts when the
+//  window is full and starts the MCP servers the turn needs. Tool hooks run
+//  when those calls execute, still inside this loop. Guardian stays out.
 //
 
 import Foundation
@@ -19,6 +20,7 @@ import Foundation
 @MainActor
 protocol ExecuteTurnLoop: AnyObject {
     var canOfferMoreTools: Bool { get }
+    /// Compact, then connect MCP servers, before this sample. Tool hooks run in `consume`.
     func willSample(includeTools: Bool) async
     func sample(includeTools: Bool) async throws -> ModelTurn
     func consume(_ turn: ModelTurn) async -> Turn.StepResult

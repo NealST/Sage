@@ -2,13 +2,13 @@
 //  compact.swift
 //  Sage
 //
-//  Inspired by codex-rs/core/src/tasks/compact.rs (Apache-2.0).
+//  Port of codex-rs/core/src/tasks/compact.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: partial
 //
-//  Not a 1:1 port. Codex replaces history with a summary (or a remote
-//  checkpoint, or a full window reset). Sage keeps lossless
-//  `ContextBudget.assemble` and `TaskWorkingMemory`, then borrows Codex's
-//  hybrid occupancy, tool-output-first fold, and visible failure.
+//  After the compressor returns, folded events are replaced by one
+//  summary event — the same history swap Codex does locally. Remote V2
+//  and token-budget window reset stay out.
 //
 
 import Foundation

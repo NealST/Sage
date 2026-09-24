@@ -88,7 +88,8 @@ final class TurnCoordinator {
     func bind(
         slashHost: SlashCommandHost,
         executeToolBatch: @escaping (Bool) async -> ToolBatchExecutor.WaveOutcome,
-        handleStop: @escaping (AgentPlan?) async -> Void
+        handleStop: @escaping (AgentPlan?) async -> Void,
+        ensureMCPConnected: (() async -> Void)? = nil
     ) {
         self.slashHost = slashHost
         self.executeToolBatch = executeToolBatch
@@ -101,7 +102,8 @@ final class TurnCoordinator {
             onCandidateReply: { [weak self] text in
                 await self?.reviewAndFinish(text)
             },
-            handleStop: handleStop
+            handleStop: handleStop,
+            ensureMCPConnected: ensureMCPConnected
         )
     }
 

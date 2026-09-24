@@ -6,6 +6,45 @@
 import Foundation
 
 extension ToolBatchExecutor {
+    /// Codex starts every call, then admits them through an RWLock.
+    /// Approval still happens first so a HUD card is a single pause.
+    static func runAdmittedBatch(
+        plan: inout AgentPlan,
+        services: ExecuteServices
+    ) async -> WaveOutcome {
+        var approved: [Int] = []
+        for index in plan.steps.indices {
+            if shouldSkip(plan.steps[index], services: services) { continue }
+            if let blocked = await gateSerialStep(plan.steps[index], at: index, plan: &plan, services: services) {
+                return blocked
+            }
+            approved.append(index)
+        }
+        guard !approved.isEmpty else { return .succeeded }
+        guard await markParallelRunning(approved, plan: &plan, services: services) else {
+            return .persistFailed
+        }
+        let steps = plan.steps
+        let gate = ParallelAdmission()
+        let tasks = approved.map { index in
+            Task { @MainActor in
+                let exclusive = !ParallelToolRuntime.supportsParallel(steps[index].toolName)
+                let outcome: StepCallResult
+                if exclusive {
+                    outcome = await gate.write { await invoke(steps[index], services: services) }
+                } else {
+                    outcome = await gate.read { await invoke(steps[index], services: services) }
+                }
+                return IndexedResult(index: index, result: outcome)
+            }
+        }
+        var collected: [IndexedResult] = []
+        for task in tasks {
+            collected.append(await task.value)
+        }
+        return await foldParallelResults(collected, plan: &plan, services: services)
+    }
+
     // MARK: - Waves
 
     static func runWave(
@@ -314,6 +353,19 @@ extension ToolBatchExecutor {
     ) async -> WaveOutcome {
         var cancelled = false
         for item in results {
+            if case .needsEscalationApproval(let reason) = item.result {
+                plan.steps[item.index].status = .pending
+                let step = plan.steps[item.index]
+                let card = AgentStep(
+                    id: step.id,
+                    toolCallID: step.toolCallID,
+                    toolName: step.toolName,
+                    argumentsJSON: step.argumentsJSON,
+                    title: SandboxEscalation.title(reason: reason, original: step.title),
+                    status: .pending
+                )
+                return await pauseForApproval(card, plan: plan, services: services)
+            }
             if case .cancelled = item.result {
                 plan.steps[item.index].status = .pending
                 cancelled = true

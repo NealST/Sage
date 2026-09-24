@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tools/orchestrator.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  Approval → select sandbox → attempt → one escalate retry on denial.
 //  Already-approved commands are not re-asked. `ToolInvocationPipeline`
@@ -45,7 +46,17 @@ struct ToolOrchestrator {
 
         switch requirement {
         case .skip:
-            break
+            if Guardian.strictAutoReviewEnabled(policy: ctx.pathGuardPolicy) {
+                try await requestApproval(
+                    tool: tool,
+                    request: request,
+                    ctx: ctx,
+                    approver: approver,
+                    approvalReason: nil,
+                    retryReason: nil
+                )
+                alreadyApproved = true
+            }
 
         case .forbidden(let reason):
             throw HarnessToolError.rejected(reason)
@@ -93,22 +104,24 @@ struct ToolOrchestrator {
                 throw error
             }
             guard tool.escalateOnFailure() else {
-                return try outputAsResult(output)
+                throw error
             }
             guard tool.wantsNoSandboxApproval(policy: ctx.approvalPolicy) else {
-                return try outputAsResult(output)
+                throw error
             }
-            guard unsandboxedAllowed || sandboxRequested else {
-                return try outputAsResult(output)
+            // Codex stops when the sandbox cannot be dropped. Project mode is that case.
+            guard unsandboxedAllowed else {
+                throw error
             }
 
-            let bypassRetryApproval = tool.shouldBypassApproval(
-                policy: ctx.approvalPolicy,
-                alreadyApproved: alreadyApproved
-            )
+            let bypassRetryApproval = !Guardian.strictAutoReviewEnabled(policy: ctx.pathGuardPolicy)
+                && tool.shouldBypassApproval(
+                    policy: ctx.approvalPolicy,
+                    alreadyApproved: alreadyApproved
+                )
             if !bypassRetryApproval {
                 if ctx.allowUnsandboxedRetry {
-                    return try outputAsResult(output)
+                    throw error
                 }
                 let approvalReason = if case .needsApproval(let reason) = requirement {
                     reason
@@ -122,15 +135,10 @@ struct ToolOrchestrator {
                         ctx: ctx,
                         approver: approver,
                         approvalReason: approvalReason,
-                        retryReason: "command failed; retry without sandbox?"
+                        retryReason: NetworkApproval.retryReason(sandboxOutput: output)
                     )
-                } catch let error as HarnessToolError {
-                    if case .needsEscalationApproval = error {
-                        throw error
-                    }
-                    return try outputAsResult(output)
                 } catch {
-                    return try outputAsResult(output)
+                    throw error
                 }
             }
 
@@ -145,14 +153,7 @@ struct ToolOrchestrator {
                 cwd: cwd,
                 ctx: ctx
             )
-            do {
-                return try await tool.run(request, attempt: retryAttempt, ctx: ctx)
-            } catch let retry as HarnessToolError {
-                if case .sandboxDenied(let retryOutput) = retry {
-                    return try outputAsResult(retryOutput)
-                }
-                throw retry
-            }
+            return try await tool.run(request, attempt: retryAttempt, ctx: ctx)
         }
     }
 
@@ -161,13 +162,30 @@ struct ToolOrchestrator {
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
         let prepared = try await ToolInvocationPipeline.prepare(request)
+        let projectRoot = projectRoot(of: prepared.pathGuardPolicy)
+        let preTool = HookRuntime.preToolUse(
+            tool: prepared.name,
+            command: prepared.argumentsJSON,
+            projectRoot: projectRoot
+        )
+        if preTool.shouldStop {
+            throw HarnessToolError.rejected(preTool.additionalContexts.first ?? "Hook denied this tool.")
+        }
+        let output: String
         if prepared.name == "run_shell_command" {
-            return try await executeShell(prepared)
+            output = try await executeShell(prepared)
+        } else if prepared.name == "apply_patch" {
+            output = try await ApplyPatchToolRuntime.execute(prepared)
+        } else {
+            output = try await ToolInvocationPipeline.dispatchTimed(prepared)
         }
-        if prepared.name == "apply_patch" {
-            return try await ApplyPatchToolRuntime.execute(prepared)
-        }
-        return try await ToolInvocationPipeline.dispatchTimed(prepared)
+        _ = HookRuntime.postToolUse(tool: prepared.name, projectRoot: projectRoot)
+        return output
+    }
+
+    private static func projectRoot(of policy: PathGuard.Policy) -> URL? {
+        if case .project(let root) = policy { return root }
+        return nil
     }
 
     @MainActor
@@ -218,11 +236,28 @@ struct ToolOrchestrator {
             approvalReason: approvalReason,
             retryReason: retryReason
         )
+        let permission = HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: projectRoot(of: ctx.pathGuardPolicy))
+        if permission.shouldStop {
+            throw HarnessToolError.rejected(permission.additionalContexts.first ?? "Hook denied this approval.")
+        }
         let decision = try await withCachedApproval(
             store: approvalStore,
             keys: [action.cacheKey]
         ) {
-            try await approver.requestApproval(action: action, context: context)
+            let reviewed = await GuardianDecision.decide(
+                action: action,
+                context: context,
+                options: GuardianReviewOptions(
+                    requireGuardian: Guardian.requiresReview(
+                        policy: ctx.pathGuardPolicy,
+                        retry: retryReason != nil
+                    )
+                )
+            )
+            if let reviewed {
+                return reviewed
+            }
+            return try await approver.requestApproval(action: action, context: context)
         }
         switch decision {
         case .approved, .approvedForSession:
@@ -238,12 +273,5 @@ struct ToolOrchestrator {
 
     private func permissionBits<Request>(from request: Request) -> SandboxPermissionBits {
         (request as? ShellExecRequest)?.permissionBits ?? []
-    }
-
-    private func outputAsResult<Output>(_ output: String) throws -> Output {
-        guard let typed = output as? Output else {
-            throw HarnessToolError.rejected(output)
-        }
-        return typed
     }
 }

@@ -4,6 +4,7 @@
 //
 //  Port of codex-rs/core/src/tools/handlers/apply_patch_spec.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
+//  Port status: adapted
 //
 //  Sage exposes apply_patch as a JSON function tool (not a freeform grammar).
 //  The patch body itself stays the Codex apply-patch language.

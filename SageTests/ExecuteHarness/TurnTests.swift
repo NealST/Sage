@@ -91,8 +91,7 @@ final class ExecuteHarnessTurnTests: XCTestCase {
 
         XCTAssertEqual(reply, "九轮之后仍能收尾")
         XCTAssertEqual(runtime.turns.execute.toolBatchCount, 9)
-        XCTAssertEqual(RegularTask.defaultToolBatchLimit, 32)
-        XCTAssertEqual(RegularTask.maxToolBatchLimit, 64)
+        XCTAssertTrue(runtime.turns.execute.canOfferMoreTools)
     }
 
     func testStopCancelsTheModelRequest() async throws {
