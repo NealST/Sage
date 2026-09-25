@@ -104,7 +104,8 @@ CORE_P5_ROOT = {
     "mcp_tool_approval_templates.rs", "mcp_openai_file.rs", "session_startup_prewarm.rs",
 }
 CORE_P6 = {
-    "client.rs", "client_common.rs", "responses_headers.rs", "responses_metadata.rs",
+    "client.rs", "client_common.rs", "client_tool_metadata.rs", "model_request.rs",
+    "responses_headers.rs", "responses_metadata.rs",
     "responses_retry.rs", "prompt_debug.rs", "image_preparation.rs",
     "original_image_detail.rs", "current_time.rs", "web_search.rs",
 }
@@ -173,7 +174,7 @@ def core_classify(rel: str) -> tuple[int | None, str]:
         return (5, "")
     if rel.startswith(("state/", "session/", "tasks/", "context/", "context_manager/", "config/")):
         return (5, "")
-    raise ValueError(f"core 文件未分类: {rel}")
+    return (5, "unclassified at generate time; assign phase")
 
 
 # crate 内文件级规则：rel → (status, note)
@@ -198,6 +199,17 @@ CRATE_FILE_RULES: dict[str, dict[str, tuple[str | None, str]]] = {
         "command_safety/powershell_parser.rs": ("not-started", "适配项：macOS 不需要 PowerShell 解析"),
         "command_safety/powershell_tree_sitter.rs": ("not-started", "适配项：macOS 不需要 PowerShell 解析"),
         "command_safety/windows_dangerous_commands.rs": ("not-started", "适配项：Windows 危险命令表"),
+    },
+    "utils/pty": {
+        "win/conpty.rs": ("excluded", "platform: Windows PTY"),
+        "win/job.rs": ("excluded", "platform: Windows PTY"),
+        "win/mod.rs": ("excluded", "platform: Windows PTY"),
+        "win/procthreadattr.rs": ("excluded", "platform: Windows PTY"),
+        "win/psuedocon.rs": ("excluded", "platform: Windows PTY"),
+        "windows_input.rs": ("excluded", "platform: Windows PTY"),
+    },
+    "execpolicy": {
+        "main.rs": ("excluded", "独立 CLI 入口，Sage 不需要"),
     },
     "apply-patch": {
         "standalone_executable.rs": ("not-started", "适配项：Sage 进程内调用，无独立可执行"),
@@ -284,6 +296,14 @@ def module_of(swift_rel: str) -> str:
         return "ApplyPatch"
     if top == "file-system":
         return "FileSystem"
+    if top == "git-utils":
+        return "CodexGitUtils"
+    if top == "sandboxing":
+        return "CodexSandboxing"
+    if top == "shell-command":
+        return "CodexShellCommand"
+    if top == "execpolicy":
+        return "CodexExecPolicy"
     if swift_rel.startswith("tools/runtimes/"):
         return "ToolsRuntimes"
     parts = swift_rel.split("/")

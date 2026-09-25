@@ -16,6 +16,7 @@ public struct IOError: Error, Equatable, CustomStringConvertible {
     public enum Kind: String, Equatable, Sendable {
         case notFound = "NotFound"
         case invalidInput = "InvalidInput"
+        case invalidData = "InvalidData"
         case permissionDenied = "PermissionDenied"
         case other = "Other"
     }
@@ -30,6 +31,10 @@ public struct IOError: Error, Equatable, CustomStringConvertible {
 
     public static func invalidInput(_ message: String) -> IOError {
         IOError(kind: .invalidInput, message)
+    }
+
+    public static func invalidData(_ message: String) -> IOError {
+        IOError(kind: .invalidData, message)
     }
 
     public static func notFound(_ message: String) -> IOError {

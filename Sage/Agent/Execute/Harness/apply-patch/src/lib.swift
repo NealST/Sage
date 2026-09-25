@@ -11,7 +11,10 @@
 //
 
 @_exported import FileSystem
+import CodexUtils
 import Foundation
+
+public let CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR = "CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS"
 
 public enum ApplyPatchFileUpdateMode: Equatable {
     case normalizeToLf
@@ -61,6 +64,54 @@ public struct ApplyPatchArgs: Equatable {
         self.hunks = hunks
         self.workdir = workdir
         self.environmentID = environmentID
+    }
+}
+
+/// Proposed filesystem change parsed from an `apply_patch` invocation.
+public enum ApplyPatchFileChange: Equatable {
+    case add(content: String)
+    case delete(content: String)
+    case update(unifiedDiff: String, movePath: PathUri?, newContent: String)
+}
+
+/// Verified `apply_patch` action. Paths are absolute by construction.
+public struct ApplyPatchAction: Equatable {
+    public var patch: String
+    public var cwd: PathUri
+    var fileChanges: [PathUri: ApplyPatchFileChange]
+    var updateFileMode: ApplyPatchFileUpdateMode
+
+    public init(
+        patch: String,
+        cwd: PathUri,
+        changes: [PathUri: ApplyPatchFileChange],
+        updateFileMode: ApplyPatchFileUpdateMode = .normalizeToLf
+    ) {
+        self.patch = patch
+        self.cwd = cwd
+        self.fileChanges = changes
+        self.updateFileMode = updateFileMode
+    }
+
+    public var isEmpty: Bool { fileChanges.isEmpty }
+
+    public func changes() -> [PathUri: ApplyPatchFileChange] { fileChanges }
+
+    public func updateFileModeValue() -> ApplyPatchFileUpdateMode { updateFileMode }
+
+    public static func newAddForTest(path: PathUri, content: String) -> ApplyPatchAction {
+        let filename = path.basename() ?? "file"
+        let patch = """
+        *** Begin Patch
+        *** Update File: \(filename)
+        +\(content)
+        *** End Patch
+        """
+        return ApplyPatchAction(
+            patch: patch,
+            cwd: path,
+            changes: [path: .add(content: content)]
+        )
     }
 }
 
