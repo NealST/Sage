@@ -9,7 +9,7 @@
 
 import ApplyPatch
 import CodexProtocol
-@testable import Sage
+@testable import CodexCore
 import XCTest
 
 final class ExecEnvTests: XCTestCase {

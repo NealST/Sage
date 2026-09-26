@@ -207,6 +207,9 @@ CRATE_FILE_RULES: dict[str, dict[str, tuple[str | None, str]]] = {
         "win/procthreadattr.rs": ("excluded", "platform: Windows PTY"),
         "win/psuedocon.rs": ("excluded", "platform: Windows PTY"),
         "windows_input.rs": ("excluded", "platform: Windows PTY"),
+        "linux_fds.rs": ("excluded", "platform: Linux"),
+        "spawn_helper.rs": ("excluded", "platform: Linux spawn helper"),
+        "spawn_helper_main.rs": ("excluded", "platform: Linux spawn helper"),
     },
     "execpolicy": {
         "main.rs": ("excluded", "独立 CLI 入口，Sage 不需要"),
@@ -306,6 +309,8 @@ def module_of(swift_rel: str) -> str:
         return "CodexExecPolicy"
     if swift_rel.startswith("tools/runtimes/"):
         return "ToolsRuntimes"
+    if top == "network-proxy":
+        return "CodexNetworkProxy"
     parts = swift_rel.split("/")
     if len(parts) >= 3 and parts[1] == "src" and top in _CRATE_TOPS:
         return f"Crate:{top}"
@@ -343,6 +348,10 @@ def resolve_collisions(entries: list[tuple[str, int | None, str, str | None]],
         b_dir, _, b_name = b.rpartition("/")
         a_dir, _, a_name = actual.rpartition("/")
         if a_dir == b_dir and (a_name == b_name or a_name.endswith("_" + b_name)):
+            return actual
+        # R4a files lifted to the Harness root so they compile in CodexCore
+        # instead of a crate folder (`sandboxing/mod.rs` → `sandboxing_mod.swift`).
+        if not a_dir and a_name == f"{collision_prefix(p)}_{b_name}":
             return actual
         return None
 

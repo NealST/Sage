@@ -193,6 +193,43 @@ public struct SandboxManager: Sendable {
         return copy
     }
 
+    public func selectInitial(
+        permissionProfile: PermissionProfile,
+        pref: SandboxablePreference,
+        windowsSandboxType: SandboxType,
+        hasManagedNetworkRequirements: Bool
+    ) -> SandboxType {
+        if !shouldSandbox(
+            permissionProfile,
+            pref: pref,
+            hasManagedNetworkRequirements: hasManagedNetworkRequirements
+        ) {
+            return .none
+        }
+        if windowsSandboxType == .windowsMxc {
+            return .windowsMxc
+        }
+        return getPlatformSandbox(windowsSandboxEnabled: windowsSandboxType != .none) ?? .none
+    }
+
+    public func shouldSandbox(
+        _ permissionProfile: PermissionProfile,
+        pref: SandboxablePreference,
+        hasManagedNetworkRequirements: Bool
+    ) -> Bool {
+        switch pref {
+        case .forbid: return false
+        case .require: return true
+        case .auto:
+            let (fileSystem, network) = permissionProfile.toRuntimePermissions()
+            return shouldRequirePlatformSandbox(
+                fileSystemPolicy: fileSystem,
+                networkPolicy: network,
+                hasManagedNetworkRequirements: hasManagedNetworkRequirements
+            )
+        }
+    }
+
     public func transform(_ request: SandboxTransformRequest) throws -> SandboxExecRequest {
         let effective = effectivePermissionProfile(
             request.permissions,

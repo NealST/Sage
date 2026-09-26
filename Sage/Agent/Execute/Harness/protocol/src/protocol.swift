@@ -100,6 +100,12 @@ public struct GranularApprovalConfig: Codable, Equatable, Hashable, Sendable {
         self.skillApproval = skillApproval; self.requestPermissions = requestPermissions
         self.mcpElicitations = mcpElicitations
     }
+
+    public func allowsSandboxApproval() -> Bool { sandboxApproval }
+    public func allowsRulesApproval() -> Bool { rules }
+    public func allowsSkillApproval() -> Bool { skillApproval }
+    public func allowsRequestPermissions() -> Bool { requestPermissions }
+    public func allowsMcpElicitations() -> Bool { mcpElicitations }
 }
 
 // MARK: - NetworkAccess
@@ -379,18 +385,19 @@ public struct ThreadSettingsOverrides: Equatable, Sendable {
 // MARK: - AdditionalContextKind
 
 public enum AdditionalContextKind: String, Codable, Equatable, Sendable {
-    case developerInstructions = "developer_instructions"
-    case previousResponseId = "previous_response_id"
+    case untrusted
+    case application
 }
 
 // MARK: - AdditionalContextEntry
 
 public struct AdditionalContextEntry: Codable, Equatable, Sendable {
+    public var value: String
     public var kind: AdditionalContextKind
-    public var value: JSONValue
 
-    public init(kind: AdditionalContextKind, value: JSONValue) {
-        self.kind = kind; self.value = value
+    public init(value: String, kind: AdditionalContextKind) {
+        self.value = value
+        self.kind = kind
     }
 }
 
@@ -452,6 +459,286 @@ public struct GitInfo: Codable, Equatable, Sendable {
         try container.encodeIfPresent(commitHash, forKey: .commitHash)
         try container.encodeIfPresent(branch, forKey: .branch)
         try container.encodeIfPresent(repositoryUrl, forKey: .repositoryUrl)
+    }
+}
+
+// MARK: - ThreadHistoryMode
+
+public enum ThreadHistoryMode: String, Codable, Equatable, Sendable {
+    case legacy
+    case paginated
+
+    public func asStr() -> String { rawValue }
+}
+
+// MARK: - SessionContextWindow
+
+public struct SessionContextWindow: Codable, Equatable, Sendable {
+    public var windowId: String
+
+    enum CodingKeys: String, CodingKey { case windowId = "window_id" }
+
+    public init(windowId: String) { self.windowId = windowId }
+}
+
+// MARK: - HistoryPosition
+
+public struct HistoryPosition: Codable, Equatable, Sendable {
+    public var threadId: ThreadId
+    public var endOrdinalExclusive: UInt64
+    public var endByteOffset: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case threadId = "thread_id"
+        case endOrdinalExclusive = "end_ordinal_exclusive"
+        case endByteOffset = "end_byte_offset"
+    }
+
+    public init(threadId: ThreadId, endOrdinalExclusive: UInt64, endByteOffset: UInt64) {
+        self.threadId = threadId
+        self.endOrdinalExclusive = endOrdinalExclusive
+        self.endByteOffset = endByteOffset
+    }
+}
+
+// MARK: - SessionMeta
+
+public struct SessionMeta: Codable, Equatable, Sendable {
+    public var creatorUserId: String?
+    public var creatorAccountId: String?
+    public var sessionId: SessionId
+    public var id: ThreadId
+    public var forkedFromId: ThreadId?
+    public var forkedFromOrdinalExclusive: UInt64?
+    public var parentThreadId: ThreadId?
+    public var timestamp: String
+    public var cwd: String
+    public var runtimeWorkspaceRoots: [String]?
+    public var originator: String
+    public var cliVersion: String
+    public var source: SessionSource
+    public var threadSource: ThreadSource?
+    public var agentNickname: String?
+    public var agentRole: String?
+    public var agentPath: String?
+    public var modelProvider: String?
+    public var baseInstructions: BaseInstructions?
+    public var dynamicTools: [DynamicToolSpec]?
+    public var selectedCapabilityRoots: [SelectedCapabilityRoot]
+    public var memoryMode: String?
+    public var historyMode: ThreadHistoryMode
+    public var historyBase: HistoryPosition?
+    public var subagentHistoryStartOrdinal: UInt64?
+    public var multiAgentVersion: MultiAgentVersion?
+    public var contextWindow: SessionContextWindow?
+
+    enum CodingKeys: String, CodingKey {
+        case timestamp, cwd, originator, source
+        case creatorUserId = "creator_user_id"
+        case creatorAccountId = "creator_account_id"
+        case sessionId = "session_id"
+        case id
+        case forkedFromId = "forked_from_id"
+        case forkedFromOrdinalExclusive = "forked_from_ordinal_exclusive"
+        case parentThreadId = "parent_thread_id"
+        case runtimeWorkspaceRoots = "runtime_workspace_roots"
+        case cliVersion = "cli_version"
+        case threadSource = "thread_source"
+        case agentNickname = "agent_nickname"
+        case agentRole = "agent_role"
+        case agentPath = "agent_path"
+        case modelProvider = "model_provider"
+        case baseInstructions = "base_instructions"
+        case dynamicTools = "dynamic_tools"
+        case selectedCapabilityRoots = "selected_capability_roots"
+        case memoryMode = "memory_mode"
+        case historyMode = "history_mode"
+        case historyBase = "history_base"
+        case subagentHistoryStartOrdinal = "subagent_history_start_ordinal"
+        case multiAgentVersion = "multi_agent_version"
+        case contextWindow = "context_window"
+    }
+
+    public init(
+        sessionId: SessionId? = nil,
+        id: ThreadId = ThreadId(),
+        timestamp: String = "",
+        cwd: String = "",
+        originator: String = "",
+        cliVersion: String = "",
+        source: SessionSource = .default
+    ) {
+        self.sessionId = sessionId ?? SessionId(id)
+        self.id = id
+        self.timestamp = timestamp
+        self.cwd = cwd
+        self.originator = originator
+        self.cliVersion = cliVersion
+        self.source = source
+        self.selectedCapabilityRoots = []
+        self.historyMode = .legacy
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(ThreadId.self, forKey: .id)
+        sessionId = try container.decodeIfPresent(SessionId.self, forKey: .sessionId) ?? SessionId(id)
+        creatorUserId = try container.decodeIfPresent(String.self, forKey: .creatorUserId)
+        creatorAccountId = try container.decodeIfPresent(String.self, forKey: .creatorAccountId)
+        forkedFromId = try container.decodeIfPresent(ThreadId.self, forKey: .forkedFromId)
+        forkedFromOrdinalExclusive = try container.decodeIfPresent(UInt64.self, forKey: .forkedFromOrdinalExclusive)
+        parentThreadId = try container.decodeIfPresent(ThreadId.self, forKey: .parentThreadId)
+        timestamp = try container.decode(String.self, forKey: .timestamp)
+        cwd = try container.decode(String.self, forKey: .cwd)
+        runtimeWorkspaceRoots = try container.decodeIfPresent([String].self, forKey: .runtimeWorkspaceRoots)
+        originator = try container.decode(String.self, forKey: .originator)
+        cliVersion = try container.decode(String.self, forKey: .cliVersion)
+        source = try container.decodeIfPresent(SessionSource.self, forKey: .source) ?? .default
+        threadSource = try container.decodeIfPresent(ThreadSource.self, forKey: .threadSource)
+        agentNickname = try container.decodeIfPresent(String.self, forKey: .agentNickname)
+        agentRole = try container.decodeIfPresent(String.self, forKey: .agentRole)
+        agentPath = try container.decodeIfPresent(String.self, forKey: .agentPath)
+        modelProvider = try container.decodeIfPresent(String.self, forKey: .modelProvider)
+        baseInstructions = try container.decodeIfPresent(BaseInstructions.self, forKey: .baseInstructions)
+        dynamicTools = try container.decodeIfPresent([DynamicToolSpec].self, forKey: .dynamicTools)
+        selectedCapabilityRoots = try container.decodeIfPresent(
+            [SelectedCapabilityRoot].self, forKey: .selectedCapabilityRoots) ?? []
+        memoryMode = try container.decodeIfPresent(String.self, forKey: .memoryMode)
+        historyMode = try container.decodeIfPresent(ThreadHistoryMode.self, forKey: .historyMode) ?? .legacy
+        historyBase = try container.decodeIfPresent(HistoryPosition.self, forKey: .historyBase)
+        subagentHistoryStartOrdinal = try container.decodeIfPresent(
+            UInt64.self, forKey: .subagentHistoryStartOrdinal)
+        multiAgentVersion = try container.decodeIfPresent(MultiAgentVersion.self, forKey: .multiAgentVersion)
+        contextWindow = try container.decodeIfPresent(SessionContextWindow.self, forKey: .contextWindow)
+    }
+}
+
+public struct SessionMetaLine: Codable, Equatable, Sendable {
+    public var meta: SessionMeta
+    public var git: GitInfo?
+
+    enum CodingKeys: String, CodingKey { case git }
+
+    public init(meta: SessionMeta, git: GitInfo? = nil) {
+        self.meta = meta
+        self.git = git
+    }
+
+    public init(from decoder: any Decoder) throws {
+        meta = try SessionMeta(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        git = try container.decodeIfPresent(GitInfo.self, forKey: .git)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        try meta.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(git, forKey: .git)
+    }
+}
+
+// MARK: - WorldStateItem
+
+public struct WorldStateItem: Codable, Equatable, Sendable {
+    public var full: Bool
+    public var state: [String: JSONValue]
+
+    public init(full: Bool, state: [String: JSONValue]) {
+        self.full = full
+        self.state = state
+    }
+
+    public static func full(_ state: [String: JSONValue]) -> WorldStateItem {
+        WorldStateItem(full: true, state: state)
+    }
+}
+
+// MARK: - SessionNetworkProxyRuntime
+
+public struct SessionNetworkProxyRuntime: Codable, Equatable, Sendable {
+    public var httpAddr: String
+    public var socksAddr: String
+
+    enum CodingKeys: String, CodingKey {
+        case httpAddr = "http_addr"
+        case socksAddr = "socks_addr"
+    }
+
+    public init(httpAddr: String, socksAddr: String) {
+        self.httpAddr = httpAddr
+        self.socksAddr = socksAddr
+    }
+}
+
+// MARK: - ThreadRolledBackEvent
+
+public struct ThreadRolledBackEvent: Codable, Equatable, Sendable {
+    public var numTurns: UInt32
+
+    enum CodingKeys: String, CodingKey { case numTurns = "num_turns" }
+
+    public init(numTurns: UInt32) { self.numTurns = numTurns }
+}
+
+// MARK: - SessionConfiguredEvent
+
+public struct SessionConfiguredEvent: Codable, Equatable, Sendable {
+    public var sessionId: SessionId
+    public var threadId: ThreadId
+    public var forkedFromId: ThreadId?
+    public var parentThreadId: ThreadId?
+    public var threadSource: ThreadSource?
+    public var threadName: String?
+    public var model: String
+    public var modelProviderId: String
+    public var serviceTier: String?
+    public var approvalPolicy: AskForApproval
+    public var approvalsReviewer: ApprovalsReviewer
+    public var permissionProfile: PermissionProfile
+    public var activePermissionProfile: ActivePermissionProfile?
+    public var cwd: AbsolutePathBuf
+    public var reasoningEffort: ReasoningEffort?
+    public var initialMessages: [EventMsg]?
+    public var networkProxy: SessionNetworkProxyRuntime?
+    public var rolloutPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model, cwd
+        case sessionId = "session_id"
+        case threadId = "thread_id"
+        case forkedFromId = "forked_from_id"
+        case parentThreadId = "parent_thread_id"
+        case threadSource = "thread_source"
+        case threadName = "thread_name"
+        case modelProviderId = "model_provider_id"
+        case serviceTier = "service_tier"
+        case approvalPolicy = "approval_policy"
+        case approvalsReviewer = "approvals_reviewer"
+        case permissionProfile = "permission_profile"
+        case activePermissionProfile = "active_permission_profile"
+        case reasoningEffort = "reasoning_effort"
+        case initialMessages = "initial_messages"
+        case networkProxy = "network_proxy"
+        case rolloutPath = "rollout_path"
+    }
+
+    public init(
+        sessionId: SessionId,
+        threadId: ThreadId,
+        model: String,
+        modelProviderId: String,
+        approvalPolicy: AskForApproval,
+        permissionProfile: PermissionProfile,
+        cwd: AbsolutePathBuf
+    ) {
+        self.sessionId = sessionId
+        self.threadId = threadId
+        self.model = model
+        self.modelProviderId = modelProviderId
+        self.approvalPolicy = approvalPolicy
+        self.approvalsReviewer = .user
+        self.permissionProfile = permissionProfile
+        self.cwd = cwd
     }
 }
 
@@ -540,26 +827,294 @@ public struct ReviewLineRange: Codable, Equatable, Sendable {
 
 public struct TokenUsage: Codable, Equatable, Sendable {
     public var inputTokens: Int64
+    public var cachedInputTokens: Int64
+    public var cacheWriteInputTokens: Int64
     public var outputTokens: Int64
-    public var totalTokens: Int64?
+    public var reasoningOutputTokens: Int64
+    public var totalTokens: Int64
     public var inputTokenDetails: JSONValue?
     public var outputTokenDetails: JSONValue?
+    /// Provider-reported units consumed from the shared rollout budget.
+    /// Rust `skip_serializing`; not encoded on the wire.
+    public var codexRolloutBudgetUnits: JSONValue?
+
+    public static let baselineTokens: Int64 = 12_000
 
     enum CodingKeys: String, CodingKey {
         case inputTokens = "input_tokens"
+        case cachedInputTokens = "cached_input_tokens"
+        case cacheWriteInputTokens = "cache_write_input_tokens"
         case outputTokens = "output_tokens"
+        case reasoningOutputTokens = "reasoning_output_tokens"
         case totalTokens = "total_tokens"
         case inputTokenDetails = "input_token_details"
         case outputTokenDetails = "output_token_details"
+        case codexRolloutBudgetUnits = "codex_rollout_budget_units"
+    }
+
+    public init(
+        inputTokens: Int64 = 0,
+        cachedInputTokens: Int64 = 0,
+        cacheWriteInputTokens: Int64 = 0,
+        outputTokens: Int64 = 0,
+        reasoningOutputTokens: Int64 = 0,
+        totalTokens: Int64 = 0,
+        inputTokenDetails: JSONValue? = nil,
+        outputTokenDetails: JSONValue? = nil,
+        codexRolloutBudgetUnits: JSONValue? = nil
+    ) {
+        self.inputTokens = inputTokens
+        self.cachedInputTokens = cachedInputTokens
+        self.cacheWriteInputTokens = cacheWriteInputTokens
+        self.outputTokens = outputTokens
+        self.reasoningOutputTokens = reasoningOutputTokens
+        self.totalTokens = totalTokens
+        self.inputTokenDetails = inputTokenDetails
+        self.outputTokenDetails = outputTokenDetails
+        self.codexRolloutBudgetUnits = codexRolloutBudgetUnits
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        inputTokens = try container.decode(Int64.self, forKey: .inputTokens)
-        outputTokens = try container.decode(Int64.self, forKey: .outputTokens)
-        totalTokens = try container.decodeIfPresent(Int64.self, forKey: .totalTokens)
+        inputTokens = try container.decodeIfPresent(Int64.self, forKey: .inputTokens) ?? 0
+        cachedInputTokens = try container.decodeIfPresent(Int64.self, forKey: .cachedInputTokens) ?? 0
+        cacheWriteInputTokens = try container.decodeIfPresent(Int64.self, forKey: .cacheWriteInputTokens) ?? 0
+        outputTokens = try container.decodeIfPresent(Int64.self, forKey: .outputTokens) ?? 0
+        reasoningOutputTokens = try container.decodeIfPresent(Int64.self, forKey: .reasoningOutputTokens) ?? 0
+        totalTokens = try container.decodeIfPresent(Int64.self, forKey: .totalTokens) ?? 0
         inputTokenDetails = try container.decodeIfPresent(JSONValue.self, forKey: .inputTokenDetails)
         outputTokenDetails = try container.decodeIfPresent(JSONValue.self, forKey: .outputTokenDetails)
+        // Rust `TokenUsage.codex_rollout_budget_units` is skip-serialized; keep
+        // it locally so Responses `usage` mapping can preserve the field.
+        codexRolloutBudgetUnits = try container.decodeIfPresent(
+            JSONValue.self, forKey: .codexRolloutBudgetUnits)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(inputTokens, forKey: .inputTokens)
+        try container.encode(cachedInputTokens, forKey: .cachedInputTokens)
+        try container.encode(cacheWriteInputTokens, forKey: .cacheWriteInputTokens)
+        try container.encode(outputTokens, forKey: .outputTokens)
+        try container.encode(reasoningOutputTokens, forKey: .reasoningOutputTokens)
+        try container.encode(totalTokens, forKey: .totalTokens)
+        try container.encodeIfPresent(inputTokenDetails, forKey: .inputTokenDetails)
+        try container.encodeIfPresent(outputTokenDetails, forKey: .outputTokenDetails)
+        // `codex_rollout_budget_units` is skip_serializing upstream.
+    }
+
+    public var isZero: Bool { totalTokens == 0 }
+
+    public func cachedInput() -> Int64 { max(cachedInputTokens, 0) }
+
+    public func nonCachedInput() -> Int64 { max(inputTokens - cachedInput(), 0) }
+
+    public func blendedTotal() -> Int64 { max(nonCachedInput() + max(outputTokens, 0), 0) }
+
+    public func tokensInContextWindow() -> Int64 { totalTokens }
+
+    public func percentOfContextWindowRemaining(_ contextWindow: Int64) -> Int64 {
+        if contextWindow <= Self.baselineTokens { return 0 }
+        let effectiveWindow = contextWindow - Self.baselineTokens
+        let used = max(tokensInContextWindow() - Self.baselineTokens, 0)
+        let remaining = max(effectiveWindow - used, 0)
+        return Int64((Double(remaining) / Double(effectiveWindow) * 100.0).rounded())
+    }
+
+    public mutating func addAssign(_ other: TokenUsage) {
+        inputTokens += other.inputTokens
+        cachedInputTokens += other.cachedInputTokens
+        cacheWriteInputTokens += other.cacheWriteInputTokens
+        outputTokens += other.outputTokens
+        reasoningOutputTokens += other.reasoningOutputTokens
+        totalTokens += other.totalTokens
+    }
+}
+
+// MARK: - TokenUsageInfo
+
+public struct TokenUsageInfo: Codable, Equatable, Sendable {
+    public var totalTokenUsage: TokenUsage
+    public var lastTokenUsage: TokenUsage
+    public var modelContextWindow: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case totalTokenUsage = "total_token_usage"
+        case lastTokenUsage = "last_token_usage"
+        case modelContextWindow = "model_context_window"
+    }
+
+    public init(
+        totalTokenUsage: TokenUsage = TokenUsage(),
+        lastTokenUsage: TokenUsage = TokenUsage(),
+        modelContextWindow: Int64? = nil
+    ) {
+        self.totalTokenUsage = totalTokenUsage
+        self.lastTokenUsage = lastTokenUsage
+        self.modelContextWindow = modelContextWindow
+    }
+
+    public static func newOrAppend(
+        info: TokenUsageInfo?,
+        last: TokenUsage?,
+        modelContextWindow: Int64?
+    ) -> TokenUsageInfo? {
+        if info == nil && last == nil { return nil }
+        var resolved = info ?? TokenUsageInfo(modelContextWindow: modelContextWindow)
+        if let last {
+            resolved.appendLastUsage(last)
+        }
+        if let modelContextWindow {
+            resolved.modelContextWindow = modelContextWindow
+        }
+        return resolved
+    }
+
+    public mutating func appendLastUsage(_ last: TokenUsage) {
+        totalTokenUsage.addAssign(last)
+        lastTokenUsage = last
+    }
+
+    public mutating func fillToContextWindow(_ contextWindow: Int64) {
+        let previousTotal = totalTokenUsage.totalTokens
+        let delta = max(contextWindow - previousTotal, 0)
+        modelContextWindow = contextWindow
+        totalTokenUsage = TokenUsage(totalTokens: contextWindow)
+        lastTokenUsage = TokenUsage(totalTokens: delta)
+    }
+
+    public static func fullContextWindow(_ contextWindow: Int64) -> TokenUsageInfo {
+        var info = TokenUsageInfo(modelContextWindow: contextWindow)
+        info.fillToContextWindow(contextWindow)
+        return info
+    }
+}
+
+// MARK: - TokenUsageRecord
+
+public struct TokenUsageRecord: Codable, Equatable, Sendable {
+    public var threadId: ThreadId
+    public var turnId: String
+    public var sessionId: SessionId
+    public var rootTurnId: String
+    public var responseId: String
+    public var usage: TokenUsage
+    public var turnTokenUsage: TokenUsage
+    public var threadTokenUsage: TokenUsage
+
+    enum CodingKeys: String, CodingKey {
+        case threadId = "thread_id"
+        case turnId = "turn_id"
+        case sessionId = "session_id"
+        case rootTurnId = "root_turn_id"
+        case responseId = "response_id"
+        case usage
+        case turnTokenUsage = "turn_token_usage"
+        case threadTokenUsage = "thread_token_usage"
+    }
+
+    public init(
+        threadId: ThreadId,
+        turnId: String,
+        sessionId: SessionId,
+        rootTurnId: String,
+        responseId: String,
+        usage: TokenUsage,
+        turnTokenUsage: TokenUsage,
+        threadTokenUsage: TokenUsage
+    ) {
+        self.threadId = threadId
+        self.turnId = turnId
+        self.sessionId = sessionId
+        self.rootTurnId = rootTurnId
+        self.responseId = responseId
+        self.usage = usage
+        self.turnTokenUsage = turnTokenUsage
+        self.threadTokenUsage = threadTokenUsage
+    }
+}
+
+// MARK: - TurnContextItem
+
+public struct TurnContextItem: Codable, Equatable, Sendable {
+    public var turnId: String?
+    public var rootTurnId: String?
+    public var disabledPluginIds: [String]?
+    public var cwd: String
+    public var workspaceRoots: [String]?
+    public var currentDate: String?
+    public var timezone: String?
+    public var approvalPolicy: AskForApproval
+    public var approvalsReviewer: ApprovalsReviewer?
+    public var sandboxPolicy: SandboxPolicy
+    public var permissionProfile: PermissionProfile?
+    public var model: String
+    public var personality: Personality?
+    public var collaborationMode: CollaborationMode?
+    public var multiAgentVersion: MultiAgentVersion?
+    public var realtimeActive: Bool?
+    public var effort: ReasoningEffort?
+
+    enum CodingKeys: String, CodingKey {
+        case turnId = "turn_id"
+        case rootTurnId = "root_turn_id"
+        case disabledPluginIds = "disabled_plugin_ids"
+        case cwd
+        case workspaceRoots = "workspace_roots"
+        case currentDate = "current_date"
+        case timezone
+        case approvalPolicy = "approval_policy"
+        case approvalsReviewer = "approvals_reviewer"
+        case sandboxPolicy = "sandbox_policy"
+        case permissionProfile = "permission_profile"
+        case model
+        case personality
+        case collaborationMode = "collaboration_mode"
+        case multiAgentVersion = "multi_agent_version"
+        case realtimeActive = "realtime_active"
+        case effort
+    }
+
+    public init(
+        turnId: String? = nil,
+        rootTurnId: String? = nil,
+        disabledPluginIds: [String]? = nil,
+        cwd: String,
+        workspaceRoots: [String]? = nil,
+        currentDate: String? = nil,
+        timezone: String? = nil,
+        approvalPolicy: AskForApproval = .onRequest,
+        approvalsReviewer: ApprovalsReviewer? = nil,
+        sandboxPolicy: SandboxPolicy = .readOnly(networkAccess: false),
+        permissionProfile: PermissionProfile? = nil,
+        model: String,
+        personality: Personality? = nil,
+        collaborationMode: CollaborationMode? = nil,
+        multiAgentVersion: MultiAgentVersion? = nil,
+        realtimeActive: Bool? = nil,
+        effort: ReasoningEffort? = nil
+    ) {
+        self.turnId = turnId
+        self.rootTurnId = rootTurnId
+        self.disabledPluginIds = disabledPluginIds
+        self.cwd = cwd
+        self.workspaceRoots = workspaceRoots
+        self.currentDate = currentDate
+        self.timezone = timezone
+        self.approvalPolicy = approvalPolicy
+        self.approvalsReviewer = approvalsReviewer
+        self.sandboxPolicy = sandboxPolicy
+        self.permissionProfile = permissionProfile
+        self.model = model
+        self.personality = personality
+        self.collaborationMode = collaborationMode
+        self.multiAgentVersion = multiAgentVersion
+        self.realtimeActive = realtimeActive
+        self.effort = effort
+    }
+
+    public func resolvedPermissionProfile() -> PermissionProfile {
+        permissionProfile ?? .readOnly()
     }
 }
 
@@ -621,6 +1176,18 @@ public struct TurnCompleteEvent: Codable, Equatable, Sendable {
         case interrupted
     }
 
+    public init(
+        turnId: String,
+        usage: TokenUsage? = nil,
+        stopped: Bool = false,
+        interrupted: Bool = false
+    ) {
+        self.turnId = turnId
+        self.usage = usage
+        self.stopped = stopped
+        self.interrupted = interrupted
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         turnId = try container.decode(String.self, forKey: .turnId)
@@ -639,6 +1206,11 @@ public struct TurnStartedEvent: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case turnId = "turn_id"
         case model
+    }
+
+    public init(turnId: String, model: String? = nil) {
+        self.turnId = turnId
+        self.model = model
     }
 }
 
@@ -1058,6 +1630,23 @@ public struct InterAgentCommunication: Codable, Equatable, Sendable {
             forKey: .internalChatMessageMetadataPassthrough)
         try container.encode(triggerTurn, forKey: .triggerTurn)
     }
+
+    public static func isMessageContent(_ content: [ContentItem]) -> Bool {
+        fromMessageContent(content) != nil
+    }
+
+    public static func fromMessageContent(_ content: [ContentItem]) -> InterAgentCommunication? {
+        guard content.count == 1 else { return nil }
+        let text: String
+        switch content[0] {
+        case .inputText(let value), .outputText(let value):
+            text = value
+        default:
+            return nil
+        }
+        guard let data = text.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(InterAgentCommunication.self, from: data)
+    }
 }
 
 // MARK: - Session / thread source
@@ -1324,6 +1913,12 @@ public struct CreditsSnapshot: Codable, Equatable, Sendable {
         case hasCredits = "has_credits"
         case unlimited, balance
     }
+
+    public init(hasCredits: Bool, unlimited: Bool, balance: String? = nil) {
+        self.hasCredits = hasCredits
+        self.unlimited = unlimited
+        self.balance = balance
+    }
 }
 
 public struct SpendControlLimitSnapshot: Codable, Equatable, Sendable {
@@ -1384,6 +1979,20 @@ public struct RateLimitSnapshot: Codable, Equatable, Sendable {
         self.spendControlReached = spendControlReached
         self.planType = planType
         self.rateLimitReachedType = rateLimitReachedType
+    }
+}
+
+/// Server-recommended additional account verification.
+public enum ModelVerification: String, Codable, Equatable, Sendable {
+    case trustedAccessForCyber = "trusted_access_for_cyber"
+}
+
+/// First-party turn moderation metadata from `response.metadata`.
+public struct TurnModerationMetadataEvent: Codable, Equatable, Sendable {
+    public var metadata: JSONValue
+
+    public init(metadata: JSONValue) {
+        self.metadata = metadata
     }
 }
 
@@ -1703,6 +2312,20 @@ public struct UserMessageEvent: Codable, Equatable, Sendable {
         try container.encodeIfPresent(audio, forKey: .audio)
         try container.encode(localAudio, forKey: .localAudio)
         try container.encode(textElements, forKey: .textElements)
+    }
+
+    /// Whether `imageOrder` accounts for every split image reference exactly once.
+    public func hasCompleteImageOrder() -> Bool {
+        if imageOrder.isEmpty { return false }
+        var inlineCount = 0
+        var fileCount = 0
+        for kind in imageOrder {
+            switch kind {
+            case .inline: inlineCount += 1
+            case .file: fileCount += 1
+            }
+        }
+        return inlineCount == (images?.count ?? 0) && fileCount == (fileIds?.count ?? 0)
     }
 }
 
@@ -2190,6 +2813,7 @@ public enum EventMsg: Equatable, Sendable {
     case collabResumeBegin(CollabResumeBeginEvent)
     case collabResumeEnd(CollabResumeEndEvent)
     case subAgentActivity(SubAgentActivityEvent)
+    case threadRolledBack(ThreadRolledBackEvent)
 }
 
 extension EventMsg: Codable {
@@ -2265,6 +2889,8 @@ extension EventMsg: Codable {
         case "collab_resume_end": self = .collabResumeEnd(try CollabResumeEndEvent(from: decoder))
         case "sub_agent_activity":
             self = .subAgentActivity(try SubAgentActivityEvent(from: decoder))
+        case "thread_rolled_back":
+            self = .threadRolledBack(try ThreadRolledBackEvent(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type_, in: container,
@@ -2361,6 +2987,8 @@ extension EventMsg: Codable {
             try container.encode("collab_resume_end", forKey: .type_); try event.encode(to: encoder)
         case .subAgentActivity(let event):
             try container.encode("sub_agent_activity", forKey: .type_); try event.encode(to: encoder)
+        case .threadRolledBack(let event):
+            try container.encode("thread_rolled_back", forKey: .type_); try event.encode(to: encoder)
         }
     }
 }

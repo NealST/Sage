@@ -120,15 +120,15 @@ struct NetworkProxySpec: Sendable, Equatable {
         let fixed = spec.hardDenyAllowlistMisses || spec.constraints.allowlistExpansionEnabled == false
         spec.hardDenyAllowlistMisses = spec.hardDenyAllowlistMisses || managedAllowedDomainsOnly
         if !fixed, !spec.hardDenyAllowlistMisses {
-            var allowed = Set(spec.config.allowedDomains.map(normalizeHost))
-            allowed.formUnion(allowedDomains.map(normalizeHost))
+            var allowed = Set(spec.config.allowedDomains.map(Self.normalizeHost))
+            allowed.formUnion(allowedDomains.map(Self.normalizeHost))
             spec.config.allowedDomains = allowed.sorted()
             spec.constraints.allowlistExpansionEnabled = true
         }
-        var denied = Set(spec.config.deniedDomains.map(normalizeHost))
-        denied.formUnion(deniedDomains.map(normalizeHost))
+        var denied = Set(spec.config.deniedDomains.map(Self.normalizeHost))
+        denied.formUnion(deniedDomains.map(Self.normalizeHost))
         spec.config.deniedDomains = denied.sorted()
-        spec.config.allowedDomains.removeAll { denied.contains(normalizeHost($0)) }
+        spec.config.allowedDomains.removeAll { denied.contains(Self.normalizeHost($0)) }
         spec.constraints.deniedDomains = spec.config.deniedDomains
         return spec
     }

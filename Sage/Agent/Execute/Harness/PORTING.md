@@ -12,13 +12,13 @@
 |---|---:|---:|---:|---:|---:|---:|
 | Phase 1 | 96 | 65 | 26 | 0 | 1 | 0 |
 | Phase 2 | 26 | 10 | 15 | 0 | 0 | 0 |
-| Phase 3 | 86 | 15 | 29 | 0 | 31 | 7 |
-| Phase 4 | 114 | 0 | 8 | 0 | 65 | 0 |
-| Phase 5 | 156 | 0 | 4 | 0 | 152 | 0 |
-| Phase 6 | 51 | 0 | 0 | 0 | 38 | 0 |
-| Phase 7 | 126 | 0 | 0 | 0 | 126 | 0 |
-| Phase 8 | 71 | 2 | 13 | 0 | 56 | 0 |
-| Phase 9 | 75 | 0 | 0 | 0 | 75 | 0 |
+| Phase 3 | 86 | 19 | 53 | 0 | 0 | 0 |
+| Phase 4 | 114 | 11 | 62 | 0 | 0 | 0 |
+| Phase 5 | 156 | 26 | 130 | 0 | 0 | 0 |
+| Phase 6 | 51 | 4 | 34 | 0 | 0 | 13 |
+| Phase 7 | 126 | 6 | 120 | 0 | 0 | 0 |
+| Phase 8 | 71 | 14 | 21 | 0 | 36 | 0 |
+| Phase 9 | 75 | 0 | 1 | 0 | 74 | 0 |
 | Phase 10 | 43 | 0 | 0 | 0 | 43 | 0 |
 
 ## Phase 1
@@ -157,30 +157,30 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/apply_patch.rs` | 94 | - | ⬜ 未开始 |  |
+| `core/src/apply_patch.rs` | 94 | `apply_patch.swift` | 🟡 adapted |  |
 | `core/src/command_canonicalization.rs` | 42 | `command_canonicalization.swift` | ✅ faithful |  |
-| `core/src/exec.rs` | 1,276 | - | ⬜ 未开始 |  |
+| `core/src/exec.rs` | 1,276 | `exec.swift` | 🟡 adapted |  |
 | `core/src/exec_env.rs` | 117 | `exec_env.swift` | 🟡 adapted |  |
-| `core/src/exec_policy/executable_identity.rs` | 107 | - | ⬜ 未开始 |  |
-| `core/src/exec_policy/model_policy.rs` | 60 | - | ⬜ 未开始 |  |
-| `core/src/exec_policy.rs` | 1,175 | - | ⬜ 未开始 |  |
+| `core/src/exec_policy/executable_identity.rs` | 107 | `exec_policy/executable_identity.swift` | 🟡 adapted |  |
+| `core/src/exec_policy/model_policy.rs` | 60 | `exec_policy/model_policy.swift` | ✅ faithful |  |
+| `core/src/exec_policy.rs` | 1,175 | `exec_policy.swift` | 🟡 adapted |  |
 | `core/src/safety.rs` | 184 | `safety.swift` | ✅ faithful |  |
 | `core/src/sandbox_tags.rs` | 114 | `sandbox_tags.swift` | 🟡 adapted |  |
-| `core/src/sandboxing/mod.rs` | 218 | - | ⬜ 未开始 |  |
+| `core/src/sandboxing/mod.rs` | 218 | `sandboxing_mod.swift` | 🟡 adapted |  |
 | `core/src/shell.rs` | 104 | `shell.swift` | 🟡 adapted |  |
-| `core/src/shell_snapshot.rs` | 1,188 | - | ⬜ 未开始 |  |
-| `core/src/shell_snapshot_sandbox.rs` | 224 | - | ⬜ 未开始 |  |
+| `core/src/shell_snapshot.rs` | 1,188 | `shell_snapshot.swift` | 🟡 adapted |  |
+| `core/src/shell_snapshot_sandbox.rs` | 224 | `shell_snapshot_sandbox.swift` | 🟡 adapted |  |
 | `core/src/spawn.rs` | 137 | `spawn.swift` | 🟡 adapted |  |
-| `core/src/unified_exec/async_watcher.rs` | 473 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/errors.rs` | 71 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/head_tail_buffer.rs` | 169 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/mod.rs` | 249 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/oneshot.rs` | 123 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/process.rs` | 667 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/process_manager.rs` | 1,898 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/process_state.rs` | 27 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/shell_snapshot.rs` | 202 | - | ⬜ 未开始 |  |
-| `core/src/unified_exec/stdin_approval.rs` | 249 | - | ⬜ 未开始 |  |
+| `core/src/unified_exec/async_watcher.rs` | 473 | `unified_exec/async_watcher.swift` | 🟡 adapted |  |
+| `core/src/unified_exec/errors.rs` | 71 | `unified_exec/errors.swift` | 🟡 adapted |  |
+| `core/src/unified_exec/head_tail_buffer.rs` | 169 | `unified_exec/head_tail_buffer.swift` | ✅ faithful |  |
+| `core/src/unified_exec/mod.rs` | 249 | `unified_exec/mod.swift` | 🟡 adapted |  |
+| `core/src/unified_exec/oneshot.rs` | 123 | `unified_exec/oneshot.swift` | 🟡 adapted |  |
+| `core/src/unified_exec/process.rs` | 667 | `unified_exec/process.swift` | 🟡 adapted |  |
+| `core/src/unified_exec/process_manager.rs` | 1,898 | `unified_exec/process_manager.swift` | 🟡 partial |  |
+| `core/src/unified_exec/process_state.rs` | 27 | `unified_exec/process_state.swift` | ✅ faithful |  |
+| `core/src/unified_exec/shell_snapshot.rs` | 202 | `unified_exec/unified_exec_shell_snapshot.swift` | 🟡 partial |  |
+| `core/src/unified_exec/stdin_approval.rs` | 249 | `unified_exec/stdin_approval.swift` | 🟡 partial |  |
 | `core/src/user_shell_command.rs` | 44 | `user_shell_command.swift` | 🟡 partial |  |
 | `execpolicy/src/amend.rs` | 337 | `execpolicy/src/amend.swift` | 🟡 adapted |  |
 | `execpolicy/src/decision.rs` | 27 | `execpolicy/src/decision.swift` | ✅ faithful |  |
@@ -224,19 +224,19 @@
 | `shell-command/src/shell_snapshot_literals.rs` | 715 | `shell-command/src/shell_snapshot_literals.swift` | 🟡 partial |  |
 | `shell-command/src/shell_snapshot_render.rs` | 106 | `shell-command/src/shell_snapshot_render.swift` | 🟡 partial |  |
 | `shell-command/src/startup.rs` | 30 | `shell-command/src/startup.swift` | ✅ faithful |  |
-| `utils/pty/src/child.rs` | 139 | - | ⬜ 未开始 |  |
-| `utils/pty/src/child_command.rs` | 370 | - | ⬜ 未开始 |  |
-| `utils/pty/src/child_reaper.rs` | 68 | - | ⬜ 未开始 |  |
-| `utils/pty/src/lib.rs` | 70 | - | ⬜ 未开始 |  |
-| `utils/pty/src/linux_fds.rs` | 129 | - | ⬜ 未开始 |  |
-| `utils/pty/src/pipe.rs` | 370 | - | ⬜ 未开始 |  |
-| `utils/pty/src/posix_child.rs` | 480 | - | ⬜ 未开始 |  |
-| `utils/pty/src/process.rs` | 481 | - | ⬜ 未开始 |  |
-| `utils/pty/src/process_group.rs` | 309 | - | ⬜ 未开始 |  |
-| `utils/pty/src/pty.rs` | 679 | - | ⬜ 未开始 |  |
-| `utils/pty/src/spawn_helper.rs` | 201 | - | ⬜ 未开始 |  |
-| `utils/pty/src/spawn_helper_main.rs` | 119 | - | ⬜ 未开始 |  |
-| `utils/pty/src/unix_io.rs` | 109 | - | ⬜ 未开始 |  |
+| `utils/pty/src/child.rs` | 139 | `utils/pty/src/child.swift` | 🟡 adapted |  |
+| `utils/pty/src/child_command.rs` | 370 | `utils/pty/src/child_command.swift` | 🟡 adapted |  |
+| `utils/pty/src/child_reaper.rs` | 68 | `utils/pty/src/child_reaper.swift` | 🟡 adapted |  |
+| `utils/pty/src/lib.rs` | 70 | `utils/pty/src/pty_lib.swift` | 🟡 adapted |  |
+| `utils/pty/src/linux_fds.rs` | 129 | - | ⛔ excluded | platform: Linux |
+| `utils/pty/src/pipe.rs` | 370 | `utils/pty/src/pipe.swift` | 🟡 adapted |  |
+| `utils/pty/src/posix_child.rs` | 480 | `utils/pty/src/posix_child.swift` | 🟡 adapted |  |
+| `utils/pty/src/process.rs` | 481 | `utils/pty/src/process.swift` | 🟡 adapted |  |
+| `utils/pty/src/process_group.rs` | 309 | `utils/pty/src/process_group.swift` | ✅ faithful |  |
+| `utils/pty/src/pty.rs` | 679 | `utils/pty/src/pty.swift` | 🟡 adapted |  |
+| `utils/pty/src/spawn_helper.rs` | 201 | - | ⛔ excluded | platform: Linux spawn helper |
+| `utils/pty/src/spawn_helper_main.rs` | 119 | - | ⛔ excluded | platform: Linux spawn helper |
+| `utils/pty/src/unix_io.rs` | 109 | `utils/pty/src/unix_io.swift` | 🟡 adapted |  |
 | `utils/pty/src/win/conpty.rs` | 192 | - | ⛔ excluded | platform: Windows PTY |
 | `utils/pty/src/win/job.rs` | 232 | - | ⛔ excluded | platform: Windows PTY |
 | `utils/pty/src/win/mod.rs` | 181 | - | ⛔ excluded | platform: Windows PTY |
@@ -248,79 +248,79 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/function_tool.rs` | 1 | - | ⬜ 未开始 |  |
-| `core/src/network_policy_decision.rs` | 106 | - | ⬜ 未开始 |  |
+| `core/src/function_tool.rs` | 1 | `function_tool.swift` | 🟡 adapted |  |
+| `core/src/network_policy_decision.rs` | 106 | `network_policy_decision.swift` | ✅ faithful |  |
 | `core/src/tools/approvals.rs` | 889 | `tools/approvals.swift` | 🟡 partial |  |
-| `core/src/tools/call_trace.rs` | 88 | - | ⬜ 未开始 |  |
-| `core/src/tools/catalog_parameters.rs` | 14 | - | ⬜ 未开始 |  |
-| `core/src/tools/context.rs` | 607 | - | ⬜ 未开始 |  |
-| `core/src/tools/control_tool_analytics.rs` | 58 | - | ⬜ 未开始 |  |
-| `core/src/tools/events.rs` | 889 | - | ⬜ 未开始 |  |
-| `core/src/tools/executed_tool_calls/mcp_attribution.rs` | 180 | - | ⬜ 未开始 |  |
-| `core/src/tools/executed_tool_calls/request_metadata.rs` | 456 | - | ⬜ 未开始 |  |
-| `core/src/tools/executed_tool_calls/seen_ids.rs` | 133 | - | ⬜ 未开始 |  |
-| `core/src/tools/executed_tool_calls.rs` | 696 | - | ⬜ 未开始 |  |
+| `core/src/tools/call_trace.rs` | 88 | `tools/call_trace.swift` | 🟡 adapted |  |
+| `core/src/tools/catalog_parameters.rs` | 14 | `tools/catalog_parameters.swift` | ✅ faithful |  |
+| `core/src/tools/context.rs` | 607 | `tools/context.swift` | 🟡 adapted |  |
+| `core/src/tools/control_tool_analytics.rs` | 58 | `tools/control_tool_analytics.swift` | 🟡 adapted |  |
+| `core/src/tools/events.rs` | 889 | `tools/events.swift` | 🟡 adapted |  |
+| `core/src/tools/executed_tool_calls/mcp_attribution.rs` | 180 | `tools/executed_tool_calls/mcp_attribution.swift` | 🟡 adapted |  |
+| `core/src/tools/executed_tool_calls/request_metadata.rs` | 456 | `tools/executed_tool_calls/request_metadata.swift` | 🟡 adapted |  |
+| `core/src/tools/executed_tool_calls/seen_ids.rs` | 133 | `tools/executed_tool_calls/seen_ids.swift` | 🟡 adapted |  |
+| `core/src/tools/executed_tool_calls.rs` | 696 | `tools/executed_tool_calls.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/apply_patch.rs` | 626 | `tools/handlers/apply_patch.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/apply_patch_spec.rs` | 32 | `tools/handlers/apply_patch_spec.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/current_time.rs` | 130 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/dynamic.rs` | 251 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/extension_tools.rs` | 640 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/get_context_remaining.rs` | 94 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/get_context_remaining_spec.rs` | 36 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp.rs` | 902 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp_resource/list_mcp_resource_templates.rs` | 111 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp_resource/list_mcp_resources.rs` | 109 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp_resource/read_mcp_resource.rs` | 108 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp_resource.rs` | 414 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mcp_resource_spec.rs` | 120 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/mod.rs` | 617 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/new_context_window.rs` | 48 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/new_context_window_spec.rs` | 17 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/plan.rs` | 112 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/plan_spec.rs` | 58 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_permissions.rs` | 209 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_user_input.rs` | 163 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_user_input_async.rs` | 156 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_user_input_spec.rs` | 146 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/send_message_to_user_async.rs` | 109 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/shell_spec.rs` | 348 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/sleep.rs` | 167 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/test_sync.rs` | 196 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/test_sync_spec.rs` | 70 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/tool_search.rs` | 500 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/tool_search_spec.rs` | 221 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/unified_exec/exec_command.rs` | 569 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/unified_exec/write_stdin.rs` | 145 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/unified_exec.rs` | 159 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/view_image.rs` | 526 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/view_image_spec.rs` | 74 | - | ⬜ 未开始 |  |
-| `core/src/tools/hook_names.rs` | 67 | - | ⬜ 未开始 |  |
-| `core/src/tools/hosted_spec.rs` | 50 | - | ⬜ 未开始 |  |
-| `core/src/tools/lifecycle.rs` | 177 | - | ⬜ 未开始 |  |
-| `core/src/tools/metadata_metrics.rs` | 61 | - | ⬜ 未开始 |  |
-| `core/src/tools/mod.rs` | 148 | - | ⬜ 未开始 |  |
-| `core/src/tools/multi_agent_tool.rs` | 133 | - | ⬜ 未开始 |  |
+| `core/src/tools/handlers/current_time.rs` | 130 | `tools/handlers/current_time.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/dynamic.rs` | 251 | `tools/handlers/dynamic.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/extension_tools.rs` | 640 | `tools/handlers/extension_tools.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/get_context_remaining.rs` | 94 | `tools/handlers/get_context_remaining.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/get_context_remaining_spec.rs` | 36 | `tools/handlers/get_context_remaining_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/mcp.rs` | 902 | `tools/handlers/mcp.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp_resource/list_mcp_resource_templates.rs` | 111 | `tools/handlers/mcp_resource/list_mcp_resource_templates.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp_resource/list_mcp_resources.rs` | 109 | `tools/handlers/mcp_resource/list_mcp_resources.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp_resource/read_mcp_resource.rs` | 108 | `tools/handlers/mcp_resource/read_mcp_resource.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp_resource.rs` | 414 | `tools/handlers/mcp_resource.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp_resource_spec.rs` | 120 | `tools/handlers/mcp_resource_spec.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mod.rs` | 617 | `tools/handlers/handlers_mod.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/new_context_window.rs` | 48 | `tools/handlers/new_context_window.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/new_context_window_spec.rs` | 17 | `tools/handlers/new_context_window_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/plan.rs` | 112 | `tools/handlers/plan.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/plan_spec.rs` | 58 | `tools/handlers/plan_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/request_permissions.rs` | 209 | `tools/handlers/request_permissions.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_user_input.rs` | 163 | `tools/handlers/request_user_input.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_user_input_async.rs` | 156 | `tools/handlers/request_user_input_async.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_user_input_spec.rs` | 146 | `tools/handlers/request_user_input_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/send_message_to_user_async.rs` | 109 | `tools/handlers/send_message_to_user_async.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/shell_spec.rs` | 348 | `tools/handlers/shell_spec.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/sleep.rs` | 167 | `tools/handlers/sleep.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/test_sync.rs` | 196 | `tools/handlers/test_sync.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/test_sync_spec.rs` | 70 | `tools/handlers/test_sync_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/tool_search.rs` | 500 | `tools/handlers/tool_search.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/tool_search_spec.rs` | 221 | `tools/handlers/tool_search_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/unified_exec/exec_command.rs` | 569 | `tools/handlers/unified_exec/exec_command.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/unified_exec/write_stdin.rs` | 145 | `tools/handlers/unified_exec/write_stdin.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/unified_exec.rs` | 159 | `tools/handlers/unified_exec.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/view_image.rs` | 526 | `tools/handlers/view_image.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/view_image_spec.rs` | 74 | `tools/handlers/view_image_spec.swift` | ✅ faithful |  |
+| `core/src/tools/hook_names.rs` | 67 | `tools/hook_names.swift` | ✅ faithful |  |
+| `core/src/tools/hosted_spec.rs` | 50 | `tools/hosted_spec.swift` | 🟡 adapted |  |
+| `core/src/tools/lifecycle.rs` | 177 | `tools/lifecycle.swift` | 🟡 adapted |  |
+| `core/src/tools/metadata_metrics.rs` | 61 | `tools/metadata_metrics.swift` | 🟡 adapted |  |
+| `core/src/tools/mod.rs` | 148 | `tools/mod.swift` | 🟡 adapted |  |
+| `core/src/tools/multi_agent_tool.rs` | 133 | `tools/multi_agent_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
 | `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted |  |
 | `core/src/tools/parallel.rs` | 813 | `tools/parallel.swift` | 🟡 adapted |  |
-| `core/src/tools/registry.rs` | 865 | - | ⬜ 未开始 |  |
-| `core/src/tools/router.rs` | 389 | - | ⬜ 未开始 |  |
+| `core/src/tools/registry.rs` | 865 | `tools/registry.swift` | 🟡 adapted |  |
+| `core/src/tools/router.rs` | 389 | `tools/router.swift` | 🟡 adapted |  |
 | `core/src/tools/runtimes/apply_patch.rs` | 242 | `tools/runtimes/apply_patch.swift` | 🟡 partial |  |
-| `core/src/tools/runtimes/mod.rs` | 918 | - | ⬜ 未开始 |  |
-| `core/src/tools/runtimes/unified_exec/launch.rs` | 75 | - | ⬜ 未开始 |  |
-| `core/src/tools/runtimes/unified_exec.rs` | 981 | - | ⬜ 未开始 |  |
-| `core/src/tools/runtimes/zsh_fork/unix_escalation.rs` | 875 | - | ⬜ 未开始 |  |
-| `core/src/tools/runtimes/zsh_fork.rs` | 105 | - | ⬜ 未开始 |  |
+| `core/src/tools/runtimes/mod.rs` | 918 | `tools/runtimes/mod.swift` | 🟡 adapted |  |
+| `core/src/tools/runtimes/unified_exec/launch.rs` | 75 | `tools/runtimes/unified_exec/launch.swift` | 🟡 adapted |  |
+| `core/src/tools/runtimes/unified_exec.rs` | 981 | `tools/runtimes/unified_exec.swift` | 🟡 adapted |  |
+| `core/src/tools/runtimes/zsh_fork/unix_escalation.rs` | 875 | `tools/runtimes/zsh_fork/unix_escalation.swift` | 🟡 adapted |  |
+| `core/src/tools/runtimes/zsh_fork.rs` | 105 | `tools/runtimes/zsh_fork.swift` | 🟡 adapted |  |
 | `core/src/tools/sandboxing.rs` | 561 | `tools/sandboxing.swift` | 🟡 adapted |  |
-| `core/src/tools/spec_plan.rs` | 1,534 | - | ⬜ 未开始 |  |
-| `core/src/tools/tool_dispatch_trace.rs` | 128 | - | ⬜ 未开始 |  |
-| `core/src/tools/tool_namespaces_info.rs` | 111 | - | ⬜ 未开始 |  |
-| `core/src/tools/user_messaging.rs` | 35 | - | ⬜ 未开始 |  |
+| `core/src/tools/spec_plan.rs` | 1,534 | `tools/spec_plan.swift` | 🟡 adapted |  |
+| `core/src/tools/tool_dispatch_trace.rs` | 128 | `tools/tool_dispatch_trace.swift` | 🟡 adapted |  |
+| `core/src/tools/tool_namespaces_info.rs` | 111 | `tools/tool_namespaces_info.swift` | 🟡 adapted |  |
+| `core/src/tools/user_messaging.rs` | 35 | `tools/user_messaging.swift` | 🟡 adapted |  |
 | `network-proxy/src/attribution.rs` | 145 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/authorization_path.rs` | 64 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/brokered_tunnel.rs` | 217 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/certs.rs` | 1,283 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
-| `network-proxy/src/config.rs` | 1,233 | - | ⬜ 未开始 | 策略类型层 |
+| `network-proxy/src/config.rs` | 1,233 | `network-proxy/src/config.swift` | 🟡 adapted | 策略类型层 |
 | `network-proxy/src/connect_policy.rs` | 244 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/connection_lifecycle/listeners.rs` | 47 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/connection_lifecycle/mod.rs` | 12 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
@@ -337,19 +337,19 @@
 | `network-proxy/src/credential_broker/registry.rs` | 442 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/credential_broker/replacement.rs` | 155 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/credential_broker.rs` | 1,639 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
-| `network-proxy/src/environment_policy.rs` | 97 | - | ⬜ 未开始 | 策略类型层 |
+| `network-proxy/src/environment_policy.rs` | 97 | `network-proxy/src/environment_policy.swift` | 🟡 adapted | 策略类型层 |
 | `network-proxy/src/http_proxy.rs` | 1,917 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/lib.rs` | 125 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/main.rs` | 119 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/mitm.rs` | 639 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/mitm_hook.rs` | 1,086 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/native_certs.rs` | 260 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
-| `network-proxy/src/network_policy.rs` | 1,124 | - | ⬜ 未开始 | 策略类型层 |
-| `network-proxy/src/policy.rs` | 559 | - | ⬜ 未开始 | 策略类型层 |
+| `network-proxy/src/network_policy.rs` | 1,124 | `network-proxy/src/network_policy.swift` | 🟡 adapted | 策略类型层 |
+| `network-proxy/src/policy.rs` | 559 | `network-proxy/src/policy.swift` | 🟡 adapted | 策略类型层 |
 | `network-proxy/src/process_log_metadata.rs` | 17 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/proxy/execution_scope.rs` | 53 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/proxy.rs` | 3,087 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
-| `network-proxy/src/reasons.rs` | 9 | - | ⬜ 未开始 | 策略类型层 |
+| `network-proxy/src/reasons.rs` | 9 | `network-proxy/src/reasons.swift` | ✅ faithful | 策略类型层 |
 | `network-proxy/src/remote_config.rs` | 119 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/request_cancellation.rs` | 32 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
 | `network-proxy/src/request_disconnect.rs` | 45 | - | ⛔ excluded | 适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记） |
@@ -367,186 +367,186 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/compact.rs` | 840 | - | ⬜ 未开始 |  |
-| `core/src/compact_model_fallback.rs` | 59 | - | ⬜ 未开始 |  |
-| `core/src/compact_remote_history.rs` | 190 | - | ⬜ 未开始 |  |
-| `core/src/compact_remote_v2.rs` | 1,272 | - | ⬜ 未开始 |  |
-| `core/src/compact_remote_v2_attempt.rs` | 133 | - | ⬜ 未开始 |  |
-| `core/src/compact_remote_v2_images.rs` | 100 | - | ⬜ 未开始 |  |
-| `core/src/compact_token_budget.rs` | 84 | - | ⬜ 未开始 |  |
-| `core/src/config/auth_keyring.rs` | 122 | - | ⬜ 未开始 |  |
-| `core/src/config/edit/bedrock.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/config/edit/document_helpers.rs` | 354 | - | ⬜ 未开始 |  |
-| `core/src/config/edit.rs` | 989 | - | ⬜ 未开始 |  |
-| `core/src/config/managed_features.rs` | 349 | - | ⬜ 未开始 |  |
-| `core/src/config/metrics.rs` | 26 | - | ⬜ 未开始 |  |
-| `core/src/config/mod.rs` | 4,922 | - | ⬜ 未开始 |  |
-| `core/src/config/network_config.rs` | 176 | - | ⬜ 未开始 |  |
+| `core/src/compact.rs` | 840 | `compact.swift` | 🟡 adapted |  |
+| `core/src/compact_model_fallback.rs` | 59 | `compact_model_fallback.swift` | 🟡 adapted |  |
+| `core/src/compact_remote_history.rs` | 190 | `compact_remote_history.swift` | 🟡 adapted |  |
+| `core/src/compact_remote_v2.rs` | 1,272 | `compact_remote_v2.swift` | 🟡 adapted |  |
+| `core/src/compact_remote_v2_attempt.rs` | 133 | `compact_remote_v2_attempt.swift` | 🟡 adapted |  |
+| `core/src/compact_remote_v2_images.rs` | 100 | `compact_remote_v2_images.swift` | 🟡 adapted |  |
+| `core/src/compact_token_budget.rs` | 84 | `compact_token_budget.swift` | 🟡 adapted |  |
+| `core/src/config/auth_keyring.rs` | 122 | `config/auth_keyring.swift` | 🟡 adapted |  |
+| `core/src/config/edit/bedrock.rs` | 37 | `config/edit/bedrock.swift` | 🟡 adapted |  |
+| `core/src/config/edit/document_helpers.rs` | 354 | `config/edit/document_helpers.swift` | 🟡 adapted |  |
+| `core/src/config/edit.rs` | 989 | `config/edit.swift` | 🟡 adapted |  |
+| `core/src/config/managed_features.rs` | 349 | `config/managed_features.swift` | 🟡 adapted |  |
+| `core/src/config/metrics.rs` | 26 | `config/metrics.swift` | 🟡 adapted |  |
+| `core/src/config/mod.rs` | 4,922 | `config/config_mod.swift` | 🟡 adapted |  |
+| `core/src/config/network_config.rs` | 176 | `config/network_config.swift` | 🟡 adapted |  |
 | `core/src/config/network_proxy_spec.rs` | 546 | `config/network_proxy_spec.swift` | 🟡 adapted |  |
-| `core/src/config/otel.rs` | 120 | - | ⬜ 未开始 |  |
-| `core/src/config/permission_path.rs` | 75 | - | ⬜ 未开始 |  |
-| `core/src/config/permission_profile_catalog.rs` | 137 | - | ⬜ 未开始 |  |
-| `core/src/config/permission_profile_selection.rs` | 39 | - | ⬜ 未开始 |  |
-| `core/src/config/permissions.rs` | 893 | - | ⬜ 未开始 |  |
-| `core/src/config/requirements.rs` | 178 | - | ⬜ 未开始 |  |
-| `core/src/config/resolved_permission_profile.rs` | 93 | - | ⬜ 未开始 |  |
-| `core/src/config/schema.rs` | 7 | - | ⬜ 未开始 |  |
-| `core/src/config/token_budget_startup.rs` | 31 | - | ⬜ 未开始 |  |
-| `core/src/config/windows_sandbox_config.rs` | 126 | - | ⬜ 未开始 |  |
-| `core/src/context/agent_message_board_notification.rs` | 42 | - | ⬜ 未开始 |  |
-| `core/src/context/approved_command_prefix_saved.rs` | 43 | - | ⬜ 未开始 |  |
-| `core/src/context/apps_instructions.rs` | 33 | - | ⬜ 未开始 |  |
-| `core/src/context/available_plugins_instructions.rs` | 49 | - | ⬜ 未开始 |  |
-| `core/src/context/base_instructions.rs` | 31 | - | ⬜ 未开始 |  |
-| `core/src/context/compaction_summary.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/context/contextual_user_message.rs` | 121 | - | ⬜ 未开始 |  |
-| `core/src/context/current_time_reminder.rs` | 71 | - | ⬜ 未开始 |  |
-| `core/src/context/developer_instructions.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/context/environment_context.rs` | 243 | - | ⬜ 未开始 |  |
-| `core/src/context/environments_instructions.rs` | 38 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_approved_action.rs` | 48 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_budget_omission.rs` | 32 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_context_mode.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_followup_review_reminder.rs` | 34 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_node_repl_policy.rs` | 39 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_policy.rs` | 42 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_review_evidence.rs` | 211 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_sender_messages.rs` | 58 | - | ⬜ 未开始 |  |
-| `core/src/context/guardian_tool_descriptions.rs` | 58 | - | ⬜ 未开始 |  |
-| `core/src/context/hook_additional_context.rs` | 35 | - | ⬜ 未开始 |  |
-| `core/src/context/image_resize_notice.rs` | 79 | - | ⬜ 未开始 |  |
-| `core/src/context/inter_agent_completion_message.rs` | 46 | - | ⬜ 未开始 |  |
-| `core/src/context/inter_agent_message.rs` | 71 | - | ⬜ 未开始 |  |
-| `core/src/context/internal_model_context.rs` | 134 | - | ⬜ 未开始 |  |
-| `core/src/context/legacy_apply_patch_exec_command_warning.rs` | 34 | - | ⬜ 未开始 |  |
-| `core/src/context/legacy_model_mismatch_warning.rs` | 34 | - | ⬜ 未开始 |  |
-| `core/src/context/legacy_unified_exec_process_limit_warning.rs` | 34 | - | ⬜ 未开始 |  |
-| `core/src/context/memory.rs` | 43 | - | ⬜ 未开始 |  |
-| `core/src/context/mod.rs` | 129 | - | ⬜ 未开始 |  |
-| `core/src/context/model_switch_instructions.rs` | 44 | - | ⬜ 未开始 |  |
-| `core/src/context/multi_agent_mode_instructions.rs` | 54 | - | ⬜ 未开始 |  |
-| `core/src/context/multi_agent_usage_hint.rs` | 42 | - | ⬜ 未开始 |  |
-| `core/src/context/network_rule_saved.rs` | 48 | - | ⬜ 未开始 |  |
-| `core/src/context/node_repl_review_evidence.rs` | 316 | - | ⬜ 未开始 |  |
-| `core/src/context/plugin_instructions.rs` | 35 | - | ⬜ 未开始 |  |
-| `core/src/context/recommended_plugins_instructions.rs` | 55 | - | ⬜ 未开始 |  |
-| `core/src/context/rollout_budget.rs` | 32 | - | ⬜ 未开始 |  |
-| `core/src/context/subagent_notification.rs` | 47 | - | ⬜ 未开始 |  |
-| `core/src/context/token_budget_context.rs` | 245 | - | ⬜ 未开始 |  |
-| `core/src/context/turn_aborted.rs` | 40 | - | ⬜ 未开始 |  |
-| `core/src/context/unsupported_media.rs` | 42 | - | ⬜ 未开始 |  |
-| `core/src/context/user_goal.rs` | 105 | - | ⬜ 未开始 |  |
-| `core/src/context/user_instructions.rs` | 35 | - | ⬜ 未开始 |  |
-| `core/src/context/user_shell_command.rs` | 53 | - | ⬜ 未开始 |  |
-| `core/src/context/user_verification_notice.rs` | 28 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/agents_md.rs` | 84 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/apps_instructions.rs` | 55 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/collaboration_mode.rs` | 177 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/compact_permissions.rs` | 59 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/context_window_guidance.rs` | 76 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/environment.rs` | 557 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/environments_instructions.rs` | 55 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/managed_developer_instructions.rs` | 157 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/mod.rs` | 556 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/model.rs` | 65 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/multi_agent_mode.rs` | 91 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/multi_agent_usage_hint.rs` | 50 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/permissions.rs` | 135 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/persistent_mode.rs` | 120 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/plugins_instructions.rs` | 55 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/realtime.rs` | 96 | - | ⬜ 未开始 |  |
-| `core/src/context/world_state/tools.rs` | 233 | - | ⬜ 未开始 |  |
-| `core/src/context_manager/history.rs` | 1,256 | - | ⬜ 未开始 |  |
-| `core/src/context_manager/history_user_authorization.rs` | 204 | - | ⬜ 未开始 |  |
-| `core/src/context_manager/mod.rs` | 9 | - | ⬜ 未开始 |  |
-| `core/src/context_manager/normalize.rs` | 420 | - | ⬜ 未开始 |  |
-| `core/src/context_manager/updates.rs` | 60 | - | ⬜ 未开始 |  |
-| `core/src/event_mapping.rs` | 261 | - | ⬜ 未开始 |  |
-| `core/src/mcp.rs` | 421 | - | ⬜ 未开始 |  |
-| `core/src/mcp_openai_file.rs` | 698 | - | ⬜ 未开始 |  |
-| `core/src/mcp_skill_dependencies.rs` | 535 | - | ⬜ 未开始 |  |
-| `core/src/mcp_tool_approval_templates.rs` | 371 | - | ⬜ 未开始 |  |
-| `core/src/mcp_tool_call/account.rs` | 39 | - | ⬜ 未开始 |  |
-| `core/src/mcp_tool_call/telemetry.rs` | 166 | - | ⬜ 未开始 |  |
-| `core/src/mcp_tool_call.rs` | 2,510 | - | ⬜ 未开始 |  |
-| `core/src/mcp_tool_exposure.rs` | 192 | - | ⬜ 未开始 |  |
-| `core/src/session/code_mode_warning.rs` | 26 | - | ⬜ 未开始 |  |
-| `core/src/session/context_window.rs` | 130 | - | ⬜ 未开始 |  |
-| `core/src/session/daemon_recovery.rs` | 46 | - | ⬜ 未开始 |  |
-| `core/src/session/environment.rs` | 307 | - | ⬜ 未开始 |  |
-| `core/src/session/extension_interruption.rs` | 117 | - | ⬜ 未开始 |  |
-| `core/src/session/extension_metrics.rs` | 35 | - | ⬜ 未开始 |  |
-| `core/src/session/guardian_checkpoint.rs` | 47 | - | ⬜ 未开始 |  |
-| `core/src/session/handlers.rs` | 716 | - | ⬜ 未开始 |  |
-| `core/src/session/inject.rs` | 193 | - | ⬜ 未开始 |  |
-| `core/src/session/input_queue.rs` | 681 | - | ⬜ 未开始 |  |
-| `core/src/session/mcp.rs` | 1,219 | - | ⬜ 未开始 |  |
-| `core/src/session/mcp_prewarm.rs` | 82 | - | ⬜ 未开始 |  |
-| `core/src/session/mcp_refresh.rs` | 56 | - | ⬜ 未开始 |  |
-| `core/src/session/mcp_runtime.rs` | 380 | - | ⬜ 未开始 |  |
-| `core/src/session/mod.rs` | 5,161 | - | ⬜ 未开始 |  |
-| `core/src/session/plugin_selection.rs` | 32 | - | ⬜ 未开始 |  |
-| `core/src/session/reasoning_effort.rs` | 162 | - | ⬜ 未开始 |  |
-| `core/src/session/retained_context.rs` | 86 | - | ⬜ 未开始 |  |
-| `core/src/session/review.rs` | 229 | - | ⬜ 未开始 |  |
-| `core/src/session/rollout_budget.rs` | 40 | - | ⬜ 未开始 |  |
-| `core/src/session/rollout_reconstruction.rs` | 563 | - | ⬜ 未开始 |  |
-| `core/src/session/session.rs` | 1,928 | - | ⬜ 未开始 |  |
-| `core/src/session/startup.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/session/startup_prewarm.rs` | 413 | - | ⬜ 未开始 |  |
-| `core/src/session/step_activation.rs` | 472 | - | ⬜ 未开始 |  |
-| `core/src/session/step_context.rs` | 61 | - | ⬜ 未开始 |  |
-| `core/src/session/step_settings.rs` | 347 | - | ⬜ 未开始 |  |
-| `core/src/session/submission.rs` | 18 | - | ⬜ 未开始 |  |
-| `core/src/session/thread_settings.rs` | 131 | - | ⬜ 未开始 |  |
-| `core/src/session/time_reminder.rs` | 202 | - | ⬜ 未开始 |  |
-| `core/src/session/token_budget.rs` | 249 | - | ⬜ 未开始 |  |
+| `core/src/config/otel.rs` | 120 | `config/otel.swift` | 🟡 adapted |  |
+| `core/src/config/permission_path.rs` | 75 | `config/permission_path.swift` | 🟡 adapted |  |
+| `core/src/config/permission_profile_catalog.rs` | 137 | `config/permission_profile_catalog.swift` | 🟡 adapted |  |
+| `core/src/config/permission_profile_selection.rs` | 39 | `config/permission_profile_selection.swift` | 🟡 adapted |  |
+| `core/src/config/permissions.rs` | 893 | `config/permissions.swift` | 🟡 adapted |  |
+| `core/src/config/requirements.rs` | 178 | `config/requirements.swift` | 🟡 adapted |  |
+| `core/src/config/resolved_permission_profile.rs` | 93 | `config/resolved_permission_profile.swift` | 🟡 adapted |  |
+| `core/src/config/schema.rs` | 7 | `config/schema.swift` | 🟡 adapted |  |
+| `core/src/config/token_budget_startup.rs` | 31 | `config/token_budget_startup.swift` | 🟡 adapted |  |
+| `core/src/config/windows_sandbox_config.rs` | 126 | `config/windows_sandbox_config.swift` | 🟡 adapted |  |
+| `core/src/context/agent_message_board_notification.rs` | 42 | `context/agent_message_board_notification.swift` | 🟡 adapted |  |
+| `core/src/context/approved_command_prefix_saved.rs` | 43 | `context/approved_command_prefix_saved.swift` | ✅ faithful |  |
+| `core/src/context/apps_instructions.rs` | 33 | `context/apps_instructions.swift` | ✅ faithful |  |
+| `core/src/context/available_plugins_instructions.rs` | 49 | `context/available_plugins_instructions.swift` | ✅ faithful |  |
+| `core/src/context/base_instructions.rs` | 31 | `context/base_instructions.swift` | ✅ faithful |  |
+| `core/src/context/compaction_summary.rs` | 37 | `context/compaction_summary.swift` | ✅ faithful |  |
+| `core/src/context/contextual_user_message.rs` | 121 | `context/contextual_user_message.swift` | 🟡 adapted |  |
+| `core/src/context/current_time_reminder.rs` | 71 | `context/current_time_reminder.swift` | ✅ faithful |  |
+| `core/src/context/developer_instructions.rs` | 37 | `context/developer_instructions.swift` | ✅ faithful |  |
+| `core/src/context/environment_context.rs` | 243 | `context/environment_context.swift` | 🟡 adapted |  |
+| `core/src/context/environments_instructions.rs` | 38 | `context/environments_instructions.swift` | ✅ faithful |  |
+| `core/src/context/guardian_approved_action.rs` | 48 | `context/guardian_approved_action.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_budget_omission.rs` | 32 | `context/guardian_budget_omission.swift` | ✅ faithful |  |
+| `core/src/context/guardian_context_mode.rs` | 37 | `context/guardian_context_mode.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_followup_review_reminder.rs` | 34 | `context/guardian_followup_review_reminder.swift` | ✅ faithful |  |
+| `core/src/context/guardian_node_repl_policy.rs` | 39 | `context/guardian_node_repl_policy.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_policy.rs` | 42 | `context/guardian_policy.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_review_evidence.rs` | 211 | `context/guardian_review_evidence.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_sender_messages.rs` | 58 | `context/guardian_sender_messages.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_tool_descriptions.rs` | 58 | `context/guardian_tool_descriptions.swift` | 🟡 adapted |  |
+| `core/src/context/hook_additional_context.rs` | 35 | `context/hook_additional_context.swift` | ✅ faithful |  |
+| `core/src/context/image_resize_notice.rs` | 79 | `context/image_resize_notice.swift` | 🟡 adapted |  |
+| `core/src/context/inter_agent_completion_message.rs` | 46 | `context/inter_agent_completion_message.swift` | 🟡 adapted |  |
+| `core/src/context/inter_agent_message.rs` | 71 | `context/inter_agent_message.swift` | 🟡 adapted |  |
+| `core/src/context/internal_model_context.rs` | 134 | `context/internal_model_context.swift` | ✅ faithful |  |
+| `core/src/context/legacy_apply_patch_exec_command_warning.rs` | 34 | `context/legacy_apply_patch_exec_command_warning.swift` | ✅ faithful |  |
+| `core/src/context/legacy_model_mismatch_warning.rs` | 34 | `context/legacy_model_mismatch_warning.swift` | ✅ faithful |  |
+| `core/src/context/legacy_unified_exec_process_limit_warning.rs` | 34 | `context/legacy_unified_exec_process_limit_warning.swift` | ✅ faithful |  |
+| `core/src/context/memory.rs` | 43 | `context/memory.swift` | 🟡 adapted |  |
+| `core/src/context/mod.rs` | 129 | `context/context_mod.swift` | 🟡 adapted |  |
+| `core/src/context/model_switch_instructions.rs` | 44 | `context/model_switch_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/multi_agent_mode_instructions.rs` | 54 | `context/multi_agent_mode_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/multi_agent_usage_hint.rs` | 42 | `context/multi_agent_usage_hint.swift` | 🟡 adapted |  |
+| `core/src/context/network_rule_saved.rs` | 48 | `context/network_rule_saved.swift` | 🟡 adapted |  |
+| `core/src/context/node_repl_review_evidence.rs` | 316 | `context/node_repl_review_evidence.swift` | 🟡 adapted |  |
+| `core/src/context/plugin_instructions.rs` | 35 | `context/plugin_instructions.swift` | ✅ faithful |  |
+| `core/src/context/recommended_plugins_instructions.rs` | 55 | `context/recommended_plugins_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/rollout_budget.rs` | 32 | `context/context_rollout_budget.swift` | ✅ faithful | R4a: basename collides with core/src/rollout_budget.rs |
+| `core/src/context/subagent_notification.rs` | 47 | `context/subagent_notification.swift` | 🟡 adapted |  |
+| `core/src/context/token_budget_context.rs` | 245 | `context/token_budget_context.swift` | 🟡 adapted |  |
+| `core/src/context/turn_aborted.rs` | 40 | `context/turn_aborted.swift` | ✅ faithful |  |
+| `core/src/context/unsupported_media.rs` | 42 | `context/unsupported_media.swift` | ✅ faithful |  |
+| `core/src/context/user_goal.rs` | 105 | `context/user_goal.swift` | 🟡 adapted |  |
+| `core/src/context/user_instructions.rs` | 35 | `context/user_instructions.swift` | ✅ faithful |  |
+| `core/src/context/user_shell_command.rs` | 53 | `context/context_user_shell_command.swift` | ✅ faithful |  |
+| `core/src/context/user_verification_notice.rs` | 28 | `context/user_verification_notice.swift` | ✅ faithful |  |
+| `core/src/context/world_state/agents_md.rs` | 84 | `context/world_state/agents_md.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/apps_instructions.rs` | 55 | `context/world_state/world_state_apps_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/collaboration_mode.rs` | 177 | `context/world_state/collaboration_mode.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/compact_permissions.rs` | 59 | `context/world_state/compact_permissions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/context_window_guidance.rs` | 76 | `context/world_state/context_window_guidance.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/environment.rs` | 557 | `context/world_state/environment.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/environments_instructions.rs` | 55 | `context/world_state/world_state_environments_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/managed_developer_instructions.rs` | 157 | `context/world_state/managed_developer_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/mod.rs` | 556 | `context/world_state/world_state_mod.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/model.rs` | 65 | `context/world_state/model.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/multi_agent_mode.rs` | 91 | `context/world_state/multi_agent_mode.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/multi_agent_usage_hint.rs` | 50 | `context/world_state/world_state_multi_agent_usage_hint.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/permissions.rs` | 135 | `context/world_state/permissions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/persistent_mode.rs` | 120 | `context/world_state/persistent_mode.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/plugins_instructions.rs` | 55 | `context/world_state/plugins_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/realtime.rs` | 96 | `context/world_state/realtime.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/tools.rs` | 233 | `context/world_state/tools.swift` | 🟡 adapted |  |
+| `core/src/context_manager/history.rs` | 1,256 | `context_manager/history.swift` | 🟡 adapted |  |
+| `core/src/context_manager/history_user_authorization.rs` | 204 | `context_manager/history_user_authorization.swift` | 🟡 adapted |  |
+| `core/src/context_manager/mod.rs` | 9 | `context_manager/context_manager_mod.swift` | ✅ faithful |  |
+| `core/src/context_manager/normalize.rs` | 420 | `context_manager/normalize.swift` | 🟡 adapted |  |
+| `core/src/context_manager/updates.rs` | 60 | `context_manager/updates.swift` | 🟡 adapted |  |
+| `core/src/event_mapping.rs` | 261 | `event_mapping.swift` | 🟡 adapted |  |
+| `core/src/mcp.rs` | 421 | `mcp.swift` | 🟡 adapted |  |
+| `core/src/mcp_openai_file.rs` | 698 | `mcp_openai_file.swift` | 🟡 adapted |  |
+| `core/src/mcp_skill_dependencies.rs` | 535 | `mcp_skill_dependencies.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_approval_templates.rs` | 371 | `mcp_tool_approval_templates.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_call/account.rs` | 39 | `mcp_tool_call/account.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_call/telemetry.rs` | 166 | `mcp_tool_call/telemetry.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_call.rs` | 2,510 | `mcp_tool_call.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_exposure.rs` | 192 | `mcp_tool_exposure.swift` | 🟡 adapted |  |
+| `core/src/session/code_mode_warning.rs` | 26 | `session/code_mode_warning.swift` | 🟡 adapted |  |
+| `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted |  |
+| `core/src/session/daemon_recovery.rs` | 46 | `session/daemon_recovery.swift` | 🟡 adapted |  |
+| `core/src/session/environment.rs` | 307 | `session/environment.swift` | 🟡 adapted |  |
+| `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
+| `core/src/session/extension_metrics.rs` | 35 | `session/extension_metrics.swift` | 🟡 adapted |  |
+| `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
+| `core/src/session/handlers.rs` | 716 | `session/handlers.swift` | 🟡 adapted |  |
+| `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
+| `core/src/session/input_queue.rs` | 681 | `session/input_queue.swift` | 🟡 adapted |  |
+| `core/src/session/mcp.rs` | 1,219 | `session/session_mcp.swift` | 🟡 adapted |  |
+| `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted |  |
+| `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted |  |
+| `core/src/session/mcp_runtime.rs` | 380 | `session/mcp_runtime.swift` | 🟡 adapted |  |
+| `core/src/session/mod.rs` | 5,161 | `session/session_mod.swift` | 🟡 adapted |  |
+| `core/src/session/plugin_selection.rs` | 32 | `session/plugin_selection.swift` | 🟡 adapted |  |
+| `core/src/session/reasoning_effort.rs` | 162 | `session/reasoning_effort.swift` | 🟡 adapted |  |
+| `core/src/session/retained_context.rs` | 86 | `session/retained_context.swift` | 🟡 adapted |  |
+| `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
+| `core/src/session/rollout_budget.rs` | 40 | `session/rollout_budget.swift` | 🟡 adapted |  |
+| `core/src/session/rollout_reconstruction.rs` | 563 | `session/rollout_reconstruction.swift` | 🟡 adapted |  |
+| `core/src/session/session.rs` | 1,928 | `session/session.swift` | 🟡 adapted |  |
+| `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
+| `core/src/session/startup_prewarm.rs` | 413 | `session/startup_prewarm.swift` | 🟡 adapted |  |
+| `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
+| `core/src/session/step_context.rs` | 61 | `session/step_context.swift` | 🟡 adapted |  |
+| `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
+| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted |  |
+| `core/src/session/thread_settings.rs` | 131 | `session/thread_settings.swift` | 🟡 adapted |  |
+| `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
+| `core/src/session/token_budget.rs` | 249 | `session/token_budget.swift` | 🟡 adapted |  |
 | `core/src/session/turn.rs` | 3,113 | `session/turn.swift` | 🟡 partial |  |
-| `core/src/session/turn_context.rs` | 1,388 | - | ⬜ 未开始 |  |
-| `core/src/session/turn_input.rs` | 780 | - | ⬜ 未开始 |  |
-| `core/src/session/turn_suspension.rs` | 119 | - | ⬜ 未开始 |  |
-| `core/src/session/world_state.rs` | 335 | - | ⬜ 未开始 |  |
-| `core/src/state/additional_context.rs` | 35 | - | ⬜ 未开始 |  |
-| `core/src/state/auto_compact_window.rs` | 237 | - | ⬜ 未开始 |  |
-| `core/src/state/mod.rs` | 22 | - | ⬜ 未开始 |  |
-| `core/src/state/service.rs` | 104 | - | ⬜ 未开始 |  |
-| `core/src/state/session.rs` | 478 | - | ⬜ 未开始 |  |
-| `core/src/state/turn.rs` | 254 | - | ⬜ 未开始 |  |
-| `core/src/state/turn_token_usage.rs` | 48 | - | ⬜ 未开始 |  |
-| `core/src/stream_events_utils.rs` | 602 | - | ⬜ 未开始 |  |
+| `core/src/session/turn_context.rs` | 1,388 | `session/turn_context.swift` | 🟡 adapted |  |
+| `core/src/session/turn_input.rs` | 780 | `session/turn_input.swift` | 🟡 adapted |  |
+| `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
+| `core/src/session/world_state.rs` | 335 | `session/world_state.swift` | 🟡 adapted |  |
+| `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
+| `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
+| `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted |  |
+| `core/src/state/session.rs` | 478 | `state/state_session.swift` | 🟡 adapted |  |
+| `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
+| `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
+| `core/src/stream_events_utils.rs` | 602 | `stream_events_utils.swift` | 🟡 adapted |  |
 | `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 partial |  |
-| `core/src/tasks/lifecycle.rs` | 119 | - | ⬜ 未开始 |  |
-| `core/src/tasks/mod.rs` | 1,014 | - | ⬜ 未开始 |  |
+| `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
+| `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted |  |
 | `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted |  |
-| `core/src/tasks/review.rs` | 280 | - | ⬜ 未开始 |  |
-| `core/src/tasks/user_shell.rs` | 489 | - | ⬜ 未开始 |  |
-| `core/src/turn_diff_tracker.rs` | 403 | - | ⬜ 未开始 |  |
-| `core/src/turn_metadata.rs` | 569 | - | ⬜ 未开始 |  |
-| `core/src/turn_timing.rs` | 443 | - | ⬜ 未开始 |  |
+| `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
+| `core/src/tasks/user_shell.rs` | 489 | `tasks/user_shell.swift` | 🟡 adapted |  |
+| `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted |  |
+| `core/src/turn_metadata.rs` | 569 | `turn_metadata.swift` | 🟡 adapted |  |
+| `core/src/turn_timing.rs` | 443 | `turn_timing.swift` | 🟡 adapted |  |
 
 ## Phase 6
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/client.rs` | 2,942 | - | ⬜ 未开始 |  |
-| `core/src/client_common.rs` | 141 | - | ⬜ 未开始 |  |
-| `core/src/client_tool_metadata.rs` | 45 | - | ⬜ 未开始 |  |
-| `core/src/current_time.rs` | 55 | - | ⬜ 未开始 |  |
-| `core/src/image_preparation.rs` | 428 | - | ⬜ 未开始 |  |
-| `core/src/model_request.rs` | 51 | - | ⬜ 未开始 |  |
-| `core/src/original_image_detail.rs` | 2 | - | ⬜ 未开始 |  |
-| `core/src/prompt_debug.rs` | 114 | - | ⬜ 未开始 |  |
-| `core/src/responses_headers.rs` | 24 | - | ⬜ 未开始 |  |
-| `core/src/responses_metadata.rs` | 601 | - | ⬜ 未开始 |  |
-| `core/src/responses_retry.rs` | 185 | - | ⬜ 未开始 |  |
-| `core/src/web_search.rs` | 30 | - | ⬜ 未开始 |  |
-| `codex-api/src/api_bridge.rs` | 343 | - | ⬜ 未开始 |  |
-| `codex-api/src/auth.rs` | 104 | - | ⬜ 未开始 |  |
-| `codex-api/src/common.rs` | 424 | - | ⬜ 未开始 |  |
-| `codex-api/src/endpoint/images.rs` | 411 | - | ⬜ 未开始 |  |
-| `codex-api/src/endpoint/memories.rs` | 225 | - | ⬜ 未开始 |  |
-| `codex-api/src/endpoint/mod.rs` | 34 | - | ⬜ 未开始 |  |
-| `codex-api/src/endpoint/models.rs` | 431 | - | ⬜ 未开始 |  |
+| `core/src/client.rs` | 2,942 | `client.swift` | 🟡 adapted | HTTP/SSE via URLSession + ResponsesClient; WebSocket / ChatGPT refresh / otel / attestation wait |
+| `core/src/client_common.rs` | 141 | `client_common.swift` | 🟡 adapted | `Prompt.tools` is pre-serialized `[JSONValue]` (ToolSpec lives in the Sage app) |
+| `core/src/client_tool_metadata.rs` | 45 | `client_tool_metadata.swift` | 🟡 adapted |  |
+| `core/src/current_time.rs` | 55 | `current_time.swift` | 🟡 adapted | `CurrentTimeSource` lives in CodexCore so Config can import it |
+| `core/src/image_preparation.rs` | 428 | `image_preparation.swift` | 🟡 adapted | resize via CodexUtils; AttachmentStore protocol |
+| `core/src/model_request.rs` | 51 | `model_request.swift` | 🟡 adapted | contributor / interceptor protocols (no `inout` stored) |
+| `core/src/original_image_detail.rs` | 2 | `original_image_detail.swift` | ✅ faithful | also includes `tools/src/image_detail.rs` sanitize helpers |
+| `core/src/prompt_debug.rs` | 114 | `prompt_debug.swift` | 🟡 adapted | history + UserInput helper; no ThreadManager |
+| `core/src/responses_headers.rs` | 24 | `responses_headers.swift` | 🟡 adapted |  |
+| `core/src/responses_metadata.rs` | 601 | `responses_metadata.swift` | 🟡 adapted | reserved-key filter; `ExtraMetadataError` stands in for `Result<(), String>` |
+| `core/src/responses_retry.rs` | 185 | `responses_retry.swift` | 🟡 adapted | HTTP-only fallback sink; websocket retry path is a no-op |
+| `core/src/web_search.rs` | 30 | `web_search.swift` | ✅ faithful |  |
+| `codex-api/src/api_bridge.rs` | 343 | `codex-api/src/api_bridge.swift` | 🟡 adapted |  |
+| `codex-api/src/auth.rs` | 104 | `codex-api/src/auth.swift` | 🟡 adapted | `AuthProvider` + `BearerAuthProvider`; ChatGPT OAuth deferred |
+| `codex-api/src/common.rs` | 424 | `codex-api/src/common.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/images.rs` | 411 | `codex-api/src/endpoint/endpoint_images.swift` | 🟡 adapted | R4a basename (`images.swift` collision) |
+| `codex-api/src/endpoint/memories.rs` | 225 | `codex-api/src/endpoint/memories.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/mod.rs` | 34 | `codex-api/src/endpoint/endpoint_mod.swift` | 🟡 adapted | R4a basename (`mod.swift` collision) |
+| `codex-api/src/endpoint/models.rs` | 431 | `codex-api/src/endpoint/models.swift` | 🟡 adapted |  |
 | `codex-api/src/endpoint/realtime_call.rs` | 796 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/methods.rs` | 3,225 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/methods_common.rs` | 179 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
@@ -559,157 +559,157 @@
 | `codex-api/src/endpoint/realtime_websocket/protocol_frameless_bidi.rs` | 99 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/protocol_v1.rs` | 99 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/protocol_v2.rs` | 210 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
-| `codex-api/src/endpoint/responses.rs` | 159 | - | ⬜ 未开始 |  |
+| `codex-api/src/endpoint/responses.rs` | 159 | `codex-api/src/endpoint/endpoint_responses.swift` | 🟡 adapted | R4a basename; HTTP/SSE `ResponsesClient` |
 | `codex-api/src/endpoint/responses_websocket.rs` | 1,251 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
-| `codex-api/src/endpoint/search.rs` | 320 | - | ⬜ 未开始 |  |
-| `codex-api/src/endpoint/session.rs` | 156 | - | ⬜ 未开始 |  |
-| `codex-api/src/error.rs` | 63 | - | ⬜ 未开始 |  |
-| `codex-api/src/files.rs` | 892 | - | ⬜ 未开始 |  |
-| `codex-api/src/images.rs` | 68 | - | ⬜ 未开始 |  |
-| `codex-api/src/lib.rs` | 120 | - | ⬜ 未开始 |  |
-| `codex-api/src/provider.rs` | 67 | - | ⬜ 未开始 |  |
-| `codex-api/src/rate_limits.rs` | 382 | - | ⬜ 未开始 |  |
-| `codex-api/src/requests/headers.rs` | 40 | - | ⬜ 未开始 |  |
-| `codex-api/src/requests/mod.rs` | 4 | - | ⬜ 未开始 |  |
-| `codex-api/src/requests/responses.rs` | 6 | - | ⬜ 未开始 |  |
-| `codex-api/src/safety_buffering.rs` | 67 | - | ⬜ 未开始 |  |
-| `codex-api/src/search.rs` | 305 | - | ⬜ 未开始 |  |
-| `codex-api/src/sse/mod.rs` | 5 | - | ⬜ 未开始 |  |
-| `codex-api/src/sse/responses.rs` | 2,153 | - | ⬜ 未开始 |  |
-| `codex-api/src/telemetry.rs` | 98 | - | ⬜ 未开始 |  |
-| `model-provider-info/src/gateway_oauth.rs` | 157 | - | ⬜ 未开始 |  |
-| `model-provider-info/src/lib.rs` | 765 | - | ⬜ 未开始 |  |
+| `codex-api/src/endpoint/search.rs` | 320 | `codex-api/src/endpoint/endpoint_search.swift` | 🟡 adapted | R4a basename (`search.swift` collision) |
+| `codex-api/src/endpoint/session.rs` | 156 | `codex-api/src/endpoint/session.swift` | 🟡 adapted |  |
+| `codex-api/src/error.rs` | 63 | `codex-api/src/error.swift` | 🟡 adapted |  |
+| `codex-api/src/files.rs` | 892 | `codex-api/src/files.swift` | 🟡 adapted |  |
+| `codex-api/src/images.rs` | 68 | `codex-api/src/images.swift` | ✅ faithful |  |
+| `codex-api/src/lib.rs` | 120 | `codex-api/src/lib.swift` | 🟡 adapted | SSE / Responses subset; realtime/websocket omitted |
+| `codex-api/src/provider.rs` | 67 | `codex-api/src/provider.swift` | 🟡 adapted |  |
+| `codex-api/src/rate_limits.rs` | 382 | `codex-api/src/rate_limits.swift` | 🟡 adapted |  |
+| `codex-api/src/requests/headers.rs` | 40 | `codex-api/src/requests/headers.swift` | 🟡 adapted |  |
+| `codex-api/src/requests/mod.rs` | 4 | `codex-api/src/requests/requests_mod.swift` | 🟡 adapted | R4a basename |
+| `codex-api/src/requests/responses.rs` | 6 | `codex-api/src/requests/requests_responses.swift` | 🟡 adapted | R4a basename |
+| `codex-api/src/safety_buffering.rs` | 67 | `codex-api/src/safety_buffering.swift` | 🟡 adapted |  |
+| `codex-api/src/search.rs` | 305 | `codex-api/src/search.swift` | ✅ faithful |  |
+| `codex-api/src/sse/mod.rs` | 5 | `codex-api/src/sse/sse_mod.swift` | 🟡 adapted | R4a basename |
+| `codex-api/src/sse/responses.rs` | 2,153 | `codex-api/src/sse/responses.swift` | 🟡 adapted | `URLSession` bytes + SSE framing |
+| `codex-api/src/telemetry.rs` | 98 | `codex-api/src/telemetry.swift` | 🟡 adapted |  |
+| `model-provider-info/src/gateway_oauth.rs` | 157 | `model-provider-info/src/gateway_oauth.swift` | 🟡 adapted |  |
+| `model-provider-info/src/lib.rs` | 765 | `model-provider-info/src/lib.swift` | 🟡 adapted | `RedactedString`→`String`; `OSAllocatedUnfairLock`; local `ApiProvider` |
 
 ## Phase 7
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/attestation.rs` | 26 | - | ⬜ 未开始 |  |
-| `core/src/codex_delegate.rs` | 382 | - | ⬜ 未开始 |  |
-| `core/src/codex_thread.rs` | 1,134 | - | ⬜ 未开始 |  |
-| `core/src/feedback_config.rs` | 81 | - | ⬜ 未开始 |  |
-| `core/src/installation_id.rs` | 149 | - | ⬜ 未开始 |  |
-| `core/src/memory_usage.rs` | 51 | - | ⬜ 未开始 |  |
-| `core/src/rollout.rs` | 61 | - | ⬜ 未开始 |  |
-| `core/src/rollout_budget.rs` | 121 | - | ⬜ 未开始 |  |
-| `core/src/session_prefix.rs` | 50 | - | ⬜ 未开始 |  |
-| `core/src/session_rollout_init_error.rs` | 67 | - | ⬜ 未开始 |  |
-| `core/src/state_db_bridge.rs` | 8 | - | ⬜ 未开始 |  |
-| `core/src/thread_manager/managed.rs` | 109 | - | ⬜ 未开始 |  |
-| `core/src/thread_manager/shared_instructions.rs` | 112 | - | ⬜ 未开始 |  |
-| `core/src/thread_manager.rs` | 2,664 | - | ⬜ 未开始 |  |
-| `core/src/thread_rollout_truncation.rs` | 305 | - | ⬜ 未开始 |  |
-| `core/src/thread_startup_metadata.rs` | 110 | - | ⬜ 未开始 |  |
-| `rollout/src/compression/error_metrics.rs` | 65 | - | ⬜ 未开始 |  |
-| `rollout/src/compression/read_metrics.rs` | 124 | - | ⬜ 未开始 |  |
-| `rollout/src/compression.rs` | 1,414 | - | ⬜ 未开始 |  |
-| `rollout/src/config.rs` | 101 | - | ⬜ 未开始 |  |
-| `rollout/src/lib.rs` | 171 | - | ⬜ 未开始 |  |
-| `rollout/src/list.rs` | 1,703 | - | ⬜ 未开始 |  |
-| `rollout/src/maintenance.rs` | 41 | - | ⬜ 未开始 |  |
-| `rollout/src/metadata.rs` | 491 | - | ⬜ 未开始 |  |
-| `rollout/src/model_context.rs` | 59 | - | ⬜ 未开始 |  |
-| `rollout/src/ordinal.rs` | 131 | - | ⬜ 未开始 |  |
-| `rollout/src/persistence_metrics.rs` | 439 | - | ⬜ 未开始 |  |
-| `rollout/src/policy.rs` | 206 | - | ⬜ 未开始 |  |
-| `rollout/src/recorder.rs` | 2,249 | - | ⬜ 未开始 |  |
-| `rollout/src/reverse_jsonl_scanner.rs` | 165 | - | ⬜ 未开始 |  |
-| `rollout/src/rollout_file_name.rs` | 87 | - | ⬜ 未开始 |  |
-| `rollout/src/rollout_reference_index.rs` | 168 | - | ⬜ 未开始 |  |
-| `rollout/src/search.rs` | 370 | - | ⬜ 未开始 |  |
-| `rollout/src/seekable_reader.rs` | 110 | - | ⬜ 未开始 |  |
-| `rollout/src/session_index.rs` | 300 | - | ⬜ 未开始 |  |
-| `rollout/src/sqlite_metrics.rs` | 73 | - | ⬜ 未开始 |  |
-| `rollout/src/state_db.rs` | 744 | - | ⬜ 未开始 |  |
-| `rollout/src/writer_lock.rs` | 200 | - | ⬜ 未开始 |  |
-| `state/src/audit.rs` | 48 | - | ⬜ 未开始 |  |
-| `state/src/extract.rs` | 850 | - | ⬜ 未开始 |  |
-| `state/src/lib.rs` | 153 | - | ⬜ 未开始 |  |
-| `state/src/log_db.rs` | 969 | - | ⬜ 未开始 |  |
-| `state/src/migrations.rs` | 122 | - | ⬜ 未开始 |  |
-| `state/src/model/backfill_state.rs` | 73 | - | ⬜ 未开始 |  |
-| `state/src/model/graph.rs` | 11 | - | ⬜ 未开始 |  |
-| `state/src/model/log.rs` | 57 | - | ⬜ 未开始 |  |
-| `state/src/model/memories.rs` | 69 | - | ⬜ 未开始 |  |
-| `state/src/model/mod.rs` | 56 | - | ⬜ 未开始 |  |
-| `state/src/model/project.rs` | 39 | - | ⬜ 未开始 |  |
-| `state/src/model/queued_item.rs` | 22 | - | ⬜ 未开始 |  |
-| `state/src/model/rollout_migration_state.rs` | 67 | - | ⬜ 未开始 |  |
-| `state/src/model/thread_attachment.rs` | 48 | - | ⬜ 未开始 |  |
-| `state/src/model/thread_goal.rs` | 117 | - | ⬜ 未开始 |  |
-| `state/src/model/thread_metadata.rs` | 894 | - | ⬜ 未开始 |  |
-| `state/src/paths.rs` | 9 | - | ⬜ 未开始 |  |
-| `state/src/runtime/backfill.rs` | 288 | - | ⬜ 未开始 |  |
-| `state/src/runtime/external_agent_config_imports.rs` | 148 | - | ⬜ 未开始 |  |
-| `state/src/runtime/goals.rs` | 1,728 | - | ⬜ 未开始 |  |
-| `state/src/runtime/logs.rs` | 1,915 | - | ⬜ 未开始 |  |
-| `state/src/runtime/memories.rs` | 5,468 | - | ⬜ 未开始 |  |
-| `state/src/runtime/memory_readiness.rs` | 16 | - | ⬜ 未开始 |  |
-| `state/src/runtime/memory_versions.rs` | 56 | - | ⬜ 未开始 |  |
-| `state/src/runtime/projects.rs` | 573 | - | ⬜ 未开始 |  |
-| `state/src/runtime/queued_items.rs` | 215 | - | ⬜ 未开始 |  |
-| `state/src/runtime/recovery.rs` | 243 | - | ⬜ 未开始 |  |
-| `state/src/runtime/remote_control.rs` | 393 | - | ⬜ 未开始 |  |
-| `state/src/runtime/rollout_migration.rs` | 149 | - | ⬜ 未开始 |  |
-| `state/src/runtime/test_support.rs` | 84 | - | ⬜ 未开始 |  |
-| `state/src/runtime/thread_attachments.rs` | 291 | - | ⬜ 未开始 |  |
-| `state/src/runtime/thread_section_order.rs` | 284 | - | ⬜ 未开始 |  |
-| `state/src/runtime/thread_sections.rs` | 93 | - | ⬜ 未开始 |  |
-| `state/src/runtime/threads.rs` | 3,637 | - | ⬜ 未开始 |  |
-| `state/src/runtime.rs` | 764 | - | ⬜ 未开始 |  |
-| `state/src/sqlite.rs` | 332 | - | ⬜ 未开始 |  |
-| `state/src/telemetry.rs` | 251 | - | ⬜ 未开始 |  |
-| `thread-store/src/error.rs` | 55 | - | ⬜ 未开始 |  |
-| `thread-store/src/in_memory.rs` | 1,181 | - | ⬜ 未开始 |  |
-| `thread-store/src/lib.rs` | 114 | - | ⬜ 未开始 |  |
-| `thread-store/src/live_thread.rs` | 463 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/archive_thread.rs` | 371 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/create_thread.rs` | 68 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/delete_thread.rs` | 883 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/helpers.rs` | 385 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/list_threads.rs` | 793 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/live_writer.rs` | 374 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/mod.rs` | 2,141 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/model_context.rs` | 193 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/move_thread_to_section.rs` | 58 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/paginated_fork.rs` | 191 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/pending_thread_metadata.rs` | 58 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/projects.rs` | 192 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/read_thread.rs` | 1,641 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/revert_thread.rs` | 208 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_lineage.rs` | 304 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/canonicalizer.rs` | 502 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/legacy_event.rs` | 314 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/line_parser.rs` | 201 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/publish.rs` | 267 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/rollback.rs` | 147 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/rollback_plan.rs` | 554 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/rollback_replay.rs` | 195 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/startup.rs` | 412 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/subagent.rs` | 55 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration/telemetry.rs` | 152 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/rollout_migration.rs` | 1,386 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/search_threads.rs` | 257 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/test_support.rs` | 131 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_attachments.rs` | 116 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history/read.rs` | 432 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history/realtime.rs` | 246 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history/search.rs` | 494 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history/segment_paging.rs` | 506 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history/turn_lookup.rs` | 100 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history.rs` | 579 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_history_materialization.rs` | 366 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_rollout_resolver.rs` | 216 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/thread_sections.rs` | 99 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/unarchive_thread.rs` | 286 | - | ⬜ 未开始 |  |
-| `thread-store/src/local/update_thread_metadata.rs` | 2,431 | - | ⬜ 未开始 |  |
-| `thread-store/src/projects.rs` | 81 | - | ⬜ 未开始 |  |
-| `thread-store/src/queue_store.rs` | 158 | - | ⬜ 未开始 |  |
-| `thread-store/src/store.rs` | 554 | - | ⬜ 未开始 |  |
-| `thread-store/src/thread_attachments.rs` | 39 | - | ⬜ 未开始 |  |
-| `thread-store/src/thread_metadata_sync.rs` | 928 | - | ⬜ 未开始 |  |
-| `thread-store/src/thread_sections.rs` | 52 | - | ⬜ 未开始 |  |
-| `thread-store/src/types.rs` | 1,127 | - | ⬜ 未开始 |  |
+| `core/src/attestation.rs` | 26 | `attestation.swift` | 🟡 adapted | `HeaderValue`→`String` |
+| `core/src/codex_delegate.rs` | 382 | `codex_delegate.swift` | 🟡 adapted | Session/login deferred |
+| `core/src/codex_thread.rs` | 1,134 | `codex_thread.swift` | 🟡 adapted | Session-free handle |
+| `core/src/feedback_config.rs` | 81 | `feedback_config.swift` | 🟡 adapted | Config stays in app; callers pass scalars |
+| `core/src/installation_id.rs` | 149 | `installation_id.swift` | 🟡 adapted | `flock` via `fcntl`; `Task.detached` |
+| `core/src/memory_usage.rs` | 51 | `memory_usage.swift` | 🟡 adapted | metric emit no-op until memories crate |
+| `core/src/rollout.rs` | 61 | `rollout.swift` | 🟡 adapted | re-export; no Sage Config view |
+| `core/src/rollout_budget.rs` | 121 | `rollout_budget.swift` | 🟡 adapted | `OSAllocatedUnfairLock`; R4a vs context/ |
+| `core/src/session_prefix.rs` | 50 | `session_prefix.swift` | 🟡 adapted | `truncateTextByTokens` |
+| `core/src/session_rollout_init_error.rs` | 67 | `session_rollout_init_error.swift` | 🟡 adapted | ThreadStoreError / POSIX |
+| `core/src/state_db_bridge.rs` | 8 | `state_db_bridge.swift` | 🟡 adapted | `RolloutConfig` not Sage Config |
+| `core/src/thread_manager/managed.rs` | 109 | `thread_manager/managed.swift` | 🟡 adapted | no Session/AgentControl |
+| `core/src/thread_manager/shared_instructions.rs` | 112 | `thread_manager/shared_instructions.swift` | 🟡 adapted | AGENTS.md merge waits Phase 8 |
+| `core/src/thread_manager.rs` | 2,664 | `thread_manager.swift` | 🟡 adapted | Session-free facade + fork helpers |
+| `core/src/thread_rollout_truncation.rs` | 305 | `thread_rollout_truncation.swift` | 🟡 adapted | no app-server turn projection |
+| `core/src/thread_startup_metadata.rs` | 110 | `thread_startup_metadata.swift` | 🟡 adapted |  |
+| `rollout/src/compression/error_metrics.rs` | 65 | `rollout/src/compression/error_metrics.swift` | 🟡 adapted | otel no-op |
+| `rollout/src/compression/read_metrics.rs` | 124 | `rollout/src/compression/read_metrics.swift` | 🟡 adapted | otel no-op |
+| `rollout/src/compression.rs` | 1,414 | `rollout/src/compression.swift` | 🟡 adapted | path helpers + plain reader; zstd worker deferred |
+| `rollout/src/config.rs` | 101 | `rollout/src/config.swift` | 🟡 adapted | `PathBuf`→`String` |
+| `rollout/src/lib.rs` | 171 | `rollout/src/lib.swift` | 🟡 adapted | decode/encode flattened JSONL |
+| `rollout/src/list.rs` | 1,703 | `rollout/src/list.swift` | 🟡 adapted | FileManager walk; preview also from user response_item; SQLite skipped |
+| `rollout/src/maintenance.rs` | 41 | `rollout/src/maintenance.swift` | 🟡 adapted | `flock(2)` `LOCK_EX\|LOCK_NB` on Darwin |
+| `rollout/src/metadata.rs` | 491 | `rollout/src/metadata.swift` | 🟡 adapted | `Date` for chrono; `apply_rollout_item` waits CodexState extract |
+| `rollout/src/model_context.rs` | 59 | `rollout/src/model_context.swift` | ✅ faithful |  |
+| `rollout/src/ordinal.rs` | 131 | `rollout/src/ordinal.swift` | 🟡 adapted | last-line scan vs ReverseJsonlScanner |
+| `rollout/src/persistence_metrics.rs` | 439 | `rollout/src/persistence_metrics.swift` | 🟡 adapted | measure/filter faithful; otel no-op |
+| `rollout/src/policy.rs` | 206 | `rollout/src/policy.swift` | 🟡 adapted | EventMsg subset; unknown→false |
+| `rollout/src/recorder.rs` | 2,249 | `rollout/src/recorder.swift` | 🟡 adapted | sync JSONL writer; no git/compression actor |
+| `rollout/src/reverse_jsonl_scanner.rs` | 165 | `rollout/src/reverse_jsonl_scanner.swift` | ✅ faithful | `FileHandle` for `Read + Seek` |
+| `rollout/src/rollout_file_name.rs` | 87 | `rollout/src/rollout_file_name.swift` | 🟡 adapted | `DateFormatter` UTC |
+| `rollout/src/rollout_reference_index.rs` | 168 | `rollout/src/rollout_reference_index.swift` | 🟡 adapted | FileManager walk |
+| `rollout/src/search.rs` | 370 | `rollout/src/search.swift` | 🟡 adapted | optional rg; empty rg falls back to scan; no zstd |
+| `rollout/src/seekable_reader.rs` | 110 | `rollout/src/seekable_reader.swift` | 🟡 adapted | `.jsonl` only; compressed-only path is an error |
+| `rollout/src/session_index.rs` | 300 | `rollout/src/session_index.swift` | 🟡 adapted | ReverseJsonlScanner; no StateRuntime |
+| `rollout/src/sqlite_metrics.rs` | 73 | `rollout/src/sqlite_metrics.swift` | 🟡 adapted | returns NoopDbTelemetry |
+| `rollout/src/state_db.rs` | 744 | `rollout/src/state_db.swift` | 🟡 adapted | opaque handle until GRDB runtime |
+| `rollout/src/writer_lock.rs` | 200 | `rollout/src/writer_lock.swift` | 🟡 adapted | `flock(2)` on Darwin |
+| `state/src/audit.rs` | 48 | `state/src/audit.swift` | 🟡 adapted | row type; read throws until GRDB |
+| `state/src/extract.rs` | 850 | `state/src/extract.swift` | 🟡 adapted | reuses lib guardian helpers; EventMsg subset |
+| `state/src/lib.rs` | 153 | `state/src/lib.swift` | 🟡 adapted | Xcode excludes `state/src` from app target |
+| `state/src/log_db.rs` | 969 | `state/src/log_db.swift` | 🟡 adapted | types + start(); query/insert throw until GRDB |
+| `state/src/migrations.rs` | 122 | `state/src/migrations.swift` | 🟡 adapted | migrator name stubs; no sqlx embed |
+| `state/src/model/backfill_state.rs` | 73 | `state/src/model/backfill_state.swift` | 🟡 adapted | no sqlx; `DateTime`→`Date` |
+| `state/src/model/graph.rs` | 11 | `state/src/model/graph.swift` | ✅ faithful |  |
+| `state/src/model/log.rs` | 57 | `state/src/model/log.swift` | 🟡 adapted | no sqlx `FromRow` |
+| `state/src/model/memories.rs` | 69 | `state/src/model/memories.swift` | 🟡 adapted | `PathBuf`→`String`; `DateTime`→`Date` |
+| `state/src/model/mod.rs` | 56 | `state/src/model/mod.swift` | ✅ faithful | same-module types; RFC3339 + `StateModelError` |
+| `state/src/model/project.rs` | 39 | `state/src/model/project.swift` | ✅ faithful |  |
+| `state/src/model/queued_item.rs` | 22 | `state/src/model/queued_item.swift` | 🟡 adapted | no sqlx `try_from_row` |
+| `state/src/model/rollout_migration_state.rs` | 67 | `state/src/model/rollout_migration_state.swift` | 🟡 adapted | no sqlx |
+| `state/src/model/thread_attachment.rs` | 48 | `state/src/model/thread_attachment.swift` | 🟡 adapted | `serde_json::Value`→`JSONValue` |
+| `state/src/model/thread_goal.rs` | 117 | `state/src/model/thread_goal.swift` | 🟡 adapted | no sqlx; `DateTime`→`Date` |
+| `state/src/model/thread_metadata.rs` | 894 | `state/src/model/thread_metadata.swift` | 🟡 adapted | no sqlx; `PathBuf`→`String`; `DateTime`→`Date` |
+| `state/src/paths.rs` | 9 | `state/src/paths.swift` | ✅ faithful |  |
+| `state/src/runtime/backfill.rs` | 288 | `state/src/runtime/backfill.swift` | 🟡 adapted | methods throw until GRDB |
+| `state/src/runtime/external_agent_config_imports.rs` | 148 | `state/src/runtime/external_agent_config_imports.swift` | 🟡 adapted | records + throw until GRDB |
+| `state/src/runtime/goals.rs` | 1,728 | `state/src/runtime/goals.swift` | 🟡 adapted | GoalStore API; throw until GRDB |
+| `state/src/runtime/logs.rs` | 1,915 | `state/src/runtime/logs.swift` | 🟡 adapted | query/prune helpers; insert/query stay on log_db.swift |
+| `state/src/runtime/memories.rs` | 5,468 | `state/src/runtime/runtime_memories.swift` | 🟡 adapted | R4a vs model/memories.swift; API throws until GRDB |
+| `state/src/runtime/memory_readiness.rs` | 16 | `state/src/runtime/memory_readiness.swift` | 🟡 adapted | throws until memories pool |
+| `state/src/runtime/memory_versions.rs` | 56 | `state/src/runtime/memory_versions.swift` | 🟡 adapted | v2 open throws; path helper local |
+| `state/src/runtime/projects.rs` | 573 | `state/src/runtime/projects.swift` | 🟡 adapted | signatures; SQL throws until GRDB |
+| `state/src/runtime/queued_items.rs` | 215 | `state/src/runtime/queued_items.swift` | 🟡 adapted | SqliteQueueStore; SQLite methods throw |
+| `state/src/runtime/recovery.rs` | 243 | `state/src/runtime/recovery.swift` | 🟡 adapted | filesystem backup helpers |
+| `state/src/runtime/remote_control.rs` | 393 | `state/src/runtime/remote_control.swift` | 🟡 adapted | records; SQL throws until GRDB |
+| `state/src/runtime/rollout_migration.rs` | 149 | `state/src/runtime/rollout_migration.swift` | 🟡 adapted | methods throw until state pool |
+| `state/src/runtime/test_support.rs` | 84 | `state/src/runtime/test_support.swift` | 🟡 adapted | library helpers; Date / String paths |
+| `state/src/runtime/thread_attachments.rs` | 291 | `state/src/runtime/thread_attachments.swift` | 🟡 adapted | validators; SQL throws until GRDB |
+| `state/src/runtime/thread_section_order.rs` | 284 | `state/src/runtime/thread_section_order.swift` | 🟡 adapted | SQL throws until GRDB |
+| `state/src/runtime/thread_sections.rs` | 93 | `state/src/runtime/thread_sections.swift` | 🟡 adapted | pinned guards; SQL throws |
+| `state/src/runtime/threads.rs` | 3,637 | `state/src/runtime/threads.swift` | 🟡 adapted | ThreadFilterOptions only; listing deferred |
+| `state/src/runtime.rs` | 764 | `state/src/runtime.swift` | 🟡 adapted | facade; SQLite methods throw; thin GoalStore/MemoryStore |
+| `state/src/sqlite.rs` | 332 | `state/src/sqlite.swift` | 🟡 adapted | filenames + `SqliteConfig`; GRDB later |
+| `state/src/telemetry.rs` | 251 | `state/src/telemetry.swift` | 🟡 adapted | DbTelemetry + no-op handle; no sqlx classify |
+| `thread-store/src/error.rs` | 55 | `thread-store/src/error.swift` | 🟡 adapted |  |
+| `thread-store/src/in_memory.rs` | 1,181 | `thread-store/src/in_memory.swift` | 🟡 adapted | OSAllocatedUnfairLock; no state_db; in-memory projects/sections/attachments |
+| `thread-store/src/lib.rs` | 114 | `thread-store/src/lib.swift` | 🟡 adapted |  |
+| `thread-store/src/live_thread.rs` | 463 | `thread-store/src/live_thread.swift` | 🟡 adapted | no Tokio Drop spawn; explicit discard(); local no-op RolloutPersistenceTelemetry |
+| `thread-store/src/local/archive_thread.rs` | 371 | `thread-store/src/local/archive_thread.swift` | 🟡 adapted | JSONL file move; no live_writer_locks / GRDB |
+| `thread-store/src/local/create_thread.rs` | 68 | `thread-store/src/local/create_thread.swift` | 🟡 adapted | RolloutRecorder.create; writer lock held by LocalThreadStore |
+| `thread-store/src/local/delete_thread.rs` | 883 | `thread-store/src/local/delete_thread.swift` | 🟡 adapted | JSONL delete; no memories/attachments SQL |
+| `thread-store/src/local/helpers.rs` | 385 | `thread-store/src/local/helpers.swift` | 🟡 adapted | FileManager path/id helpers; no RolloutReferenceIndex |
+| `thread-store/src/local/list_threads.rs` | 793 | `thread-store/src/local/list_threads.swift` | 🟡 adapted | JSONL getThreads; archived uses flat layout; section/state-db/relation throw |
+| `thread-store/src/local/live_writer.rs` | 374 | `thread-store/src/local/live_writer.swift` | 🟡 adapted | types + no-lock adapter; no Tokio / SQLite projection |
+| `thread-store/src/local/mod.rs` | 2,141 | `thread-store/src/local/mod.swift` | 🟡 adapted | JSONL CRUD/archive/search + name metadata; paginated history throws |
+| `thread-store/src/local/model_context.rs` | 193 | `thread-store/src/local/model_context.swift` | 🟡 adapted | JSONL reverse scan |
+| `thread-store/src/local/move_thread_to_section.rs` | 58 | `thread-store/src/local/move_thread_to_section.swift` | 🟡 adapted | validation; SQL path unsupported |
+| `thread-store/src/local/paginated_fork.rs` | 191 | `thread-store/src/local/paginated_fork.swift` | 🟡 adapted | types; prepareFork unsupported |
+| `thread-store/src/local/pending_thread_metadata.rs` | 58 | `thread-store/src/local/pending_thread_metadata.swift` | 🟡 adapted | in-process OSAllocatedUnfairLock map |
+| `thread-store/src/local/projects.rs` | 192 | `thread-store/src/local/local_projects.swift` | 🟡 adapted | R4a vs thread-store/src/projects.swift; unsupported until GRDB |
+| `thread-store/src/local/read_thread.rs` | 1,641 | `thread-store/src/local/read_thread.swift` | 🟡 adapted | JSONL path resolve + loadRolloutItems; no SQLite overlay |
+| `thread-store/src/local/revert_thread.rs` | 208 | `thread-store/src/local/revert_thread.swift` | 🟡 adapted | unsupported; needs SQLite path CAS |
+| `thread-store/src/local/rollout_lineage.rs` | 304 | `thread-store/src/local/rollout_lineage.swift` | 🟡 adapted | JSONL history_base walk |
+| `thread-store/src/local/rollout_migration/canonicalizer.rs` | 502 | `thread-store/src/local/rollout_migration/canonicalizer.swift` | 🟡 adapted | JSONL writer; TurnStarted/Complete subset; no TurnAborted |
+| `thread-store/src/local/rollout_migration/legacy_event.rs` | 314 | `thread-store/src/local/rollout_migration/legacy_event.swift` | 🟡 adapted | Event→TurnItem; ImageGeneration is TurnItem not ExtensionItem |
+| `thread-store/src/local/rollout_migration/line_parser.rs` | 201 | `thread-store/src/local/rollout_migration/line_parser.swift` | 🟡 adapted | Value rewrites faithful; unported EventMsg variants fail decode |
+| `thread-store/src/local/rollout_migration/publish.rs` | 267 | `thread-store/src/local/rollout_migration/publish.swift` | 🟡 adapted | journal/staged/sync; zstd throws |
+| `thread-store/src/local/rollout_migration/rollback.rs` | 147 | `thread-store/src/local/rollout_migration/rollback.swift` | 🟡 adapted | envelope history; frozen contextual prefixes |
+| `thread-store/src/local/rollout_migration/rollback_plan.rs` | 554 | `thread-store/src/local/rollout_migration/rollback_plan.swift` | 🟡 adapted | boundary/apply; retained-context JSONValue skipped |
+| `thread-store/src/local/rollout_migration/rollback_replay.rs` | 195 | `thread-store/src/local/rollout_migration/rollback_replay.swift` | 🟡 adapted | no TurnAborted records |
+| `thread-store/src/local/rollout_migration/startup.rs` | 412 | `thread-store/src/local/rollout_migration/startup.swift` | 🟡 adapted | no stateDb → Ok; Apply throws until GRDB |
+| `thread-store/src/local/rollout_migration/subagent.rs` | 55 | `thread-store/src/local/rollout_migration/subagent.swift` | 🟡 adapted | ReverseJsonlScanner; no spawn_blocking |
+| `thread-store/src/local/rollout_migration/telemetry.rs` | 152 | `thread-store/src/local/rollout_migration/telemetry.swift` | 🟡 adapted | tags only; otel counters omitted |
+| `thread-store/src/local/rollout_migration.rs` | 1,386 | `thread-store/src/local/rollout_migration.swift` | 🟡 adapted | dry-run inspect; Apply throws until GRDB |
+| `thread-store/src/local/search_threads.rs` | 257 | `thread-store/src/local/search_threads.swift` | 🟡 adapted | CodexRollout search; no name/section overlay |
+| `thread-store/src/local/test_support.rs` | 131 | `thread-store/src/local/test_support.swift` | 🟡 adapted | testConfig + writeSessionFile |
+| `thread-store/src/local/thread_attachments.rs` | 116 | `thread-store/src/local/local_thread_attachments.swift` | 🟡 adapted | R4a; unsupported until GRDB |
+| `thread-store/src/local/thread_history/read.rs` | 432 | `thread-store/src/local/thread_history/read.swift` | 🟡 adapted | cursor JSON; list throws until GRDB |
+| `thread-store/src/local/thread_history/realtime.rs` | 246 | `thread-store/src/local/thread_history/realtime.swift` | 🟡 adapted | listTimeline throws until GRDB |
+| `thread-store/src/local/thread_history/search.rs` | 494 | `thread-store/src/local/thread_history/search.swift` | 🟡 adapted | empty-term checks; SQL throws until GRDB |
+| `thread-store/src/local/thread_history/segment_paging.rs` | 506 | `thread-store/src/local/thread_history/segment_paging.swift` | 🟡 adapted | page-size helpers; SQL throws |
+| `thread-store/src/local/thread_history/turn_lookup.rs` | 100 | `thread-store/src/local/thread_history/turn_lookup.swift` | 🟡 adapted | throws until GRDB |
+| `thread-store/src/local/thread_history.rs` | 579 | `thread-store/src/local/thread_history.swift` | 🟡 adapted | projection types; SQLite throws; no ThreadHistoryChangeSet |
+| `thread-store/src/local/thread_history_materialization.rs` | 366 | `thread-store/src/local/thread_history_materialization.swift` | 🟡 adapted | JSONL scan helper; persist throws |
+| `thread-store/src/local/thread_rollout_resolver.rs` | 216 | `thread-store/src/local/thread_rollout_resolver.swift` | 🟡 adapted | live/active/archived path resolve; no SQLite pointer |
+| `thread-store/src/local/thread_sections.rs` | 99 | `thread-store/src/local/local_thread_sections.swift` | 🟡 adapted | R4a; unsupported until GRDB |
+| `thread-store/src/local/unarchive_thread.rs` | 286 | `thread-store/src/local/unarchive_thread.swift` | 🟡 adapted | reverse file move; no GRDB |
+| `thread-store/src/local/update_thread_metadata.rs` | 2,431 | `thread-store/src/local/update_thread_metadata.swift` | 🟡 adapted | name index + empty patch + legacy session_meta rewrite; SQLite/paginated throw |
+| `thread-store/src/projects.rs` | 81 | `thread-store/src/projects.swift` | 🟡 adapted | types; in-memory CRUD on InMemoryThreadStore |
+| `thread-store/src/queue_store.rs` | 158 | `thread-store/src/queue_store.swift` | 🟡 adapted | InMemoryQueueStore; LocalQueueStore GRDB stub |
+| `thread-store/src/store.rs` | 554 | `thread-store/src/store.swift` | 🟡 adapted | async throws protocol; no as_any |
+| `thread-store/src/thread_attachments.rs` | 39 | `thread-store/src/thread_attachments.swift` | 🟡 adapted | types + limits; in-memory on InMemoryThreadStore |
+| `thread-store/src/thread_metadata_sync.rs` | 928 | `thread-store/src/thread_metadata_sync.swift` | 🟡 adapted | in-memory patch merge; no git collect / remote HTTP |
+| `thread-store/src/thread_sections.rs` | 52 | `thread-store/src/thread_sections.swift` | 🟡 adapted | types + pinned constants; catalog on InMemoryThreadStore |
+| `thread-store/src/types.rs` | 1,127 | `thread-store/src/types.swift` | 🟡 adapted | PathBuf→String; Date RFC3339; ThreadMemoryMode local; timeline stub |
 
 ## Phase 8
 
@@ -717,14 +717,14 @@
 |---|---:|---|---|---|
 | `core/src/agents_md.rs` | 562 | - | ⬜ 未开始 |  |
 | `core/src/agents_md_manager.rs` | 182 | - | ⬜ 未开始 |  |
-| `core/src/elicitation.rs` | 100 | - | ⬜ 未开始 |  |
+| `core/src/elicitation.rs` | 100 | `elicitation.swift` | ✅ faithful | watch → AsyncStream + OSAllocatedUnfairLock |
 | `core/src/guardian/approval_request.rs` | 570 | `guardian/approval_request.swift` | 🟡 partial |  |
 | `core/src/guardian/coverage.rs` | 37 | `guardian/coverage.swift` | ✅ faithful |  |
 | `core/src/guardian/decision.rs` | 133 | `guardian/decision.swift` | 🟡 partial |  |
 | `core/src/guardian/feedback.rs` | 44 | `guardian/feedback.swift` | ✅ faithful |  |
 | `core/src/guardian/input_budget.rs` | 198 | `guardian/input_budget.swift` | 🟡 partial |  |
-| `core/src/guardian/mod.rs` | 210 | - | ⬜ 未开始 |  |
-| `core/src/guardian/permissions.rs` | 109 | - | ⬜ 未开始 |  |
+| `core/src/guardian/mod.rs` | 210 | `guardian/mod.swift` | 🟡 adapted | constants + slim GuardianReviewContext; From-turn/step wait on Session |
+| `core/src/guardian/permissions.rs` | 109 | `guardian/permissions.swift` | 🟡 adapted | for_tool / for_environment throw until TurnEnvironment |
 | `core/src/guardian/prompt.rs` | 315 | `guardian/prompt.swift` | 🟡 partial |  |
 | `core/src/guardian/request_budget.rs` | 90 | `guardian/request_budget.swift` | 🟡 partial |  |
 | `core/src/guardian/review.rs` | 291 | `guardian/review.swift` | 🟡 partial |  |
@@ -734,21 +734,21 @@
 | `core/src/guardian/review_session_setup.rs` | 265 | `guardian/review_session_setup.swift` | 🟡 partial |  |
 | `core/src/guardian/reviewer_config.rs` | 109 | `guardian/reviewer_config.swift` | 🟡 partial |  |
 | `core/src/guardian/runtime.rs` | 89 | `guardian/runtime.swift` | 🟡 partial |  |
-| `core/src/guardian_review.rs` | 7 | - | ⬜ 未开始 |  |
-| `core/src/hook_mcp_executor.rs` | 57 | - | ⬜ 未开始 |  |
+| `core/src/guardian_review.rs` | 7 | `guardian_review.swift` | 🟡 adapted | re-exports existing session types; state/prewarm throw |
+| `core/src/hook_mcp_executor.rs` | 57 | `hook_mcp_executor.swift` | 🟡 adapted | CoreHookMcpExecutor throws until McpRuntime |
 | `core/src/hook_runtime.rs` | 1,353 | `hook_runtime.swift` | 🟡 partial |  |
-| `core/src/mention_syntax.rs` | 2 | - | ⬜ 未开始 |  |
-| `core/src/skills.rs` | 210 | - | ⬜ 未开始 |  |
-| `agent-roles/src/agent_role_config.rs` | 209 | - | ⬜ 未开始 |  |
-| `agent-roles/src/discovery.rs` | 40 | - | ⬜ 未开始 |  |
-| `agent-roles/src/lib.rs` | 8 | - | ⬜ 未开始 |  |
-| `agent-roles/src/loader.rs` | 335 | - | ⬜ 未开始 |  |
-| `context-fragments/src/additional_context.rs` | 102 | - | ⬜ 未开始 |  |
-| `context-fragments/src/annotated_content.rs` | 98 | - | ⬜ 未开始 |  |
-| `context-fragments/src/answered_question.rs` | 60 | - | ⬜ 未开始 |  |
-| `context-fragments/src/fragment.rs` | 135 | - | ⬜ 未开始 |  |
-| `context-fragments/src/lib.rs` | 16 | - | ⬜ 未开始 |  |
-| `context-fragments/src/recap_prompt.rs` | 67 | - | ⬜ 未开始 |  |
+| `core/src/mention_syntax.rs` | 2 | `mention_syntax.swift` | ✅ faithful |  |
+| `core/src/skills.rs` | 210 | `skills.swift` | 🟡 adapted | ImplicitSkillInvocations; emit/load throw until Session |
+| `agent-roles/src/agent_role_config.rs` | 209 | `agent-roles/src/agent_role_config.swift` | 🟡 adapted | table TOML parser; ConfigToml leftover as TomlValue |
+| `agent-roles/src/discovery.rs` | 40 | `agent-roles/src/discovery.swift` | ✅ faithful |  |
+| `agent-roles/src/lib.rs` | 8 | `agent-roles/src/lib.swift` | ✅ faithful |  |
+| `agent-roles/src/loader.rs` | 335 | `agent-roles/src/loader.swift` | 🟡 adapted | declared roles + agents/ dirs; ConfigLayerStack throws |
+| `context-fragments/src/additional_context.rs` | 102 | `context-fragments/src/additional_context.swift` | ✅ faithful |  |
+| `context-fragments/src/annotated_content.rs` | 98 | `context-fragments/src/annotated_content.swift` | ✅ faithful |  |
+| `context-fragments/src/answered_question.rs` | 60 | `context-fragments/src/answered_question.swift` | ✅ faithful |  |
+| `context-fragments/src/fragment.rs` | 135 | `context-fragments/src/fragment.swift` | ✅ faithful |  |
+| `context-fragments/src/lib.rs` | 16 | `context-fragments/src/lib.swift` | ✅ faithful |  |
+| `context-fragments/src/recap_prompt.rs` | 67 | `context-fragments/src/recap_prompt.swift` | ✅ faithful |  |
 | `hooks/src/bin/write_hooks_schema_fixtures.rs` | 9 | - | ⬜ 未开始 |  |
 | `hooks/src/config_rules.rs` | 259 | - | ⬜ 未开始 |  |
 | `hooks/src/declarations.rs` | 102 | - | ⬜ 未开始 |  |
@@ -771,12 +771,12 @@
 | `hooks/src/events/stop.rs` | 723 | - | ⬜ 未开始 |  |
 | `hooks/src/events/user_prompt_submit.rs` | 492 | - | ⬜ 未开始 |  |
 | `hooks/src/legacy_notify.rs` | 183 | - | ⬜ 未开始 |  |
-| `hooks/src/lib.rs` | 123 | - | ⬜ 未开始 |  |
-| `hooks/src/mcp.rs` | 24 | - | ⬜ 未开始 |  |
+| `hooks/src/lib.rs` | 123 | `hooks/src/lib.swift` | 🟡 adapted | event-name tables + hook_key; event types still unstarted |
+| `hooks/src/mcp.rs` | 24 | `hooks/src/mcp.swift` | ✅ faithful |  |
 | `hooks/src/output_spill.rs` | 135 | - | ⬜ 未开始 |  |
 | `hooks/src/registry.rs` | 336 | - | ⬜ 未开始 |  |
 | `hooks/src/schema.rs` | 1,254 | - | ⬜ 未开始 |  |
-| `hooks/src/types.rs` | 152 | - | ⬜ 未开始 |  |
+| `hooks/src/types.rs` | 152 | `hooks/src/types.swift` | ✅ faithful | HookEvent → HookPayloadEvent to avoid Sage HookEvent |
 | `skills/src/interface.rs` | 201 | - | ⬜ 未开始 |  |
 | `skills/src/invocation.rs` | 160 | - | ⬜ 未开始 |  |
 | `skills/src/lib.rs` | 214 | - | ⬜ 未开始 |  |
@@ -865,7 +865,7 @@
 | `core/src/tools/handlers/multi_agents_v2.rs` | 66 | - | ⬜ 未开始 |  |
 | `core/src/tools/handlers/request_plugin_install.rs` | 551 | - | ⬜ 未开始 |  |
 | `core/src/tools/handlers/request_plugin_install_spec.rs` | 189 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/wait_for_environment.rs` | 182 | - | ⬜ 未开始 |  |
+| `core/src/tools/handlers/wait_for_environment.rs` | 182 | `tools/handlers/wait_for_environment.swift` | 🟡 adapted |  |
 
 ## Phase 10
 

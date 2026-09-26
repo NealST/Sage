@@ -9,7 +9,7 @@
 
 import CodexProtocol
 import FileSystem
-@testable import Sage
+@testable import CodexCore
 import XCTest
 
 final class SandboxTagsTests: XCTestCase {

@@ -52,6 +52,14 @@ public final class Policy: @unchecked Sendable {
         Policy()
     }
 
+    public func clone() -> Policy {
+        Policy.fromParts(
+            rulesByProgram: rulesByProgram,
+            networkRules: networkRules,
+            hostExecutablesByName: hostExecutablesByName
+        )
+    }
+
     public func rules() -> [String: [any ExecPolicyRule]] {
         rulesByProgram
     }

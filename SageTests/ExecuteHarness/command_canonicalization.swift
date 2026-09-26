@@ -7,7 +7,7 @@
 //  Port status: faithful
 //
 
-@testable import Sage
+@testable import CodexCore
 import XCTest
 
 final class CommandCanonicalizationTests: XCTestCase {

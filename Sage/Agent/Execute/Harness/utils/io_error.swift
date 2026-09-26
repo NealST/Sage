@@ -18,6 +18,7 @@ public struct IOError: Error, Equatable, CustomStringConvertible {
         case invalidInput = "InvalidInput"
         case invalidData = "InvalidData"
         case permissionDenied = "PermissionDenied"
+        case wouldBlock = "WouldBlock"
         case other = "Other"
     }
 
@@ -39,6 +40,14 @@ public struct IOError: Error, Equatable, CustomStringConvertible {
 
     public static func notFound(_ message: String) -> IOError {
         IOError(kind: .notFound, message)
+    }
+
+    public static func wouldBlock(_ message: String) -> IOError {
+        IOError(kind: .wouldBlock, message)
+    }
+
+    public static func other(_ message: String) -> IOError {
+        IOError(kind: .other, message)
     }
 
     /// Map an errno value to the matching `ErrorKind`.

@@ -6,10 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Request types are faithful. Process launch waits on `utils/pty`
-//  (`pty::spawn_process` / `pipe::spawn_process`). Until that crate lands,
-//  `spawnProcess` throws `unsupportedOperation` rather than calling
-//  Foundation `Process` with different PTY semantics.
+//  Request types are faithful. Process launch uses `utils/pty`
+//  (`pty::spawn_process` / `pipe::spawn_process`). Windows sandbox spawn
+//  remains excluded(platform).
 //
 
 import CodexProtocol
@@ -94,13 +93,41 @@ public struct SpawnRequest: Sendable {
     }
 }
 
-public func spawnProcess(_ request: SpawnRequest) async throws -> Never {
+public func spawnProcess(_ request: SpawnRequest) async throws -> SpawnedProcess {
+    guard let program = request.command.first else {
+        throw CodexErr.io("command args are empty")
+    }
+    let args = Array(request.command.dropFirst())
     if request.sandbox == .windowsRestrictedToken {
         throw CodexErr.unsupportedOperation(
             "Windows sandbox process spawn is unavailable on this platform"
         )
     }
-    throw CodexErr.unsupportedOperation(
-        "process spawn waits on the utils/pty port (Phase 3 remaining)"
+    if request.tty {
+        return try await spawnPtyProcess(
+            program: program,
+            args: args,
+            cwd: request.cwd,
+            env: request.env,
+            arg0: request.arg0,
+            size: TerminalSize(),
+            inheritedFds: .attached([])
+        )
+    }
+    if request.stdinOpen {
+        return try await spawnPipeProcess(
+            program: program,
+            args: args,
+            cwd: request.cwd,
+            env: request.env,
+            arg0: request.arg0
+        )
+    }
+    return try await spawnPipeProcessNoStdin(
+        program: program,
+        args: args,
+        cwd: request.cwd,
+        env: request.env,
+        arg0: request.arg0
     )
 }

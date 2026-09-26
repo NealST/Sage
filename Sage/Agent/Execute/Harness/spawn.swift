@@ -6,9 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Request types and env-var contract match upstream. Process launch uses
-//  Foundation `Process` instead of tokio + `utils/pty` pre_exec hooks
-//  (detach_from_tty / close inherited fds). Those land with the pty crate.
+//  Request types and env-var contract match upstream. Launch goes through
+//  `utils/pty` pipe spawn. macOS inherited-fd cleanup and `setpgid` live in
+//  that crate; Linux `prctl` parent-death is excluded(platform).
 //
 
 import CodexProtocol
@@ -35,7 +35,7 @@ struct SpawnChildRequest {
     var env: [String: String]
 }
 
-func spawnChild(_ request: SpawnChildRequest) throws -> Process {
+func spawnChild(_ request: SpawnChildRequest) async throws -> SpawnedProcess {
     var env = request.env
     env = env.filter { !isNonInheritableEnvVar($0.key) }
     if let network = request.network {
@@ -45,19 +45,22 @@ func spawnChild(_ request: SpawnChildRequest) throws -> Process {
         env[CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR] = "1"
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: request.program)
-    process.arguments = request.args
-    process.currentDirectoryURL = URL(fileURLWithPath: request.cwd.asPath)
-    process.environment = env
     switch request.stdioPolicy {
     case .redirectForShellTool:
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        return try await spawnPipeProcessNoStdin(
+            program: request.program,
+            args: request.args,
+            cwd: request.cwd.asPath,
+            env: env,
+            arg0: request.arg0
+        )
     case .inherit:
-        break
+        return try await spawnPipeProcess(
+            program: request.program,
+            args: request.args,
+            cwd: request.cwd.asPath,
+            env: env,
+            arg0: request.arg0
+        )
     }
-    try process.run()
-    return process
 }

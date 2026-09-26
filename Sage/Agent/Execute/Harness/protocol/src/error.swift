@@ -191,6 +191,9 @@ public struct CodexErr: Error, Equatable, Sendable {
     public static func invalidRequest(_ message: String) -> CodexErr {
         CodexErr(details: .invalidRequest(message))
     }
+    public static func io(_ message: String) -> CodexErr {
+        CodexErr(details: .io(message))
+    }
     public static func usageLimitReached(_ error: UsageLimitReachedError) -> CodexErr {
         CodexErr(details: .usageLimitReached(error))
     }

@@ -68,6 +68,20 @@ public final class CancellationToken: @unchecked Sendable {
 
     public init() {}
 
+    /// `CancellationToken::child_token` — a token cancelled when this one is.
+    public func childToken() -> CancellationToken {
+        let child = CancellationToken()
+        if isCancelled {
+            child.cancel()
+            return child
+        }
+        Task { [weak self] in
+            await self?.waitForCancellation()
+            child.cancel()
+        }
+        return child
+    }
+
     /// `CancellationToken::cancel` — wakes every current and future waiter.
     public func cancel() {
         let waiters = withState { state -> [Waiter] in

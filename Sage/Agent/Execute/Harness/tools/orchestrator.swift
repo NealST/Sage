@@ -236,7 +236,7 @@ struct ToolOrchestrator {
             approvalReason: approvalReason,
             retryReason: retryReason
         )
-        let permission = HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: projectRoot(of: ctx.pathGuardPolicy))
+        let permission = HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: Self.projectRoot(of: ctx.pathGuardPolicy))
         if permission.shouldStop {
             throw HarnessToolError.rejected(permission.additionalContexts.first ?? "Hook denied this approval.")
         }

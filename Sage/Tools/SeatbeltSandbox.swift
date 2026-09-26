@@ -22,7 +22,7 @@ struct SeatbeltInvocation: Sendable {
 /// Falls back to an unsandboxed shell when sandbox-exec is unavailable.
 nonisolated enum SeatbeltSandbox {
     /// Inputs for one sandboxed invocation. Paths must be resolved absolute.
-    struct Profile: Sendable {
+    struct Profile: Sendable, Equatable {
         /// Resolved home directory, denied for reads in Project mode.
         var homePath: String
         /// Read-only roots re-allowed after the home denial (Project mode).

@@ -53,6 +53,14 @@ public func XCTUnwrap<T>(_ expression: @autoclosure () throws -> T?, _ message: 
     }
     return value
 }
+public func XCTAssertNoThrow<T>(_ expression: @autoclosure () throws -> T, _ message: @autoclosure () -> String = "", file: StaticString = #filePath, line: UInt = #line) {
+    checks += 1
+    do {
+        _ = try expression()
+    } catch {
+        fail("XCTAssertNoThrow failed: threw \(error). \(message())", file: file, line: line)
+    }
+}
 public func XCTAssertThrowsError<T>(_ expression: @autoclosure () throws -> T, _ message: @autoclosure () -> String = "", file: StaticString = #filePath, line: UInt = #line, _ errorHandler: (Error) -> Void = { _ in }) {
     checks += 1
     do {

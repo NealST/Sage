@@ -31,7 +31,7 @@ enum PatchSandboxRoute: Equatable, Sendable {
     case platform(WindowsSandboxLevel)
 }
 
-struct PatchPolicyMatcher {
+public struct PatchPolicyMatcher {
     var configuredPolicy: FileSystemSandboxPolicy
     var context: FileSystemSandboxPolicyContext
     var sandboxRoute: PatchSandboxRoute
