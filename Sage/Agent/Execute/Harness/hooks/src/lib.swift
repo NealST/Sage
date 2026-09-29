@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 //  Event-name tables and persisted hook-state keys use protocol
-//  `HookEventName`. Event run paths still wait on the command runner.
+//  `HookEventName`. Event run paths go through ClaudeHooksEngine.
 //
 
 import CodexProtocol

@@ -4,15 +4,12 @@
 //
 //  Port of codex-rs/protocol/src/models.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Core model types shared across the harness. FileSystemPermissions,
-//  ManagedFileSystemPermissions, and PermissionProfile now use the full
-//  permissions.swift types. ResponseItem is a partial port of the main
-//  tagged variants so turn_input.swift can compile.
-//
-//  Sub-modules `configuration_update`, `executed_tool_calls`, and
-//  `item_metadata` are ported in their own files.
+//  ResponseItem tagged variants and payload helpers match upstream.
+//  `BASE_INSTRUCTIONS_DEFAULT` include_str markdown is omitted (no SPM
+//  resource for that prompt file). Sub-modules `configuration_update`,
+//  `executed_tool_calls`, and `item_metadata` are ported in their own files.
 //
 
 import CodexUtils
@@ -1289,7 +1286,7 @@ public enum ResponseInputItem: Codable, Equatable, Sendable {
     }
 }
 
-// MARK: - ResponseItem (partial)
+// MARK: - ResponseItem
 
 public enum ResponseItem: Equatable, Sendable {
     case additionalTools(id: ResponseItemId?, role: String, tools: [JSONValue])
@@ -1409,8 +1406,211 @@ public enum ResponseItem: Equatable, Sendable {
                 id: id, role: role, content: content, phase: phase,
                 internalChatMessageMetadataPassthrough: metadata)
             return true
-        default:
+        case .agentMessage(let id, let author, let recipient, let content, var metadata):
+            body(&metadata)
+            self = .agentMessage(
+                id: id, author: author, recipient: recipient, content: content,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .reasoning(let id, let summary, let content, let enc, var metadata):
+            body(&metadata)
+            self = .reasoning(
+                id: id, summary: summary, content: content, encryptedContent: enc,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .localShellCall(let id, let callId, let status, let action, var metadata):
+            body(&metadata)
+            self = .localShellCall(
+                id: id, callId: callId, status: status, action: action,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .functionCall(let id, let name, let namespace, let arguments, let enc, let callId, var metadata):
+            body(&metadata)
+            self = .functionCall(
+                id: id, name: name, namespace: namespace, arguments: arguments,
+                encryptedFunctionArgs: enc, callId: callId,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .toolSearchCall(let id, let callId, let status, let execution, let arguments, var metadata):
+            body(&metadata)
+            self = .toolSearchCall(
+                id: id, callId: callId, status: status, execution: execution,
+                arguments: arguments, internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .functionCallOutput(let id, let callId, let name, let namespace, let output, var metadata):
+            body(&metadata)
+            self = .functionCallOutput(
+                id: id, callId: callId, name: name, namespace: namespace, output: output,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .customToolCall(let id, let status, let callId, let name, let namespace, let input, var metadata):
+            body(&metadata)
+            self = .customToolCall(
+                id: id, status: status, callId: callId, name: name, namespace: namespace,
+                input: input, internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .customToolCallOutput(let id, let callId, let name, let output, var metadata):
+            body(&metadata)
+            self = .customToolCallOutput(
+                id: id, callId: callId, name: name, output: output,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .toolSearchOutput(let id, let callId, let status, let execution, let tools, var metadata):
+            body(&metadata)
+            self = .toolSearchOutput(
+                id: id, callId: callId, status: status, execution: execution, tools: tools,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .webSearchCall(let id, let status, let action, var metadata):
+            body(&metadata)
+            self = .webSearchCall(
+                id: id, status: status, action: action,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .imageGenerationCall(let id, let status, let prompt, let result, var metadata):
+            body(&metadata)
+            self = .imageGenerationCall(
+                id: id, status: status, revisedPrompt: prompt, result: result,
+                internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .compaction(let id, let enc, var metadata):
+            body(&metadata)
+            self = .compaction(
+                id: id, encryptedContent: enc, internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .contextCompaction(let id, let enc, var metadata):
+            body(&metadata)
+            self = .contextCompaction(
+                id: id, encryptedContent: enc, internalChatMessageMetadataPassthrough: metadata)
+            return true
+        case .additionalTools, .configurationUpdate, .compactionTrigger, .other:
             return false
+        }
+    }
+
+    public mutating func setId(_ newId: ResponseItemId?) {
+        switch self {
+        case .additionalTools(_, let role, let tools):
+            self = .additionalTools(id: newId, role: role, tools: tools)
+        case .message(_, let role, let content, let phase, let meta):
+            self = .message(
+                id: newId, role: role, content: content, phase: phase,
+                internalChatMessageMetadataPassthrough: meta)
+        case .agentMessage(_, let author, let recipient, let content, let meta):
+            self = .agentMessage(
+                id: newId, author: author, recipient: recipient, content: content,
+                internalChatMessageMetadataPassthrough: meta)
+        case .reasoning(_, let summary, let content, let enc, let meta):
+            self = .reasoning(
+                id: newId, summary: summary, content: content, encryptedContent: enc,
+                internalChatMessageMetadataPassthrough: meta)
+        case .localShellCall(_, let callId, let status, let action, let meta):
+            self = .localShellCall(
+                id: newId, callId: callId, status: status, action: action,
+                internalChatMessageMetadataPassthrough: meta)
+        case .functionCall(_, let name, let namespace, let arguments, let enc, let callId, let meta):
+            self = .functionCall(
+                id: newId, name: name, namespace: namespace, arguments: arguments,
+                encryptedFunctionArgs: enc, callId: callId,
+                internalChatMessageMetadataPassthrough: meta)
+        case .toolSearchCall(_, let callId, let status, let execution, let arguments, let meta):
+            self = .toolSearchCall(
+                id: newId, callId: callId, status: status, execution: execution,
+                arguments: arguments, internalChatMessageMetadataPassthrough: meta)
+        case .functionCallOutput(_, let callId, let name, let namespace, let output, let meta):
+            self = .functionCallOutput(
+                id: newId, callId: callId, name: name, namespace: namespace, output: output,
+                internalChatMessageMetadataPassthrough: meta)
+        case .customToolCall(_, let status, let callId, let name, let namespace, let input, let meta):
+            self = .customToolCall(
+                id: newId, status: status, callId: callId, name: name, namespace: namespace,
+                input: input, internalChatMessageMetadataPassthrough: meta)
+        case .customToolCallOutput(_, let callId, let name, let output, let meta):
+            self = .customToolCallOutput(
+                id: newId, callId: callId, name: name, output: output,
+                internalChatMessageMetadataPassthrough: meta)
+        case .toolSearchOutput(_, let callId, let status, let execution, let tools, let meta):
+            self = .toolSearchOutput(
+                id: newId, callId: callId, status: status, execution: execution, tools: tools,
+                internalChatMessageMetadataPassthrough: meta)
+        case .webSearchCall(_, let status, let action, let meta):
+            self = .webSearchCall(
+                id: newId, status: status, action: action,
+                internalChatMessageMetadataPassthrough: meta)
+        case .imageGenerationCall(_, let status, let prompt, let result, let meta):
+            self = .imageGenerationCall(
+                id: newId, status: status, revisedPrompt: prompt, result: result,
+                internalChatMessageMetadataPassthrough: meta)
+        case .compaction(_, let enc, let meta):
+            self = .compaction(
+                id: newId, encryptedContent: enc, internalChatMessageMetadataPassthrough: meta)
+        case .contextCompaction(_, let enc, let meta):
+            self = .contextCompaction(
+                id: newId, encryptedContent: enc, internalChatMessageMetadataPassthrough: meta)
+        case .configurationUpdate, .compactionTrigger, .other:
+            break
+        }
+    }
+
+    public func idPrefix() -> String? {
+        switch self {
+        case .additionalTools: return "at"
+        case .message: return "msg"
+        case .agentMessage: return "amsg"
+        case .reasoning: return "rs"
+        case .localShellCall: return "lsh"
+        case .functionCall: return "fc"
+        case .toolSearchCall: return "tsc"
+        case .functionCallOutput: return "fco"
+        case .customToolCall: return "ctc"
+        case .customToolCallOutput: return "ctco"
+        case .toolSearchOutput: return "tso"
+        case .webSearchCall: return "ws"
+        case .imageGenerationCall: return "ig"
+        case .compaction, .contextCompaction: return "cmp"
+        case .configurationUpdate, .compactionTrigger, .other: return nil
+        }
+    }
+
+    public func turnId() -> String? {
+        guard let turnId = internalChatMessageMetadataPassthrough()?.turnId, !turnId.isEmpty else {
+            return nil
+        }
+        return turnId
+    }
+
+    public mutating func setTurnIdIfMissing(_ turnId: String) {
+        _ = modifyInternalChatMessageMetadata { metadata in
+            InternalChatMessageMetadataPassthrough.setTurnIdIfMissing(&metadata, turnId: turnId)
+        }
+    }
+
+    public mutating func setCreateTimeIfMissing(_ createTime: JSONValue) {
+        switch self {
+        case .message(_, let role, _, _, _) where role == "user" || role == "developer":
+            break
+        case .agentMessage, .functionCallOutput, .customToolCallOutput, .toolSearchOutput:
+            break
+        default:
+            return
+        }
+        _ = modifyInternalChatMessageMetadata { metadata in
+            if metadata == nil { metadata = InternalChatMessageMetadataPassthrough() }
+            if metadata?.createTime == nil { metadata?.createTime = createTime }
+        }
+    }
+
+    public mutating func clearInternalChatMessageMetadataPassthrough() {
+        _ = modifyInternalChatMessageMetadata { metadata in
+            metadata = nil
+        }
+    }
+
+    public mutating func clearContentItemKinds() {
+        _ = modifyInternalChatMessageMetadata { metadata in
+            guard var value = metadata else { return }
+            value.contentItemKinds = nil
+            metadata = value == InternalChatMessageMetadataPassthrough() ? nil : value
         }
     }
 }

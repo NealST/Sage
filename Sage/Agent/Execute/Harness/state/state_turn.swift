@@ -154,6 +154,10 @@ final class TurnState: @unchecked Sendable {
         mailboxDeliveryPhase = .currentTurn
     }
 
+    func setMailboxDeliveryPhase(_ phase: MailboxDeliveryPhase) {
+        mailboxDeliveryPhase = phase
+    }
+
     func acceptsMailboxDeliveryForCurrentTurn() -> Bool {
         mailboxDeliveryPhase == .currentTurn
     }

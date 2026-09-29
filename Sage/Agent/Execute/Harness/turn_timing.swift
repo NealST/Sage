@@ -31,3 +31,10 @@ public struct TurnTiming: Equatable, Sendable {
         completedAt = Date()
     }
 }
+
+public func nowUnixTimestampMs() -> Int64 {
+    let millis = Date().timeIntervalSince1970 * 1000
+    if millis >= Double(Int64.max) { return Int64.max }
+    if millis <= Double(Int64.min) { return Int64.min }
+    return Int64(millis)
+}

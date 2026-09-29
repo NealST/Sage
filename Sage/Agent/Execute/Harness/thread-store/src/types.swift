@@ -10,8 +10,8 @@
 //  - `PathBuf` / `AbsolutePathBuf` → `String` (CodexUtils is not a
 //    CodexThreadStore dependency).
 //  - `DateTime<Utc>` → `Date` encoded as RFC 3339.
-//  - `ThreadMemoryMode` lives here until protocol.swift ports it.
-//  - `ThreadSection` is defined in thread_sections.swift (CodexState model
+//  - `ThreadMemoryMode` is `CodexProtocol.ThreadMemoryMode`.
+//  - `ThreadSection` is defined in thread_sections.swift (CodexState model)
 //    unported).
 //  - `ThreadTimelineEntry` (app-server crate) is a JSON stub.
 //  - `PreparedFork` drops the backend-owned source reservation.
@@ -24,14 +24,6 @@ import Foundation
 
 /// Optional field patch where omission leaves a value unchanged and `.some(nil)` clears it.
 public typealias ClearableField<T> = T??
-
-/// Memory mode associated with a live thread.
-///
-/// Port of `codex_protocol::protocol::ThreadMemoryMode` (`rename_all = "lowercase"`).
-public enum ThreadMemoryMode: String, Codable, Equatable, Sendable {
-    case enabled
-    case disabled
-}
 
 /// Thread-scoped metadata used when opening live persistence.
 public struct ThreadPersistenceMetadata: Codable, Equatable, Sendable {

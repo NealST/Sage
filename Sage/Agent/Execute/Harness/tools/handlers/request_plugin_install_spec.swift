@@ -2,9 +2,7 @@
 //  request_plugin_install_spec.swift
 //  Sage
 //
-//  Port of
-//  codex-rs/core/src/tools/handlers/request_plugin_install_spec.rs
-//  (Apache-2.0).
+//  Port of codex-rs/core/src/tools/handlers/request_plugin_install_spec.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //

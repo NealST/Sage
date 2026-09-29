@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 //  Known registry metadata is inspectable without a runtime. Agents with
-//  mailbox status report `.loaded`; others stay `.unloaded` until
-//  ThreadManager can supply a live snapshot.
+//  mailbox status report `.loaded`; live ThreadManager snapshots supply
+//  config when the thread is registered.
 //
 
 import CodexProtocol
@@ -20,9 +20,17 @@ extension LocalAgentControl {
         guard runtime.delivery.status(threadId) != nil else {
             return .unloaded(metadata)
         }
+        let config: ThreadConfigSnapshot
+        if let manager = try? runtime.upgradeThreadManager(),
+           let thread = try? await manager.getThread(threadId)
+        {
+            config = thread.configSnapshot()
+        } else {
+            config = ThreadConfigSnapshot(model: "", sessionSource: .unknown)
+        }
         return .loaded(
             agent: liveSnapshot(threadId: threadId, metadata: metadata),
-            config: ThreadConfigSnapshot(model: "", sessionSource: .unknown)
+            config: config
         )
     }
 }

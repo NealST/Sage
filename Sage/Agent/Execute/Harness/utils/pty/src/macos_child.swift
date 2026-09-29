@@ -1,13 +1,15 @@
 //
-//  posix_child.swift
+//  macos_child.swift
 //  CodexUtils
 //
-//  Port of codex-rs/utils/pty/src/posix_child.rs (Apache-2.0).
+//  Port of codex-rs/utils/pty/src/macos_child.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  posix_spawn with POSIX_SPAWN_SETSID / addchdir_np. SIGCHLD wait replaces
-//  Tokio unix signal stream.
+//  Native macOS posix_spawn without rewriting executable paths or argv[0].
+//  POSIX_SPAWN_SETSID / addchdir_np match upstream. waitpid on a detached
+//  queue replaces Tokio SIGCHLD. Upstream renamed this file from
+//  posix_child.rs.
 //
 
 import Darwin

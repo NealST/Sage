@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Handler selection and running/completed summaries are faithful.
-//  `execute_handlers` waits on CommandHookRuntime / MCP runner.
+//  Handler selection, summaries, and execute_handlers are ported.
+//  Executor-scoped hooks still schedule after the local batch.
 //
 
 import CodexProtocol
@@ -143,6 +143,128 @@ func serializationFailureHookEventsForToolUse(
         errorMessage: errorMessage
     )
     .map { hookCompletedForToolUse($0, toolUseId: toolUseId) }
+}
+
+public func executeHandlers<T: Sendable>(
+    engine: ClaudeHooksEngine,
+    handlers: [ConfiguredHandler],
+    inputJSON: String,
+    cwd: String,
+    turnId: String?,
+    parse: @escaping @Sendable (ConfiguredHandler, HandlerRunResult, String?) -> ParsedHandler<T>
+) async -> [ParsedHandler<T>] {
+    await executeHandlers(
+        engine: engine,
+        handlers: handlers,
+        inputJSON: inputJSON,
+        cwd: cwd,
+        turnId: turnId,
+        metadata: nil,
+        parse: parse
+    )
+}
+
+public func executeHandlers<T: Sendable>(
+    engine: ClaudeHooksEngine,
+    handlers: [ConfiguredHandler],
+    inputJSON: String,
+    cwd: String,
+    turnId: String?,
+    metadata: [String: JSONValue]?,
+    parse: @escaping @Sendable (ConfiguredHandler, HandlerRunResult, String?) -> ParsedHandler<T>
+) async -> [ParsedHandler<T>] {
+    var executorHandlers: [ConfiguredHandler] = []
+    var completed: [(Int, ParsedHandler<T>)] = []
+    await withTaskGroup(of: (Int, ParsedHandler<T>).self) { group in
+        for (configuredOrder, handler) in handlers.enumerated() {
+            if case .executorScoped = handler.sourcePath {
+                executorHandlers.append(handler)
+                continue
+            }
+            if handler.executionMode() == HookExecutionMode.async {
+                engine.commandRuntime.scheduleAsyncHook(
+                    handler: handler,
+                    inputJSON: inputJSON,
+                    cwd: cwd,
+                    turnId: turnId,
+                    parse: parse
+                )
+                continue
+            }
+            group.addTask {
+                let result = await executeHandler(
+                    engine: engine,
+                    handler: handler,
+                    inputJSON: inputJSON,
+                    cwd: cwd,
+                    metadata: nil
+                )
+                return (configuredOrder, parse(handler, result, turnId))
+            }
+        }
+        var completionOrder = 0
+        var shouldStop = false
+        var shouldBlock = false
+        for await (configuredOrder, var parsed) in group {
+            shouldStop = shouldStop || parsed.completed.run.status == .stopped
+            shouldBlock = shouldBlock || parsed.completed.run.status == .blocked
+            parsed.completionOrder = completionOrder
+            completionOrder += 1
+            completed.append((configuredOrder, parsed))
+        }
+        if shouldStop || !shouldBlock {
+            for handler in executorHandlers {
+                let inputJSON = inputJSON
+                let cwd = cwd
+                let metadata = metadata
+                engine.commandRuntime.scheduleAsyncTask {
+                    let result = await executeHandler(
+                        engine: engine,
+                        handler: handler,
+                        inputJSON: inputJSON,
+                        cwd: cwd,
+                        metadata: metadata
+                    )
+                    _ = result.error
+                }
+            }
+        }
+    }
+    return completed.sorted { $0.0 < $1.0 }.map(\.1)
+}
+
+func executeHandler(
+    engine: ClaudeHooksEngine,
+    handler: ConfiguredHandler,
+    inputJSON: String,
+    cwd: String,
+    metadata: [String: JSONValue]?
+) async -> HandlerRunResult {
+    switch handler.kind {
+    case .command(let command, let env, _):
+        return await runCommand(
+            runtime: engine.commandRuntime,
+            handler: handler,
+            command: command,
+            env: env,
+            inputJSON: inputJSON,
+            cwd: cwd
+        )
+    case .mcpTool(let server, let tool, let input):
+        return await runMcpTool(
+            executor: engine.mcpExecutor,
+            handler: handler,
+            server: server,
+            tool: tool,
+            argumentTemplate: input,
+            hookEventJSON: inputJSON,
+            metadata: metadata
+        )
+    }
+}
+
+func hookEventNameLabel(_ eventName: HookEventName) -> String {
+    hookEventWireName(eventName)
 }
 
 public func appendAdditionalContext(

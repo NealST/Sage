@@ -6,12 +6,15 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Session, Op submission, and store persistence are not wired. This is the
-//  public handle type plus startup metadata.
+//  Each live handle owns a ThreadSession submission loop. The handle also
+//  carries sessionSource, a config snapshot, a shutdown latch, a recorded
+//  submission/event log, in-memory history items, and an AgentStatus watch.
 //
 
+import CodexHistory
 import CodexProtocol
 import Foundation
+import os
 
 /// Snapshot of a live thread's effective settings. Config-owned fields stay
 /// optional until the Config crate is ported.
@@ -105,12 +108,226 @@ public struct GuardianRootSnapshot: Equatable, Sendable {
     }
 }
 
+/// Session-free subset of rust `Op` that live registry submission can record.
+public enum ThreadOp: Equatable, Sendable {
+    case interrupt
+    case shutdown
+    case interAgentCommunication(InterAgentCommunication, startOptions: TurnStartOptions)
+}
+
 public final class CodexThread: @unchecked Sendable {
     public let threadId: ThreadId
     public let startup: ThreadStartupMetadata
+    public let sessionSource: SessionSource
+    private let snapshot: ThreadConfigSnapshot
+    private struct RuntimeState: Sendable {
+        var shutdown = false
+        var session: ThreadSession?
+        var submissions: [(String, ThreadOp)] = []
+        var events: [Event] = []
+        var history: [RolloutItem] = []
+        var agentStatus: AgentStatus = .pendingInit
+    }
 
-    public init(threadId: ThreadId, startup: ThreadStartupMetadata) {
+    private let runtimeLock = OSAllocatedUnfairLock(initialState: RuntimeState())
+    private let waitersLock = NSLock()
+    private var statusWaiters: [UUID: AsyncStream<AgentStatus>.Continuation] = [:]
+
+    public init(
+        threadId: ThreadId,
+        startup: ThreadStartupMetadata,
+        sessionSource: SessionSource = .unknown,
+        configSnapshot: ThreadConfigSnapshot? = nil
+    ) {
         self.threadId = threadId
         self.startup = startup
+        self.sessionSource = sessionSource
+        snapshot = configSnapshot ?? ThreadConfigSnapshot(
+            model: startup.model,
+            modelProviderId: startup.modelProviderId,
+            serviceTier: startup.serviceTier,
+            approvalPolicy: startup.approvalPolicy,
+            sessionSource: sessionSource,
+            parentThreadId: startup.parentThreadId ?? sessionSource.parentThreadId(),
+            threadSource: startup.threadSource
+        )
+    }
+
+    public func configSnapshot() -> ThreadConfigSnapshot {
+        snapshot
+    }
+
+    public func isRunning() -> Bool {
+        !runtimeLock.withLock { $0.shutdown }
+    }
+
+    public func liveSession() -> ThreadSession? {
+        runtimeLock.withLock { $0.session }
+    }
+
+    func openLiveSession(
+        sampler: (any TurnSampler)? = nil,
+        toolRunner: (any TurnToolRunner)? = nil
+    ) {
+        if runtimeLock.withLock({ $0.session }) != nil {
+            return
+        }
+        let session = ThreadSession.open(
+            threadId: threadId,
+            sessionSource: sessionSource,
+            sampler: sampler,
+            toolRunner: toolRunner
+        ) { [weak self] event in
+            self?.recordEvent(event)
+        }
+        runtimeLock.withLock { state in
+            if state.session == nil {
+                state.session = session
+            }
+        }
+    }
+
+    func submitSpawnInput(_ input: AgentInput, options: SpawnAgentOptions) async throws {
+        guard let session = liveSession() else {
+            throw CodexErr.internalAgentDied
+        }
+        switch input {
+        case .userInput(let items):
+            let submission = try await session.submitTurnInput(
+                TurnInputRequest.userInput(items).onStart(
+                    TurnStartOptions(
+                        turnTrigger: options.turnTrigger,
+                        parentTurnId: options.parentTurnId,
+                        rootTurnId: options.rootTurnId,
+                        cyberAccessProgram: options.cyberAccessProgram
+                    )
+                ),
+                mode: .startOrSteer
+            )
+            if case .notSubmitted(let reason) = submission {
+                throw CodexErr.invalidRequest("spawn turn input was not submitted (\(reason))")
+            }
+        case .message:
+            return
+        }
+    }
+
+    /// Closes the submission loop, then the live-registry shutdown latch.
+    public func shutdownAndWait() async throws {
+        let session = runtimeLock.withLock { state -> ThreadSession? in
+            state.shutdown = true
+            return state.session
+        }
+        await session?.shutdown()
+    }
+
+    public func submit(_ op: ThreadOp) -> String {
+        let submissionId = UUID().uuidString.lowercased()
+        runtimeLock.withLock { state in
+            state.submissions.append((submissionId, op))
+            if case .shutdown = op {
+                state.shutdown = true
+            }
+        }
+        return submissionId
+    }
+
+    public func recordEvent(_ event: Event) {
+        runtimeLock.withLock { $0.events.append(event) }
+    }
+
+    public func recordedEvents() -> [Event] {
+        runtimeLock.withLock { $0.events }
+    }
+
+    public func submittedOps() -> [ThreadOp] {
+        runtimeLock.withLock { $0.submissions.map(\.1) }
+    }
+
+    public func historyItems() -> [RolloutItem] {
+        runtimeLock.withLock { $0.history }
+    }
+
+    public func replaceHistory(_ items: [RolloutItem]) {
+        runtimeLock.withLock { $0.history = items }
+    }
+
+    public func agentStatus() -> AgentStatus {
+        runtimeLock.withLock { $0.agentStatus }
+    }
+
+    public func publishStatus(_ status: AgentStatus) {
+        runtimeLock.withLock { state in
+            state.agentStatus = status
+            if status == .shutdown {
+                state.shutdown = true
+            }
+        }
+        waitersLock.lock()
+        let waiters = Array(statusWaiters.values)
+        waitersLock.unlock()
+        for waiter in waiters {
+            waiter.yield(status)
+        }
+    }
+
+    public func subscribeStatus() -> AsyncStream<AgentStatus> {
+        let initial = runtimeLock.withLock { $0.agentStatus }
+        return AsyncStream { continuation in
+            let id = UUID()
+            waitersLock.lock()
+            statusWaiters[id] = continuation
+            waitersLock.unlock()
+            continuation.yield(initial)
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.waitersLock.lock()
+                self.statusWaiters.removeValue(forKey: id)
+                self.waitersLock.unlock()
+            }
+        }
+    }
+
+    public func emitTurnItemStarted(turnId: String, item: TurnItem) {
+        let startedAtMs = nowUnixTimestampMs()
+        let event = ItemStartedEvent(
+            threadId: threadId,
+            turnId: turnId,
+            item: item,
+            startedAtMs: startedAtMs
+        )
+        recordEvent(Event(id: turnId, msg: .itemStarted(event)))
+        for legacy in event.asLegacyEvents(showRawAgentReasoning: false) {
+            recordEvent(Event(id: turnId, msg: legacy))
+        }
+    }
+
+    public func emitTurnItemCompleted(turnId: String, item: TurnItem, startedAtMs: Int64? = nil) {
+        let completedAtMs = nowUnixTimestampMs()
+        let event = ItemCompletedEvent(
+            threadId: threadId,
+            turnId: turnId,
+            item: item,
+            startedAtMs: startedAtMs,
+            completedAtMs: completedAtMs
+        )
+        recordEvent(Event(id: turnId, msg: .itemCompleted(event)))
+        for legacy in event.asLegacyEvents(showRawAgentReasoning: false) {
+            recordEvent(Event(id: turnId, msg: legacy))
+        }
+    }
+
+    deinit {
+        let session = runtimeLock.withLock { $0.session }
+        if let session {
+            Task { await session.shutdown() }
+        }
+        waitersLock.lock()
+        let waiters = Array(statusWaiters.values)
+        statusWaiters.removeAll()
+        waitersLock.unlock()
+        for waiter in waiters {
+            waiter.finish()
+        }
     }
 }

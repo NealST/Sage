@@ -2,12 +2,10 @@
 //  child_reaper.swift
 //  CodexUtils
 //
-//  Port of codex-rs/utils/pty/src/child_reaper.rs (Apache-2.0).
-//  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: adapted
+//  Sage addition (no codex counterpart).
 //
-//  Background waitpid worker. Tokio-child transfer is not needed because
-//  Sage owns NativeChild PIDs directly.
+//  Background waitpid worker kept after upstream folded reaping into
+//  macos_child.rs. Sage owns NativeChild PIDs directly.
 //
 
 import Darwin

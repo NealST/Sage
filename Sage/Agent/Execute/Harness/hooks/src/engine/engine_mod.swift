@@ -7,8 +7,9 @@
 //  Port status: adapted
 //
 //  R4a: basename collides with events/mod.swift.
-//  Handler types, list entries, and run-id labels are faithful.
-//  `ClaudeHooksEngine` construction waits on ConfigLayerStack / discovery.
+//  Handler types, list entries, run-id labels, and preview/run wrappers
+//  are ported. `new` discovers hooks.json folders and plugin-source
+//  warnings without walking a ConfigLayerStack.
 //  `PluginId` is a string until the plugin crate is ported.
 //
 
@@ -223,23 +224,155 @@ public final class ClaudeHooksEngine: @unchecked Sendable {
     public var handlers: [ConfiguredHandler]
     public var warnings: [String]
     public var requiredLoadErrors: [String]
+    public var commandRuntime: CommandHookRuntime
     public var mcpExecutor: any HookMcpExecutor
 
     public init(
         handlers: [ConfiguredHandler] = [],
         warnings: [String] = [],
         requiredLoadErrors: [String] = [],
+        commandRuntime: CommandHookRuntime,
         mcpExecutor: any HookMcpExecutor
     ) {
         self.handlers = handlers
         self.warnings = warnings
         self.requiredLoadErrors = requiredLoadErrors
+        self.commandRuntime = commandRuntime
         self.mcpExecutor = mcpExecutor
     }
 
-    public static func `new`() throws -> ClaudeHooksEngine {
-        throw CodexErr.unsupportedOperation(
-            "ClaudeHooksEngine::new waits on ConfigLayerStack / hook discovery"
+    public static func `new`(
+        enabled: Bool,
+        bypassHookTrust: Bool = false,
+        pluginHookSources: [PluginHookSource] = [],
+        pluginHookLoadWarnings: [String] = [],
+        hooksJsonFolders: [AbsolutePathBuf] = [],
+        hookStates: [String: HookStateToml] = [:],
+        commandRuntime: CommandHookRuntime,
+        mcpExecutor: any HookMcpExecutor
+    ) -> ClaudeHooksEngine {
+        if !enabled && pluginHookSources.isEmpty && hooksJsonFolders.isEmpty {
+            return ClaudeHooksEngine(commandRuntime: commandRuntime, mcpExecutor: mcpExecutor)
+        }
+        _ = generatedHookSchemas()
+        var discovered = discoverHandlers(
+            hooksJsonFolders: hooksJsonFolders,
+            hookStates: hookStates,
+            pluginHookSources: pluginHookSources,
+            pluginHookLoadWarnings: pluginHookLoadWarnings,
+            bypassHookTrust: bypassHookTrust
         )
+        if !enabled {
+            discovered.handlers.removeAll { !$0.builtin }
+            discovered.warnings = []
+            discovered.requiredLoadErrors = []
+        }
+        return ClaudeHooksEngine(
+            handlers: discovered.handlers,
+            warnings: discovered.warnings,
+            requiredLoadErrors: discovered.requiredLoadErrors,
+            commandRuntime: commandRuntime,
+            mcpExecutor: mcpExecutor
+        )
+    }
+
+    public func maxPermissionRequestTimeout() -> TimeInterval {
+        TimeInterval(
+            handlers
+                .filter { $0.eventName == .permissionRequest && $0.canApplyControlEffects() }
+                .map(\.timeoutSec)
+                .max() ?? 0
+        )
+    }
+
+    public func previewSessionStart(_ request: SessionStartRequest) -> [HookRunSummary] {
+        CodexHooks.previewSessionStart(handlers: handlers, request: request)
+    }
+
+    public func previewPreToolUse(_ request: PreToolUseRequest) -> [HookRunSummary] {
+        CodexHooks.previewPreToolUse(handlers: handlers, request: request)
+    }
+
+    public func previewPermissionRequest(_ request: PermissionRequestRequest) -> [HookRunSummary] {
+        CodexHooks.previewPermissionRequest(handlers: handlers, request: request)
+    }
+
+    public func previewPostToolUse(_ request: PostToolUseRequest) -> [HookRunSummary] {
+        CodexHooks.previewPostToolUse(handlers: handlers, request: request)
+    }
+
+    public func previewPreCompact(_ request: PreCompactRequest) -> [HookRunSummary] {
+        CodexHooks.previewPreCompact(handlers: handlers, request: request)
+    }
+
+    public func previewPostCompact(_ request: PostCompactRequest) -> [HookRunSummary] {
+        CodexHooks.previewPostCompact(handlers: handlers, request: request)
+    }
+
+    public func previewUserPromptSubmit(_ request: UserPromptSubmitRequest) -> [HookRunSummary] {
+        CodexHooks.previewUserPromptSubmit(handlers: handlers, request: request)
+    }
+
+    public func previewStop(_ request: StopRequest) -> [HookRunSummary] {
+        CodexHooks.previewStop(handlers: handlers, request: request)
+    }
+
+    public func previewSessionEnd() -> [HookRunSummary] {
+        CodexHooks.previewSessionEnd(handlers: handlers)
+    }
+
+    public func previewInterrupt() -> [HookRunSummary] {
+        CodexHooks.previewInterrupt(handlers: handlers)
+    }
+
+    public func runSessionStart(
+        _ request: SessionStartRequest,
+        turnId: String? = nil
+    ) async -> SessionStartOutcome {
+        await CodexHooks.runSessionStart(self, request: request, turnId: turnId)
+    }
+
+    public func runPreToolUse(_ request: PreToolUseRequest) async -> PreToolUseOutcome {
+        await CodexHooks.runPreToolUse(self, request: request)
+    }
+
+    public func runPermissionRequest(_ request: PermissionRequestRequest) async -> PermissionRequestOutcome {
+        await CodexHooks.runPermissionRequest(self, request: request)
+    }
+
+    public func runPostToolUse(_ request: PostToolUseRequest) async -> PostToolUseOutcome {
+        var outcome = await CodexHooks.runPostToolUse(self, request: request)
+        if let feedback = outcome.feedbackMessage {
+            outcome.feedbackMessage = await commandRuntime.outputSpiller.maybeSpillText(feedback)
+        }
+        return outcome
+    }
+
+    public func runPreCompact(_ request: PreCompactRequest) async -> PreCompactOutcome {
+        await CodexHooks.runPreCompact(self, request: request)
+    }
+
+    public func runPostCompact(_ request: PostCompactRequest) async -> StatelessHookOutcome {
+        await CodexHooks.runPostCompact(self, request: request)
+    }
+
+    public func runUserPromptSubmit(_ request: UserPromptSubmitRequest) async -> UserPromptSubmitOutcome {
+        await CodexHooks.runUserPromptSubmit(self, request: request)
+    }
+
+    public func runStop(_ request: StopRequest) async -> StopOutcome {
+        var outcome = await CodexHooks.runStop(self, request: request)
+        outcome.continuationFragments = await commandRuntime.outputSpiller.maybeSpillPromptFragments(
+            outcome.continuationFragments
+        )
+        return outcome
+    }
+
+    public func runSessionEnd(_ request: SessionEndRequest) async -> SessionEndOutcome {
+        await CodexHooks.runSessionEnd(self, request: request)
+    }
+
+    public func runInterrupt(_ request: InterruptRequest) async -> InterruptOutcome {
+        await CodexHooks.runInterrupt(self, request: request)
     }
 }

@@ -4,12 +4,11 @@
 //
 //  Port of codex-rs/sandboxing/src/manager.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
 //  Platform selection, MITM CA readable-root injection, compatibility
-//  SandboxPolicy, and request types. Full `transform` wrapping of argv
-//  (Linux landlock / Windows token) is macOS-only here: Seatbelt args are
-//  produced via `createSeatbeltCommandArgs`.
+//  SandboxPolicy, and request types. `transform` wraps macOS Seatbelt
+//  argv. Linux landlock / Windows token wrappers stay excluded.
 //
 
 import CodexProtocol

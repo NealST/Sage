@@ -20,7 +20,7 @@ extension LocalAgentControl {
     ) async throws -> (LiveAgent, ThreadConfigSnapshot) {
         let metadata = try runtime.ensureAgentKnown(threadId)
         if runtime.delivery.status(threadId) == nil {
-            runtime.delivery.setStatus(threadId, .pendingInit)
+            runtime.publishAgentStatus(threadId, .pendingInit)
         }
         return (
             liveSnapshot(threadId: threadId, metadata: metadata),

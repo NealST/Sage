@@ -4,11 +4,12 @@
 //
 //  Port of codex-rs/protocol/src/protocol.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Core protocol types. This is a partial port covering the most commonly
-//  referenced types needed by other protocol files. The full `protocol.rs`
-//  is ~6,444 lines; remaining types will be ported incrementally.
+//  Wire types for turns, events, approvals, and session metadata.
+//  Realtime conversation variants stay omitted (Sage has no voice
+//  realtime; Phase 10 deferred). `Op` oneshot reply channels stay on
+//  SessionOp in the session layer. Skill metadata lives in CodexSkills.
 //
 
 import CodexUtils
@@ -501,6 +502,11 @@ public enum ThreadHistoryMode: String, Codable, Equatable, Sendable {
     case paginated
 
     public func asStr() -> String { rawValue }
+}
+
+public enum ThreadMemoryMode: String, Codable, Equatable, Sendable {
+    case enabled
+    case disabled
 }
 
 // MARK: - SessionContextWindow
@@ -1512,6 +1518,189 @@ public enum TruncationPolicy: Equatable, Sendable {
     }
 }
 
+extension TruncationPolicy: Codable {
+    private enum Keys: String, CodingKey { case mode, limit }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        let mode = try container.decode(String.self, forKey: .mode)
+        let limit = try container.decode(Int.self, forKey: .limit)
+        switch mode {
+        case "bytes": self = .bytes(limit)
+        case "tokens": self = .tokens(limit)
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .mode, in: container, debugDescription: "Unknown TruncationPolicy mode: \(mode)")
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: Keys.self)
+        switch self {
+        case .bytes(let bytes):
+            try container.encode("bytes", forKey: .mode)
+            try container.encode(bytes, forKey: .limit)
+        case .tokens(let tokens):
+            try container.encode("tokens", forKey: .mode)
+            try container.encode(tokens, forKey: .limit)
+        }
+    }
+}
+
+public func withSerializationAllowance(_ policy: TruncationPolicy) -> TruncationPolicy {
+    policy * 1.2
+}
+
+public func formattedTruncateText(_ content: String, policy: TruncationPolicy) -> String {
+    if content.utf8.count <= policy.byteBudget { return content }
+    let originalTokenCount = approxTokenCount(content)
+    let totalLines = content.split(whereSeparator: \.isNewline).count
+    let result = truncateText(content, policy: policy)
+    return """
+        Warning: truncated output (original token count: \(originalTokenCount))
+        Total output lines: \(totalLines)
+
+        \(result)
+        """
+}
+
+public func truncateText(_ content: String, policy: TruncationPolicy) -> String {
+    switch policy {
+    case .bytes(let bytes): return truncateMiddleChars(content, maxBytes: bytes)
+    case .tokens(let tokens): return truncateMiddleWithTokenBudget(content, maxTokens: tokens).0
+    }
+}
+
+public func truncateFunctionOutputPayload(
+    _ output: inout FunctionCallOutputPayload,
+    policy: TruncationPolicy,
+    estimateAudioTokenCount: (String) -> Int
+) {
+    switch output.body {
+    case .text(let text):
+        output.body = .text(truncateText(text, policy: policy))
+    case .contentItems(let items):
+        output.body = .contentItems(
+            truncateFunctionOutputItemsWithPolicy(
+                items, policy: policy, estimateAudioTokenCount: estimateAudioTokenCount))
+    }
+}
+
+public func formattedTruncateTextContentItemsWithPolicy(
+    _ items: [FunctionCallOutputContentItem],
+    policy: TruncationPolicy
+) -> (items: [FunctionCallOutputContentItem], originalTokenCount: Int?) {
+    let textSegments = items.compactMap { item -> String? in
+        if case .inputText(let text) = item { return text }
+        return nil
+    }
+    if textSegments.isEmpty { return (items, nil) }
+
+    var combined = ""
+    for text in textSegments {
+        if !combined.isEmpty { combined.append("\n") }
+        combined.append(text)
+    }
+    if combined.utf8.count <= policy.byteBudget { return (items, nil) }
+
+    let originalTokenCount = approxTokenCount(combined)
+    var out: [FunctionCallOutputContentItem] = [
+        .inputText(text: formattedTruncateText(combined, policy: policy))
+    ]
+    for item in items {
+        switch item {
+        case .inputImage(let image, let detail):
+            out.append(.inputImage(image: image, detail: detail))
+        case .inputAudio(let audioUrl):
+            out.append(.inputAudio(audioUrl: audioUrl))
+        case .encryptedContent(let enc):
+            out.append(.encryptedContent(encryptedContent: enc))
+        case .inputText:
+            break
+        }
+    }
+    return (out, originalTokenCount)
+}
+
+public func truncateFunctionOutputItemsWithPolicy(
+    _ items: [FunctionCallOutputContentItem],
+    policy: TruncationPolicy,
+    estimateAudioTokenCount: (String) -> Int
+) -> [FunctionCallOutputContentItem] {
+    var out: [FunctionCallOutputContentItem] = []
+    var remainingBudget: Int
+    switch policy {
+    case .bytes: remainingBudget = policy.byteBudget
+    case .tokens: remainingBudget = policy.tokenBudget
+    }
+    var omittedTextItems = 0
+    var omittedAudioItems = 0
+
+    for item in items {
+        switch item {
+        case .inputText(let text):
+            if text.isEmpty { continue }
+            if remainingBudget == 0 {
+                omittedTextItems += 1
+                continue
+            }
+            let cost: Int
+            switch policy {
+            case .bytes: cost = text.utf8.count
+            case .tokens: cost = approxTokenCount(text)
+            }
+            if cost <= remainingBudget {
+                out.append(.inputText(text: text))
+                remainingBudget = remainingBudget.saturatingSub(cost)
+            } else {
+                let snippetPolicy: TruncationPolicy
+                switch policy {
+                case .bytes: snippetPolicy = .bytes(remainingBudget)
+                case .tokens: snippetPolicy = .tokens(remainingBudget)
+                }
+                let snippet = truncateText(text, policy: snippetPolicy)
+                if snippet.isEmpty {
+                    omittedTextItems += 1
+                } else {
+                    out.append(.inputText(text: snippet))
+                }
+                remainingBudget = 0
+            }
+        case .inputImage(let image, let detail):
+            out.append(.inputImage(image: image, detail: detail))
+        case .inputAudio(let audioUrl):
+            let tokenCost = estimateAudioTokenCount(audioUrl)
+            let cost: Int
+            switch policy {
+            case .bytes: cost = approxBytesForTokens(tokenCost)
+            case .tokens: cost = tokenCost
+            }
+            if cost <= remainingBudget {
+                out.append(.inputAudio(audioUrl: audioUrl))
+                remainingBudget = remainingBudget.saturatingSub(cost)
+            } else {
+                omittedAudioItems += 1
+            }
+        case .encryptedContent(let enc):
+            out.append(.encryptedContent(encryptedContent: enc))
+        }
+    }
+
+    if omittedTextItems > 0 {
+        out.append(.inputText(text: "[omitted \(omittedTextItems) text items ...]"))
+    }
+    if omittedAudioItems > 0 {
+        out.append(.inputText(text: "[omitted \(omittedAudioItems) audio items ...]"))
+    }
+    return out
+}
+
+private extension Int {
+    func saturatingSub(_ other: Int) -> Int {
+        self > other ? self - other : 0
+    }
+}
+
 // MARK: - FileChange
 
 /// serde `tag = "type"`, `rename_all = "snake_case"`.
@@ -2005,6 +2194,11 @@ public enum SessionSource: Codable, Equatable, Sendable {
         }
     }
 
+    public func isInternal() -> Bool {
+        if case .internal = self { return true }
+        return false
+    }
+
     public func isNonRootAgent() -> Bool {
         switch self {
         case .internal, .subAgent:
@@ -2399,7 +2593,7 @@ private enum ResultKey: String, CodingKey {
     case err = "Err"
 }
 
-// MARK: - Event / EventMsg (partial — variants needed by items + legacy_events)
+// MARK: - Event / EventMsg
 
 public struct Event: Codable, Equatable, Sendable {
     public var id: String
@@ -3003,13 +3197,32 @@ public struct SubAgentActivityEvent: Codable, Equatable, Sendable {
 
 public enum EventMsg: Equatable, Sendable {
     case error(ErrorEvent)
+    case warning(WarningEvent)
+    case authRecoveryStarted(AuthRecoveryEvent)
+    case authRecoveryCompleted(AuthRecoveryEvent)
+    case guardianWarning(WarningEvent)
+    case modelReroute(ModelRerouteEvent)
+    case modelVerification(ModelVerificationEvent)
+    case turnModerationMetadata(TurnModerationMetadataEvent)
+    case safetyBuffering(SafetyBufferingEvent)
     case contextCompacted(ContextCompactedEvent)
+    case threadRolledBack(ThreadRolledBackEvent)
     case turnStarted(TurnStartedEvent)
+    case threadSettingsApplied(ThreadSettingsAppliedEvent)
     case turnComplete(TurnCompleteEvent)
+    case tokenCount(TokenCountEvent)
     case agentMessage(AgentMessageEvent)
     case userMessage(UserMessageEvent)
     case agentReasoning(AgentReasoningEvent)
     case agentReasoningRawContent(AgentReasoningRawContentEvent)
+    case agentReasoningSectionBreak(AgentReasoningSectionBreakEvent)
+    case sessionConfigured(SessionConfiguredEvent)
+    case environmentConnected(EnvironmentConnectionEvent)
+    case environmentDisconnected(EnvironmentConnectionEvent)
+    case threadGoalUpdated(ThreadGoalUpdatedEvent)
+    case threadQueueChanged(ThreadQueueChangedEvent)
+    case mcpStartupUpdate(McpStartupUpdateEvent)
+    case mcpStartupComplete(McpStartupCompleteEvent)
     case mcpToolCallBegin(McpToolCallBeginEvent)
     case mcpToolCallEnd(McpToolCallEndEvent)
     case webSearchBegin(WebSearchBeginEvent)
@@ -3017,24 +3230,37 @@ public enum EventMsg: Equatable, Sendable {
     case imageGenerationBegin(ImageGenerationBeginEvent)
     case imageGenerationEnd(ImageGenerationEndEvent)
     case execCommandBegin(ExecCommandBeginEvent)
+    case execCommandOutputDelta(ExecCommandOutputDeltaEvent)
+    case terminalInteraction(TerminalInteractionEvent)
     case execCommandEnd(ExecCommandEndEvent)
     case viewImageToolCall(ViewImageToolCallEvent)
     case execApprovalRequest(ExecApprovalRequestEvent)
-    case applyPatchApprovalRequest(ApplyPatchApprovalRequestEvent)
-    case guardianAssessment(GuardianAssessmentEvent)
-    case elicitationRequest(ElicitationRequestEvent)
+    case requestPermissions(RequestPermissionsEvent)
+    case requestUserInput(RequestUserInputEvent)
     case dynamicToolCallRequest(DynamicToolCallRequest)
     case dynamicToolCallResponse(DynamicToolCallResponseEvent)
+    case elicitationRequest(ElicitationRequestEvent)
+    case applyPatchApprovalRequest(ApplyPatchApprovalRequestEvent)
+    case guardianAssessment(GuardianAssessmentEvent)
+    case deprecationNotice(DeprecationNoticeEvent)
+    case streamError(StreamErrorEvent)
     case patchApplyBegin(PatchApplyBeginEvent)
     case patchApplyUpdated(PatchApplyUpdatedEvent)
     case patchApplyEnd(PatchApplyEndEvent)
-    case safetyBuffering(SafetyBufferingEvent)
-    case agentReasoningSectionBreak(AgentReasoningSectionBreakEvent)
+    case turnDiff(TurnDiffEvent)
+    case planUpdate(UpdatePlanArgs)
+    case turnAborted(TurnAbortedEvent)
+    case shutdownComplete
     case enteredReviewMode(EnteredReviewModeEvent)
     case exitedReviewMode(ExitedReviewModeEvent)
+    case rawResponseItem(RawResponseItemEvent)
+    case rawResponseCompleted(RawResponseCompletedEvent)
     case itemStarted(ItemStartedEvent)
     case itemCompleted(ItemCompletedEvent)
+    case hookStarted(HookStartedEvent)
+    case hookCompleted(HookCompletedEvent)
     case agentMessageContentDelta(AgentMessageContentDeltaEvent)
+    case planDelta(PlanDeltaEvent)
     case reasoningContentDelta(ReasoningContentDeltaEvent)
     case reasoningRawContentDelta(ReasoningRawContentDeltaEvent)
     case collabAgentSpawnBegin(CollabAgentSpawnBeginEvent)
@@ -3048,7 +3274,6 @@ public enum EventMsg: Equatable, Sendable {
     case collabResumeBegin(CollabResumeBeginEvent)
     case collabResumeEnd(CollabResumeEndEvent)
     case subAgentActivity(SubAgentActivityEvent)
-    case threadRolledBack(ThreadRolledBackEvent)
 }
 
 extension EventMsg: Codable {
@@ -3059,9 +3284,59 @@ extension EventMsg: Codable {
         let type_ = try container.decode(String.self, forKey: .type_)
         switch type_ {
         case "error": self = .error(try ErrorEvent(from: decoder))
+        case "warning": self = .warning(try WarningEvent(from: decoder))
+        case "auth_recovery_started":
+            self = .authRecoveryStarted(try AuthRecoveryEvent(from: decoder))
+        case "auth_recovery_completed":
+            self = .authRecoveryCompleted(try AuthRecoveryEvent(from: decoder))
+        case "guardian_warning": self = .guardianWarning(try WarningEvent(from: decoder))
+        case "model_reroute": self = .modelReroute(try ModelRerouteEvent(from: decoder))
+        case "model_verification":
+            self = .modelVerification(try ModelVerificationEvent(from: decoder))
+        case "turn_moderation_metadata":
+            self = .turnModerationMetadata(try TurnModerationMetadataEvent(from: decoder))
         case "context_compacted": self = .contextCompacted(try ContextCompactedEvent(from: decoder))
+        case "thread_settings_applied":
+            self = .threadSettingsApplied(try ThreadSettingsAppliedEvent(from: decoder))
         case "task_started", "turn_started": self = .turnStarted(try TurnStartedEvent(from: decoder))
         case "task_complete", "turn_complete": self = .turnComplete(try TurnCompleteEvent(from: decoder))
+        case "token_count": self = .tokenCount(try TokenCountEvent(from: decoder))
+        case "session_configured":
+            self = .sessionConfigured(try SessionConfiguredEvent(from: decoder))
+        case "environment_connected":
+            self = .environmentConnected(try EnvironmentConnectionEvent(from: decoder))
+        case "environment_disconnected":
+            self = .environmentDisconnected(try EnvironmentConnectionEvent(from: decoder))
+        case "thread_goal_updated":
+            self = .threadGoalUpdated(try ThreadGoalUpdatedEvent(from: decoder))
+        case "thread_queue_changed":
+            self = .threadQueueChanged(try ThreadQueueChangedEvent(from: decoder))
+        case "mcp_startup_update":
+            self = .mcpStartupUpdate(try McpStartupUpdateEvent(from: decoder))
+        case "mcp_startup_complete":
+            self = .mcpStartupComplete(try McpStartupCompleteEvent(from: decoder))
+        case "exec_command_output_delta":
+            self = .execCommandOutputDelta(try ExecCommandOutputDeltaEvent(from: decoder))
+        case "terminal_interaction":
+            self = .terminalInteraction(try TerminalInteractionEvent(from: decoder))
+        case "request_permissions":
+            self = .requestPermissions(try RequestPermissionsEvent(from: decoder))
+        case "request_user_input":
+            self = .requestUserInput(try RequestUserInputEvent(from: decoder))
+        case "deprecation_notice":
+            self = .deprecationNotice(try DeprecationNoticeEvent(from: decoder))
+        case "stream_error": self = .streamError(try StreamErrorEvent(from: decoder))
+        case "turn_diff": self = .turnDiff(try TurnDiffEvent(from: decoder))
+        case "plan_update": self = .planUpdate(try UpdatePlanArgs(from: decoder))
+        case "turn_aborted": self = .turnAborted(try TurnAbortedEvent(from: decoder))
+        case "shutdown_complete": self = .shutdownComplete
+        case "raw_response_item":
+            self = .rawResponseItem(try RawResponseItemEvent(from: decoder))
+        case "raw_response_completed":
+            self = .rawResponseCompleted(try RawResponseCompletedEvent(from: decoder))
+        case "hook_started": self = .hookStarted(try HookStartedEvent(from: decoder))
+        case "hook_completed": self = .hookCompleted(try HookCompletedEvent(from: decoder))
+        case "plan_delta": self = .planDelta(try PlanDeltaEvent(from: decoder))
         case "agent_message": self = .agentMessage(try AgentMessageEvent(from: decoder))
         case "user_message": self = .userMessage(try UserMessageEvent(from: decoder))
         case "agent_reasoning": self = .agentReasoning(try AgentReasoningEvent(from: decoder))
@@ -3144,8 +3419,70 @@ extension EventMsg: Codable {
         switch self {
         case .error(let event):
             try container.encode("error", forKey: .type_); try event.encode(to: encoder)
+        case .warning(let event):
+            try container.encode("warning", forKey: .type_); try event.encode(to: encoder)
+        case .authRecoveryStarted(let event):
+            try container.encode("auth_recovery_started", forKey: .type_); try event.encode(to: encoder)
+        case .authRecoveryCompleted(let event):
+            try container.encode("auth_recovery_completed", forKey: .type_); try event.encode(to: encoder)
+        case .guardianWarning(let event):
+            try container.encode("guardian_warning", forKey: .type_); try event.encode(to: encoder)
+        case .modelReroute(let event):
+            try container.encode("model_reroute", forKey: .type_); try event.encode(to: encoder)
+        case .modelVerification(let event):
+            try container.encode("model_verification", forKey: .type_); try event.encode(to: encoder)
+        case .turnModerationMetadata(let event):
+            try container.encode("turn_moderation_metadata", forKey: .type_); try event.encode(to: encoder)
         case .contextCompacted(let event):
             try container.encode("context_compacted", forKey: .type_); try event.encode(to: encoder)
+        case .threadSettingsApplied(let event):
+            try container.encode("thread_settings_applied", forKey: .type_); try event.encode(to: encoder)
+        case .tokenCount(let event):
+            try container.encode("token_count", forKey: .type_); try event.encode(to: encoder)
+        case .sessionConfigured(let event):
+            try container.encode("session_configured", forKey: .type_); try event.encode(to: encoder)
+        case .environmentConnected(let event):
+            try container.encode("environment_connected", forKey: .type_); try event.encode(to: encoder)
+        case .environmentDisconnected(let event):
+            try container.encode("environment_disconnected", forKey: .type_); try event.encode(to: encoder)
+        case .threadGoalUpdated(let event):
+            try container.encode("thread_goal_updated", forKey: .type_); try event.encode(to: encoder)
+        case .threadQueueChanged(let event):
+            try container.encode("thread_queue_changed", forKey: .type_); try event.encode(to: encoder)
+        case .mcpStartupUpdate(let event):
+            try container.encode("mcp_startup_update", forKey: .type_); try event.encode(to: encoder)
+        case .mcpStartupComplete(let event):
+            try container.encode("mcp_startup_complete", forKey: .type_); try event.encode(to: encoder)
+        case .execCommandOutputDelta(let event):
+            try container.encode("exec_command_output_delta", forKey: .type_); try event.encode(to: encoder)
+        case .terminalInteraction(let event):
+            try container.encode("terminal_interaction", forKey: .type_); try event.encode(to: encoder)
+        case .requestPermissions(let event):
+            try container.encode("request_permissions", forKey: .type_); try event.encode(to: encoder)
+        case .requestUserInput(let event):
+            try container.encode("request_user_input", forKey: .type_); try event.encode(to: encoder)
+        case .deprecationNotice(let event):
+            try container.encode("deprecation_notice", forKey: .type_); try event.encode(to: encoder)
+        case .streamError(let event):
+            try container.encode("stream_error", forKey: .type_); try event.encode(to: encoder)
+        case .turnDiff(let event):
+            try container.encode("turn_diff", forKey: .type_); try event.encode(to: encoder)
+        case .planUpdate(let event):
+            try container.encode("plan_update", forKey: .type_); try event.encode(to: encoder)
+        case .turnAborted(let event):
+            try container.encode("turn_aborted", forKey: .type_); try event.encode(to: encoder)
+        case .shutdownComplete:
+            try container.encode("shutdown_complete", forKey: .type_)
+        case .rawResponseItem(let event):
+            try container.encode("raw_response_item", forKey: .type_); try event.encode(to: encoder)
+        case .rawResponseCompleted(let event):
+            try container.encode("raw_response_completed", forKey: .type_); try event.encode(to: encoder)
+        case .hookStarted(let event):
+            try container.encode("hook_started", forKey: .type_); try event.encode(to: encoder)
+        case .hookCompleted(let event):
+            try container.encode("hook_completed", forKey: .type_); try event.encode(to: encoder)
+        case .planDelta(let event):
+            try container.encode("plan_delta", forKey: .type_); try event.encode(to: encoder)
         case .turnStarted(let event):
             try container.encode("task_started", forKey: .type_); try event.encode(to: encoder)
         case .turnComplete(let event):
@@ -3988,5 +4325,430 @@ public enum SkillScope: String, Codable, Equatable, Sendable {
     case repo
     case system
     case admin
+}
+
+// MARK: - Remaining EventMsg payloads
+
+public struct WarningEvent: Codable, Equatable, Sendable {
+    public var message: String
+    public init(message: String) { self.message = message }
+}
+
+public struct AuthRecoveryEvent: Codable, Equatable, Sendable {
+    public var provider: String
+    public var message: String
+    public init(provider: String, message: String) {
+        self.provider = provider; self.message = message
+    }
+}
+
+public enum ModelRerouteReason: String, Codable, Equatable, Sendable {
+    case highRiskCyberActivity = "high_risk_cyber_activity"
+}
+
+public struct ModelRerouteEvent: Codable, Equatable, Sendable {
+    public var fromModel: String
+    public var toModel: String
+    public var reason: ModelRerouteReason
+
+    enum CodingKeys: String, CodingKey {
+        case reason
+        case fromModel = "from_model"
+        case toModel = "to_model"
+    }
+
+    public init(fromModel: String, toModel: String, reason: ModelRerouteReason) {
+        self.fromModel = fromModel; self.toModel = toModel; self.reason = reason
+    }
+}
+
+public struct ModelVerificationEvent: Codable, Equatable, Sendable {
+    public var verifications: [ModelVerification]
+    public init(verifications: [ModelVerification]) { self.verifications = verifications }
+}
+
+public struct TokenCountEvent: Codable, Equatable, Sendable {
+    public var info: TokenUsageInfo?
+    public var rateLimits: RateLimitSnapshot?
+
+    enum CodingKeys: String, CodingKey {
+        case info
+        case rateLimits = "rate_limits"
+    }
+
+    public init(info: TokenUsageInfo? = nil, rateLimits: RateLimitSnapshot? = nil) {
+        self.info = info; self.rateLimits = rateLimits
+    }
+}
+
+public struct EnvironmentConnectionEvent: Codable, Equatable, Sendable {
+    public var environmentId: String
+    enum CodingKeys: String, CodingKey { case environmentId = "environment_id" }
+    public init(environmentId: String) { self.environmentId = environmentId }
+}
+
+public struct ThreadSettingsSnapshot: Codable, Equatable, Sendable {
+    public var model: String
+    public var modelProviderId: String
+    public var serviceTier: String?
+    public var approvalPolicy: AskForApproval
+    public var approvalsReviewer: ApprovalsReviewer
+    public var permissionProfile: PermissionProfile
+    public var activePermissionProfile: ActivePermissionProfile?
+    public var cwd: AbsolutePathBuf
+    public var runtimeWorkspaceRoots: [AbsolutePathBuf]?
+    public var reasoningEffort: ReasoningEffort?
+    public var reasoningSummary: ReasoningSummary?
+    public var personality: Personality?
+    public var collaborationMode: CollaborationMode
+    public var disabledPluginIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case model, cwd, personality
+        case modelProviderId = "model_provider_id"
+        case serviceTier = "service_tier"
+        case approvalPolicy = "approval_policy"
+        case approvalsReviewer = "approvals_reviewer"
+        case permissionProfile = "permission_profile"
+        case activePermissionProfile = "active_permission_profile"
+        case runtimeWorkspaceRoots = "runtime_workspace_roots"
+        case reasoningEffort = "reasoning_effort"
+        case reasoningSummary = "reasoning_summary"
+        case collaborationMode = "collaboration_mode"
+        case disabledPluginIds = "disabled_plugin_ids"
+    }
+}
+
+public struct ThreadSettingsAppliedEvent: Codable, Equatable, Sendable {
+    public var threadId: ThreadId?
+    public var threadSettings: ThreadSettingsSnapshot
+
+    enum CodingKeys: String, CodingKey {
+        case threadId = "thread_id"
+        case threadSettings = "thread_settings"
+    }
+
+    public init(threadId: ThreadId? = nil, threadSettings: ThreadSettingsSnapshot) {
+        self.threadId = threadId; self.threadSettings = threadSettings
+    }
+}
+
+public enum ExecOutputStream: String, Codable, Equatable, Sendable {
+    case stdout
+    case stderr
+}
+
+public struct ExecCommandOutputDeltaEvent: Codable, Equatable, Sendable {
+    public var callId: String
+    public var stream: ExecOutputStream
+    public var chunk: Data
+
+    enum CodingKeys: String, CodingKey {
+        case stream, chunk
+        case callId = "call_id"
+    }
+
+    public init(callId: String, stream: ExecOutputStream, chunk: Data) {
+        self.callId = callId; self.stream = stream; self.chunk = chunk
+    }
+}
+
+public struct TerminalInteractionEvent: Codable, Equatable, Sendable {
+    public var callId: String
+    public var processId: String
+    public var stdin: String
+
+    enum CodingKeys: String, CodingKey {
+        case stdin
+        case callId = "call_id"
+        case processId = "process_id"
+    }
+
+    public init(callId: String, processId: String, stdin: String) {
+        self.callId = callId; self.processId = processId; self.stdin = stdin
+    }
+}
+
+public struct DeprecationNoticeEvent: Codable, Equatable, Sendable {
+    public var summary: String
+    public var details: String?
+    public init(summary: String, details: String? = nil) {
+        self.summary = summary; self.details = details
+    }
+}
+
+public struct StreamErrorEvent: Codable, Equatable, Sendable {
+    public var message: String
+    public var codexErrorInfo: CodexErrorInfo?
+    public var additionalDetails: String?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case codexErrorInfo = "codex_error_info"
+        case additionalDetails = "additional_details"
+    }
+
+    public init(
+        message: String, codexErrorInfo: CodexErrorInfo? = nil, additionalDetails: String? = nil
+    ) {
+        self.message = message
+        self.codexErrorInfo = codexErrorInfo
+        self.additionalDetails = additionalDetails
+    }
+}
+
+public struct TurnDiffEvent: Codable, Equatable, Sendable {
+    public var unifiedDiff: String
+    enum CodingKeys: String, CodingKey { case unifiedDiff = "unified_diff" }
+    public init(unifiedDiff: String) { self.unifiedDiff = unifiedDiff }
+}
+
+public enum McpStartupFailureReason: String, Codable, Equatable, Sendable {
+    case reauthenticationRequired = "reauthentication_required"
+}
+
+public enum McpStartupStatus: Equatable, Sendable {
+    case starting
+    case ready
+    case failed(error: String, reason: McpStartupFailureReason?)
+    case cancelled
+}
+
+extension McpStartupStatus: Codable {
+    private enum Keys: String, CodingKey { case state, error, reason }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        let state = try container.decode(String.self, forKey: .state)
+        switch state {
+        case "starting": self = .starting
+        case "ready": self = .ready
+        case "cancelled": self = .cancelled
+        case "failed":
+            self = .failed(
+                error: try container.decode(String.self, forKey: .error),
+                reason: try container.decodeIfPresent(McpStartupFailureReason.self, forKey: .reason))
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .state, in: container, debugDescription: "Unknown McpStartupStatus: \(state)")
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: Keys.self)
+        switch self {
+        case .starting: try container.encode("starting", forKey: .state)
+        case .ready: try container.encode("ready", forKey: .state)
+        case .cancelled: try container.encode("cancelled", forKey: .state)
+        case .failed(let error, let reason):
+            try container.encode("failed", forKey: .state)
+            try container.encode(error, forKey: .error)
+            try container.encodeIfPresent(reason, forKey: .reason)
+        }
+    }
+}
+
+public struct McpStartupUpdateEvent: Codable, Equatable, Sendable {
+    public var server: String
+    public var status: McpStartupStatus
+    public init(server: String, status: McpStartupStatus) {
+        self.server = server; self.status = status
+    }
+}
+
+public struct McpStartupFailure: Codable, Equatable, Sendable {
+    public var server: String
+    public var error: String
+    public init(server: String, error: String) {
+        self.server = server; self.error = error
+    }
+}
+
+public struct McpStartupCompleteEvent: Codable, Equatable, Sendable {
+    public var ready: [String]
+    public var failed: [McpStartupFailure]
+    public var cancelled: [String]
+
+    public init(ready: [String] = [], failed: [McpStartupFailure] = [], cancelled: [String] = []) {
+        self.ready = ready; self.failed = failed; self.cancelled = cancelled
+    }
+}
+
+public enum ReviewDelivery: String, Codable, Equatable, Sendable {
+    case inline
+    case detached
+}
+
+public struct ReviewRequest: Codable, Equatable, Sendable {
+    public var target: ReviewTarget
+    public var userFacingHint: String?
+
+    enum CodingKeys: String, CodingKey {
+        case target
+        case userFacingHint = "user_facing_hint"
+    }
+
+    public init(target: ReviewTarget, userFacingHint: String? = nil) {
+        self.target = target; self.userFacingHint = userFacingHint
+    }
+}
+
+public enum TurnAbortReason: String, Codable, Equatable, Sendable {
+    case interrupted
+    case replaced
+    case reviewEnded = "review_ended"
+    case budgetLimited = "budget_limited"
+}
+
+public struct TurnAbortedEvent: Codable, Equatable, Sendable {
+    public var turnId: String?
+    public var reason: TurnAbortReason
+    public var startedAt: Int64?
+    public var completedAt: Int64?
+    public var durationMs: Int64?
+
+    enum CodingKeys: String, CodingKey {
+        case reason
+        case turnId = "turn_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case durationMs = "duration_ms"
+    }
+
+    public init(
+        turnId: String? = nil, reason: TurnAbortReason,
+        startedAt: Int64? = nil, completedAt: Int64? = nil, durationMs: Int64? = nil
+    ) {
+        self.turnId = turnId; self.reason = reason
+        self.startedAt = startedAt; self.completedAt = completedAt; self.durationMs = durationMs
+    }
+}
+
+public struct RawResponseItemEvent: Codable, Equatable, Sendable {
+    public var item: ResponseItem
+    public init(item: ResponseItem) { self.item = item }
+}
+
+public struct RawResponseCompletedEvent: Codable, Equatable, Sendable {
+    public var responseId: String
+    public var tokenUsage: TokenUsage?
+    public var usageMetadata: ResponseUsageMetadata?
+
+    enum CodingKeys: String, CodingKey {
+        case responseId = "response_id"
+        case tokenUsage = "token_usage"
+        case usageMetadata = "usage_metadata"
+    }
+
+    public init(
+        responseId: String, tokenUsage: TokenUsage? = nil, usageMetadata: ResponseUsageMetadata? = nil
+    ) {
+        self.responseId = responseId; self.tokenUsage = tokenUsage; self.usageMetadata = usageMetadata
+    }
+}
+
+public struct PlanDeltaEvent: Codable, Equatable, Sendable {
+    public var threadId: String
+    public var turnId: String
+    public var itemId: String
+    public var delta: String
+
+    enum CodingKeys: String, CodingKey {
+        case delta
+        case threadId = "thread_id"
+        case turnId = "turn_id"
+        case itemId = "item_id"
+    }
+
+    public init(threadId: String, turnId: String, itemId: String, delta: String) {
+        self.threadId = threadId; self.turnId = turnId; self.itemId = itemId; self.delta = delta
+    }
+}
+
+public let maxThreadGoalObjectiveChars = 4_000
+
+public enum ThreadGoalStatus: String, Codable, Equatable, Sendable {
+    case active
+    case paused
+    case blocked
+    case usageLimited
+    case budgetLimited
+    case complete
+}
+
+/// Swift `Result` requires `Failure: Error`; stands in for Rust `Result<(), String>`.
+public struct ThreadGoalObjectiveError: Error, Equatable, Sendable, CustomStringConvertible {
+    public var message: String
+
+    public init(_ message: String) {
+        self.message = message
+    }
+
+    public var description: String { message }
+}
+
+public func validateThreadGoalObjective(_ value: String) -> Result<Void, ThreadGoalObjectiveError> {
+    if value.isEmpty { return .failure(ThreadGoalObjectiveError("goal objective must not be empty")) }
+    if value.count > maxThreadGoalObjectiveChars {
+        return .failure(
+            ThreadGoalObjectiveError(
+                "goal objective must be at most \(maxThreadGoalObjectiveChars) characters"
+            )
+        )
+    }
+    return .success(())
+}
+
+public struct ThreadGoal: Codable, Equatable, Sendable {
+    public var threadId: ThreadId
+    public var objective: String
+    public var status: ThreadGoalStatus
+    public var tokenBudget: Int64?
+    public var tokensUsed: Int64
+    public var timeUsedSeconds: Int64
+    public var createdAt: Int64
+    public var updatedAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case objective, status
+        case threadId = "threadId"
+        case tokenBudget = "tokenBudget"
+        case tokensUsed = "tokensUsed"
+        case timeUsedSeconds = "timeUsedSeconds"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+    }
+
+    public init(
+        threadId: ThreadId, objective: String, status: ThreadGoalStatus,
+        tokenBudget: Int64? = nil, tokensUsed: Int64 = 0, timeUsedSeconds: Int64 = 0,
+        createdAt: Int64 = 0, updatedAt: Int64 = 0
+    ) {
+        self.threadId = threadId; self.objective = objective; self.status = status
+        self.tokenBudget = tokenBudget; self.tokensUsed = tokensUsed
+        self.timeUsedSeconds = timeUsedSeconds; self.createdAt = createdAt; self.updatedAt = updatedAt
+    }
+}
+
+public struct ThreadGoalUpdatedEvent: Codable, Equatable, Sendable {
+    public var threadId: ThreadId
+    public var turnId: String?
+    public var goal: ThreadGoal
+
+    enum CodingKeys: String, CodingKey {
+        case goal
+        case threadId = "threadId"
+        case turnId = "turnId"
+    }
+
+    public init(threadId: ThreadId, turnId: String? = nil, goal: ThreadGoal) {
+        self.threadId = threadId; self.turnId = turnId; self.goal = goal
+    }
+}
+
+public struct ThreadQueueChangedEvent: Codable, Equatable, Sendable {
+    public var threadId: ThreadId
+    enum CodingKeys: String, CodingKey { case threadId }
+    public init(threadId: ThreadId) { self.threadId = threadId }
 }
 

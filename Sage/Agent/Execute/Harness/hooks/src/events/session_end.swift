@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Request/outcome types, timeouts, and preview are faithful. `run` waits
-//  on the command runner.
+//  Request/outcome types, timeouts, preview, `run`, and parse_completed
+//  are ported. Process spawn is Foundation.Process.
 //
 
 import CodexProtocol
@@ -53,7 +53,67 @@ public func previewSessionEnd(handlers: [ConfiguredHandler]) -> [HookRunSummary]
 public func runSessionEnd(
     _ engine: ClaudeHooksEngine,
     request: SessionEndRequest
-) async throws -> SessionEndOutcome {
-    _ = (engine, request)
-    throw CodexErr.unsupportedOperation("session_end hook run waits on CommandHookRuntime")
+) async -> SessionEndOutcome {
+    let matched = selectHandlers(engine.handlers, eventName: .sessionEnd, matcherInput: SESSION_END_REASON)
+    if matched.isEmpty {
+        return SessionEndOutcome()
+    }
+
+    let results = await executeHandlers(
+        engine: engine,
+        handlers: matched,
+        inputJSON: commandInputJSON(request),
+        cwd: request.cwd.asPath,
+        turnId: request.turnId,
+        parse: parseSessionEndCompleted
+    )
+    return SessionEndOutcome(hookEvents: results.map(\.completed))
+}
+
+func commandInputJSON(_ request: SessionEndRequest) -> String {
+    SessionEndCommandInput(
+        sessionId: request.sessionId.description,
+        transcriptPath: .fromPath(request.transcriptPath),
+        cwd: request.cwd.asPath,
+        hookEventName: "SessionEnd",
+        reason: SESSION_END_REASON
+    ).encodedJSON()
+}
+
+func parseSessionEndCompleted(
+    _ handler: ConfiguredHandler,
+    _ runResult: HandlerRunResult,
+    _ turnId: String?
+) -> ParsedHandler<Void> {
+    let status: HookRunStatus
+    let entries: [HookOutputEntry]
+    if let error = runResult.error {
+        status = .failed
+        entries = [HookOutputEntry(kind: .error, text: error)]
+    } else if let exitCode = runResult.exitCode {
+        if exitCode == 0 {
+            status = .completed
+            entries = []
+        } else {
+            status = .failed
+            entries = [
+                HookOutputEntry(
+                    kind: .error,
+                    text: trimmedNonEmpty(runResult.stderr) ?? "hook exited with code \(exitCode)"
+                ),
+            ]
+        }
+    } else {
+        status = .failed
+        entries = [HookOutputEntry(kind: .error, text: "hook process terminated without an exit code")]
+    }
+
+    return ParsedHandler(
+        completed: HookCompletedEvent(
+            turnId: turnId,
+            run: completedSummary(handler, runResult: runResult, status: status, entries: entries)
+        ),
+        data: (),
+        completionOrder: 0
+    )
 }

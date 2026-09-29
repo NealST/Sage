@@ -7,7 +7,8 @@
 //  Port status: adapted
 //
 //  Root/self/path validation is faithful. Runtime interrupt records
-//  `.interrupted` on the mailbox; ThreadManager stop is still pending.
+//  `.interrupted` on the mailbox and submits `ThreadOp.interrupt` when a
+//  ThreadManager is attached.
 //
 
 import CodexProtocol
@@ -43,6 +44,12 @@ extension LocalAgentControl {
 
     public func interruptAgent(_ target: ThreadId) async throws {
         _ = try runtime.ensureAgentKnown(target)
-        runtime.delivery.setStatus(target, .interrupted)
+        runtime.publishAgentStatus(target, .interrupted)
+        guard let manager = try? runtime.upgradeThreadManager() else {
+            return
+        }
+        _ = try await handleThreadRequestResult(agentId: target) {
+            try await manager.sendOp(target, op: .interrupt)
+        }
     }
 }

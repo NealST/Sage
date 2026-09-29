@@ -6,7 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Submission dispatch is a stub until the full session loop is wired.
+//  App-target Session dispatch remains a sampling stub. ThreadManager's
+//  live submission loop is ThreadSession in session_mod.swift.
 //
 
 import Foundation

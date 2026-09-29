@@ -828,7 +828,15 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
     func testMailboxPreemptsCommentaryWhenMailIsPending() async throws {
         let sess = Session()
-        sess.inputQueue.enqueue(TurnInputBuilder.user([.text(text: "mail", textElements: [])]))
+        sess.inputQueue.enqueueMailboxCommunication(
+            InterAgentCommunication(
+                author: AgentPath.root(),
+                recipient: try AgentPath.root().join("worker"),
+                otherRecipients: [],
+                content: "mail",
+                triggerTurn: false
+            )
+        )
         var client: ModelClientSession?
         sess.runSamplingStreamOverride = { _ in
             makeResponseStream([
@@ -1126,9 +1134,168 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             XCTAssertTrue(String(describing: error).contains("not wired"))
         }
     }
+
+    func testInputQueueMailboxAndSteerActivity() async throws {
+        let inputQueue = InputQueue()
+        let (_, nonePending) = inputQueue.subscribeActivity()
+        XCTAssertNil(nonePending)
+
+        let mailOne = try turnLoopMail("one", triggerTurn: false)
+        let mailTwo = try turnLoopMail("two", triggerTurn: false)
+        let stream = inputQueue.subscribeActivityStream()
+        let mailboxTask = Task { () -> InputQueueActivity? in
+            for await activity in stream {
+                return activity
+            }
+            return nil
+        }
+        try await Task.sleep(for: .milliseconds(10))
+        inputQueue.enqueueMailboxCommunication(mailOne)
+        inputQueue.enqueueMailboxCommunication(mailTwo)
+        let mailboxActivity = await mailboxTask.value
+        XCTAssertEqual(mailboxActivity, .mailbox)
+        let drained = inputQueue.drainMailboxInputItems().0
+        XCTAssertEqual(drained, [
+            .interAgentCommunication(mailOne),
+            .interAgentCommunication(mailTwo),
+        ])
+        XCTAssertFalse(inputQueue.hasPendingMailboxItems())
+
+        let turnState = TurnState()
+        inputQueue.extendPendingInputForTurnState(
+            turnState,
+            input: [
+                .responseItem(
+                    .functionCallOutput(
+                        id: nil,
+                        callId: "n",
+                        name: "notify",
+                        namespace: nil,
+                        output: FunctionCallOutputPayload(body: .text("passive")),
+                        internalChatMessageMetadataPassthrough: nil
+                    )
+                )
+            ]
+        )
+        XCTAssertNil(inputQueue.subscribeActivity(turnState: turnState).1)
+        inputQueue.extendPendingInputAndAcceptMailboxDeliveryForTurnState(
+            turnState,
+            input: [TurnInputBuilder.user([.text(text: "already pending", textElements: [])])]
+        )
+        XCTAssertEqual(inputQueue.subscribeActivity(turnState: turnState).1, .steer)
+
+        let queued = try turnLoopMail("queued", triggerTurn: false)
+        let trigger = try turnLoopMail("wake", triggerTurn: true)
+        let triggerQueue = InputQueue()
+        triggerQueue.enqueueMailboxCommunication(queued)
+        XCTAssertFalse(triggerQueue.hasTriggerTurnMailboxItems())
+        triggerQueue.enqueueMailboxCommunication(trigger)
+        XCTAssertTrue(triggerQueue.hasTriggerTurnMailboxItems())
+
+        let parent = "a"
+        let peer = "b"
+        let root = "r"
+        let root2 = "s"
+        let parentCases: [([(Bool, String?, String?)], String?, String?)] = [
+            ([], nil, nil),
+            ([(false, "q", root)], nil, nil),
+            ([(true, "", root)], nil, nil),
+            ([(true, "   ", root)], nil, nil),
+            ([(true, nil, root)], nil, nil),
+            ([(true, parent, nil)], parent, nil),
+            ([(true, parent, "")], parent, nil),
+            ([(true, parent, root), (true, peer, root)], nil, root),
+            ([(true, parent, root), (true, peer, root2)], nil, root),
+            ([(true, parent, root), (true, nil, root)], nil, root),
+            ([(true, parent, root), (true, parent, root)], parent, root),
+            ([(false, "q", root2), (true, parent, root)], parent, root),
+        ]
+        for (mails, expectedParent, expectedRoot) in parentCases {
+            let queue = InputQueue()
+            for (triggerTurn, parentTurnId, rootTurnId) in mails {
+                queue.enqueueMailboxCommunication(
+                    try turnLoopMail("task", triggerTurn: triggerTurn),
+                    startOptions: TurnStartOptions(
+                        parentTurnId: parentTurnId,
+                        rootTurnId: rootTurnId
+                    )
+                )
+            }
+            let startOptions = queue.drainMailboxInputItems().1
+            XCTAssertEqual(startOptions.parentTurnId, expectedParent)
+            XCTAssertEqual(startOptions.rootTurnId, expectedRoot)
+        }
+
+        let latestChoices: [CyberAccessProgram?] = [.standard, nil]
+        for latest in latestChoices {
+            let queue = InputQueue()
+            for (triggerTurn, program) in [
+                (true, CyberAccessProgram.daybreakBlue),
+                (true, latest),
+                (false, CyberAccessProgram.daybreakRed),
+            ] as [(Bool, CyberAccessProgram?)] {
+                queue.enqueueMailboxCommunication(
+                    try turnLoopMail("task", triggerTurn: triggerTurn),
+                    startOptions: TurnStartOptions(cyberAccessProgram: program)
+                )
+            }
+            XCTAssertEqual(queue.drainMailboxInputItems().1.cyberAccessProgram, latest)
+        }
+
+        let delivery = AgentDeliveryState()
+        let caller = ThreadId()
+        _ = delivery.enqueue(
+            threadId: caller,
+            input: .message(message: .plaintext("mail"), mode: .queueOnly)
+        )
+        let mailboxOutcome = await waitForV2Activity(
+            delivery: delivery,
+            threadId: caller,
+            inputQueue: InputQueue(),
+            hasPendingSteer: false,
+            timeout: .milliseconds(20)
+        )
+        XCTAssertEqual(mailboxOutcome, .mailboxActivity)
+
+        let steered = await waitForV2Activity(
+            delivery: AgentDeliveryState(),
+            threadId: ThreadId(),
+            inputQueue: InputQueue(),
+            hasPendingSteer: true,
+            timeout: .milliseconds(20)
+        )
+        XCTAssertEqual(steered, .steered)
+
+        let preferredQueue = InputQueue()
+        preferredQueue.enqueueMailboxCommunication(try turnLoopMail("mail", triggerTurn: false))
+        let preferredDelivery = AgentDeliveryState()
+        let preferredCaller = ThreadId()
+        _ = preferredDelivery.enqueue(
+            threadId: preferredCaller,
+            input: .message(message: .plaintext("mail"), mode: .queueOnly)
+        )
+        let preferredOutcome = await waitForV2Activity(
+            delivery: preferredDelivery,
+            threadId: preferredCaller,
+            inputQueue: preferredQueue,
+            hasPendingSteer: true,
+            timeout: .milliseconds(20)
+        )
+        XCTAssertEqual(preferredOutcome, .steered)
+    }
 }
 
 private func messageContent(_ item: ResponseItem) -> [ContentItem] {
     if case .message(_, _, let content, _, _) = item { return content }
     return []
+}
+
+private func turnLoopMail(_ content: String, triggerTurn: Bool) throws -> InterAgentCommunication {
+    InterAgentCommunication(
+        author: AgentPath.root(),
+        recipient: try AgentPath.root().join("worker"),
+        otherRecipients: [],
+        content: content,
+        triggerTurn: triggerTurn
+    )
 }

@@ -7,8 +7,10 @@
 //  Port status: adapted
 //
 //  Nickname candidates, forked-history filters, and metadata reservation
-//  are faithful. Session spawn / restore wait on ThreadManager. R4a:
-//  basename `spawn.swift` already belongs to core/src/spawn.rs.
+//  are faithful. Spawn copies parent CodexThread history when fork_mode is
+//  set and a ThreadManager is attached, then submits the child's initial
+//  user input through ThreadSession. Rollout restore stays deferred.
+//  R4a: basename `spawn.swift` already belongs to core/src/spawn.rs.
 //
 
 import CodexAgentRoles
@@ -144,6 +146,57 @@ public func agentNicknameCandidates(
         return candidates
     }
     return defaultAgentNicknameList()
+}
+
+public func preserveContextBaselinesForFork(
+    _ items: [RolloutItem],
+    forkMode: SpawnAgentForkMode
+) -> Bool {
+    guard forkMode == .fullHistory else { return false }
+    for item in items.reversed() {
+        if case .compacted(let compacted) = item {
+            return compacted.replacementHistory != nil
+        }
+    }
+    return true
+}
+
+public func filterForkedRolloutItems(
+    _ items: [RolloutItem],
+    forkMode: SpawnAgentForkMode
+) -> [RolloutItem] {
+    var items = items
+    if case .lastNTurns(let n) = forkMode {
+        items = truncateRolloutToLastNForkTurns(items, nFromEnd: n)
+    }
+    let preserve = preserveContextBaselinesForFork(items, forkMode: forkMode)
+    return items.filter { keepForkedRolloutItem($0, preserveContextBaselines: preserve) }
+}
+
+func spawnForkParentThreadId(
+    _ request: SpawnRequest,
+    sessionSource: SessionSource
+) throws -> ThreadId? {
+    guard request.options.forkMode != nil else { return nil }
+    guard request.options.forkParentSpawnCallId != nil else {
+        throw CodexErr.fatal("spawn_agent fork requires a parent spawn call id")
+    }
+    guard case .subAgent(.threadSpawn(let parentThreadId, _, _, _, _)) = sessionSource else {
+        throw CodexErr.fatal("spawn_agent fork requires a thread-spawn session source")
+    }
+    return parentThreadId
+}
+
+func copySpawnForkHistory(
+    forkMode: SpawnAgentForkMode,
+    parentThreadId: ThreadId,
+    childThreadId: ThreadId,
+    manager: ThreadManager
+) {
+    let parentItems = manager.peekThread(parentThreadId)?.historyItems() ?? []
+    let filtered = filterForkedRolloutItems(parentItems, forkMode: forkMode)
+    let forked = forkHistoryItems(filtered, snapshot: .interrupted)
+    manager.peekThread(childThreadId)?.replaceHistory(forked)
 }
 
 public func keepForkedRolloutItem(

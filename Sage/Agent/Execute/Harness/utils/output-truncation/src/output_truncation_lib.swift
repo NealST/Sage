@@ -4,13 +4,11 @@
 //
 //  Port of codex-rs/utils/output-truncation/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Shared byte/token truncation for tool and exec output. The core text
-//  truncation functions are faithfully ported. Functions operating on
-//  `FunctionCallOutputPayload` / `FunctionCallOutputContentItem` / 
-//  `TruncationPolicy` are deferred until `protocol/models.rs` and
-//  `protocol/protocol.rs` are ported (Phase 1 protocol layer).
+//  Byte/token text helpers live here. Policy and FunctionCallOutputPayload
+//  APIs live in CodexProtocol (`protocol.swift`) because CodexUtils cannot
+//  import CodexProtocol (SPM cycle: Protocol already depends on Utils).
 //
 //  R4a: upstream `lib.rs` → `output_truncation_lib.swift` (basename dedup).
 //
@@ -60,9 +58,3 @@ public func approxTokensFromByteCountI64(_ bytes: Int64) -> Int64 {
     let ub = Int(clamping: bytes)
     return Int64(clamping: approxTokensFromByteCount(ub))
 }
-
-// TODO: Port `truncate_function_output_payload`,
-// `formatted_truncate_text_content_items_with_policy`,
-// `truncate_function_output_items_with_policy` once
-// FunctionCallOutputPayload / FunctionCallOutputContentItem /
-// TruncationPolicy are available (protocol/models.rs).

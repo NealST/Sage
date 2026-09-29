@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Cancellation cleanup closes over ThreadManagerState / agent graph store.
-//  The guard tracks a child id so later wiring can drop it on cancel.
+//  Cancellation cleanup removes the live CodexThread when a ThreadManager
+//  is attached. Agent-graph-store Closed writes stay skipped.
 //
 
 import CodexProtocol
@@ -16,26 +16,37 @@ import Foundation
 public final class PendingSpawn: @unchecked Sendable {
     public private(set) var child: ThreadId?
     public private(set) var armed: Bool
+    weak var manager: ThreadManager?
+    private var edgeWritePending: Bool
 
-    public init(child: ThreadId) {
+    public init(child: ThreadId, manager: ThreadManager? = nil) {
         self.child = child
         self.armed = true
+        self.manager = manager
+        self.edgeWritePending = false
     }
 
-    public func waitForEdge() async throws {
-        throw CodexErr.unsupportedOperation(
-            "PendingSpawn.wait_for_edge waits on ThreadManager / graph-store write"
-        )
+    public func markEdgeWritePending() {
+        edgeWritePending = true
+    }
+
+    public func waitForEdge() async {
+        edgeWritePending = false
     }
 
     public func disarm() {
         child = nil
         armed = false
+        edgeWritePending = false
     }
 
     deinit {
-        if armed, child != nil {
-            // ThreadManager cleanup waits on Session.
+        guard armed, let child else { return }
+        let manager = manager
+        Task {
+            if let manager, let thread = await manager.removeThread(child) {
+                try? await thread.shutdownAndWait()
+            }
         }
     }
 }

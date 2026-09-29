@@ -7,8 +7,11 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, and registry spawn are live. History fork and
-//  Session thread create wait on ThreadManager.
+//  Spec, argument parsing, registry spawn, and fork_turns history copy
+//  are live. emit_sub_agent_activity records on the caller CodexThread
+//  when a ThreadManager is attached. Child thread create submits the
+//  initial user input through ThreadSession. Analytics and
+//  hide_spawn_agent_metadata stay deferred.
 //
 
 import CodexCore
@@ -94,7 +97,7 @@ struct SpawnAgentV2Handler: CoreToolRuntime {
     func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
         let arguments = try functionArguments(invocation.payload)
         let args: SpawnAgentV2Args = try parseArguments(arguments)
-        _ = try args.forkMode()
+        let forkMode = try args.forkMode()
         let message = try messageContent(args.message)
         let control = try requireLocalAgentControl(invocation)
         let caller = try requireCallerThreadId(invocation)
@@ -114,20 +117,45 @@ struct SpawnAgentV2Handler: CoreToolRuntime {
             agentRole: roleName,
             taskName: args.taskName
         )
-        let (spawned, snapshot) = try await control.spawn(
-            SpawnRequest(
-                caller: caller,
-                input: .message(message: .plaintext(message), mode: .triggerTurn),
-                source: source,
-                options: SpawnAgentOptions(parentThreadId: caller)
+        guard let newAgentPath = source.getAgentPath() else {
+            throw FunctionCallError.respondToModel(
+                "spawned agent is missing a canonical task name"
+            )
+        }
+        let spawnedAgent: LiveAgent
+        let snapshot: ThreadConfigSnapshot
+        do {
+            (spawnedAgent, snapshot) = try await control.spawn(
+                SpawnRequest(
+                    caller: caller,
+                    input: .message(message: .plaintext(message), mode: .triggerTurn),
+                    source: source,
+                    options: SpawnAgentOptions(
+                        forkParentSpawnCallId: forkMode == nil ? nil : invocation.callId,
+                        forkMode: forkMode,
+                        parentThreadId: caller
+                    )
+                )
+            )
+        } catch let err as CodexErr {
+            throw collabSpawnError(err)
+        }
+        try? await control.emitSubAgentActivity(
+            threadId: caller,
+            turnId: invocation.turnId,
+            item: SubAgentActivityItem(
+                id: invocation.callId,
+                kind: .started,
+                agentThreadId: spawnedAgent.threadId,
+                agentPath: newAgentPath
             )
         )
         let taskName = snapshot.sessionSource.getAgentPath()?.asStr
-            ?? spawned.metadata.agentPath?.asStr
-            ?? args.taskName
+            ?? spawnedAgent.metadata.agentPath?.asStr
+            ?? newAgentPath.asStr
         return SpawnAgentV2Result.withNickname(
             taskName: taskName,
-            nickname: snapshot.sessionSource.getNickname() ?? spawned.metadata.agentNickname
+            nickname: snapshot.sessionSource.getNickname() ?? spawnedAgent.metadata.agentNickname
         )
     }
 }

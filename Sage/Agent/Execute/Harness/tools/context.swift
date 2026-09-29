@@ -71,6 +71,8 @@ struct ToolInvocation: Sendable {
     var isRootThread: Bool
     var availableModes: [ModeKind]
     var localAgentControl: LocalAgentControl?
+    var inputQueue: InputQueue?
+    var hasPendingSteer: Bool
     var sessionSource: SessionSource
     var parentThreadId: ThreadId?
     var agentMaxDepth: Int32
@@ -99,6 +101,8 @@ struct ToolInvocation: Sendable {
         isRootThread: Bool = true,
         availableModes: [ModeKind] = [.plan],
         localAgentControl: LocalAgentControl? = nil,
+        inputQueue: InputQueue? = nil,
+        hasPendingSteer: Bool = false,
         sessionSource: SessionSource = .unknown,
         parentThreadId: ThreadId? = nil,
         agentMaxDepth: Int32 = Int32.max,
@@ -126,6 +130,8 @@ struct ToolInvocation: Sendable {
         self.isRootThread = isRootThread
         self.availableModes = availableModes
         self.localAgentControl = localAgentControl
+        self.inputQueue = inputQueue
+        self.hasPendingSteer = hasPendingSteer
         self.sessionSource = sessionSource
         self.parentThreadId = parentThreadId
         self.agentMaxDepth = agentMaxDepth

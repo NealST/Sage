@@ -610,15 +610,6 @@ func isCharBoundary(_ utf8: [UInt8], _ index: Int) -> Bool {
     return utf8[index] & 0xC0 != 0x80
 }
 
-func truncateText(_ content: String, policy: TruncationPolicy) -> String {
-    switch policy {
-    case .bytes(let bytes):
-        return truncateMiddleChars(content, maxBytes: bytes)
-    case .tokens(let tokens):
-        return truncateMiddleWithTokenBudget(content, maxTokens: tokens).0
-    }
-}
-
 func durationMillis(_ duration: Duration) -> Int64 {
     let (seconds, attoseconds) = duration.components
     return seconds * 1000 + attoseconds / 1_000_000_000_000_000

@@ -231,11 +231,14 @@ let package = Package(
             path: "agent-roles/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // codex-rs/hooks — types/events/engine; command spawn still throws.
+        // codex-rs/hooks — types/events/engine; schema fixtures are bundled.
         .target(
             name: "CodexHooks",
             dependencies: ["CodexProtocol", "CodexUtils"],
             path: "hooks/src",
+            resources: [
+                .copy("schema/generated"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/skills — Phase 8 model/parser/mentions/selection.
@@ -343,6 +346,7 @@ let package = Package(
                 "attestation.swift",
                 "installation_id.swift",
                 "session_prefix.swift",
+                "session_startup_prewarm.swift",
                 "rollout_budget.swift",
                 "thread_startup_metadata.swift",
                 "memory_usage.swift",
@@ -354,6 +358,7 @@ let package = Package(
                 "thread_manager.swift",
                 "thread_manager",
                 "codex_thread.swift",
+                "session/session_mod.swift",
                 "codex_delegate.swift",
                 "mention_syntax.swift",
                 "elicitation.swift",
@@ -408,6 +413,7 @@ let package = Package(
             dependencies: [
                 "CodexAgentRoles",
                 "CodexAPI",
+                "CodexAsyncUtils",
                 "CodexCore",
                 "CodexHistory",
                 "CodexProtocol",

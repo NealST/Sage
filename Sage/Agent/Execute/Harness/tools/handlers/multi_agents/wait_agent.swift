@@ -7,12 +7,14 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, and mailbox status poll are live when
-//  LocalAgentControl is attached. Live watch loops wait on ThreadManager.
+//  Spec, argument parsing, and subscribeStatus wait are live when
+//  LocalAgentControl is attached. Turn items record on the caller
+//  CodexThread when a ThreadManager is present.
 //
 
 import CodexCore
 import CodexProtocol
+import Foundation
 
 struct WaitArgs: Decodable, Equatable, Sendable {
     var targets: [String]
@@ -64,17 +66,126 @@ struct WaitAgentHandler: CoreToolRuntime {
         let arguments = try functionArguments(invocation.payload)
         let args: WaitArgs = try parseArguments(arguments)
         let targets = try parseAgentIdTargets(args.targets)
-        _ = try clampWaitTimeoutMs(args.timeoutMs)
+        let timeoutMs = try clampWaitTimeoutMs(args.timeoutMs)
         let control = try requireLocalAgentControl(invocation)
-        var status: [String: AgentStatus] = [:]
-        var allFinal = true
-        for target in targets {
-            let current = await control.getStatus(target)
-            status[target.description] = current
-            if !isFinal(current) {
-                allFinal = false
+        let caller = try requireCallerThreadId(invocation)
+
+        var receiverAgents: [CollabAgentRef] = []
+        var targetByThreadId: [ThreadId: String] = [:]
+        receiverAgents.reserveCapacity(targets.count)
+        for threadId in targets {
+            let metadata = control.getAgentMetadata(threadId) ?? AgentMetadata()
+            targetByThreadId[threadId] = metadata.agentPath?.asStr ?? threadId.description
+            receiverAgents.append(
+                CollabAgentRef(
+                    threadId: threadId,
+                    agentNickname: metadata.agentNickname,
+                    agentRole: metadata.agentRole
+                )
+            )
+        }
+
+        try? await control.emitTurnItemStarted(
+            threadId: caller,
+            turnId: invocation.turnId,
+            item: .collabAgentToolCall(
+                CollabAgentToolCallItem(
+                    id: invocation.callId,
+                    tool: .wait,
+                    status: .inProgress,
+                    senderThreadId: caller,
+                    receiverThreadIds: targets,
+                    receiverAgents: receiverAgents
+                )
+            )
+        )
+
+        let statuses: [(ThreadId, AgentStatus)]
+        do {
+            statuses = try await control.waitForFinalStatuses(
+                threadIds: targets,
+                timeout: .milliseconds(timeoutMs)
+            )
+        } catch let err as CodexErr {
+            var failed: [ThreadId: AgentStatus] = [:]
+            if let threadId = targets.first {
+                failed[threadId] = await control.getStatus(threadId)
+            }
+            try? await control.emitTurnItemCompleted(
+                threadId: caller,
+                turnId: invocation.turnId,
+                item: .collabAgentToolCall(
+                    CollabAgentToolCallItem(
+                        id: invocation.callId,
+                        tool: .wait,
+                        status: waitToolCallStatus(failed),
+                        senderThreadId: caller,
+                        receiverThreadIds: Array(failed.keys),
+                        receiverAgents: waitReceiverAgents(failed, receiverAgents: receiverAgents),
+                        agentsStates: failed
+                    )
+                )
+            )
+            throw collabAgentError(agentId: targets.first ?? caller, err: err)
+        }
+
+        let timedOut = statuses.isEmpty
+        let statusesById = Dictionary(uniqueKeysWithValues: statuses)
+        var resultStatus: [String: AgentStatus] = [:]
+        for (threadId, status) in statuses {
+            if let key = targetByThreadId[threadId] {
+                resultStatus[key] = status
             }
         }
-        return WaitAgentResult(status: status, timedOut: !allFinal)
+        try? await control.emitTurnItemCompleted(
+            threadId: caller,
+            turnId: invocation.turnId,
+            item: .collabAgentToolCall(
+                CollabAgentToolCallItem(
+                    id: invocation.callId,
+                    tool: .wait,
+                    status: waitToolCallStatus(statusesById),
+                    senderThreadId: caller,
+                    receiverThreadIds: Array(statusesById.keys),
+                    receiverAgents: waitReceiverAgents(statusesById, receiverAgents: receiverAgents),
+                    agentsStates: statusesById
+                )
+            )
+        )
+        return WaitAgentResult(status: resultStatus, timedOut: timedOut)
     }
 }
+
+func waitToolCallStatus(_ statuses: [ThreadId: AgentStatus]) -> CollabAgentToolCallStatus {
+    if statuses.values.contains(where: {
+        if case .errored = $0 { return true }
+        if case .notFound = $0 { return true }
+        return false
+    }) {
+        return .failed
+    }
+    return .completed
+}
+
+func waitReceiverAgents(
+    _ statuses: [ThreadId: AgentStatus],
+    receiverAgents: [CollabAgentRef]
+) -> [CollabAgentRef] {
+    if statuses.isEmpty { return [] }
+    var agents: [CollabAgentRef] = []
+    var seen: Set<ThreadId> = []
+    agents.reserveCapacity(statuses.count)
+    for agent in receiverAgents {
+        seen.insert(agent.threadId)
+        if statuses[agent.threadId] != nil {
+            agents.append(agent)
+        }
+    }
+    var extras = statuses.keys
+        .filter { !seen.contains($0) }
+        .map { CollabAgentRef(threadId: $0) }
+    extras.sort { $0.threadId.description < $1.threadId.description }
+    agents.append(contentsOf: extras)
+    return agents
+}
+

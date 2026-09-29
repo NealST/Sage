@@ -6,6 +6,7 @@
 //  Phase 10 otel / terminal-detection / core facade tests.
 //
 
+import CodexAsyncUtils
 import CodexCore
 import CodexOtel
 import CodexProtocol
@@ -188,5 +189,27 @@ final class Phase10OtelTests: XCTestCase {
         XCTAssertNil(responseInputToResponseItem(
             .message(role: "user", content: [.inputText(text: "hi")], phase: nil)
         ))
+    }
+
+    func testConsumeStartupPrewarmWithoutHandle() async {
+        let telemetry = SessionTelemetry(
+            conversationId: ThreadId(),
+            model: "gpt-5",
+            slug: "gpt-5",
+            originator: "codex_cli_rs",
+            logUserPrompts: false,
+            terminalType: "unknown",
+            sessionSource: .cli
+        )
+        let resolution = await consumeStartupPrewarmForRegularTurn(
+            nil,
+            sessionTelemetry: telemetry,
+            cancellationToken: CancellationToken()
+        )
+        if case .unavailable(let status, _) = resolution {
+            XCTAssertEqual(status, "not_scheduled")
+        } else {
+            XCTFail("expected unavailable")
+        }
     }
 }

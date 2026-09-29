@@ -7,11 +7,14 @@
 //  Port status: adapted
 //
 //  Registry spawn/close/list/inspect and in-memory mailbox send run without
-//  Session. Live thread create and history fork wait on ThreadManager.
-//  Listed/spawned agents start as `.pendingInit` until a status update.
+//  Session. When a ThreadManager is attached, spawn also registers a live
+//  CodexThread and copies parent history for fork_mode. Mailbox and steer
+//  activity can be awaited without Session. Session IO still waits on later
+//  wiring. Listed/spawned agents start as `.pendingInit` until a status update.
 //
 
 import CodexProtocol
+import CodexUtils
 import Foundation
 import os
 
@@ -25,14 +28,28 @@ public struct QueuedAgentDelivery: Equatable, Sendable {
     }
 }
 
+public enum AgentDeliveryActivity: Equatable, Sendable {
+    case mailbox
+    case steer
+}
+
+public enum AgentMailboxWait: Equatable, Sendable {
+    case mailbox
+    case steer
+    case timedOut
+}
+
 public final class AgentDeliveryState: @unchecked Sendable {
     private struct State {
         var status: [ThreadId: AgentStatus] = [:]
         var mailbox: [ThreadId: [QueuedAgentDelivery]] = [:]
         var activity: Set<ThreadId> = []
+        var steer: Set<ThreadId> = []
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
+    private let waitersLock = NSLock()
+    private var activityWaiters: [ThreadId: [UUID: AsyncStream<AgentDeliveryActivity>.Continuation]] = [:]
 
     public init() {}
 
@@ -52,7 +69,13 @@ public final class AgentDeliveryState: @unchecked Sendable {
             )
             state.activity.insert(threadId)
         }
+        notifyActivity(threadId, .mailbox)
         return submissionId
+    }
+
+    public func signalSteer(threadId: ThreadId) {
+        lock.withLock { $0.steer.insert(threadId) }
+        notifyActivity(threadId, .steer)
     }
 
     public func mailbox(_ threadId: ThreadId) -> [QueuedAgentDelivery] {
@@ -69,11 +92,105 @@ public final class AgentDeliveryState: @unchecked Sendable {
         lock.withLock { $0.activity.contains(threadId) }
     }
 
+    public func hasSteer(_ threadId: ThreadId) -> Bool {
+        lock.withLock { $0.steer.contains(threadId) }
+    }
+
+    /// Subscribe first, then treat existing steer or mailbox activity as pending,
+    /// matching rust `InputQueue.subscribe_activity` + `wait_for_activity`.
+    public func waitForActivity(
+        threadId: ThreadId,
+        timeout: Duration
+    ) async -> AgentMailboxWait {
+        let stream = subscribeActivity(threadId)
+        if let pending = pendingActivity(threadId) {
+            return pending.asMailboxWait
+        }
+        return await withTaskGroup(of: AgentMailboxWait.self) { group in
+            group.addTask {
+                for await activity in stream {
+                    return activity.asMailboxWait
+                }
+                return .timedOut
+            }
+            group.addTask {
+                do {
+                    try await Task.sleep(for: timeout)
+                    return .timedOut
+                } catch {
+                    return .timedOut
+                }
+            }
+            let first = await group.next() ?? .timedOut
+            group.cancelAll()
+            while await group.next() != nil {}
+            if let pending = self.pendingActivity(threadId) {
+                return pending.asMailboxWait
+            }
+            return first
+        }
+    }
+
+    public func subscribeActivity(_ threadId: ThreadId) -> AsyncStream<AgentDeliveryActivity> {
+        AsyncStream { continuation in
+            let id = UUID()
+            waitersLock.lock()
+            activityWaiters[threadId, default: [:]][id] = continuation
+            waitersLock.unlock()
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.waitersLock.lock()
+                self.activityWaiters[threadId]?.removeValue(forKey: id)
+                if self.activityWaiters[threadId]?.isEmpty == true {
+                    self.activityWaiters.removeValue(forKey: threadId)
+                }
+                self.waitersLock.unlock()
+            }
+        }
+    }
+
+    public func pendingActivity(_ threadId: ThreadId) -> AgentDeliveryActivity? {
+        lock.withLock { state in
+            if state.steer.contains(threadId) { return .steer }
+            if state.activity.contains(threadId) { return .mailbox }
+            return nil
+        }
+    }
+
     public func remove(_ threadId: ThreadId) {
         lock.withLock { state in
             state.status.removeValue(forKey: threadId)
             state.mailbox.removeValue(forKey: threadId)
             state.activity.remove(threadId)
+            state.steer.remove(threadId)
+        }
+        finishActivityWaiters(threadId)
+    }
+
+    private func notifyActivity(_ threadId: ThreadId, _ activity: AgentDeliveryActivity) {
+        waitersLock.lock()
+        let waiters = activityWaiters[threadId].map { Array($0.values) } ?? []
+        waitersLock.unlock()
+        for waiter in waiters {
+            waiter.yield(activity)
+        }
+    }
+
+    private func finishActivityWaiters(_ threadId: ThreadId) {
+        waitersLock.lock()
+        let waiters = activityWaiters.removeValue(forKey: threadId).map { Array($0.values) } ?? []
+        waitersLock.unlock()
+        for waiter in waiters {
+            waiter.finish()
+        }
+    }
+}
+
+extension AgentDeliveryActivity {
+    var asMailboxWait: AgentMailboxWait {
+        switch self {
+        case .mailbox: return .mailbox
+        case .steer: return .steer
         }
     }
 }
@@ -84,6 +201,9 @@ public final class LocalAgentRuntime: @unchecked Sendable {
     public let agentExecutionLimiter: AgentExecutionLimiter
     public let residency: V2Residency
     public let delivery: AgentDeliveryState
+    /// Weak handle back to the live thread registry, matching rust
+    /// `LocalAgentRuntime.manager: Weak<ThreadManagerState>`.
+    weak var manager: ThreadManager?
     private let serviceTierLock = OSAllocatedUnfairLock<String?>(initialState: nil)
 
     public init(
@@ -128,6 +248,11 @@ public final class LocalAgentRuntime: @unchecked Sendable {
 
     public func setRootServiceTier(_ serviceTier: String?) {
         serviceTierLock.withLock { $0 = serviceTier }
+    }
+
+    public func publishAgentStatus(_ threadId: ThreadId, _ status: AgentStatus) {
+        delivery.setStatus(threadId, status)
+        manager?.peekThread(threadId)?.publishStatus(status)
     }
 
     public func resolvePathReference(
@@ -221,18 +346,51 @@ public final class LocalAgentControl: @unchecked Sendable {
             sessionSource = request.source
             metadata = AgentMetadata()
         }
+        let forkParentThreadId = try spawnForkParentThreadId(
+            request,
+            sessionSource: sessionSource
+        )
         let threadId = runtime.generateThreadId()
         var committed = metadata
         committed.agentId = threadId
         reservation.commit(committed)
-        runtime.delivery.setStatus(threadId, .pendingInit)
+        runtime.publishAgentStatus(threadId, .pendingInit)
         _ = runtime.delivery.enqueue(threadId: threadId, input: request.input)
         let live = LiveAgent(threadId: threadId, metadata: committed, status: .pendingInit)
         let snapshot = ThreadConfigSnapshot(
             model: "",
             sessionSource: sessionSource,
+            forkedFromThreadId: forkParentThreadId,
             parentThreadId: request.options.parentThreadId ?? sessionSource.parentThreadId()
         )
+        if let manager = try? runtime.upgradeThreadManager() {
+            let cwd = (try? AbsolutePathBuf.currentDir())
+                ?? (try? AbsolutePathBuf.fromAbsolutePathChecked("/"))
+            guard let cwd else {
+                throw CodexErr.invalidRequest("invalid thread cwd")
+            }
+            _ = try manager.insertLiveThread(
+                threadId: threadId,
+                sessionSource: sessionSource,
+                model: snapshot.model,
+                cwd: cwd,
+                configSnapshot: snapshot
+            )
+            let pending = PendingSpawn(child: threadId, manager: manager)
+            await pending.waitForEdge()
+            if let forkMode = request.options.forkMode, let forkParentThreadId {
+                copySpawnForkHistory(
+                    forkMode: forkMode,
+                    parentThreadId: forkParentThreadId,
+                    childThreadId: threadId,
+                    manager: manager
+                )
+            }
+            if let thread = manager.peekThread(threadId) {
+                try await thread.submitSpawnInput(request.input, options: request.options)
+            }
+            pending.disarm()
+        }
         return (live, snapshot)
     }
 
@@ -249,9 +407,9 @@ public final class LocalAgentControl: @unchecked Sendable {
         }
         let submissionId = runtime.delivery.enqueue(threadId: target, input: request.input)
         if case .message(_, .triggerTurn) = request.input {
-            runtime.delivery.setStatus(target, .running)
+            runtime.publishAgentStatus(target, .running)
         } else if case .userInput = request.input {
-            runtime.delivery.setStatus(target, .running)
+            runtime.publishAgentStatus(target, .running)
         }
         return DeliveryReceipt(threadId: target, metadata: metadata, submissionId: submissionId)
     }
@@ -362,7 +520,7 @@ public final class LocalAgentControl: @unchecked Sendable {
     }
 
     public func turnFinished(outcome: AgentTurnOutcome) async {
-        runtime.delivery.setStatus(outcome.threadId, outcome.status)
+        runtime.publishAgentStatus(outcome.threadId, outcome.status)
         await notifyParentOfTerminalTurn(outcome)
     }
 

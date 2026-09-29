@@ -7,9 +7,11 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, and registry spawn are live. History fork and
-//  Session thread create wait on ThreadManager. R4a: basename `spawn.swift`
-//  belongs to core/src/spawn.rs.
+//  Spec, argument parsing, registry spawn, fork_context, and
+//  turn-item recording on the caller CodexThread are live. Child thread
+//  create submits the initial user input through ThreadSession.
+//  Analytics stay deferred. R4a: basename `spawn.swift` belongs to
+//  core/src/spawn.rs.
 //
 
 import CodexCore
@@ -76,12 +78,7 @@ struct SpawnAgentHandler: CoreToolRuntime {
         let arguments = try functionArguments(invocation.payload)
         let args: SpawnAgentArgs = try parseArguments(arguments)
         let inputItems = try parseCollabInput(message: args.message, items: args.items)
-        _ = renderInputPreview(inputItems)
-        if args.forkContext {
-            throw FunctionCallError.respondToModel(
-                "spawn_agent fork_context waits on Session / ThreadManager"
-            )
-        }
+        let prompt = renderInputPreview(inputItems)
         let control = try requireLocalAgentControl(invocation)
         let caller = try requireCallerThreadId(invocation)
         let childDepth = nextThreadSpawnDepth(invocation.sessionSource)
@@ -100,17 +97,77 @@ struct SpawnAgentHandler: CoreToolRuntime {
             agentRole: roleName,
             taskName: nil
         )
-        let (spawned, snapshot) = try await control.spawn(
-            SpawnRequest(
-                caller: caller,
-                input: .userInput(inputItems),
-                source: source,
-                options: SpawnAgentOptions(parentThreadId: caller)
+        try? await control.emitTurnItemStarted(
+            threadId: caller,
+            turnId: invocation.turnId,
+            item: .collabAgentToolCall(
+                CollabAgentToolCallItem(
+                    id: invocation.callId,
+                    tool: .spawnAgent,
+                    status: .inProgress,
+                    senderThreadId: caller,
+                    prompt: prompt,
+                    model: args.model ?? "",
+                    reasoningEffort: args.reasoningEffort ?? .medium
+                )
             )
         )
+        var spawnedAgent: LiveAgent?
+        var snapshot: ThreadConfigSnapshot?
+        var spawnError: Error?
+        do {
+            let spawned = try await control.spawn(
+                SpawnRequest(
+                    caller: caller,
+                    input: .userInput(inputItems),
+                    source: source,
+                    options: SpawnAgentOptions(
+                        forkParentSpawnCallId: args.forkContext ? invocation.callId : nil,
+                        forkMode: args.forkContext ? .fullHistory : nil,
+                        parentThreadId: caller
+                    )
+                )
+            )
+            spawnedAgent = spawned.0
+            snapshot = spawned.1
+        } catch {
+            spawnError = error
+        }
+        let newThreadId = spawnedAgent?.threadId
+        let status = spawnedAgent?.status ?? .notFound
+        let nickname = snapshot?.sessionSource.getNickname() ?? spawnedAgent?.metadata.agentNickname
+        let role = snapshot?.sessionSource.getAgentRole() ?? spawnedAgent?.metadata.agentRole
+        let receiverAgents = newThreadId.map {
+            CollabAgentRef(threadId: $0, agentNickname: nickname, agentRole: role)
+        }.map { [$0] } ?? []
+        let agentsStates = newThreadId.map { [$0: status] } ?? [:]
+        try? await control.emitTurnItemCompleted(
+            threadId: caller,
+            turnId: invocation.turnId,
+            item: .collabAgentToolCall(
+                CollabAgentToolCallItem(
+                    id: invocation.callId,
+                    tool: .spawnAgent,
+                    status: collabToolCallStatus(status, receiverThreadId: newThreadId),
+                    senderThreadId: caller,
+                    receiverThreadIds: newThreadId.map { [$0] } ?? [],
+                    receiverAgents: receiverAgents,
+                    prompt: prompt,
+                    model: snapshot?.model ?? args.model ?? "",
+                    reasoningEffort: args.reasoningEffort ?? .medium,
+                    agentsStates: agentsStates
+                )
+            )
+        )
+        if let spawnError {
+            throw (spawnError as? CodexErr).map(collabSpawnError) ?? spawnError
+        }
+        guard let spawnedAgent else {
+            throw FunctionCallError.respondToModel("collab spawn failed")
+        }
         return SpawnAgentResult(
-            agentId: spawned.threadId.description,
-            nickname: snapshot.sessionSource.getNickname() ?? spawned.metadata.agentNickname
+            agentId: spawnedAgent.threadId.description,
+            nickname: nickname
         )
     }
 }

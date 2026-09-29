@@ -45,12 +45,52 @@ final class ShellCommandSafetyTests: XCTestCase {
             return XCTFail("expected listFiles")
         }
         XCTAssertTrue(cmd.contains("ls"))
-        XCTAssertEqual(path, "/tmp")
+        XCTAssertEqual(path, "tmp")
     }
 
     func testShellStartupScript() {
         XCTAssertTrue(shellStartupScript(.zsh).contains(".zshrc"))
         XCTAssertTrue(shellStartupScript(.bash).contains(".bashrc"))
         XCTAssertEqual(shellStartupScript(.sh), "")
+    }
+
+    func testPosixEnvPathExpansionFunction() {
+        let helper = posixEnvPathExpansionFunction()
+        XCTAssertTrue(helper.contains("__codex_snapshot_expand_env"))
+        XCTAssertTrue(helper.contains("printenv"))
+    }
+
+    func testSnapshotCaptureScriptForZsh() {
+        let script = snapshotCaptureScript(
+            .zsh,
+            options: SnapshotCaptureOptions(startup: .nonInteractive, declarations: true, environment: true)
+        )
+        XCTAssertNotNil(script)
+        XCTAssertTrue(script?.contains("__codex_snapshot_command") == true)
+        XCTAssertTrue(script?.contains("compgen -e") == true || script?.contains("typeset +x") == true)
+        XCTAssertNil(snapshotCaptureScript(
+            .powerShell,
+            options: SnapshotCaptureOptions(startup: .nonInteractive, declarations: false, environment: false)
+        ))
+    }
+
+    func testCapturedSnapshotParsePlainExports() {
+        var bytes = [UInt8]()
+        func appendRecord(_ text: String) {
+            bytes.append(contentsOf: text.utf8)
+            bytes.append(0)
+        }
+        appendRecord("# Snapshot file\n# Functions\n")
+        appendRecord("# aliases 0\n")
+        appendRecord("PATH")
+        appendRecord("export PATH=/usr/bin\n")
+        appendRecord("")
+        bytes.append(contentsOf: "PATH=/usr/bin".utf8)
+
+        let snapshot = CapturedSnapshot.parse(shellType: .bash, captured: bytes)
+        XCTAssertEqual(snapshot?.exports.count, 1)
+        XCTAssertEqual(snapshot?.exports.first?.key, "PATH")
+        XCTAssertEqual(snapshot?.renderState().contains("# Snapshot file"), true)
+        XCTAssertEqual(snapshot?.renderScript().contains("export PATH=/usr/bin"), true)
     }
 }

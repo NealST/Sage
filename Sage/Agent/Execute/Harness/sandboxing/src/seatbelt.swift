@@ -4,7 +4,7 @@
 //
 //  Port of codex-rs/sandboxing/src/seatbelt.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
 //  Seatbelt profile assembly, glob→regex translation, and
 //  `createSeatbeltCommandArgs` match upstream. `.sbpl` fragments are
@@ -83,6 +83,26 @@ public func createSeatbeltCommandArgs(
         args,
         profile: .process,
         allowedSymlinkedCodexHome: nil
+    )
+}
+
+func createSeatbeltCommandArgsForLegacyPolicy(
+    command: [String],
+    sandboxPolicy: SandboxPolicy,
+    sandboxPolicyCwd: String,
+    enforceManagedNetwork: Bool,
+    network: NetworkProxy?
+) throws -> [String] {
+    try createSeatbeltCommandArgs(
+        CreateSeatbeltCommandArgsParams(
+            command: command,
+            fileSystemSandboxPolicy: .fromLegacySandboxPolicyForCwd(
+                sandboxPolicy, cwd: sandboxPolicyCwd),
+            networkSandboxPolicy: NetworkSandboxPolicy(sandboxPolicy),
+            sandboxPolicyCwd: sandboxPolicyCwd,
+            enforceManagedNetwork: enforceManagedNetwork,
+            network: network
+        )
     )
 }
 

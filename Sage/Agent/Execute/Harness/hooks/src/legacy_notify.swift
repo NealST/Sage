@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  `legacy_notify_json` is faithful. Process spawn for `notify_hook` waits
-//  on a command runner; the hook reports success when argv is empty.
+//  `legacy_notify_json` is faithful. `notify_hook` spawns the argv program
+//  with the JSON payload as the last argument. Stdio is discarded.
 //
 
 import CodexProtocol
@@ -53,13 +53,26 @@ public func legacyNotifyJSON(_ payload: HookPayload) throws -> String {
     }
 }
 
-public func notifyHook(argv: [String]) -> Hook {
+public func notifyHook(
+    argv: [String],
+    environment: [(String, String)] = []
+) -> Hook {
     Hook(name: "legacy_notify") { payload in
-        if argv.isEmpty || argv[0].isEmpty {
+        guard var spec = commandFromArgv(argv, environment: environment) else {
             return .success
         }
+        if let notifyPayload = try? legacyNotifyJSON(payload) {
+            spec.arguments.append(notifyPayload)
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: spec.program)
+        process.arguments = spec.arguments
+        process.environment = spec.environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         do {
-            _ = try legacyNotifyJSON(payload)
+            try process.run()
             return .success
         } catch {
             return .failedContinue(error)
