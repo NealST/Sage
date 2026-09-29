@@ -224,6 +224,9 @@ public struct CodexErr: Error, Equatable, Sendable {
     public static func invalidImageRequest() -> CodexErr {
         CodexErr(details: .invalidImageRequest)
     }
+    public static func agentLimitReached(maxThreads: Int) -> CodexErr {
+        CodexErr(details: .agentLimitReached(maxThreads: maxThreads))
+    }
 }
 
 public enum CodexErrorDetails: Equatable, Sendable {

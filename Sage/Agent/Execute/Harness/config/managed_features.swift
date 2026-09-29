@@ -18,6 +18,10 @@ enum Feature: String, Equatable, Hashable, Sendable {
     case unifiedExec = "unified_exec"
     case unboundedConnectionRetries = "unbounded_connection_retries"
     case unifiedImageBudget = "unified_image_budget"
+    case cwdRelativeTurnDiffs = "cwd_relative_turn_diffs"
+    case tokenBudget = "token_budget"
+    case deferMailboxPreemption = "defer_mailbox_preemption"
+    case applyPatchStreamingEvents = "apply_patch_streaming_events"
 }
 
 struct Features: Equatable, Sendable {

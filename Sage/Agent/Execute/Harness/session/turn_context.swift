@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Turn-scoped settings and environment. Shell snapshot futures and
-//  plugin metrics wait for Phase 6/9.
+//  Turn-scoped settings, sessionSource, and model snapshot used by
+//  `runTurn`. Shell snapshot futures and plugin metrics wait.
 //
 
 import CodexCore
@@ -39,6 +39,12 @@ final class TurnContext: @unchecked Sendable {
     var threadId: ThreadId
     var cwd: String
     var model: String
+    var modelCompHash: String?
+    var modelContextWindow: Int64?
+    var effectiveContextWindowPercent: Int64
+    var autoCompactTokenLimitValue: Int64?
+    var sessionSource: SessionSource
+    var config: Config
     var approvalPolicy: CodexProtocol.AskForApproval
     var sandboxPolicy: SandboxPolicy
     var permissionProfile: PermissionProfile
@@ -47,6 +53,7 @@ final class TurnContext: @unchecked Sendable {
     var environment: TurnEnvironment
     var finalOutputJsonSchema: String?
     var cyberAccessProgram: Bool
+    var realtimeActive: Bool
     var nextStepSettings: StepSettings
 
     init(
@@ -55,6 +62,12 @@ final class TurnContext: @unchecked Sendable {
         threadId: ThreadId = ThreadId(),
         cwd: String = FileManager.default.currentDirectoryPath,
         model: String = "gpt-5",
+        modelCompHash: String? = nil,
+        modelContextWindow: Int64? = nil,
+        effectiveContextWindowPercent: Int64 = 95,
+        autoCompactTokenLimitValue: Int64? = nil,
+        sessionSource: SessionSource = .cli,
+        config: Config = Config(),
         approvalPolicy: CodexProtocol.AskForApproval = CodexProtocol.AskForApproval.onRequest,
         sandboxPolicy: SandboxPolicy = .readOnly(networkAccess: false),
         permissionProfile: PermissionProfile = .readOnly(),
@@ -63,6 +76,7 @@ final class TurnContext: @unchecked Sendable {
         environment: TurnEnvironment = TurnEnvironment(),
         finalOutputJsonSchema: String? = nil,
         cyberAccessProgram: Bool = false,
+        realtimeActive: Bool = false,
         nextStepSettings: StepSettings = StepSettings()
     ) {
         self.subId = subId
@@ -70,6 +84,12 @@ final class TurnContext: @unchecked Sendable {
         self.threadId = threadId
         self.cwd = cwd
         self.model = model
+        self.modelCompHash = modelCompHash
+        self.modelContextWindow = modelContextWindow
+        self.effectiveContextWindowPercent = effectiveContextWindowPercent
+        self.autoCompactTokenLimitValue = autoCompactTokenLimitValue
+        self.sessionSource = sessionSource
+        self.config = config
         self.approvalPolicy = approvalPolicy
         self.sandboxPolicy = sandboxPolicy
         self.permissionProfile = permissionProfile
@@ -78,11 +98,68 @@ final class TurnContext: @unchecked Sendable {
         self.environment = environment
         self.finalOutputJsonSchema = finalOutputJsonSchema
         self.cyberAccessProgram = cyberAccessProgram
+        self.realtimeActive = realtimeActive
         self.nextStepSettings = nextStepSettings
     }
 
     func collaborationModeValue() -> CollaborationMode? {
         collaborationMode
+    }
+
+    func mode() -> ModeKind {
+        collaborationMode?.mode ?? .default
+    }
+
+    func captureCurrentModelInfo() -> TurnModelSnapshot {
+        TurnModelSnapshot(
+            slug: model,
+            compHash: modelCompHash,
+            contextWindow: modelContextWindow,
+            effectiveContextWindowPercent: effectiveContextWindowPercent,
+            autoCompactTokenLimitValue: autoCompactTokenLimitValue
+        )
+    }
+
+    func resolvedContextWindow() -> Int64? {
+        modelContextWindow ?? config.modelContextWindow
+    }
+
+    func usableContextWindow() -> Int64? {
+        resolvedContextWindow().map { ($0 &* effectiveContextWindowPercent) / 100 }
+    }
+
+    func modelInfoValue() -> ModelInfo {
+        minimalModelInfo(slug: model)
+    }
+
+    func autoCompactTokenLimit() -> Int64? {
+        let contextLimit = resolvedContextWindow().map { ($0 * 9) / 10 }
+        if let contextLimit {
+            return autoCompactTokenLimitValue.map { min($0, contextLimit) } ?? contextLimit
+        }
+        return autoCompactTokenLimitValue ?? config.modelAutoCompactTokenLimit
+    }
+}
+
+struct TurnModelSnapshot: Equatable, Sendable {
+    var slug: String
+    var compHash: String?
+    var contextWindow: Int64?
+    var effectiveContextWindowPercent: Int64
+    var autoCompactTokenLimitValue: Int64?
+
+    init(
+        slug: String,
+        compHash: String? = nil,
+        contextWindow: Int64? = nil,
+        effectiveContextWindowPercent: Int64 = 95,
+        autoCompactTokenLimitValue: Int64? = nil
+    ) {
+        self.slug = slug
+        self.compHash = compHash
+        self.contextWindow = contextWindow
+        self.effectiveContextWindowPercent = effectiveContextWindowPercent
+        self.autoCompactTokenLimitValue = autoCompactTokenLimitValue
     }
 }
 

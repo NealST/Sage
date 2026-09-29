@@ -7,5 +7,5 @@
 //  Port status: adapted
 //
 //  The 5,161-line session event loop is split across session/*.swift.
-//  This file keeps the module-level aliases used by tasks and state.
+//  `runTurn` lives in turn.swift; this file keeps module-level aliases.
 //

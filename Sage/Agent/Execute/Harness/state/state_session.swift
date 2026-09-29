@@ -36,11 +36,20 @@ enum ReasoningEffortPin: Equatable, Sendable {
 
 struct PreviousTurnSettings: Equatable, Sendable {
     var model: String
+    var compHash: String?
     var realtimeActive: Bool
+    var contextWindow: Int64?
 
-    init(model: String, realtimeActive: Bool = false) {
+    init(
+        model: String,
+        compHash: String? = nil,
+        realtimeActive: Bool = false,
+        contextWindow: Int64? = nil
+    ) {
         self.model = model
+        self.compHash = compHash
         self.realtimeActive = realtimeActive
+        self.contextWindow = contextWindow
     }
 }
 
@@ -103,6 +112,7 @@ final class SessionState: @unchecked Sendable {
 
     func recordItems(_ items: [ResponseItem]) {
         history.recordItems(items)
+        currentTimeReminder.noteRecordedItems(items)
     }
 
     func replaceAnnotatedHistory(

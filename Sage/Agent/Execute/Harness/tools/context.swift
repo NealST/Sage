@@ -70,6 +70,10 @@ struct ToolInvocation: Sendable {
     var clock: @Sendable () -> Date
     var isRootThread: Bool
     var availableModes: [ModeKind]
+    var localAgentControl: LocalAgentControl?
+    var sessionSource: SessionSource
+    var parentThreadId: ThreadId?
+    var agentMaxDepth: Int32
     var onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)?
     var onNewContextWindow: (@Sendable () -> Void)?
     var onAsyncUserMessage: (@Sendable (String) -> Void)?
@@ -94,6 +98,10 @@ struct ToolInvocation: Sendable {
         clock: @escaping @Sendable () -> Date = Date.init,
         isRootThread: Bool = true,
         availableModes: [ModeKind] = [.plan],
+        localAgentControl: LocalAgentControl? = nil,
+        sessionSource: SessionSource = .unknown,
+        parentThreadId: ThreadId? = nil,
+        agentMaxDepth: Int32 = Int32.max,
         onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)? = nil,
         onNewContextWindow: (@Sendable () -> Void)? = nil,
         onAsyncUserMessage: (@Sendable (String) -> Void)? = nil,
@@ -117,6 +125,10 @@ struct ToolInvocation: Sendable {
         self.clock = clock
         self.isRootThread = isRootThread
         self.availableModes = availableModes
+        self.localAgentControl = localAgentControl
+        self.sessionSource = sessionSource
+        self.parentThreadId = parentThreadId
+        self.agentMaxDepth = agentMaxDepth
         self.onPlanUpdate = onPlanUpdate
         self.onNewContextWindow = onNewContextWindow
         self.onAsyncUserMessage = onAsyncUserMessage

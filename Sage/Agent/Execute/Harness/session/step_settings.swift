@@ -44,22 +44,26 @@ struct StepSettings: Equatable, Sendable {
     var model: String
     var reasoningEffort: ReasoningEffort?
     var serviceTier: String?
+    var modelSnapshot: TurnModelSnapshot
 
     init(
         model: String = "gpt-5",
         reasoningEffort: ReasoningEffort? = nil,
-        serviceTier: String? = nil
+        serviceTier: String? = nil,
+        modelSnapshot: TurnModelSnapshot? = nil
     ) {
         self.model = model
         self.reasoningEffort = reasoningEffort
         self.serviceTier = serviceTier
+        self.modelSnapshot = modelSnapshot ?? TurnModelSnapshot(slug: model)
     }
 
     func applying(_ update: StepSettingsUpdate) -> StepSettings {
         StepSettings(
             model: update.model ?? model,
             reasoningEffort: update.reasoningEffort ?? reasoningEffort,
-            serviceTier: serviceTier
+            serviceTier: serviceTier,
+            modelSnapshot: modelSnapshot
         )
     }
 }

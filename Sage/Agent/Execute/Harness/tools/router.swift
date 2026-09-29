@@ -61,4 +61,47 @@ struct ToolRouter {
     func dispatch(_ call: ToolCall) async throws -> AnyToolResult {
         try await registry.dispatch(buildInvocation(call))
     }
+
+    /// Codex `ToolRouter::build_tool_call`.
+    static func buildToolCall(_ item: ResponseItem) throws -> ToolCall? {
+        switch item {
+        case .functionCall(_, let name, let namespace, let arguments, let encrypted, let callId, _):
+            return ToolCall(
+                toolName: ToolName(namespace: namespace, name: name).withDefaultNamespace(),
+                callId: callId,
+                payload: .function(arguments: arguments),
+                encryptedFunctionArgs: encrypted
+            )
+        case .toolSearchCall(_, let callId, _, let execution, let arguments, _)
+            where execution == "client":
+            guard let callId else { return nil }
+            do {
+                let params = try JSONDecoder().decode(
+                    SearchToolCallParams.self,
+                    from: try JSONEncoder().encode(arguments)
+                )
+                return ToolCall(
+                    toolName: ToolName(plain: "tool_search"),
+                    callId: callId,
+                    payload: .toolSearch(arguments: params),
+                    encryptedFunctionArgs: nil
+                )
+            } catch {
+                throw FunctionCallError.respondToModel(
+                    "failed to parse tool_search arguments: \(error)"
+                )
+            }
+        case .toolSearchCall:
+            return nil
+        case .customToolCall(_, _, let callId, let name, let namespace, let input, _):
+            return ToolCall(
+                toolName: ToolName(namespace: namespace, name: name).withDefaultNamespace(),
+                callId: callId,
+                payload: .custom(input: input),
+                encryptedFunctionArgs: nil
+            )
+        default:
+            return nil
+        }
+    }
 }

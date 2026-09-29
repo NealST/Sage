@@ -3,13 +3,14 @@
 //  Phase8GuardianSkillsTests
 //
 //  Sage addition (no codex counterpart).
-//  Phase 8 context-fragments, agent-roles, hooks, and elicitation tests.
+//  Phase 8 context-fragments, agent-roles, hooks, skills, and AGENTS.md tests.
 //
 
 import CodexAgentRoles
 import CodexCore
 import CodexHooks
 import CodexProtocol
+import CodexSkills
 import CodexUtils
 import FileSystem
 import Foundation
@@ -234,7 +235,7 @@ final class Phase8GuardianSkillsTests: XCTestCase {
 
     func testHookKeyAndPayloadWireShape() throws {
         XCTAssertEqual(
-            hookKey(keySource: "user", eventName: "PreToolUse", groupIndex: 1, handlerIndex: 2),
+            hookKey(keySource: "user", eventName: .preToolUse, groupIndex: 1, handlerIndex: 2),
             "user:pre_tool_use:1:2"
         )
         let sessionId = ThreadId()
@@ -284,6 +285,107 @@ final class Phase8GuardianSkillsTests: XCTestCase {
         _ = second
     }
 
+    func testSkillFrontmatterRepairsColonsAndKeepsBlockScalars() throws {
+        let repaired = try parseSkillFrontmatterMetadata(
+            """
+            ---
+            name:  deploy  service
+            description: Build for AWS: ECS
+            metadata:
+              short-description:  Deploy   safely
+            ---
+
+            """,
+            defaultName: { "fallback" }
+        )
+        XCTAssertEqual(repaired.name, "deploy service")
+        XCTAssertEqual(repaired.description, "Build for AWS: ECS")
+        XCTAssertEqual(repaired.shortDescription, "Deploy safely")
+
+        let block = try parseSkillFrontmatterMetadata(
+            """
+            ---
+            name: block
+            description: |-
+              Build for AWS: ECS
+            argument-hint: <duration: e.g. 7d>
+            ---
+
+            """,
+            defaultName: { "fallback" }
+        )
+        XCTAssertEqual(block.description, "Build for AWS: ECS")
+
+        XCTAssertThrowsError(
+            try parseSkillFrontmatterMetadata("---\nname: demo\n---\n", defaultName: { "fallback" })
+        ) { error in
+            XCTAssertEqual(String(describing: error), "missing field `description`")
+        }
+    }
+
+    func testExtractToolMentionsSkipsEnvVarsAndKeepsLinkedPaths() {
+        let mentions = extractToolMentions("use $PATH and $alpha and [$beta](/tmp/beta)")
+        XCTAssertEqual(mentions.names, ["alpha", "beta"])
+        XCTAssertEqual(mentions.paths, ["/tmp/beta"])
+        XCTAssertEqual(pluginConfigNameFromPath("plugin://sample@test?app=com.example.editor"), "sample@test")
+    }
+
+    func testHookMatcherExactPipeAndRegex() throws {
+        XCTAssertTrue(matchesMatcher(nil, input: "Bash"))
+        XCTAssertTrue(matchesMatcher("*", input: "Bash"))
+        XCTAssertTrue(matchesMatcher("Edit|Write", input: "Edit"))
+        XCTAssertFalse(matchesMatcher("Edit|Write", input: "Bash"))
+        XCTAssertTrue(matchesMatcher("^Bash", input: "BashOutput"))
+        XCTAssertFalse(matchesMatcher("^Bash$", input: "BashOutput"))
+        XCTAssertThrowsError(try validateMatcherPattern("["))
+        XCTAssertEqual(matcherPatternForEvent(.userPromptSubmit, matcher: "^hello"), nil)
+        XCTAssertEqual(matcherPatternForEvent(.preToolUse, matcher: "Bash"), "Bash")
+    }
+
+    func testPluginHookDeclarationsUsePersistedKeys() {
+        let declarations = pluginHookDeclarations([
+            PluginHookSource(
+                pluginId: "demo@test",
+                sourceRelativePath: "hooks/hooks.json",
+                groupsByEvent: [
+                    (.preToolUse, [PluginHookMatcherGroup(handlerCount: 2)]),
+                    (.sessionStart, [PluginHookMatcherGroup(handlerCount: 1)]),
+                ]
+            )
+        ])
+        XCTAssertEqual(
+            declarations.map(\.key),
+            [
+                "demo@test:hooks/hooks.json:pre_tool_use:0:0",
+                "demo@test:hooks/hooks.json:pre_tool_use:0:1",
+                "demo@test:hooks/hooks.json:session_start:0:0",
+            ]
+        )
+    }
+
+    func testLoadedAgentsMdInsertsProjectSeparator() {
+        var loaded = LoadedAgentsMd.fromUserInstructions(Instructions(text: "user rules"))
+        loaded.entries = [
+            InstructionEntry(
+                contents: "project rules",
+                provenance: .project(
+                    sourcePath: PathUri.fromAbsPath(AbsolutePathTestSupport.abs("/tmp/AGENTS.md")),
+                    environmentId: "local",
+                    cwd: PathUri.fromAbsPath(AbsolutePathTestSupport.abs("/tmp"))
+                )
+            )
+        ]
+        XCTAssertEqual(loaded.text(), "user rules\n\n--- project-doc ---\n\nproject rules")
+    }
+
+    func testCandidateFilenamesIgnorePathSyntax() {
+        let cwd = PathUri.fromAbsPath(AbsolutePathTestSupport.abs("/tmp"))
+        XCTAssertEqual(
+            candidateFilenames(cwd: cwd, fallbackFilenames: ["NOTES.md", "../escape", "AGENTS.md"]),
+            [LOCAL_AGENTS_MD_FILENAME, DEFAULT_AGENTS_MD_FILENAME, "NOTES.md"]
+        )
+    }
+
     func testCoreHookMcpExecutorThrowsUntilRuntime() async {
         let executor = CoreHookMcpExecutor(threadId: ThreadId())
         do {
@@ -296,6 +398,391 @@ final class Phase8GuardianSkillsTests: XCTestCase {
             XCTFail("unexpected error: \(error)")
         }
     }
+
+    func testRequiredMcpServersAndMentionedPluginsCollectsSkillAndPluginDeps() {
+        var skills = SessionSkillsLookup()
+        skills.insertHostSkill(
+            name: "deploy",
+            path: "/tmp/deploy/SKILL.md",
+            prompt: "Deploy the service.",
+            pluginId: "weather",
+            mcpServers: ["deploy-mcp"]
+        )
+        let plugins = [
+            PluginCapabilitySummary(
+                configName: "weather",
+                displayName: "Weather",
+                hasSkills: true,
+                mcpServerNames: ["weather-mcp"]
+            ),
+        ]
+        let result = requiredMcpServersAndMentionedPlugins(
+            userInput: [
+                .mention(name: "weather", path: "plugin://weather"),
+                .skill(name: "deploy", path: "/tmp/deploy/SKILL.md"),
+                .mention(name: "linear", path: "mcp://linear/issues"),
+            ],
+            plugins: plugins,
+            skills: skills,
+            connectors: []
+        )
+        XCTAssertEqual(Set(result.servers), ["weather-mcp", "deploy-mcp", "linear"])
+        XCTAssertEqual(result.plugins.map(\.configName), ["weather"])
+    }
+
+    func testBuildSkillAndPluginInjectionItemsRendersHostSkillAndPlugin() {
+        var skills = SessionSkillsLookup()
+        skills.insertHostSkill(
+            name: "deploy",
+            path: "/tmp/deploy/SKILL.md",
+            prompt: "Deploy the service."
+        )
+        let plugins = [
+            PluginCapabilitySummary(
+                configName: "weather",
+                displayName: "Weather",
+                hasSkills: true
+            ),
+        ]
+        let result = buildSkillAndPluginInjectionItems(
+            userInput: [
+                .mention(name: "weather", path: "plugin://weather"),
+                .skill(name: "deploy", path: "/tmp/deploy/SKILL.md"),
+            ],
+            mentionedPlugins: plugins,
+            skills: skills,
+            mcpTools: [],
+            connectors: []
+        )
+        XCTAssertTrue(result.items.contains { item in
+            if case .message(_, _, let content, _, _) = item {
+                return content.contains { part in
+                    if case .inputText(let text) = part {
+                        return text.contains("<skill>") && text.contains("Deploy the service.")
+                    }
+                    return false
+                }
+            }
+            return false
+        })
+        XCTAssertTrue(result.items.contains { item in
+            if case .message(_, _, let content, _, _) = item {
+                return content.contains { part in
+                    if case .inputText(let text) = part {
+                        return text.contains("`Weather` plugin")
+                    }
+                    return false
+                }
+            }
+            return false
+        })
+        XCTAssertTrue(result.warnings.isEmpty)
+    }
+
+    func testBuildCompactedHistoryKeepsUserMessagesAndAppendsSummary() {
+        let users = collectUserMessages([
+            .message(
+                id: nil,
+                role: "user",
+                content: [.inputText(text: "first")],
+                phase: nil,
+                internalChatMessageMetadataPassthrough: nil
+            ),
+            .message(
+                id: nil,
+                role: "assistant",
+                content: [.outputText(text: "ignored")],
+                phase: nil,
+                internalChatMessageMetadataPassthrough: nil
+            ),
+            .message(
+                id: nil,
+                role: "user",
+                content: [.inputText(text: "second")],
+                phase: nil,
+                internalChatMessageMetadataPassthrough: nil
+            ),
+        ])
+        XCTAssertEqual(users.map(\.message), ["first", "second"])
+        let compacted = buildCompactedHistory(userMessages: users, summaryText: "folded")
+        XCTAssertEqual(compacted.count, 3)
+        XCTAssertEqual(contentItemsToText(messageContent(compacted[0].item)), "first")
+        XCTAssertEqual(contentItemsToText(messageContent(compacted[1].item)), "second")
+        XCTAssertEqual(compacted[2].item, wrapCompactionSummary("folded"))
+    }
+
+    func testBuildCompactedHistoryUsesPlaceholderWhenSummaryEmpty() {
+        let compacted = buildCompactedHistory(userMessages: [], summaryText: "")
+        XCTAssertEqual(compacted.count, 1)
+        XCTAssertEqual(contentItemsToText(messageContent(compacted[0].item)), compactNoSummaryAvailable)
+    }
+
+    func testParseTurnItemMapsAssistantReasoningAndWebSearch() {
+        let assistant = parseTurnItem(.message(
+            id: .fromServer("msg_1"),
+            role: "assistant",
+            content: [.outputText(text: "hi")],
+            phase: .commentary,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        guard case .agentMessage(let message) = assistant else {
+            return XCTFail("expected agent message")
+        }
+        XCTAssertEqual(message.id, "msg_1")
+        XCTAssertEqual(message.phase, .commentary)
+
+        let reasoning = parseTurnItem(.reasoning(
+            id: .fromServer("rsn_1"),
+            summary: [.summaryText(text: "think")],
+            content: [.text(text: "raw")],
+            encryptedContent: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        guard case .reasoning(let item) = reasoning else {
+            return XCTFail("expected reasoning")
+        }
+        XCTAssertEqual(item.summaryText, ["think"])
+        XCTAssertEqual(item.rawContent, ["raw"])
+
+        let search = parseTurnItem(.webSearchCall(
+            id: .fromServer("ws_1"),
+            status: nil,
+            action: .search(query: "codex", queries: nil),
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        guard case .webSearch(let web) = search else {
+            return XCTFail("expected web search")
+        }
+        XCTAssertEqual(web.query, "codex")
+    }
+
+    func testCollectRemoteCompactSummaryUsesLastAssistant() async throws {
+        let stream = ResponseStream(events: AsyncStream { continuation in
+            continuation.yield(.success(.outputItemDone(.message(
+                id: nil,
+                role: "assistant",
+                content: [.outputText(text: "remote fold")],
+                phase: nil,
+                internalChatMessageMetadataPassthrough: nil
+            ))))
+            continuation.yield(.success(.completed(
+                responseId: "c1",
+                tokenUsage: nil,
+                usageMetadata: nil,
+                endTurn: true
+            )))
+            continuation.finish()
+        })
+        let summary = try await collectRemoteCompactSummary(from: stream)
+        XCTAssertEqual(summary, "remote fold")
+    }
+
+    func testHistoryItemGroupsAttachImageResizeNotice() {
+        let user = ResponseItemEnvelope(.message(
+            id: nil,
+            role: "user",
+            content: [.inputText(text: "hi")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        let notice = ResponseItemEnvelope(.message(
+            id: nil,
+            role: "developer",
+            content: [.inputText(text: "<image_resize_notice>resized</image_resize_notice>")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        let groups = historyItemGroups([user, notice])
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(groups[0].attachedNotice, notice)
+    }
+
+    func testBuildV2CompactedHistoryKeepsUserDropsAssistant() {
+        let user = ResponseItemEnvelope(.message(
+            id: nil,
+            role: "user",
+            content: [.inputText(text: "keep")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        let assistant = ResponseItemEnvelope(.message(
+            id: nil,
+            role: "assistant",
+            content: [.outputText(text: "chatter")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        let compacted = buildV2CompactedHistory(
+            promptInput: [user, assistant],
+            compactionOutput: wrapCompactionSummary("folded")
+        )
+        XCTAssertEqual(compacted.count, 2)
+        XCTAssertEqual(contentItemsToText(messageContent(compacted[0].item)), "keep")
+        XCTAssertEqual(compacted[1].item, wrapCompactionSummary("folded"))
+    }
+
+    func testTrimFunctionCallHistoryRewritesOversizedOutput() {
+        let history = ContextManager()
+        history.recordItems([
+            .functionCallOutput(
+                id: nil,
+                callId: "c1",
+                name: "exec",
+                namespace: nil,
+                output: FunctionCallOutputPayload(body: .text(String(repeating: "x", count: 200))),
+                internalChatMessageMetadataPassthrough: nil
+            )
+        ])
+        let result = trimFunctionCallHistoryToFitContextWindow(
+            history: history,
+            contextWindow: 10,
+            baseInstructions: ""
+        )
+        XCTAssertEqual(result.rewrittenOutputs, 1)
+        if case .functionCallOutput(_, _, _, _, let output, _) = history.items[0].item {
+            XCTAssertEqual(output.body.toText(), contextWindowTruncatedOutputMessage)
+        } else {
+            XCTFail("expected rewritten function output")
+        }
+    }
+
+    func testCollectRemoteCompactionV2RejectsMultipleCompactionItems() async {
+        let stream = ResponseStream(events: AsyncStream { continuation in
+            continuation.yield(.success(.outputItemDone(.compaction(
+                id: nil,
+                encryptedContent: "one",
+                internalChatMessageMetadataPassthrough: nil
+            ))))
+            continuation.yield(.success(.outputItemDone(.compaction(
+                id: nil,
+                encryptedContent: "two",
+                internalChatMessageMetadataPassthrough: nil
+            ))))
+            continuation.yield(.success(.completed(
+                responseId: "c2",
+                tokenUsage: nil,
+                usageMetadata: nil,
+                endTurn: true
+            )))
+            continuation.finish()
+        })
+        do {
+            _ = try await collectRemoteCompactionV2Output(from: stream)
+            XCTFail("expected fatal for multiple compaction items")
+        } catch let error as CodexErr {
+            XCTAssertTrue(String(describing: error).contains("exactly one compaction"))
+        } catch {
+            XCTFail("unexpected error \(error)")
+        }
+    }
+
+    func testTruncateMessageToTokenBudgetKeepsLaterImageAtomically() {
+        let envelope = ResponseItemEnvelope(.message(
+            id: nil,
+            role: "user",
+            content: [
+                .inputText(text: String(repeating: "old ", count: 80)),
+                .inputText(text: "<image>"),
+                .inputImage(image: .inline(imageUrl: "https://example.com/a.png"), detail: .high),
+                .inputText(text: "</image>"),
+            ],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        ))
+        let imageTokens = contentItemTokenCount(
+            .inputImage(image: .inline(imageUrl: "https://example.com/a.png"), detail: .high)
+        )
+        let truncated = truncateMessageToTokenBudget(envelope, maxTokens: imageTokens + 4)
+        XCTAssertNotNil(truncated)
+        let content = messageContent(truncated!.item)
+        XCTAssertTrue(content.contains { part in
+            if case .inputImage = part { return true }
+            return false
+        })
+        XCTAssertTrue(content.contains { part in
+            if case .inputText(let text) = part { return text == "</image>" }
+            return false
+        })
+    }
+
+    func testShouldRetryWithCurrentModelRejectsAbort() {
+        XCTAssertFalse(shouldRetryWithCurrentModel(CodexErr(details: .turnAborted)))
+        XCTAssertTrue(shouldRetryWithCurrentModel(CodexErr.stream("boom")))
+    }
+
+    func testParseBase64ImageDataURLRequiresImageAndBase64() {
+        XCTAssertEqual(
+            parseBase64ImageDataURL("data:image/png;base64,abcd"),
+            "abcd"
+        )
+        XCTAssertNil(parseBase64ImageDataURL("data:text/plain;base64,abcd"))
+        XCTAssertNil(parseBase64ImageDataURL("data:image/png,abcd"))
+        XCTAssertNil(parseBase64ImageDataURL("https://example.com/a.png"))
+    }
+
+    func testEstimateImageBytesUsesResizedConstantUnlessOriginalDataURL() {
+        let longURL = "data:image/png;base64," + String(repeating: "A", count: 20_000)
+        XCTAssertEqual(estimateImageBytes(longURL, detail: .high), resizedImageBytesEstimate)
+        XCTAssertEqual(estimateImageBytes(longURL, detail: nil), resizedImageBytesEstimate)
+        XCTAssertEqual(
+            estimateImageReferenceBytes(.inline(imageUrl: longURL), detail: .high),
+            resizedImageBytesEstimate
+        )
+        XCTAssertEqual(
+            estimateImageReferenceBytes(.file(fileId: "file_a"), detail: .original),
+            approxBytesForTokens(originalImageMaxPatches)
+        )
+    }
+
+    func testOriginalDetailDataURLUsesDecodedPatchCount() {
+        let png = pngDataURL(width: 1, height: 1)
+        XCTAssertEqual(estimateImageBytes(png, detail: .original), approxBytesForTokens(1))
+        let large = pngDataURL(width: 33, height: 33)
+        XCTAssertEqual(estimateImageBytes(large, detail: .original), approxBytesForTokens(4))
+        XCTAssertEqual(
+            estimateImageBytes("data:image/png;base64,not-valid", detail: .original),
+            resizedImageBytesEstimate
+        )
+    }
+
+    func testEstimateItemTokenCountUsesModelVisibleBytes() {
+        let item = ResponseItem.message(
+            id: nil,
+            role: "user",
+            content: [
+                .inputText(text: "hi"),
+                .inputImage(image: .inline(imageUrl: "https://example.com/a.png"), detail: .high),
+            ],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        )
+        let expected = Int(clamping: approxTokensFromByteCountI64(Int64("hi".utf8.count + resizedImageBytesEstimate)))
+        XCTAssertEqual(estimateItemTokenCount(item), expected)
+        XCTAssertEqual(estimateImageReferenceBytes(item), resizedImageBytesEstimate)
+    }
+}
+
+private func messageContent(_ item: ResponseItem) -> [ContentItem] {
+    if case .message(_, _, let content, _, _) = item { return content }
+    return []
+}
+
+private func pngDataURL(width: Int, height: Int) -> String {
+    var data = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    data.append(contentsOf: [0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52])
+    data.append(contentsOf: u32beBytes(width))
+    data.append(contentsOf: u32beBytes(height))
+    return "data:image/png;base64," + data.base64EncodedString()
+}
+
+private func u32beBytes(_ value: Int) -> [UInt8] {
+    let v = UInt32(clamping: value)
+    return [
+        UInt8((v >> 24) & 0xFF),
+        UInt8((v >> 16) & 0xFF),
+        UInt8((v >> 8) & 0xFF),
+        UInt8(v & 0xFF),
+    ]
 }
 
 func floorCharBoundaryForTest(_ text: String, maxBytes: Int) -> String {

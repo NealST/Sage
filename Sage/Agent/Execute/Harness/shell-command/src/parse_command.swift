@@ -57,7 +57,7 @@ private func singleUnknownForCommand(_ command: [String]) -> ParsedCommand {
     return .unknown(cmd: shlexJoin(command))
 }
 
-func parseCommandImpl(_ command: [String]) -> [ParsedCommand] {
+public func parseCommandImpl(_ command: [String]) -> [ParsedCommand] {
     if let commands = parseShellLcPlainCommands(command) {
         return commands.map(summarizeTokens)
     }
@@ -97,7 +97,7 @@ private func posixShlexQuote(_ token: String) -> String {
     return "'" + token.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
 }
 
-func posixShlexSplit(_ input: String) -> [String]? {
+public func posixShlexSplit(_ input: String) -> [String]? {
     var tokens: [String] = []
     var current = ""
     var inSingle = false

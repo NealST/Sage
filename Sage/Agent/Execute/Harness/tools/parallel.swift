@@ -14,6 +14,9 @@
 //  generic runner for isolated batches (Explore).
 //
 
+import CodexAsyncUtils
+import CodexCore
+import CodexProtocol
 import Foundation
 
 enum ParallelToolRuntime {
@@ -162,5 +165,60 @@ actor ParallelAdmission {
         if writer { return false }
         if exclusive { return readers == 0 }
         return true
+    }
+}
+
+/// Codex `ToolCallRuntime` — dispatch one model tool call through the step router.
+struct ToolCallRuntime: Sendable {
+    var session: Session
+    var stepContext: StepContext
+
+    func handleToolCall(
+        _ call: ToolCall,
+        cancellationToken: CancellationToken
+    ) async throws -> ResponseItem {
+        if cancellationToken.isCancelled {
+            throw CodexErr(details: .turnAborted)
+        }
+        let source = call.directSource()
+        _ = session.services.executedToolCalls.prepare(call: call, source: source)
+        guard let router = stepContext.toolRouter else {
+            session.services.executedToolCalls.cancel(callId: call.callId)
+            throw FunctionCallError.respondToModel(
+                "unsupported tool \(flatToolName(call.toolName))"
+            )
+        }
+        do {
+            let result = try await router.dispatch(call)
+            session.services.executedToolCalls.complete(callId: call.callId, output: result.result)
+            guard let item = responseInputToResponseItem(
+                result.result.toResponseItem(callId: result.callId, payload: result.payload)
+            ) else {
+                throw FunctionCallError.fatal("tool \(flatToolName(call.toolName)) produced no response item")
+            }
+            return item
+        } catch let error as FunctionCallError {
+            session.services.executedToolCalls.cancel(callId: call.callId)
+            switch error {
+            case .fatal(let message):
+                throw CodexErr.fatal(message)
+            case .respondToModel(let message):
+                return failureResponse(call, message: message)
+            }
+        } catch {
+            session.services.executedToolCalls.cancel(callId: call.callId)
+            throw error
+        }
+    }
+
+    func failureResponse(_ call: ToolCall, message: String) -> ResponseItem {
+        .functionCallOutput(
+            id: nil,
+            callId: call.callId,
+            name: call.toolName.name,
+            namespace: call.toolName.namespace,
+            output: FunctionCallOutputPayload(body: .text(message), success: false),
+            internalChatMessageMetadataPassthrough: nil
+        )
     }
 }

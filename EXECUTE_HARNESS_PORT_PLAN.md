@@ -361,6 +361,7 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 
 ### Phase 9 — 多智能体与高级特性（~15,000 行，按需启动）
 
+- **进度**：Phase 9 追踪表已无未开始行。registry spawn/close/list/inspect 与 mailbox send/status/interrupt/wait poll 已落地。history fork、exec-server、code_mode cell、plugin elicitation、Session thread create 仍 throw。
 - **范围**：`agent/` 全部（~5,700 行，`control/spawn.rs` 1,380 等）；`tools/handlers/multi_agents*`（~4,000 行）；`session/multi_agents.rs`；`tools/code_mode/`（~2,000 行）；`plugins/`、`apps/`、`connectors.rs` 555、`environment_selection.rs` 2,311、`cyber_access_program.rs`。
 - **对接**：此 phase 把 Sage 的 Plan/Execute/Review 三层编排映射到 codex 的 `ThreadManager`/`AgentControl` 语义——Plan agent = 上游 `plan` 工具/角色配置的 Sage 形态，Review agent = `tasks/review.rs` + guardian 的组合。启动前需单独评审 Sage 三层架构与 codex 多智能体模型的对应关系。
 - **验收**：子 agent spawn/wait/消息传递行为测试。
@@ -666,14 +667,14 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 
 | codex 文件 | 行数 | 状态 | 备注 |
 |---|---:|---|---|
-| `agent/`（mod/api/types/status/registry/role/child_config/control + `control/*` 18 文件） | ~5,700 | ⬜ | |
-| `agent_communication.rs` / `agent_message_board.rs` | 268 | ⬜ | |
-| `plugins/`（6 文件） | 548 | ⬜ | |
-| `apps/mod.rs` / `apps/render.rs` | 68 | ⬜ | |
-| `connectors.rs` | 555 | ⬜ | |
-| `environment_selection.rs` | 2,311 | ⬜ | 多环境选择 |
-| `cyber_access_program.rs` | 12 | ⬜ | |
-| （另见 Phase 4 表中标 → Phase 9 的 handlers/code_mode 项） | ~6,100 | ⬜ | |
+| `agent/`（mod/api/types/status/registry/role/child_config/control + `control/*` 18 文件） | ~5,700 | 🟡 | registry spawn/close/list/inspect + mailbox send/status；Session thread create 仍 throw |
+| `agent_communication.rs` / `agent_message_board.rs` | 268 | 🟡 | |
+| `plugins/`（6 文件） | 548 | 🟡 | DiscoverableTool 类型/过滤 + fixture writer；listing 仍 throw |
+| `apps/mod.rs` / `apps/render.rs` | 68 | ✅ | |
+| `connectors.rs` | 555 | 🟡 | collect/cache 已落地；live MCP list 仍 throw |
+| `environment_selection.rs` | 2,311 | 🟡 | origin/校验/snapshot；exec-server 连接仍 throw |
+| `cyber_access_program.rs` | 12 | 🟡 | |
+| （另见 Phase 4 表中标 → Phase 9 的 handlers/code_mode 项） | ~6,100 | 🟡 | send/wait/resume/interrupt mailbox 已落地；code_mode execute/wait/delegate Session 体仍 throw |
 
 ### Phase 10 — 暂缓/收尾（core 内）
 

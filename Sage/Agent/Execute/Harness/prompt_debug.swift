@@ -25,7 +25,7 @@ public func buildPromptInputFromItems(
     return items
 }
 
-func responseItemFromUserInput(_ input: [UserInput]) -> ResponseItem {
+public func responseItemFromUserInput(_ input: [UserInput]) -> ResponseItem {
     let content: [ContentItem] = input.compactMap { item in
         switch item {
         case .text(let text, _):

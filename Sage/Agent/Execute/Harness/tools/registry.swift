@@ -32,11 +32,18 @@ extension ToolExecutor {
 protocol CoreToolRuntime: ToolExecutor {
     func isBuiltinControlTool() -> Bool
     func mcpServerName() -> String?
+    func createDiffConsumer() -> (any ToolArgumentDiffConsumer)?
 }
 
 extension CoreToolRuntime {
     func isBuiltinControlTool() -> Bool { false }
     func mcpServerName() -> String? { nil }
+    func createDiffConsumer() -> (any ToolArgumentDiffConsumer)? { nil }
+}
+
+protocol ToolArgumentDiffConsumer: AnyObject {
+    func consumeDiff(turn: TurnContext, callId: String, delta: String) -> EventMsg?
+    func finish() throws -> EventMsg?
 }
 
 struct ToolRegistryEntry {

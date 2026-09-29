@@ -292,6 +292,38 @@ public enum CodexErrorInfo: Equatable, Sendable {
     }
 }
 
+// MARK: - TurnEnvironmentSelection
+
+/// Configuration supplied for one environment attached to a turn.
+public struct TurnEnvironmentSelection: Equatable {
+    public var environmentId: String
+    public var cwd: PathUri
+    public var workspaceRoots: [PathUri]
+    public var config: EnvironmentConfigState
+
+    public init(
+        environmentId: String,
+        cwd: PathUri,
+        workspaceRoots: [PathUri],
+        config: EnvironmentConfigState
+    ) {
+        self.environmentId = environmentId
+        self.cwd = cwd
+        self.workspaceRoots = workspaceRoots
+        self.config = config
+    }
+}
+
+public struct TurnEnvironmentSelections: Equatable {
+    public var legacyFallbackCwd: AbsolutePathBuf
+    public var environments: [TurnEnvironmentSelection]
+
+    public init(legacyFallbackCwd: AbsolutePathBuf, environments: [TurnEnvironmentSelection]) {
+        self.legacyFallbackCwd = legacyFallbackCwd
+        self.environments = environments
+    }
+}
+
 // MARK: - AgentStatus
 
 public enum AgentStatus: Codable, Equatable, Sendable {
@@ -1217,86 +1249,232 @@ public struct TurnStartedEvent: Codable, Equatable, Sendable {
 // MARK: - HookEventName
 
 public enum HookEventName: String, Codable, Equatable, Sendable {
+    case preToolUse = "pre_tool_use"
+    case permissionRequest = "permission_request"
+    case postToolUse = "post_tool_use"
+    case preCompact = "pre_compact"
+    case postCompact = "post_compact"
     case sessionStart = "session_start"
     case sessionEnd = "session_end"
-    case turnStart = "turn_start"
-    case turnEnd = "turn_end"
-    case userPrompt = "user_prompt"
-    case execApproval = "exec_approval"
-    case applyPatchApproval = "apply_patch_approval"
+    case userPromptSubmit = "user_prompt_submit"
+    case subagentStart = "subagent_start"
+    case subagentStop = "subagent_stop"
+    case stop
+    case interrupt
 }
 
 // MARK: - HookHandlerType
 
 public enum HookHandlerType: String, Codable, Equatable, Sendable {
     case command
-    case codex
+    case mcpTool = "mcp_tool"
+    case prompt
+    case agent
 }
 
 // MARK: - HookExecutionMode
 
 public enum HookExecutionMode: String, Codable, Equatable, Sendable {
-    case sequential
-    case parallel
+    case sync
+    case async
 }
 
 // MARK: - HookScope
 
 public enum HookScope: String, Codable, Equatable, Sendable {
-    case local
-    case global
+    case thread
+    case turn
 }
 
 // MARK: - HookSource
 
-public enum HookSource: Codable, Equatable, Sendable {
-    case agentConfig
-    case profile(name: String)
-    case project
+public enum HookSource: String, Codable, Equatable, Sendable {
+    case system
     case user
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let raw = try container.decode(String.self)
-        switch raw {
-        case "agent_config": self = .agentConfig
-        case "project": self = .project
-        case "user": self = .user
-        default:
-            if raw.hasPrefix("profile:") {
-                self = .profile(name: String(raw.dropFirst(8)))
-            } else {
-                self = .project
-            }
-        }
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .agentConfig: try container.encode("agent_config")
-        case .profile(let name): try container.encode("profile:\(name)")
-        case .project: try container.encode("project")
-        case .user: try container.encode("user")
-        }
-    }
+    case project
+    case mdm
+    case sessionFlags = "session_flags"
+    case plugin
+    case cloudRequirements = "cloud_requirements"
+    case cloudManagedConfig = "cloud_managed_config"
+    case legacyManagedConfigFile = "legacy_managed_config_file"
+    case legacyManagedConfigMdm = "legacy_managed_config_mdm"
+    case unknown
 }
 
 // MARK: - HookTrustStatus
 
 public enum HookTrustStatus: String, Codable, Equatable, Sendable {
-    case trusted
+    case managed
     case untrusted
-    case skippedUntrusted = "skipped_untrusted"
+    case trusted
+    case modified
 }
 
 // MARK: - HookRunStatus
 
 public enum HookRunStatus: String, Codable, Equatable, Sendable {
-    case success
-    case failure
-    case timeout
-    case skipped
+    case running
+    case completed
+    case failed
+    case blocked
+    case stopped
+}
+
+// MARK: - HookOutputEntryKind
+
+public enum HookOutputEntryKind: String, Codable, Equatable, Sendable {
+    case warning
+    case stop
+    case feedback
+    case context
+    case error
+}
+
+public struct HookOutputEntry: Codable, Equatable, Sendable {
+    public var kind: HookOutputEntryKind
+    public var text: String
+
+    public init(kind: HookOutputEntryKind, text: String) {
+        self.kind = kind
+        self.text = text
+    }
+}
+
+public struct HookRunSummary: Codable, Equatable, Sendable {
+    public var builtin: Bool
+    public var id: String
+    public var eventName: HookEventName
+    public var handlerType: HookHandlerType
+    public var executionMode: HookExecutionMode
+    public var scope: HookScope
+    public var sourcePath: AbsolutePathBuf
+    public var source: HookSource
+    public var displayOrder: Int64
+    public var status: HookRunStatus
+    public var statusMessage: String?
+    public var startedAt: Int64
+    public var completedAt: Int64?
+    public var durationMs: Int64?
+    public var entries: [HookOutputEntry]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case eventName = "event_name"
+        case handlerType = "handler_type"
+        case executionMode = "execution_mode"
+        case scope
+        case sourcePath = "source_path"
+        case source
+        case displayOrder = "display_order"
+        case status
+        case statusMessage = "status_message"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case durationMs = "duration_ms"
+        case entries
+    }
+
+    public init(
+        builtin: Bool = false,
+        id: String,
+        eventName: HookEventName,
+        handlerType: HookHandlerType,
+        executionMode: HookExecutionMode,
+        scope: HookScope,
+        sourcePath: AbsolutePathBuf,
+        source: HookSource = .unknown,
+        displayOrder: Int64,
+        status: HookRunStatus,
+        statusMessage: String? = nil,
+        startedAt: Int64,
+        completedAt: Int64? = nil,
+        durationMs: Int64? = nil,
+        entries: [HookOutputEntry] = []
+    ) {
+        self.builtin = builtin
+        self.id = id
+        self.eventName = eventName
+        self.handlerType = handlerType
+        self.executionMode = executionMode
+        self.scope = scope
+        self.sourcePath = sourcePath
+        self.source = source
+        self.displayOrder = displayOrder
+        self.status = status
+        self.statusMessage = statusMessage
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.durationMs = durationMs
+        self.entries = entries
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        builtin = false
+        id = try container.decode(String.self, forKey: .id)
+        eventName = try container.decode(HookEventName.self, forKey: .eventName)
+        handlerType = try container.decode(HookHandlerType.self, forKey: .handlerType)
+        executionMode = try container.decode(HookExecutionMode.self, forKey: .executionMode)
+        scope = try container.decode(HookScope.self, forKey: .scope)
+        sourcePath = try container.decode(AbsolutePathBuf.self, forKey: .sourcePath)
+        source = try container.decodeIfPresent(HookSource.self, forKey: .source) ?? .unknown
+        displayOrder = try container.decode(Int64.self, forKey: .displayOrder)
+        status = try container.decode(HookRunStatus.self, forKey: .status)
+        statusMessage = try container.decodeIfPresent(String.self, forKey: .statusMessage)
+        startedAt = try container.decode(Int64.self, forKey: .startedAt)
+        completedAt = try container.decodeIfPresent(Int64.self, forKey: .completedAt)
+        durationMs = try container.decodeIfPresent(Int64.self, forKey: .durationMs)
+        entries = try container.decodeIfPresent([HookOutputEntry].self, forKey: .entries) ?? []
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(eventName, forKey: .eventName)
+        try container.encode(handlerType, forKey: .handlerType)
+        try container.encode(executionMode, forKey: .executionMode)
+        try container.encode(scope, forKey: .scope)
+        try container.encode(sourcePath, forKey: .sourcePath)
+        try container.encode(source, forKey: .source)
+        try container.encode(displayOrder, forKey: .displayOrder)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(statusMessage, forKey: .statusMessage)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(durationMs, forKey: .durationMs)
+        try container.encode(entries, forKey: .entries)
+    }
+}
+
+public struct HookStartedEvent: Codable, Equatable, Sendable {
+    public var turnId: String?
+    public var run: HookRunSummary
+
+    enum CodingKeys: String, CodingKey {
+        case turnId = "turn_id"
+        case run
+    }
+
+    public init(turnId: String? = nil, run: HookRunSummary) {
+        self.turnId = turnId
+        self.run = run
+    }
+}
+
+public struct HookCompletedEvent: Codable, Equatable, Sendable {
+    public var turnId: String?
+    public var run: HookRunSummary
+
+    enum CodingKeys: String, CodingKey {
+        case turnId = "turn_id"
+        case run
+    }
+
+    public init(turnId: String? = nil, run: HookRunSummary) {
+        self.turnId = turnId
+        self.run = run
+    }
 }
 
 // MARK: - TruncationPolicy
@@ -1741,6 +1919,15 @@ public enum SubAgentSource: Codable, Equatable, Sendable {
             try nested.encodeIfPresent(role, forKey: .agentRole)
         }
     }
+
+    public func parentThreadId() -> ThreadId? {
+        switch self {
+        case .threadSpawn(let parentThreadId, _, _, _, _):
+            return parentThreadId
+        default:
+            return nil
+        }
+    }
 }
 
 public enum SessionSource: Codable, Equatable, Sendable {
@@ -1815,6 +2002,51 @@ public enum SessionSource: Codable, Equatable, Sendable {
         case .subAgent(let source):
             var container = encoder.container(keyedBy: ExternalKey.self)
             try container.encode(source, forKey: .subAgent)
+        }
+    }
+
+    public func isNonRootAgent() -> Bool {
+        switch self {
+        case .internal, .subAgent:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public func getNickname() -> String? {
+        switch self {
+        case .subAgent(.threadSpawn(_, _, _, let agentNickname, _)):
+            return agentNickname
+        default:
+            return nil
+        }
+    }
+
+    public func getAgentRole() -> String? {
+        switch self {
+        case .subAgent(.threadSpawn(_, _, _, _, let agentRole)):
+            return agentRole
+        default:
+            return nil
+        }
+    }
+
+    public func getAgentPath() -> AgentPath? {
+        switch self {
+        case .subAgent(.threadSpawn(_, _, let agentPath, _, _)):
+            return agentPath
+        default:
+            return nil
+        }
+    }
+
+    public func parentThreadId() -> ThreadId? {
+        switch self {
+        case .subAgent(let source):
+            return source.parentThreadId()
+        default:
+            return nil
         }
     }
 
@@ -2794,7 +3026,10 @@ public enum EventMsg: Equatable, Sendable {
     case dynamicToolCallRequest(DynamicToolCallRequest)
     case dynamicToolCallResponse(DynamicToolCallResponseEvent)
     case patchApplyBegin(PatchApplyBeginEvent)
+    case patchApplyUpdated(PatchApplyUpdatedEvent)
     case patchApplyEnd(PatchApplyEndEvent)
+    case safetyBuffering(SafetyBufferingEvent)
+    case agentReasoningSectionBreak(AgentReasoningSectionBreakEvent)
     case enteredReviewMode(EnteredReviewModeEvent)
     case exitedReviewMode(ExitedReviewModeEvent)
     case itemStarted(ItemStartedEvent)
@@ -2857,7 +3092,13 @@ extension EventMsg: Codable {
         case "dynamic_tool_call_response":
             self = .dynamicToolCallResponse(try DynamicToolCallResponseEvent(from: decoder))
         case "patch_apply_begin": self = .patchApplyBegin(try PatchApplyBeginEvent(from: decoder))
+        case "patch_apply_updated":
+            self = .patchApplyUpdated(try PatchApplyUpdatedEvent(from: decoder))
         case "patch_apply_end": self = .patchApplyEnd(try PatchApplyEndEvent(from: decoder))
+        case "safety_buffering":
+            self = .safetyBuffering(try SafetyBufferingEvent(from: decoder))
+        case "agent_reasoning_section_break":
+            self = .agentReasoningSectionBreak(try AgentReasoningSectionBreakEvent(from: decoder))
         case "entered_review_mode":
             self = .enteredReviewMode(try EnteredReviewModeEvent(from: decoder))
         case "exited_review_mode":
@@ -2949,8 +3190,14 @@ extension EventMsg: Codable {
             try container.encode("dynamic_tool_call_response", forKey: .type_); try event.encode(to: encoder)
         case .patchApplyBegin(let event):
             try container.encode("patch_apply_begin", forKey: .type_); try event.encode(to: encoder)
+        case .patchApplyUpdated(let event):
+            try container.encode("patch_apply_updated", forKey: .type_); try event.encode(to: encoder)
         case .patchApplyEnd(let event):
             try container.encode("patch_apply_end", forKey: .type_); try event.encode(to: encoder)
+        case .safetyBuffering(let event):
+            try container.encode("safety_buffering", forKey: .type_); try event.encode(to: encoder)
+        case .agentReasoningSectionBreak(let event):
+            try container.encode("agent_reasoning_section_break", forKey: .type_); try event.encode(to: encoder)
         case .enteredReviewMode(let event):
             try container.encode("entered_review_mode", forKey: .type_); try event.encode(to: encoder)
         case .exitedReviewMode(let event):
@@ -3287,6 +3534,65 @@ public struct McpToolCallEndEvent: Codable, Equatable, Sendable {
         case .success(let value): return value.isError != true
         case .failure: return false
         }
+    }
+}
+
+public struct SafetyBufferingEvent: Codable, Equatable, Sendable {
+    public var model: String
+    public var useCases: [String]
+    public var reasons: [String]
+    public var showBufferingUi: Bool
+    public var fasterModel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model, reasons
+        case useCases = "use_cases"
+        case showBufferingUi = "show_buffering_ui"
+        case fasterModel = "faster_model"
+    }
+
+    public init(
+        model: String,
+        useCases: [String] = [],
+        reasons: [String] = [],
+        showBufferingUi: Bool = false,
+        fasterModel: String? = nil
+    ) {
+        self.model = model
+        self.useCases = useCases
+        self.reasons = reasons
+        self.showBufferingUi = showBufferingUi
+        self.fasterModel = fasterModel
+    }
+}
+
+public struct AgentReasoningSectionBreakEvent: Codable, Equatable, Sendable {
+    public var itemId: String
+    public var summaryIndex: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case itemId = "item_id"
+        case summaryIndex = "summary_index"
+    }
+
+    public init(itemId: String, summaryIndex: Int64) {
+        self.itemId = itemId
+        self.summaryIndex = summaryIndex
+    }
+}
+
+public struct PatchApplyUpdatedEvent: Codable, Equatable, Sendable {
+    public var callId: String
+    public var changes: [String: FileChange]
+
+    enum CodingKeys: String, CodingKey {
+        case changes
+        case callId = "call_id"
+    }
+
+    public init(callId: String, changes: [String: FileChange]) {
+        self.callId = callId
+        self.changes = changes
     }
 }
 
@@ -3633,5 +3939,54 @@ public struct CollabResumeEndEvent: Codable, Equatable, Sendable {
         self.receiverAgentNickname = receiverAgentNickname
         self.receiverAgentRole = receiverAgentRole; self.status = status
     }
+}
+
+// MARK: - Product / SkillScope
+
+public enum Product: String, Codable, Equatable, Hashable, Sendable {
+    case chatgpt
+    case codex
+    case atlas
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw.lowercased() {
+        case "chatgpt": self = .chatgpt
+        case "codex": self = .codex
+        case "atlas": self = .atlas
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Unknown Product: \(raw)")
+        }
+    }
+
+    public func toAppPlatform() -> String {
+        switch self {
+        case .chatgpt: "chat"
+        case .codex: "codex"
+        case .atlas: "atlas"
+        }
+    }
+
+    public static func fromSessionSourceName(_ value: String) -> Product? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "chatgpt": .chatgpt
+        case "codex": .codex
+        case "atlas": .atlas
+        default: nil
+        }
+    }
+
+    public func matchesProductRestriction(_ products: [Product]) -> Bool {
+        products.isEmpty || products.contains(self)
+    }
+}
+
+public enum SkillScope: String, Codable, Equatable, Sendable {
+    case user
+    case repo
+    case system
+    case admin
 }
 

@@ -74,4 +74,12 @@ final class ExecutedToolCalls: @unchecked Sendable {
         defer { lock.unlock() }
         return retained
     }
+
+    func observeNonDispatchedCall(_ item: ResponseItem) {
+        _ = item
+    }
+
+    func attachToPrompt(_ input: inout [ResponseItem]) {
+        _ = input
+    }
 }

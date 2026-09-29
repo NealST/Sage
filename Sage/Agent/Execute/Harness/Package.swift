@@ -25,6 +25,12 @@
 //     → agent-roles/src/<file>.swift          module CodexAgentRoles
 //   codex-rs/hooks/src/<file>.rs
 //     → hooks/src/<file>.swift                module CodexHooks
+//   codex-rs/skills/src/<file>.rs
+//     → skills/src/<file>.swift               module CodexSkills
+//   codex-rs/otel/src/<file>.rs
+//     → otel/src/<file>.swift                 module CodexOtel
+//   codex-rs/terminal-detection/src/<file>.rs
+//     → terminal-detection/src/<file>.swift   module CodexTerminalDetection
 //
 // `tools/handlers`, `tools/*.swift`, `session`, and `tasks` stay in the Sage
 // app module. They close over Sage session types (PathGuard, AgentTool,
@@ -60,6 +66,9 @@ let package = Package(
         .library(name: "CodexContextFragments", targets: ["CodexContextFragments"]),
         .library(name: "CodexAgentRoles", targets: ["CodexAgentRoles"]),
         .library(name: "CodexHooks", targets: ["CodexHooks"]),
+        .library(name: "CodexSkills", targets: ["CodexSkills"]),
+        .library(name: "CodexOtel", targets: ["CodexOtel"]),
+        .library(name: "CodexTerminalDetection", targets: ["CodexTerminalDetection"]),
         .library(name: "ToolsRuntimes", targets: ["ToolsRuntimes"]),
     ],
     dependencies: [
@@ -222,11 +231,32 @@ let package = Package(
             path: "agent-roles/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // codex-rs/hooks — mcp/types/lib first; engine/events stay unstarted.
+        // codex-rs/hooks — types/events/engine; command spawn still throws.
         .target(
             name: "CodexHooks",
             dependencies: ["CodexProtocol", "CodexUtils"],
             path: "hooks/src",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        // codex-rs/skills — Phase 8 model/parser/mentions/selection.
+        // install_system_skills throws until sample assets are SPM resources.
+        .target(
+            name: "CodexSkills",
+            dependencies: ["CodexProtocol", "CodexUtils", "CodexShellCommand"],
+            path: "skills/src",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        // codex-rs/otel — Phase 10 minimal metrics (in-memory, no OTLP SDK).
+        .target(
+            name: "CodexOtel",
+            dependencies: ["CodexProtocol", "CodexUtils"],
+            path: "otel/src",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        // codex-rs/terminal-detection — Phase 10 environment-only probe.
+        .target(
+            name: "CodexTerminalDetection",
+            path: "terminal-detection/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // Phase 3 core files. They sit at the Harness root so paths stay 1:1
@@ -252,7 +282,11 @@ let package = Package(
                 "CodexState",
                 "CodexThreadStore",
                 "CodexContextFragments",
+                "CodexAgentRoles",
                 "CodexHooks",
+                "CodexSkills",
+                "CodexOtel",
+                "CodexTerminalDetection",
             ],
             path: ".",
             sources: [
@@ -325,6 +359,20 @@ let package = Package(
                 "elicitation.swift",
                 "hook_mcp_executor.swift",
                 "skills.swift",
+                "core_agents_md.swift",
+                "agents_md_manager.swift",
+                "agent",
+                "agent_communication.swift",
+                "agent_message_board.swift",
+                "apps",
+                "connectors.swift",
+                "cyber_access_program.swift",
+                "plugins",
+                "session_multi_agents.swift",
+                "environment_selection.swift",
+                "otel_init.swift",
+                "core_test_support.swift",
+                "lib.swift",
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
@@ -348,10 +396,37 @@ let package = Package(
                 "CodexCore",
                 "CodexHooks",
                 "CodexProtocol",
+                "CodexSkills",
                 "CodexUtils",
                 "FileSystem",
             ],
             path: "Tests/Phase8GuardianSkillsTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "Phase9AgentTests",
+            dependencies: [
+                "CodexAgentRoles",
+                "CodexAPI",
+                "CodexCore",
+                "CodexHistory",
+                "CodexProtocol",
+                "CodexSkills",
+                "CodexUtils",
+            ],
+            path: "Tests/Phase9AgentTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "Phase10OtelTests",
+            dependencies: [
+                "CodexCore",
+                "CodexOtel",
+                "CodexProtocol",
+                "CodexTerminalDetection",
+                "CodexUtils",
+            ],
+            path: "Tests/Phase10OtelTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

@@ -172,8 +172,6 @@ private func isTriggerTurnBoundary(_ item: ResponseItem) -> Bool {
     false
 }
 
-/// `parse_turn_item` is identity today; keep a hook for when it returns `TurnItem`.
 private func parseTurnItemAsTurn(_ item: ResponseItem) -> TurnItem? {
-    _ = parseTurnItem(item)
-    return nil
+    parseTurnItem(item)
 }

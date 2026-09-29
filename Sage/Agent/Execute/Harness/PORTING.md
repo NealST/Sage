@@ -10,16 +10,16 @@
 
 | Phase | 文件数 | ✅ | 🟡 | 🟥 | ⬜ | ⛔/💤 |
 |---|---:|---:|---:|---:|---:|---:|
-| Phase 1 | 96 | 65 | 26 | 0 | 1 | 0 |
+| Phase 1 | 96 | 66 | 26 | 0 | 0 | 0 |
 | Phase 2 | 26 | 10 | 15 | 0 | 0 | 0 |
 | Phase 3 | 86 | 19 | 53 | 0 | 0 | 0 |
 | Phase 4 | 114 | 11 | 62 | 0 | 0 | 0 |
 | Phase 5 | 156 | 26 | 130 | 0 | 0 | 0 |
 | Phase 6 | 51 | 4 | 34 | 0 | 0 | 13 |
 | Phase 7 | 126 | 6 | 120 | 0 | 0 | 0 |
-| Phase 8 | 71 | 14 | 21 | 0 | 36 | 0 |
-| Phase 9 | 75 | 0 | 1 | 0 | 74 | 0 |
-| Phase 10 | 43 | 0 | 0 | 0 | 43 | 0 |
+| Phase 8 | 71 | 22 | 48 | 0 | 0 | 1 |
+| Phase 9 | 75 | 10 | 65 | 0 | 0 | 0 |
+| Phase 10 | 43 | 7 | 24 | 0 | 0 | 12 |
 
 ## Phase 1
 
@@ -71,7 +71,7 @@
 | `protocol/src/permissions/windows_glob.rs` | 44 | `protocol/src/permissions/windows_glob.swift` | ✅ faithful |  |
 | `protocol/src/permissions.rs` | 4,591 | `protocol/src/permissions.swift` | 🟡 adapted |  |
 | `protocol/src/plan_tool.rs` | 29 | `protocol/src/plan_tool.swift` | ✅ faithful |  |
-| `protocol/src/protocol.rs` | 6,451 | `protocol/src/protocol.swift` | 🟡 partial |  |
+| `protocol/src/protocol.rs` | 6,451 | `protocol/src/protocol.swift` | 🟡 partial | SafetyBuffering / section-break / PatchApplyUpdated |
 | `protocol/src/realtime.rs` | 59 | `protocol/src/realtime.swift` | ✅ faithful |  |
 | `protocol/src/request_permissions.rs` | 99 | `protocol/src/request_permissions.swift` | ✅ faithful |  |
 | `protocol/src/request_user_input.rs` | 103 | `protocol/src/request_user_input.swift` | ✅ faithful |  |
@@ -89,7 +89,7 @@
 | `protocol/src/user_input.rs` | 126 | `protocol/src/user_input.swift` | ✅ faithful |  |
 | `utils/absolute-path/src/absolutize.rs` | 171 | `utils/absolute-path/src/absolutize.swift` | ✅ faithful |  |
 | `utils/absolute-path/src/lib.rs` | 781 | `utils/absolute-path/src/lib.swift` | ✅ faithful |  |
-| `utils/absolute-path/src/system_aliases.rs` | 35 | - | ⬜ 未开始 |  |
+| `utils/absolute-path/src/system_aliases.rs` | 35 | `utils/absolute-path/src/system_aliases.swift` | ✅ faithful |  |
 | `utils/audio/src/lib.rs` | 267 | `utils/audio/src/audio_lib.swift` | 🟡 adapted |  |
 | `utils/cache/src/lib.rs` | 218 | `utils/cache/src/cache_lib.swift` | 🟡 adapted |  |
 | `utils/git-discovery/src/lib.rs` | 120 | `utils/git-discovery/src/git_discovery_lib.swift` | 🟡 adapted |  |
@@ -260,14 +260,14 @@
 | `core/src/tools/executed_tool_calls/request_metadata.rs` | 456 | `tools/executed_tool_calls/request_metadata.swift` | 🟡 adapted |  |
 | `core/src/tools/executed_tool_calls/seen_ids.rs` | 133 | `tools/executed_tool_calls/seen_ids.swift` | 🟡 adapted |  |
 | `core/src/tools/executed_tool_calls.rs` | 696 | `tools/executed_tool_calls.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/apply_patch.rs` | 626 | `tools/handlers/apply_patch.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/apply_patch.rs` | 626 | `tools/handlers/apply_patch.swift` | 🟡 adapted | argument-diff consumer in apply_patch_diff.swift |
 | `core/src/tools/handlers/apply_patch_spec.rs` | 32 | `tools/handlers/apply_patch_spec.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/current_time.rs` | 130 | `tools/handlers/current_time.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/dynamic.rs` | 251 | `tools/handlers/dynamic.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/extension_tools.rs` | 640 | `tools/handlers/extension_tools.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining.rs` | 94 | `tools/handlers/get_context_remaining.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining_spec.rs` | 36 | `tools/handlers/get_context_remaining_spec.swift` | ✅ faithful |  |
-| `core/src/tools/handlers/mcp.rs` | 902 | `tools/handlers/mcp.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp.rs` | 902 | `tools/handlers/mcp.swift` | 🟡 adapted | per-tool handler + invokeMcp; transport waits |
 | `core/src/tools/handlers/mcp_resource/list_mcp_resource_templates.rs` | 111 | `tools/handlers/mcp_resource/list_mcp_resource_templates.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/mcp_resource/list_mcp_resources.rs` | 109 | `tools/handlers/mcp_resource/list_mcp_resources.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/mcp_resource/read_mcp_resource.rs` | 108 | `tools/handlers/mcp_resource/read_mcp_resource.swift` | 🟡 adapted |  |
@@ -302,9 +302,9 @@
 | `core/src/tools/multi_agent_tool.rs` | 133 | `tools/multi_agent_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
 | `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted |  |
-| `core/src/tools/parallel.rs` | 813 | `tools/parallel.swift` | 🟡 adapted |  |
-| `core/src/tools/registry.rs` | 865 | `tools/registry.swift` | 🟡 adapted |  |
-| `core/src/tools/router.rs` | 389 | `tools/router.swift` | 🟡 adapted |  |
+| `core/src/tools/parallel.rs` | 813 | `tools/parallel.swift` | 🟡 adapted | waves + ToolCallRuntime dispatch |
+| `core/src/tools/registry.rs` | 865 | `tools/registry.swift` | 🟡 adapted | ToolArgumentDiffConsumer |
+| `core/src/tools/router.rs` | 389 | `tools/router.swift` | 🟡 adapted | buildToolCall + registry dispatch |
 | `core/src/tools/runtimes/apply_patch.rs` | 242 | `tools/runtimes/apply_patch.swift` | 🟡 partial |  |
 | `core/src/tools/runtimes/mod.rs` | 918 | `tools/runtimes/mod.swift` | 🟡 adapted |  |
 | `core/src/tools/runtimes/unified_exec/launch.rs` | 75 | `tools/runtimes/unified_exec/launch.swift` | 🟡 adapted |  |
@@ -367,12 +367,12 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/compact.rs` | 840 | `compact.swift` | 🟡 adapted |  |
-| `core/src/compact_model_fallback.rs` | 59 | `compact_model_fallback.swift` | 🟡 adapted |  |
-| `core/src/compact_remote_history.rs` | 190 | `compact_remote_history.swift` | 🟡 adapted |  |
-| `core/src/compact_remote_v2.rs` | 1,272 | `compact_remote_v2.swift` | 🟡 adapted |  |
+| `core/src/compact.rs` | 840 | `compact.swift` | 🟡 adapted | buildCompactedHistory + collectUserMessages; runAutoCompact uses V2 when remote |
+| `core/src/compact_model_fallback.rs` | 59 | `compact_model_fallback.swift` | 🟡 adapted | shouldRetryWithCurrentModel + recordModelFallback |
+| `core/src/compact_remote_history.rs` | 190 | `compact_remote_history.swift` | 🟡 adapted | HistoryItemGroup + trim function-call outputs |
+| `core/src/compact_remote_v2.rs` | 1,272 | `compact_remote_v2.swift` | 🟡 adapted | retain/truncate + image budget + fallback-step retry |
 | `core/src/compact_remote_v2_attempt.rs` | 133 | `compact_remote_v2_attempt.swift` | 🟡 adapted |  |
-| `core/src/compact_remote_v2_images.rs` | 100 | `compact_remote_v2_images.swift` | 🟡 adapted |  |
+| `core/src/compact_remote_v2_images.rs` | 100 | `compact_remote_v2_images.swift` | 🟡 adapted | atomic image+label truncate + data-URL original patches |
 | `core/src/compact_token_budget.rs` | 84 | `compact_token_budget.swift` | 🟡 adapted |  |
 | `core/src/config/auth_keyring.rs` | 122 | `config/auth_keyring.swift` | 🟡 adapted |  |
 | `core/src/config/edit/bedrock.rs` | 37 | `config/edit/bedrock.swift` | 🟡 adapted |  |
@@ -456,12 +456,12 @@
 | `core/src/context/world_state/plugins_instructions.rs` | 55 | `context/world_state/plugins_instructions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/realtime.rs` | 96 | `context/world_state/realtime.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/tools.rs` | 233 | `context/world_state/tools.swift` | 🟡 adapted |  |
-| `core/src/context_manager/history.rs` | 1,256 | `context_manager/history.swift` | 🟡 adapted |  |
+| `core/src/context_manager/history.rs` | 1,256 | `context_manager/history.swift` | 🟡 adapted | model-visible-byte token estimate; guardian SHA waits |
 | `core/src/context_manager/history_user_authorization.rs` | 204 | `context_manager/history_user_authorization.swift` | 🟡 adapted |  |
 | `core/src/context_manager/mod.rs` | 9 | `context_manager/context_manager_mod.swift` | ✅ faithful |  |
 | `core/src/context_manager/normalize.rs` | 420 | `context_manager/normalize.swift` | 🟡 adapted |  |
 | `core/src/context_manager/updates.rs` | 60 | `context_manager/updates.swift` | 🟡 adapted |  |
-| `core/src/event_mapping.rs` | 261 | `event_mapping.swift` | 🟡 adapted |  |
+| `core/src/event_mapping.rs` | 261 | `event_mapping.swift` | 🟡 adapted | `parseTurnItem` maps assistant/reasoning/webSearch/imageGen |
 | `core/src/mcp.rs` | 421 | `mcp.swift` | 🟡 adapted |  |
 | `core/src/mcp_openai_file.rs` | 698 | `mcp_openai_file.swift` | 🟡 adapted |  |
 | `core/src/mcp_skill_dependencies.rs` | 535 | `mcp_skill_dependencies.swift` | 🟡 adapted |  |
@@ -469,9 +469,9 @@
 | `core/src/mcp_tool_call/account.rs` | 39 | `mcp_tool_call/account.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call/telemetry.rs` | 166 | `mcp_tool_call/telemetry.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call.rs` | 2,510 | `mcp_tool_call.swift` | 🟡 adapted |  |
-| `core/src/mcp_tool_exposure.rs` | 192 | `mcp_tool_exposure.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_exposure.rs` | 192 | `mcp_tool_exposure.swift` | 🟡 adapted | exposedToolNames cache; live McpBinding waits |
 | `core/src/session/code_mode_warning.rs` | 26 | `session/code_mode_warning.swift` | 🟡 adapted |  |
-| `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted |  |
+| `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted | token-status math faithful; TokenBudgetConfig buffer is 0 |
 | `core/src/session/daemon_recovery.rs` | 46 | `session/daemon_recovery.swift` | 🟡 adapted |  |
 | `core/src/session/environment.rs` | 307 | `session/environment.swift` | 🟡 adapted |  |
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
@@ -479,7 +479,7 @@
 | `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
 | `core/src/session/handlers.rs` | 716 | `session/handlers.swift` | 🟡 adapted |  |
 | `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
-| `core/src/session/input_queue.rs` | 681 | `session/input_queue.swift` | 🟡 adapted |  |
+| `core/src/session/input_queue.rs` | 681 | `session/input_queue.swift` | 🟡 adapted | drain/hasPending/acceptMailbox; mailbox gauges omitted |
 | `core/src/session/mcp.rs` | 1,219 | `session/session_mcp.swift` | 🟡 adapted |  |
 | `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted |  |
 | `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted |  |
@@ -491,29 +491,29 @@
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_budget.rs` | 40 | `session/rollout_budget.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_reconstruction.rs` | 563 | `session/rollout_reconstruction.swift` | 🟡 adapted |  |
-| `core/src/session/session.rs` | 1,928 | `session/session.swift` | 🟡 adapted |  |
+| `core/src/session/session.rs` | 1,928 | `session/session.swift` | 🟡 adapted | step capture + history/token helpers; mutex event loop waits |
 | `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
 | `core/src/session/startup_prewarm.rs` | 413 | `session/startup_prewarm.swift` | 🟡 adapted |  |
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
-| `core/src/session/step_context.rs` | 61 | `session/step_context.swift` | 🟡 adapted |  |
-| `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
+| `core/src/session/step_context.rs` | 61 | `session/step_context.swift` | 🟡 adapted | holds turn + environments + optional ToolRouter |
+| `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted | carries TurnModelSnapshot for runTurn |
 | `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted |  |
 | `core/src/session/thread_settings.rs` | 131 | `session/thread_settings.swift` | 🟡 adapted |  |
-| `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
+| `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted | maybeRecordCurrentTimeReminder records fragment |
 | `core/src/session/token_budget.rs` | 249 | `session/token_budget.swift` | 🟡 adapted |  |
-| `core/src/session/turn.rs` | 3,113 | `session/turn.swift` | 🟡 partial |  |
-| `core/src/session/turn_context.rs` | 1,388 | `session/turn_context.swift` | 🟡 adapted |  |
+| `core/src/session/turn.rs` | 3,113 | `session/turn.swift` | 🟡 partial | MCP handler register + catalog schema + image-budget compact |
+| `core/src/session/turn_context.rs` | 1,388 | `session/turn_context.swift` | 🟡 adapted | model snapshot + sessionSource/config; shell futures wait |
 | `core/src/session/turn_input.rs` | 780 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
 | `core/src/session/world_state.rs` | 335 | `session/world_state.swift` | 🟡 adapted |  |
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
 | `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
-| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted |  |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | turn input contributors + MCP handler cache names |
 | `core/src/state/session.rs` | 478 | `state/state_session.swift` | 🟡 adapted |  |
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
-| `core/src/stream_events_utils.rs` | 602 | `stream_events_utils.swift` | 🟡 adapted |  |
+| `core/src/stream_events_utils.rs` | 602 | `stream_events_utils.swift` | 🟡 adapted | assistant extract + responseInputToResponseItem |
 | `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 partial |  |
 | `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
 | `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted |  |
@@ -715,19 +715,19 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/agents_md.rs` | 562 | - | ⬜ 未开始 |  |
-| `core/src/agents_md_manager.rs` | 182 | - | ⬜ 未开始 |  |
+| `core/src/agents_md.rs` | 562 | `core_agents_md.swift` | 🟡 adapted | R4a vs world_state/agents_md.swift; Config/TurnEnvironment throws |
+| `core/src/agents_md_manager.rs` | 182 | `agents_md_manager.swift` | 🟡 adapted | refresh throws until Config; applyLoaded + size check faithful |
 | `core/src/elicitation.rs` | 100 | `elicitation.swift` | ✅ faithful | watch → AsyncStream + OSAllocatedUnfairLock |
 | `core/src/guardian/approval_request.rs` | 570 | `guardian/approval_request.swift` | 🟡 partial |  |
 | `core/src/guardian/coverage.rs` | 37 | `guardian/coverage.swift` | ✅ faithful |  |
 | `core/src/guardian/decision.rs` | 133 | `guardian/decision.swift` | 🟡 partial |  |
 | `core/src/guardian/feedback.rs` | 44 | `guardian/feedback.swift` | ✅ faithful |  |
-| `core/src/guardian/input_budget.rs` | 198 | `guardian/input_budget.swift` | 🟡 partial |  |
+| `core/src/guardian/input_budget.rs` | 198 | `guardian/input_budget.swift` | 🟡 adapted | Session check_pending / finalize; ComposedContext evidence wait |
 | `core/src/guardian/mod.rs` | 210 | `guardian/mod.swift` | 🟡 adapted | constants + slim GuardianReviewContext; From-turn/step wait on Session |
 | `core/src/guardian/permissions.rs` | 109 | `guardian/permissions.swift` | 🟡 adapted | for_tool / for_environment throw until TurnEnvironment |
 | `core/src/guardian/prompt.rs` | 315 | `guardian/prompt.swift` | 🟡 partial |  |
-| `core/src/guardian/request_budget.rs` | 90 | `guardian/request_budget.swift` | 🟡 partial |  |
-| `core/src/guardian/review.rs` | 291 | `guardian/review.swift` | 🟡 partial |  |
+| `core/src/guardian/request_budget.rs` | 90 | `guardian/request_budget.swift` | 🟡 adapted | check_prompt on Prompt items + instructions; ResponsesApiRequest wait |
+| `core/src/guardian/review.rs` | 291 | `guardian/review.swift` | 🟡 partial | `isBasicSessionSource` faithful; review session still thin |
 | `core/src/guardian/review_request.rs` | 266 | `guardian/review_request.swift` | 🟡 partial |  |
 | `core/src/guardian/review_session.rs` | 944 | `guardian/review_session.swift` | 🟡 partial |  |
 | `core/src/guardian/review_session_context.rs` | 73 | `guardian/review_session_context.swift` | 🟡 partial |  |
@@ -738,7 +738,7 @@
 | `core/src/hook_mcp_executor.rs` | 57 | `hook_mcp_executor.swift` | 🟡 adapted | CoreHookMcpExecutor throws until McpRuntime |
 | `core/src/hook_runtime.rs` | 1,353 | `hook_runtime.swift` | 🟡 partial |  |
 | `core/src/mention_syntax.rs` | 2 | `mention_syntax.swift` | ✅ faithful |  |
-| `core/src/skills.rs` | 210 | `skills.swift` | 🟡 adapted | ImplicitSkillInvocations; emit/load throw until Session |
+| `core/src/skills.rs` | 210 | `skills.swift` | 🟡 adapted | SessionSkillsLookup + skill/plugin injection helpers; emit still throws |
 | `agent-roles/src/agent_role_config.rs` | 209 | `agent-roles/src/agent_role_config.swift` | 🟡 adapted | table TOML parser; ConfigToml leftover as TomlValue |
 | `agent-roles/src/discovery.rs` | 40 | `agent-roles/src/discovery.swift` | ✅ faithful |  |
 | `agent-roles/src/lib.rs` | 8 | `agent-roles/src/lib.swift` | ✅ faithful |  |
@@ -749,171 +749,171 @@
 | `context-fragments/src/fragment.rs` | 135 | `context-fragments/src/fragment.swift` | ✅ faithful |  |
 | `context-fragments/src/lib.rs` | 16 | `context-fragments/src/lib.swift` | ✅ faithful |  |
 | `context-fragments/src/recap_prompt.rs` | 67 | `context-fragments/src/recap_prompt.swift` | ✅ faithful |  |
-| `hooks/src/bin/write_hooks_schema_fixtures.rs` | 9 | - | ⬜ 未开始 |  |
-| `hooks/src/config_rules.rs` | 259 | - | ⬜ 未开始 |  |
-| `hooks/src/declarations.rs` | 102 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/command_runner.rs` | 467 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/discovery.rs` | 1,741 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/dispatcher.rs` | 656 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/mcp_runner.rs` | 166 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/mod.rs` | 492 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/output_parser.rs` | 617 | - | ⬜ 未开始 |  |
-| `hooks/src/engine/schema_loader.rs` | 168 | - | ⬜ 未开始 |  |
-| `hooks/src/events/common.rs` | 306 | - | ⬜ 未开始 |  |
-| `hooks/src/events/compact.rs` | 554 | - | ⬜ 未开始 |  |
-| `hooks/src/events/interrupt.rs` | 183 | - | ⬜ 未开始 |  |
-| `hooks/src/events/mod.rs` | 10 | - | ⬜ 未开始 |  |
-| `hooks/src/events/permission_request.rs` | 337 | - | ⬜ 未开始 |  |
-| `hooks/src/events/post_tool_use.rs` | 637 | - | ⬜ 未开始 |  |
-| `hooks/src/events/pre_tool_use.rs` | 820 | - | ⬜ 未开始 |  |
-| `hooks/src/events/session_end.rs` | 139 | - | ⬜ 未开始 |  |
-| `hooks/src/events/session_start.rs` | 573 | - | ⬜ 未开始 |  |
-| `hooks/src/events/stop.rs` | 723 | - | ⬜ 未开始 |  |
-| `hooks/src/events/user_prompt_submit.rs` | 492 | - | ⬜ 未开始 |  |
-| `hooks/src/legacy_notify.rs` | 183 | - | ⬜ 未开始 |  |
-| `hooks/src/lib.rs` | 123 | `hooks/src/lib.swift` | 🟡 adapted | event-name tables + hook_key; event types still unstarted |
+| `hooks/src/bin/write_hooks_schema_fixtures.rs` | 9 | - | ⛔ excluded | CLI fixture writer; Sage does not generate schema fixtures |
+| `hooks/src/config_rules.rs` | 259 | `hooks/src/config_rules.swift` | 🟡 adapted | HookStateToml faithful; stack merge waits on ConfigLayerStack |
+| `hooks/src/declarations.rs` | 102 | `hooks/src/declarations.swift` | 🟡 adapted | PluginHookSource is a local stand-in until codex_plugin |
+| `hooks/src/engine/command_runner.rs` | 467 | `hooks/src/engine/command_runner.swift` | 🟡 adapted | runtime type kept; process spawn throws |
+| `hooks/src/engine/discovery.rs` | 1,741 | `hooks/src/engine/discovery.swift` | 🟡 adapted | result type kept; discovery throws until ConfigLayerStack |
+| `hooks/src/engine/dispatcher.rs` | 656 | `hooks/src/engine/dispatcher.swift` | 🟡 adapted | select_handlers + summaries faithful; execute throws |
+| `hooks/src/engine/mcp_runner.rs` | 166 | `hooks/src/engine/mcp_runner.swift` | 🟡 adapted | delegates to HookMcpExecutor |
+| `hooks/src/engine/mod.rs` | 492 | `hooks/src/engine/engine_mod.swift` | 🟡 adapted | R4a vs events/mod; handler types faithful; new throws |
+| `hooks/src/engine/output_parser.rs` | 617 | `hooks/src/engine/output_parser.swift` | 🟡 adapted | JSON detect + universal output; per-event parsers later |
+| `hooks/src/engine/schema_loader.rs` | 168 | `hooks/src/engine/schema_loader.swift` | 🟡 adapted | throws until generated fixtures are SPM resources |
+| `hooks/src/events/common.rs` | 306 | `hooks/src/events/common.swift` | ✅ faithful | NSRegularExpression for matcher regex |
+| `hooks/src/events/compact.rs` | 554 | `hooks/src/events/compact.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/interrupt.rs` | 183 | `hooks/src/events/interrupt.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/mod.rs` | 10 | `hooks/src/events/events_mod.swift` | ✅ faithful | R4a vs engine/mod |
+| `hooks/src/events/permission_request.rs` | 337 | `hooks/src/events/permission_request.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/post_tool_use.rs` | 637 | `hooks/src/events/post_tool_use.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/pre_tool_use.rs` | 820 | `hooks/src/events/pre_tool_use.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/session_end.rs` | 139 | `hooks/src/events/session_end.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/session_start.rs` | 573 | `hooks/src/events/session_start.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/stop.rs` | 723 | `hooks/src/events/stop.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/events/user_prompt_submit.rs` | 492 | `hooks/src/events/user_prompt_submit.swift` | 🟡 adapted | request/outcome + preview; run throws |
+| `hooks/src/legacy_notify.rs` | 183 | `hooks/src/legacy_notify.swift` | 🟡 adapted | JSON payload faithful; process spawn not wired |
+| `hooks/src/lib.rs` | 123 | `hooks/src/lib.swift` | 🟡 adapted | event-name tables + hook_key on protocol HookEventName |
 | `hooks/src/mcp.rs` | 24 | `hooks/src/mcp.swift` | ✅ faithful |  |
-| `hooks/src/output_spill.rs` | 135 | - | ⬜ 未开始 |  |
-| `hooks/src/registry.rs` | 336 | - | ⬜ 未开始 |  |
-| `hooks/src/schema.rs` | 1,254 | - | ⬜ 未开始 |  |
+| `hooks/src/output_spill.rs` | 135 | `hooks/src/output_spill.swift` | 🟡 adapted | token spill via formattedTruncateText byte budget |
+| `hooks/src/registry.rs` | 336 | `hooks/src/registry.swift` | 🟡 adapted | after-agent dispatch faithful; new/list throw |
+| `hooks/src/schema.rs` | 1,254 | `hooks/src/schema.swift` | 🟡 adapted | wire types; write_schema_fixtures throws |
 | `hooks/src/types.rs` | 152 | `hooks/src/types.swift` | ✅ faithful | HookEvent → HookPayloadEvent to avoid Sage HookEvent |
-| `skills/src/interface.rs` | 201 | - | ⬜ 未开始 |  |
-| `skills/src/invocation.rs` | 160 | - | ⬜ 未开始 |  |
-| `skills/src/lib.rs` | 214 | - | ⬜ 未开始 |  |
-| `skills/src/loading.rs` | 119 | - | ⬜ 未开始 |  |
-| `skills/src/mentions.rs` | 232 | - | ⬜ 未开始 |  |
-| `skills/src/model.rs` | 112 | - | ⬜ 未开始 |  |
-| `skills/src/name_counts.rs` | 25 | - | ⬜ 未开始 |  |
-| `skills/src/parser.rs` | 225 | - | ⬜ 未开始 |  |
-| `skills/src/selection.rs` | 205 | - | ⬜ 未开始 |  |
+| `skills/src/interface.rs` | 201 | `skills/src/interface.swift` | ✅ faithful |  |
+| `skills/src/invocation.rs` | 160 | `skills/src/invocation.swift` | 🟡 adapted | posixShlexSplit; PowerShell unused on macOS |
+| `skills/src/lib.rs` | 214 | `skills/src/lib.swift` | 🟡 adapted | install_system_skills throws until include_dir assets |
+| `skills/src/loading.rs` | 119 | `skills/src/loading.swift` | ✅ faithful |  |
+| `skills/src/mentions.rs` | 232 | `skills/src/mentions.swift` | ✅ faithful | mention slices are owned String values |
+| `skills/src/model.rs` | 112 | `skills/src/model.swift` | ✅ faithful |  |
+| `skills/src/name_counts.rs` | 25 | `skills/src/name_counts.swift` | ✅ faithful |  |
+| `skills/src/parser.rs` | 225 | `skills/src/parser.swift` | 🟡 adapted | line-oriented YAML + same scalar-repair pass |
+| `skills/src/selection.rs` | 205 | `skills/src/selection.swift` | ✅ faithful |  |
 
 ## Phase 9
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/agent/agent_resolver.rs` | 30 | - | ⬜ 未开始 |  |
-| `core/src/agent/api.rs` | 234 | - | ⬜ 未开始 |  |
-| `core/src/agent/child_config.rs` | 365 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/api.rs` | 307 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/budget.rs` | 39 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/completion.rs` | 131 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/delivery.rs` | 43 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/execution.rs` | 90 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/inspection.rs` | 32 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/interrupt.rs` | 52 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/legacy.rs` | 124 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/residency.rs` | 276 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/resume.rs` | 37 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/runtime.rs` | 130 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/runtime_context.rs` | 137 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/sender_context.rs` | 84 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/service_tier.rs` | 21 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/spawn.rs` | 1,433 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/spawn_guard.rs` | 75 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/spawn_telemetry.rs` | 65 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/target.rs` | 61 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/user_authorization.rs` | 355 | - | ⬜ 未开始 |  |
-| `core/src/agent/control/watch.rs` | 65 | - | ⬜ 未开始 |  |
-| `core/src/agent/control.rs` | 699 | - | ⬜ 未开始 |  |
-| `core/src/agent/mod.rs` | 14 | - | ⬜ 未开始 |  |
-| `core/src/agent/registry.rs` | 399 | - | ⬜ 未开始 |  |
-| `core/src/agent/role.rs` | 418 | - | ⬜ 未开始 |  |
-| `core/src/agent/status.rs` | 31 | - | ⬜ 未开始 |  |
-| `core/src/agent/types.rs` | 88 | - | ⬜ 未开始 |  |
-| `core/src/agent_communication.rs` | 78 | - | ⬜ 未开始 |  |
-| `core/src/agent_message_board.rs` | 200 | - | ⬜ 未开始 |  |
-| `core/src/apps/mod.rs` | 2 | - | ⬜ 未开始 |  |
-| `core/src/apps/render.rs` | 66 | - | ⬜ 未开始 |  |
-| `core/src/connectors.rs` | 555 | - | ⬜ 未开始 |  |
-| `core/src/cyber_access_program.rs` | 12 | - | ⬜ 未开始 |  |
-| `core/src/environment_selection.rs` | 2,311 | - | ⬜ 未开始 |  |
-| `core/src/plugins/discoverable.rs` | 59 | - | ⬜ 未开始 |  |
-| `core/src/plugins/injection.rs` | 59 | - | ⬜ 未开始 |  |
-| `core/src/plugins/mentions.rs` | 121 | - | ⬜ 未开始 |  |
-| `core/src/plugins/metrics.rs` | 62 | - | ⬜ 未开始 |  |
-| `core/src/plugins/mod.rs` | 46 | - | ⬜ 未开始 |  |
-| `core/src/plugins/render.rs` | 92 | - | ⬜ 未开始 |  |
-| `core/src/plugins/test_support.rs` | 109 | - | ⬜ 未开始 |  |
-| `core/src/session/multi_agents.rs` | 121 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/delegate.rs` | 497 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/execute_handler.rs` | 259 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/execute_spec.rs` | 105 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/mod.rs` | 567 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/output.rs` | 76 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/response_adapter.rs` | 51 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/telemetry.rs` | 158 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/wait_handler.rs` | 230 | - | ⬜ 未开始 |  |
-| `core/src/tools/code_mode/wait_spec.rs` | 126 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/list_available_plugins_to_install.rs` | 181 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/list_available_plugins_to_install_spec.rs` | 45 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents/close_agent.rs` | 137 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents/resume_agent.rs` | 171 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents/send_input.rs` | 173 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents/spawn.rs` | 249 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents/wait.rs` | 341 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents.rs` | 99 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_common.rs` | 190 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_spec.rs` | 891 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/analytics.rs` | 62 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/followup_task.rs` | 57 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs` | 110 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/list_agents.rs` | 110 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/message_tool.rs` | 99 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/send_message.rs` | 57 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 338 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2/wait.rs` | 205 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/multi_agents_v2.rs` | 66 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_plugin_install.rs` | 551 | - | ⬜ 未开始 |  |
-| `core/src/tools/handlers/request_plugin_install_spec.rs` | 189 | - | ⬜ 未开始 |  |
+| `core/src/agent/agent_resolver.rs` | 30 | `agent/agent_resolver.swift` | 🟡 adapted | Session / TurnContext |
+| `core/src/agent/api.rs` | 234 | `agent/agent_api.swift` | 🟡 adapted | Config omitted from request types |
+| `core/src/agent/child_config.rs` | 365 | `agent/child_config.swift` | 🟡 adapted | override resolution faithful; prepare/build wait on Session |
+| `core/src/agent/control/api.rs` | 307 | `agent/control/control_api.swift` | 🟡 adapted | impl on LocalAgentControl |
+| `core/src/agent/control/budget.rs` | 39 | `agent/control/budget.swift` | ✅ faithful |  |
+| `core/src/agent/control/completion.rs` | 131 | `agent/control/completion.swift` | 🟡 adapted | parent mailbox enqueue live; activity emit waits on ThreadManager |
+| `core/src/agent/control/delivery.rs` | 43 | `agent/control/delivery.swift` | ✅ faithful |  |
+| `core/src/agent/control/execution.rs` | 90 | `agent/control/execution.swift` | ✅ faithful |  |
+| `core/src/agent/control/inspection.rs` | 32 | `agent/control/inspection.swift` | 🟡 adapted | mailbox status is `.loaded`; ThreadManager snapshots still pending |
+| `core/src/agent/control/interrupt.rs` | 52 | `agent/control/interrupt.swift` | 🟡 adapted | mailbox `.interrupted`; ThreadManager stop still pending |
+| `core/src/agent/control/legacy.rs` | 124 | `agent/control/legacy.swift` | 🟡 adapted | registry close/release; persisted edges wait on ThreadManager |
+| `core/src/agent/control/residency.rs` | 276 | `agent/control/residency.swift` | 🟡 adapted | slot/LRU faithful; eviction waits on Session |
+| `core/src/agent/control/resume.rs` | 37 | `agent/control/resume.swift` | 🟡 adapted | registered agents rematerialize; rollout restore waits |
+| `core/src/agent/control/runtime.rs` | 130 | `agent/control/runtime.swift` | 🟡 adapted | LocalAgentRuntime lives in control.swift |
+| `core/src/agent/control/runtime_context.rs` | 137 | `agent/control/runtime_context.swift` | 🟡 adapted | descendant listing waits on ThreadManager |
+| `core/src/agent/control/sender_context.rs` | 84 | `agent/control/sender_context.swift` | 🟡 adapted | retained history waits on ThreadManager |
+| `core/src/agent/control/service_tier.rs` | 21 | `agent/control/service_tier.swift` | ✅ faithful |  |
+| `core/src/agent/control/spawn.rs` | 1,433 | `agent/control/control_spawn.swift` | 🟡 adapted | nickname/fork/metadata reservation faithful; Session spawn waits |
+| `core/src/agent/control/spawn_guard.rs` | 75 | `agent/control/spawn_guard.swift` | 🟡 adapted | cleanup waits on ThreadManager |
+| `core/src/agent/control/spawn_telemetry.rs` | 65 | `agent/control/spawn_telemetry.swift` | 🟡 adapted | otel emit deferred |
+| `core/src/agent/control/target.rs` | 61 | `agent/control/target.swift` | 🟡 adapted | ensure_agent_known waits on Session |
+| `core/src/agent/control/user_authorization.rs` | 355 | `agent/control/user_authorization.swift` | 🟡 adapted | root evidence waits on retained history |
+| `core/src/agent/control/watch.rs` | 65 | `agent/control/watch.swift` | 🟡 adapted | known agents emit one unloaded snapshot; live watch waits |
+| `core/src/agent/control.rs` | 699 | `agent/control.swift` | 🟡 adapted | registry spawn/list + mailbox send/status; Session thread create waits |
+| `core/src/agent/mod.rs` | 14 | `agent/agent_mod.swift` | ✅ faithful |  |
+| `core/src/agent/registry.rs` | 399 | `agent/registry.swift` | 🟡 adapted | otel nickname reset omitted |
+| `core/src/agent/role.rs` | 418 | `agent/role.swift` | 🟡 adapted | apply_role_to_config waits on Config |
+| `core/src/agent/status.rs` | 31 | `agent/status.swift` | 🟡 adapted | TurnComplete error/last message pending |
+| `core/src/agent/types.rs` | 88 | `agent/types.swift` | 🟡 adapted | MultiAgentRoleInstructions stand-in |
+| `core/src/agent_communication.rs` | 78 | `agent_communication.swift` | 🟡 adapted | otel emit no-op |
+| `core/src/agent_message_board.rs` | 200 | `agent_message_board.swift` | 🟡 adapted | install waits on ThreadManager |
+| `core/src/apps/mod.rs` | 2 | `apps/apps_mod.swift` | ✅ faithful |  |
+| `core/src/apps/render.rs` | 66 | `apps/apps_render.swift` | ✅ faithful |  |
+| `core/src/connectors.rs` | 555 | `connectors.swift` | 🟡 adapted | collect/cache/slug faithful; live MCP list throws |
+| `core/src/cyber_access_program.rs` | 12 | `cyber_access_program.swift` | 🟡 adapted | ChatGPT auth is a boolean |
+| `core/src/environment_selection.rs` | 2,311 | `environment_selection.swift` | 🟡 adapted | origin/validate/snapshot faithful; exec-server waits |
+| `core/src/plugins/discoverable.rs` | 59 | `plugins/discoverable.swift` | 🟡 adapted | DiscoverableTool types + filter; listing waits on Config |
+| `core/src/plugins/injection.rs` | 59 | `plugins/injection.swift` | 🟡 adapted | PluginToolInfo stand-in |
+| `core/src/plugins/mentions.rs` | 121 | `plugins/mentions.swift` | ✅ faithful |  |
+| `core/src/plugins/metrics.rs` | 62 | `plugins/metrics.swift` | 🟡 adapted | Session / analytics |
+| `core/src/plugins/mod.rs` | 46 | `plugins/plugins_mod.swift` | 🟡 adapted | McpVisibleTool carries parametersJSON; PluginsManager waits |
+| `core/src/plugins/render.rs` | 92 | `plugins/plugins_render.swift` | ✅ faithful |  |
+| `core/src/plugins/test_support.rs` | 109 | `plugins/test_support.swift` | 🟡 adapted | fixture writers; load_plugins_config waits |
+| `core/src/session/multi_agents.rs` | 121 | `session_multi_agents.swift` | 🟡 adapted | resolve_usage_hints faithful; StepContext waits |
+| `core/src/tools/code_mode/delegate.rs` | 497 | `tools/code_mode/delegate.swift` | 🟡 adapted | dispatch gates; nested dispatch waits |
+| `core/src/tools/code_mode/execute_handler.rs` | 259 | `tools/code_mode/execute_handler.swift` | 🟡 adapted | payload parse; execute waits |
+| `core/src/tools/code_mode/execute_spec.rs` | 105 | `tools/code_mode/execute_spec.swift` | 🟡 adapted | description waits on code_mode crate |
+| `core/src/tools/code_mode/mod.rs` | 567 | `tools/code_mode/code_mode_mod.swift` | 🟡 adapted | names/predicate faithful; handlers wait |
+| `core/src/tools/code_mode/output.rs` | 76 | `tools/code_mode/code_mode_output.swift` | 🟡 adapted |  |
+| `core/src/tools/code_mode/response_adapter.rs` | 51 | `tools/code_mode/response_adapter.swift` | 🟡 adapted | host types already match |
+| `core/src/tools/code_mode/telemetry.rs` | 158 | `tools/code_mode/telemetry.swift` | 🟡 adapted | analytics emit waits on Session |
+| `core/src/tools/code_mode/wait_handler.rs` | 230 | `tools/code_mode/wait_handler.swift` | 🟡 adapted | wait args faithful; runtime waits |
+| `core/src/tools/code_mode/wait_spec.rs` | 126 | `tools/code_mode/wait_spec.swift` | 🟡 adapted | catalog parameter override omitted |
+| `core/src/tools/handlers/list_available_plugins_to_install.rs` | 181 | `tools/handlers/list_available_plugins_to_install.swift` | 🟡 adapted | sort/truncate faithful; discovery waits on PluginsManager |
+| `core/src/tools/handlers/list_available_plugins_to_install_spec.rs` | 45 | `tools/handlers/list_available_plugins_to_install_spec.swift` | ✅ faithful |  |
+| `core/src/tools/handlers/multi_agents/close_agent.rs` | 137 | `tools/handlers/multi_agents/close_agent.swift` | 🟡 adapted | registry close when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents/resume_agent.rs` | 171 | `tools/handlers/multi_agents/resume_agent.swift` | 🟡 adapted | registry rematerialize when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents/send_input.rs` | 173 | `tools/handlers/multi_agents/send_input.swift` | 🟡 adapted | mailbox send when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents/spawn.rs` | 249 | `tools/handlers/multi_agents/spawn_agent.swift` | 🟡 adapted | registry spawn; history fork waits on ThreadManager |
+| `core/src/tools/handlers/multi_agents/wait.rs` | 341 | `tools/handlers/multi_agents/wait_agent.swift` | 🟡 adapted | mailbox status poll; live watch waits on ThreadManager |
+| `core/src/tools/handlers/multi_agents.rs` | 99 | `tools/handlers/multi_agents.swift` | 🟡 adapted | parse/status faithful |
+| `core/src/tools/handlers/multi_agents_common.rs` | 190 | `tools/handlers/multi_agents_common.swift` | 🟡 adapted | timeout clamp faithful; telemetry emit no-op |
+| `core/src/tools/handlers/multi_agents_spec.rs` | 891 | `tools/handlers/multi_agents_spec.swift` | 🟡 adapted | with_encrypted omitted |
+| `core/src/tools/handlers/multi_agents_v2/analytics.rs` | 62 | `tools/handlers/multi_agents_v2/analytics.swift` | 🟡 adapted | analytics emit waits |
+| `core/src/tools/handlers/multi_agents_v2/followup_task.rs` | 57 | `tools/handlers/multi_agents_v2/followup_task.swift` | 🟡 adapted | mailbox send when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs` | 110 | `tools/handlers/multi_agents_v2/interrupt_agent.swift` | 🟡 adapted | resolve + V2 validation + mailbox interrupt; ThreadManager stop pending |
+| `core/src/tools/handlers/multi_agents_v2/list_agents.rs` | 110 | `tools/handlers/multi_agents_v2/list_agents.swift` | 🟡 adapted | registry list when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents_v2/message_tool.rs` | 99 | `tools/handlers/multi_agents_v2/message_tool.swift` | 🟡 adapted | message_content + mailbox send when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents_v2/send_message.rs` | 57 | `tools/handlers/multi_agents_v2/send_message.swift` | 🟡 adapted | mailbox send when LocalAgentControl is attached |
+| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 338 | `tools/handlers/multi_agents_v2/spawn_agent_v2.swift` | 🟡 adapted | registry spawn; history copy waits on ThreadManager |
+| `core/src/tools/handlers/multi_agents_v2/wait.rs` | 205 | `tools/handlers/multi_agents_v2/wait_agent_v2.swift` | 🟡 adapted | mailbox activity poll; live input-queue wait waits on Session |
+| `core/src/tools/handlers/multi_agents_v2.rs` | 66 | `tools/handlers/multi_agents_v2.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_plugin_install.rs` | 551 | `tools/handlers/request_plugin_install.swift` | 🟡 adapted | args/match faithful; elicitation waits on Session |
+| `core/src/tools/handlers/request_plugin_install_spec.rs` | 189 | `tools/handlers/request_plugin_install_spec.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/wait_for_environment.rs` | 182 | `tools/handlers/wait_for_environment.swift` | 🟡 adapted |  |
 
 ## Phase 10
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/context/realtime_delegation.rs` | 105 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/context/realtime_end_instructions.rs` | 51 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/context/realtime_start_instructions.rs` | 33 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/context/realtime_start_with_instructions.rs` | 42 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/lib.rs` | 246 | - | ⬜ 未开始 |  |
-| `core/src/otel_init.rs` | 111 | - | ⬜ 未开始 |  |
-| `core/src/realtime_context.rs` | 583 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_conversation/bem.rs` | 71 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_conversation/existing_call.rs` | 90 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_conversation/sideband.rs` | 195 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_conversation.rs` | 2,752 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_history/presentation.rs` | 129 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_history.rs` | 450 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/realtime_prompt.rs` | 82 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/session/realtime_history.rs` | 56 | - | ⬜ 未开始 | deferred: 语音 realtime，Sage 无此形态 |
-| `core/src/test_support.rs` | 264 | - | ⬜ 未开始 |  |
-| `otel/src/agent_response.rs` | 111 | - | ⬜ 未开始 |  |
-| `otel/src/auth_storage/originator.rs` | 45 | - | ⬜ 未开始 |  |
-| `otel/src/auth_storage.rs` | 257 | - | ⬜ 未开始 |  |
-| `otel/src/config.rs` | 120 | - | ⬜ 未开始 |  |
-| `otel/src/events/mod.rs` | 2 | - | ⬜ 未开始 |  |
-| `otel/src/events/session_telemetry.rs` | 1,429 | - | ⬜ 未开始 |  |
-| `otel/src/events/shared.rs` | 70 | - | ⬜ 未开始 |  |
-| `otel/src/guardian_assessment.rs` | 68 | - | ⬜ 未开始 |  |
-| `otel/src/lib.rs` | 99 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/buffered.rs` | 177 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/client.rs` | 678 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/config.rs` | 135 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/error.rs` | 49 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/mod.rs` | 61 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/names.rs` | 80 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/process.rs` | 27 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/runtime_metrics.rs` | 220 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/tags.rs` | 134 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/timer.rs` | 41 | - | ⬜ 未开始 |  |
-| `otel/src/metrics/validation.rs` | 55 | - | ⬜ 未开始 |  |
-| `otel/src/network_policy.rs` | 127 | - | ⬜ 未开始 |  |
-| `otel/src/otlp.rs` | 277 | - | ⬜ 未开始 |  |
-| `otel/src/provider.rs` | 854 | - | ⬜ 未开始 |  |
-| `otel/src/targets.rs` | 11 | - | ⬜ 未开始 |  |
-| `otel/src/tool_result.rs` | 115 | - | ⬜ 未开始 |  |
-| `otel/src/trace_context.rs` | 411 | - | ⬜ 未开始 |  |
-| `terminal-detection/src/lib.rs` | 423 | - | ⬜ 未开始 |  |
+| `core/src/context/realtime_delegation.rs` | 105 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/context/realtime_end_instructions.rs` | 51 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/context/realtime_start_instructions.rs` | 33 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/context/realtime_start_with_instructions.rs` | 42 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/lib.rs` | 246 | `lib.swift` | 🟡 adapted | re-export aliases; realtime/windows omitted |
+| `core/src/otel_init.rs` | 111 | `otel_init.swift` | 🟡 adapted | `OtelInitInputs` scalars; no Sage Config |
+| `core/src/realtime_context.rs` | 583 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_conversation/bem.rs` | 71 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_conversation/existing_call.rs` | 90 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_conversation/sideband.rs` | 195 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_conversation.rs` | 2,752 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_history/presentation.rs` | 129 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_history.rs` | 450 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/realtime_prompt.rs` | 82 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/session/realtime_history.rs` | 56 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/test_support.rs` | 264 | `core_test_support.swift` | 🟡 adapted | R4a vs plugins/test_support.swift; ThreadManager factories wait |
+| `otel/src/agent_response.rs` | 111 | `otel/src/agent_response.swift` | 🟡 adapted | os.Logger emit; dedup/byte bound faithful |
+| `otel/src/auth_storage/originator.rs` | 45 | `otel/src/auth_storage/originator.swift` | 🟡 adapted | `@TaskLocal` instead of tokio task_local |
+| `otel/src/auth_storage.rs` | 257 | `otel/src/auth_storage.swift` | 🟡 adapted | classification + drop emit; IOError downcast |
+| `otel/src/config.rs` | 120 | `otel/src/config.swift` | 🟡 adapted | no HttpClientFactory; DEBUG Statsig off |
+| `otel/src/events/mod.rs` | 2 | `otel/src/events/mod.swift` | ✅ faithful |  |
+| `otel/src/events/session_telemetry.rs` | 1,429 | `otel/src/events/session_telemetry.swift` | 🟡 adapted | turn timing/token/cost live; SSE/WS omitted |
+| `otel/src/events/shared.rs` | 70 | `otel/src/events/shared.swift` | 🟡 adapted | os.Logger for tracing macros |
+| `otel/src/guardian_assessment.rs` | 68 | `otel/src/guardian_assessment.swift` | 🟡 adapted | mapping faithful; os.Logger emit |
+| `otel/src/lib.rs` | 99 | `otel/src/lib.swift` | 🟡 adapted | public types + install helpers |
+| `otel/src/metrics/buffered.rs` | 177 | `otel/src/metrics/buffered.swift` | 🟡 adapted | OSAllocatedUnfairLock; pair limits faithful |
+| `otel/src/metrics/client.rs` | 678 | `otel/src/metrics/client.swift` | 🟡 adapted | in-memory instruments; no OTLP SDK |
+| `otel/src/metrics/config.rs` | 135 | `otel/src/metrics/metrics_config.swift` | 🟡 adapted | R4a vs otel/src/config.swift |
+| `otel/src/metrics/error.rs` | 49 | `otel/src/metrics/error.swift` | 🟡 adapted | SDK source errors flattened to strings |
+| `otel/src/metrics/mod.rs` | 61 | `otel/src/metrics/metrics_mod.swift` | 🟡 adapted | R4a vs events/mod.swift |
+| `otel/src/metrics/names.rs` | 80 | `otel/src/metrics/names.swift` | ✅ faithful |  |
+| `otel/src/metrics/process.rs` | 27 | `otel/src/metrics/process.swift` | ✅ faithful |  |
+| `otel/src/metrics/runtime_metrics.rs` | 220 | `otel/src/metrics/runtime_metrics.swift` | 🟡 adapted | aggregates in-memory observations |
+| `otel/src/metrics/tags.rs` | 134 | `otel/src/metrics/tags.swift` | ✅ faithful |  |
+| `otel/src/metrics/timer.rs` | 41 | `otel/src/metrics/timer.swift` | 🟡 adapted | deinit records; ContinuousClock |
+| `otel/src/metrics/validation.rs` | 55 | `otel/src/metrics/validation.swift` | ✅ faithful |  |
+| `otel/src/network_policy.rs` | 127 | `otel/src/network_policy.swift` | 🟡 adapted | SDK PolicyExporter is a deny flag |
+| `otel/src/otlp.rs` | 277 | `otel/src/otlp.swift` | 🟡 adapted | header map only; TLS/HTTP builders omitted |
+| `otel/src/provider.rs` | 854 | `otel/src/provider.swift` | 🟡 adapted | in-memory metrics; no logger/tracer SDK |
+| `otel/src/targets.rs` | 11 | `otel/src/targets.swift` | ✅ faithful |  |
+| `otel/src/tool_result.rs` | 115 | `otel/src/tool_result.swift` | 🟡 adapted | preview faithful; os.Logger emit |
+| `otel/src/trace_context.rs` | 411 | `otel/src/trace_context.swift` | 🟡 adapted | W3C parse/validate; span helpers nil |
+| `terminal-detection/src/lib.rs` | 423 | `terminal-detection/src/lib.swift` | ✅ faithful |  |
 
 ## 不计入范围（平台/测试）
 

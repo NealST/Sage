@@ -12,9 +12,21 @@ import Foundation
 final class StepContext: @unchecked Sendable {
     var stepId: String
     var settings: StepSettings
+    var turn: TurnContext
+    var toolRouter: ToolRouter?
+    var environments: [TurnEnvironment]
 
-    init(stepId: String = UUID().uuidString, settings: StepSettings = StepSettings()) {
+    init(
+        stepId: String = UUID().uuidString,
+        settings: StepSettings = StepSettings(),
+        turn: TurnContext = TurnContext(),
+        toolRouter: ToolRouter? = nil,
+        environments: [TurnEnvironment] = []
+    ) {
         self.stepId = stepId
         self.settings = settings
+        self.turn = turn
+        self.toolRouter = toolRouter
+        self.environments = environments
     }
 }

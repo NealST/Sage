@@ -1986,11 +1986,8 @@ extension String {
     }
 }
 
-extension AbsolutePathBuf {
-    /// Stand-in for `normalize_system_aliases`. Not yet ported on AbsolutePathBuf;
-    /// POSIX/macOS returns `self`.
-    func normalizeSystemAliases() throws -> AbsolutePathBuf { self }
-}
+// `normalizeSystemAliases` lives on AbsolutePathBuf in CodexUtils
+// (`utils/absolute-path/src/system_aliases.swift`).
 
 // MARK: - POSIX glob matcher (globset stand-in)
 

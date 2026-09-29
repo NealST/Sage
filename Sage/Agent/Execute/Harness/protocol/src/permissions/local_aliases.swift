@@ -7,9 +7,7 @@
 //  Port status: adapted
 //
 //  Prepare local policy paths in the sandbox's trusted system-alias
-//  namespace. `AbsolutePathBuf.normalizeSystemAliases` is not ported yet
-//  and is an identity on POSIX/macOS, so macOS `/var` ↔ `/private/var`
-//  folding is skipped until that helper lands on AbsolutePathBuf.
+//  namespace. Uses AbsolutePathBuf.normalizeSystemAliases (Phase 10).
 //
 
 import CodexUtils

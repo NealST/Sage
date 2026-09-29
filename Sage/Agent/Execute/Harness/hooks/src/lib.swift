@@ -6,12 +6,11 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Event request/outcome types stay unstarted with the rest of the hooks
-//  crate. This file ports the event-name tables and persisted hook-state
-//  keys. Protocol `HookEventName` is still a smaller subset, so key labels
-//  take the upstream PascalCase names as strings.
+//  Event-name tables and persisted hook-state keys use protocol
+//  `HookEventName`. Event run paths still wait on the command runner.
 //
 
+import CodexProtocol
 import Foundation
 
 /// Hook event names as they appear in hooks JSON and config files.
@@ -44,30 +43,47 @@ public let HOOK_EVENT_NAMES_WITH_MATCHERS: [String] = [
 ]
 
 /// Returns the hook event label used in persisted hook-state keys.
-public func hookEventKeyLabel(_ eventName: String) -> String {
+public func hookEventKeyLabel(_ eventName: HookEventName) -> String {
     switch eventName {
-    case "PreToolUse": return "pre_tool_use"
-    case "PermissionRequest": return "permission_request"
-    case "PostToolUse": return "post_tool_use"
-    case "PreCompact": return "pre_compact"
-    case "PostCompact": return "post_compact"
-    case "SessionStart": return "session_start"
-    case "SessionEnd": return "session_end"
-    case "UserPromptSubmit": return "user_prompt_submit"
-    case "SubagentStart": return "subagent_start"
-    case "SubagentStop": return "subagent_stop"
-    case "Stop": return "stop"
-    case "Interrupt": return "interrupt"
-    default: return eventName
+    case .preToolUse: return "pre_tool_use"
+    case .permissionRequest: return "permission_request"
+    case .postToolUse: return "post_tool_use"
+    case .preCompact: return "pre_compact"
+    case .postCompact: return "post_compact"
+    case .sessionStart: return "session_start"
+    case .sessionEnd: return "session_end"
+    case .userPromptSubmit: return "user_prompt_submit"
+    case .subagentStart: return "subagent_start"
+    case .subagentStop: return "subagent_stop"
+    case .stop: return "stop"
+    case .interrupt: return "interrupt"
     }
 }
 
 /// Builds the persisted config-state key for one discovered hook handler.
 public func hookKey(
     keySource: String,
-    eventName: String,
+    eventName: HookEventName,
     groupIndex: Int,
     handlerIndex: Int
 ) -> String {
     "\(keySource):\(hookEventKeyLabel(eventName)):\(groupIndex):\(handlerIndex)"
+}
+
+/// PascalCase JSON event name used on hook stdin.
+public func hookEventWireName(_ eventName: HookEventName) -> String {
+    switch eventName {
+    case .preToolUse: return "PreToolUse"
+    case .permissionRequest: return "PermissionRequest"
+    case .postToolUse: return "PostToolUse"
+    case .preCompact: return "PreCompact"
+    case .postCompact: return "PostCompact"
+    case .sessionStart: return "SessionStart"
+    case .sessionEnd: return "SessionEnd"
+    case .userPromptSubmit: return "UserPromptSubmit"
+    case .subagentStart: return "SubagentStart"
+    case .subagentStop: return "SubagentStop"
+    case .stop: return "Stop"
+    case .interrupt: return "Interrupt"
+    }
 }

@@ -6,9 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Guardian review transcripts, retained-context SHA, and image/audio
-//  estimators wait for those crates. Item recording, replacement, and
-//  token-info accounting are ported.
+//  Guardian review transcripts and retained-context SHA wait. Item
+//  recording, replacement, token-info, and model-visible-byte estimates
+//  are ported. Original-detail images use PNG/JPEG/GIF headers.
 //
 
 import CodexProtocol
@@ -102,6 +102,11 @@ public final class ContextManager: @unchecked Sendable {
         referenceContextItem
     }
 
+    public func forPrompt(inputModalities: [InputModality] = []) -> [ResponseItem] {
+        _ = inputModalities
+        return items.map(\.item)
+    }
+
     public func cloneHistory() -> ContextManager {
         let copy = ContextManager()
         copy.items = items
@@ -122,11 +127,184 @@ public func isUserTurnBoundary(_ item: ResponseItem) -> Bool {
 }
 
 public func estimateItemTokenCount(_ item: ResponseItem) -> Int {
-    approxTokenCount(estimateItemText(item))
+    Int(clamping: approxTokensFromByteCountI64(estimateResponseItemModelVisibleBytes(item)))
 }
 
 public func estimateImageReferenceBytes(_ item: ResponseItem) -> Int {
-    0
+    Int(clamping: imageReferenceBytes(in: item))
+}
+
+func estimateResponseItemModelVisibleBytes(_ item: ResponseItem) -> Int64 {
+    switch item {
+    case .message(_, _, let content, _, _):
+        return content.reduce(0 as Int64) { partial, part in
+            saturatingAddInt64(partial, contentItemModelVisibleBytes(part))
+        }
+    case .agentMessage(_, let author, let recipient, let content, _):
+        return content.reduce(saturatingAddInt64(textBytes(author), textBytes(recipient))) { partial, part in
+            switch part {
+            case .inputText(let text):
+                return saturatingAddInt64(partial, textBytes(text))
+            case .encryptedContent(let encrypted):
+                return saturatingAddInt64(
+                    partial,
+                    Int64(clamping: estimateEncryptedFunctionOutputLength(encrypted.utf8.count))
+                )
+            }
+        }
+    case .reasoning(_, _, _, let encrypted, _) where encrypted != nil:
+        return Int64(clamping: estimateReasoningLength(encrypted!.utf8.count))
+    case .compaction(_, let encrypted, _):
+        return Int64(clamping: estimateReasoningLength(encrypted.utf8.count))
+    case .contextCompaction(_, let encrypted, _) where encrypted != nil:
+        return Int64(clamping: estimateReasoningLength(encrypted!.utf8.count))
+    case .functionCall(_, let name, let namespace, let arguments, _, _, _):
+        return saturatingAddInt64(
+            saturatingAddInt64(textBytes(name), textBytes(namespace ?? DEFAULT_FUNCTION_NAMESPACE)),
+            textBytes(arguments)
+        )
+    case .customToolCall(_, _, _, let name, let namespace, let input, _):
+        return saturatingAddInt64(
+            saturatingAddInt64(textBytes(name), textBytes(namespace ?? DEFAULT_FUNCTION_NAMESPACE)),
+            textBytes(input)
+        )
+    case .functionCallOutput(_, let callId, let name, let namespace, let output, _):
+        return saturatingAddInt64(
+            saturatingAddInt64(
+                saturatingAddInt64(estimateFunctionOutputBytes(output.body), textBytes(callId ?? "")),
+                textBytes(name ?? "")
+            ),
+            textBytes(namespace ?? "")
+        )
+    case .customToolCallOutput(_, let callId, let name, let output, _):
+        return saturatingAddInt64(
+            saturatingAddInt64(estimateFunctionOutputBytes(output.body), textBytes(callId)),
+            textBytes(name ?? "")
+        )
+    case .additionalTools(_, _, let tools):
+        return jsonContentBytes(tools)
+    case .toolSearchCall(_, _, _, _, let arguments, _):
+        return jsonContentBytes(arguments)
+    case .toolSearchOutput(_, _, _, _, let tools, _):
+        return jsonContentBytes(tools)
+    case .localShellCall(_, _, _, let action, _):
+        return jsonContentBytes(action)
+    case .webSearchCall(_, _, let action, _):
+        return action.map(jsonContentBytes) ?? 0
+    case .imageGenerationCall(_, _, let revisedPrompt, let result, _):
+        let imageBytes: Int64 = result.isEmpty ? 0 : Int64(resizedImageBytesEstimate)
+        return saturatingAddInt64(textBytes(revisedPrompt ?? ""), imageBytes)
+    case .contextCompaction(_, nil, _),
+         .reasoning(_, _, _, nil, _),
+         .configurationUpdate,
+         .compactionTrigger,
+         .other:
+        return 0
+    default:
+        return 0
+    }
+}
+
+func contentItemModelVisibleBytes(_ item: ContentItem) -> Int64 {
+    switch item {
+    case .inputText(let text), .outputText(let text):
+        return textBytes(text)
+    case .inputImage(let image, let detail):
+        return Int64(clamping: estimateImageReferenceBytes(image, detail: detail))
+    case .inputAudio(let audioURL):
+        return estimateAudioBytes(audioURL)
+    }
+}
+
+func estimateFunctionOutputBytes(_ output: FunctionCallOutputBody) -> Int64 {
+    switch output {
+    case .text(let text):
+        return textBytes(text)
+    case .contentItems(let items):
+        return items.reduce(0 as Int64) { partial, part in
+            saturatingAddInt64(partial, functionCallOutputContentBytes(part))
+        }
+    }
+}
+
+func functionCallOutputContentBytes(_ item: FunctionCallOutputContentItem) -> Int64 {
+    switch item {
+    case .inputText(let text):
+        return textBytes(text)
+    case .inputImage(let image, let detail):
+        return Int64(clamping: estimateImageReferenceBytes(image, detail: detail))
+    case .inputAudio(let audioURL):
+        return estimateAudioBytes(audioURL)
+    case .encryptedContent(let encrypted):
+        return Int64(clamping: estimateEncryptedFunctionOutputLength(encrypted.utf8.count))
+    }
+}
+
+func imageReferenceBytes(in item: ResponseItem) -> Int64 {
+    switch item {
+    case .message(_, _, let content, _, _):
+        return content.reduce(0 as Int64) { partial, part in
+            if case .inputImage(let image, let detail) = part {
+                return saturatingAddInt64(
+                    partial,
+                    Int64(clamping: estimateImageReferenceBytes(image, detail: detail))
+                )
+            }
+            return partial
+        }
+    case .functionCallOutput(_, _, _, _, let output, _),
+         .customToolCallOutput(_, _, _, let output, _):
+        if case .contentItems(let items) = output.body {
+            return items.reduce(0 as Int64) { partial, part in
+                if case .inputImage(let image, let detail) = part {
+                    return saturatingAddInt64(
+                        partial,
+                        Int64(clamping: estimateImageReferenceBytes(image, detail: detail))
+                    )
+                }
+                return partial
+            }
+        }
+        return 0
+    case .imageGenerationCall(_, _, _, let result, _) where !result.isEmpty:
+        return Int64(resizedImageBytesEstimate)
+    default:
+        return 0
+    }
+}
+
+func estimateAudioBytes(_ audioURL: String) -> Int64 {
+    Int64(clamping: approxBytesForTokens(estimateAudioTokenCount(audioURL)))
+}
+
+func estimateReasoningLength(_ encodedLen: Int) -> Int {
+    let (tripled, overflow) = encodedLen.multipliedReportingOverflow(by: 3)
+    if overflow { return Int.max }
+    return max(0, tripled / 4 - 650)
+}
+
+func estimateEncryptedFunctionOutputLength(_ encodedLen: Int) -> Int {
+    let (nines, overflow) = encodedLen.multipliedReportingOverflow(by: 9)
+    if overflow { return Int.max }
+    return (nines + 15) / 16
+}
+
+func textBytes(_ text: String) -> Int64 {
+    Int64(clamping: text.utf8.count)
+}
+
+func jsonContentBytes(_ value: JSONValue) -> Int64 {
+    Int64(clamping: value.encodedString().utf8.count)
+}
+
+func jsonContentBytes<T: Encodable>(_ value: T) -> Int64 {
+    (try? serializedJSONBytes(value)).map { Int64(clamping: $0) } ?? 0
+}
+
+func saturatingAddInt64(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+    let (result, overflow) = lhs.addingReportingOverflow(rhs)
+    if overflow { return lhs >= 0 ? .max : .min }
+    return result
 }
 
 func estimateItemText(_ item: ResponseItem) -> String {

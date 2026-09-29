@@ -234,7 +234,7 @@ private extension String {
 
 // MARK: - Minimal TOML table parser
 
-func parseTomlDocument(_ text: String) throws -> TomlValue {
+public func parseTomlDocument(_ text: String) throws -> TomlValue {
     var parser = TomlTableParser(text)
     return .table(try parser.parseDocument())
 }

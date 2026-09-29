@@ -71,3 +71,28 @@ func applyPersistentTimeReminderDefaults(_ config: inout Config) {
         config.currentTimeReminder = CurrentTimeReminderConfig(sleepTool: true)
     }
 }
+
+func maybeRecordCurrentTimeReminder(
+    sess: Session,
+    turnContext: TurnContext,
+    windowId: String,
+    now: Date = Date()
+) throws {
+    let features = turnContext.config.features
+    guard features.enabled(.currentTimeReminder) || sess.features.enabled(.currentTimeReminder) else {
+        return
+    }
+    applyPersistentTimeReminderDefaults(&turnContext.config)
+    guard let config = turnContext.config.currentTimeReminder else { return }
+    let due = sess.state.currentTimeReminder.takeReminderDue(
+        windowId: windowId,
+        currentTime: now,
+        intervalSeconds: config.intervalSeconds,
+        afterUserOrToolOutput: config.deliveryMode == .afterUserOrToolOutput
+    )
+    guard due else { return }
+    sess.recordConversationItems(
+        turnContext,
+        items: [CurrentTimeReminder(currentTime: now).asResponseItem()]
+    )
+}

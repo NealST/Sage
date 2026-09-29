@@ -7,12 +7,38 @@
 //  Port status: adapted
 //
 
+import CodexProtocol
 import Foundation
 
 public struct CompactModelFallback: Equatable, Sendable {
-    public var model: String?
+    public var previousModel: String
+    public var currentModel: String
+    public var succeeded: Bool
 
-    public init(model: String? = nil) {
-        self.model = model
+    public init(previousModel: String, currentModel: String, succeeded: Bool) {
+        self.previousModel = previousModel
+        self.currentModel = currentModel
+        self.succeeded = succeeded
     }
+}
+
+public func shouldRetryWithCurrentModel(_ error: CodexErr) -> Bool {
+    switch error.details {
+    case .turnAborted, .interrupted, .sessionBudgetExceeded:
+        return false
+    default:
+        return true
+    }
+}
+
+public func recordModelFallback(
+    previousModel: String,
+    currentModel: String,
+    fallbackError: CodexErr?
+) -> CompactModelFallback {
+    CompactModelFallback(
+        previousModel: previousModel,
+        currentModel: currentModel,
+        succeeded: fallbackError == nil
+    )
 }

@@ -26,3 +26,46 @@ public func getLastAssistantMessage(from items: [ResponseItem]) -> String? {
     }
     return nil
 }
+
+/// Codex `response_input_to_response_item`.
+public func responseInputToResponseItem(_ input: ResponseInputItem) -> ResponseItem? {
+    switch input {
+    case .functionCallOutput(let callId, let output):
+        return .functionCallOutput(
+            id: nil,
+            callId: callId,
+            name: nil,
+            namespace: nil,
+            output: output,
+            internalChatMessageMetadataPassthrough: nil
+        )
+    case .customToolCallOutput(let callId, let name, let output):
+        return .customToolCallOutput(
+            id: nil,
+            callId: callId,
+            name: name,
+            output: output,
+            internalChatMessageMetadataPassthrough: nil
+        )
+    case .mcpToolCallOutput(let callId, let output):
+        return .functionCallOutput(
+            id: nil,
+            callId: callId,
+            name: nil,
+            namespace: nil,
+            output: output.asFunctionCallOutputPayload(),
+            internalChatMessageMetadataPassthrough: nil
+        )
+    case .toolSearchOutput(let callId, let status, let execution, let tools):
+        return .toolSearchOutput(
+            id: nil,
+            callId: callId,
+            status: status,
+            execution: execution,
+            tools: tools,
+            internalChatMessageMetadataPassthrough: nil
+        )
+    case .message:
+        return nil
+    }
+}

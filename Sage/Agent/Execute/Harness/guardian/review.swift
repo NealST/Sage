@@ -10,6 +10,7 @@
 //  allows, denies, or hands the action back to the user card.
 //
 
+import CodexProtocol
 import Foundation
 
 enum Guardian {
@@ -17,6 +18,18 @@ enum Guardian {
 
     static func newReviewID() -> String {
         UUID().uuidString
+    }
+
+    /// Codex `is_basic_session_source` — Guardian reviewer turns skip plugin/skill injection.
+    static func isBasicSessionSource(_ sessionSource: SessionSource) -> Bool {
+        switch sessionSource {
+        case .subAgent(.other(let label)):
+            return label == reviewerName || label == GUARDIAN_REVIEWER_NAME
+        case .internal(.guardian):
+            return true
+        default:
+            return false
+        }
     }
 
     /// Codex `strict_auto_review`. Project mode cannot drop Seatbelt quietly.

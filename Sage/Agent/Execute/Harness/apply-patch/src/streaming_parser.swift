@@ -11,14 +11,16 @@ import Foundation
 
 let ENVIRONMENT_ID_MARKER = "*** Environment ID:"
 
-struct StreamingPatchParser {
+public struct StreamingPatchParser {
     private var lineBuffer = ""
     private var state = StreamingParserState()
     private var lineNumber = 0
 
-    var environmentID: String? { state.environmentID }
+    public init() {}
 
-    mutating func pushDelta(_ delta: String) throws -> [Hunk] {
+    public var environmentID: String? { state.environmentID }
+
+    public mutating func pushDelta(_ delta: String) throws -> [Hunk] {
         for character in delta {
             if character == "\n" {
                 var line = lineBuffer
@@ -35,7 +37,7 @@ struct StreamingPatchParser {
         return state.hunks
     }
 
-    mutating func finish() throws -> [Hunk] {
+    public mutating func finish() throws -> [Hunk] {
         if !lineBuffer.isEmpty {
             let line = lineBuffer
             lineBuffer = ""

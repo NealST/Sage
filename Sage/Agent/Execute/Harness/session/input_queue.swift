@@ -65,4 +65,23 @@ final class InputQueue: @unchecked Sendable {
     func hasTriggerTurnMailboxItems() async -> Bool {
         !pending.isEmpty
     }
+
+    func getPendingInput(_ activeTurn: ActiveTurn?) -> [SessionTurnInput] {
+        _ = activeTurn
+        return takeAll()
+    }
+
+    func hasPendingInput(_ activeTurn: ActiveTurn?) -> Bool {
+        _ = activeTurn
+        return !pending.isEmpty
+    }
+
+    func hasPendingMailboxItems() -> Bool {
+        !pending.isEmpty
+    }
+
+    func acceptMailboxDeliveryForCurrentTurn(_ activeTurn: ActiveTurn?, subId: String) {
+        _ = activeTurn
+        _ = subId
+    }
 }

@@ -531,6 +531,11 @@ public struct CollaborationMode: Codable, Equatable, Hashable, Sendable {
     public var mode: ModeKind
     public var settings: Settings
 
+    public init(mode: ModeKind, settings: Settings) {
+        self.mode = mode
+        self.settings = settings
+    }
+
     public var model: String { settings.model }
 
     public var reasoningEffort: ReasoningEffort? { settings.reasoningEffort }

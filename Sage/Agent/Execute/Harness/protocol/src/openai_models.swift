@@ -69,6 +69,11 @@ public func defaultInputModalities() -> [InputModality] {
 public struct ReasoningEffortPreset: Codable, Equatable, Sendable {
     public var effort: ReasoningEffort
     public var description: String
+
+    public init(effort: ReasoningEffort, description: String) {
+        self.effort = effort
+        self.description = description
+    }
 }
 
 // MARK: - ModelUpgrade
@@ -203,6 +208,48 @@ public struct ModelPreset: Codable, Equatable, Sendable {
 }
 
 extension ModelPreset {
+    public init(
+        id: String,
+        model: String,
+        displayName: String,
+        description: String,
+        defaultReasoningEffort: ReasoningEffort = .none,
+        supportedReasoningEfforts: [ReasoningEffortPreset] = [],
+        supportsPersonality: Bool = false,
+        additionalSpeedTiers: [String] = [],
+        serviceTiers: [ModelServiceTier] = [],
+        defaultServiceTier: String? = nil,
+        availableAccessPrograms: ModelAccessPrograms? = nil,
+        isDefault: Bool = false,
+        upgrade: ModelUpgrade? = nil,
+        showInPicker: Bool = true,
+        multiAgentVersion: MultiAgentVersion? = nil,
+        availabilityNux: ModelAvailabilityNux? = nil,
+        supportedInApi: Bool = true,
+        inputModalities: [InputModality] = defaultInputModalities(),
+        modelSpecialty: String? = nil
+    ) {
+        self.id = id
+        self.model = model
+        self.displayName = displayName
+        self.description = description
+        self.modelSpecialty = modelSpecialty
+        self.defaultReasoningEffort = defaultReasoningEffort
+        self.supportedReasoningEfforts = supportedReasoningEfforts
+        self.supportsPersonality = supportsPersonality
+        self.additionalSpeedTiers = additionalSpeedTiers
+        self.serviceTiers = serviceTiers
+        self.defaultServiceTier = defaultServiceTier
+        self.availableAccessPrograms = availableAccessPrograms
+        self.isDefault = isDefault
+        self.upgrade = upgrade
+        self.showInPicker = showInPicker
+        self.multiAgentVersion = multiAgentVersion
+        self.availabilityNux = availabilityNux
+        self.supportedInApi = supportedInApi
+        self.inputModalities = inputModalities
+    }
+
     public func supportsFastMode() -> Bool {
         serviceTiers.contains(where: { $0.id == ServiceTier.fast.requestValue })
             || additionalSpeedTiers.contains(speedTierFast)
