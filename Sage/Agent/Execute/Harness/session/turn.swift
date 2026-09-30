@@ -4,7 +4,7 @@
 //
 //  Port of codex-rs/core/src/session/turn.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
 //  `runTurn` ports the rust control flow: guardian gate, pre-sampling
 //  compact, MCP mention collection, skill/plugin injection, guardian
@@ -14,11 +14,15 @@
 //  MCP specs decode catalog JSON schema via parseCatalogParameters.
 //  Apps visibility/policy/agent-plugin budgets come from mcp_tool_exposure.
 //  Sage execute tools register through sage_execute / onSageToolCall.
-//  `ExecuteTurnLoop` / `Turn.run` remain the Sage RegularTask adapter.
+//  Live Execute calls `runTurn` when `useHarnessRunTurn`. Tool calls stay
+//  in the sampling stream and dispatch here. HUD admission happens before
+//  the stream is built, so a card pauses the turn instead of waiting inside it.
 //
 
+import CodexAPI
 import CodexAsyncUtils
 import CodexCore
+import CodexModelProviderInfo
 import CodexProtocol
 import CodexThreadStore
 import CodexUtils
@@ -357,7 +361,7 @@ func runTurn(
                 sess: sess,
                 stepContext: stepContext,
                 clientSession: &clientSession,
-                injection: .doNotInject
+                injection: .beforeLastUserMessage
             )
             if await runPendingSessionStartHooks(sess: sess, turnContext: turnContext) {
                 return nil
@@ -396,7 +400,7 @@ func runHooksAndRecordInputs(
     var acceptedUserInput = false
     let projectRoot = URL(fileURLWithPath: turnContext.cwd, isDirectory: true)
     for inputItem in input {
-        let hookOutcome = inspectPendingInput(inputItem, projectRoot: projectRoot)
+        let hookOutcome = await inspectPendingInput(inputItem, projectRoot: projectRoot)
         if hookOutcome.shouldStop {
             blockedInput = true
             recordAdditionalContexts(sess: sess, turnContext: turnContext, contexts: hookOutcome.additionalContexts)
@@ -448,10 +452,12 @@ func buildPrompt(
     sess: Session? = nil
 ) -> Prompt {
     let turnContext = stepContext.turn
+    let tools = builtTools(sess: sess, stepContext: stepContext)
+    let parallelToolCalls = sess?.services.sageResponsesTools == nil || !tools.isEmpty
     return Prompt(
         input: input,
-        tools: builtTools(sess: sess, stepContext: stepContext),
-        parallelToolCalls: true,
+        tools: tools,
+        parallelToolCalls: parallelToolCalls,
         baseInstructions: baseInstructions,
         outputSchema: nil,
         outputSchemaStrict: !Guardian.isBasicSessionSource(turnContext.sessionSource),
@@ -510,7 +516,7 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     return router
 }
 
-func builtTools(stepContext: StepContext) -> [JSONValue] {
+func builtTools(stepContext: StepContext) -> [CodexProtocol.JSONValue] {
     builtTools(sess: nil, stepContext: stepContext)
 }
 
@@ -571,8 +577,12 @@ func mcpVisibleTools(from sess: Session?) -> [McpVisibleTool] {
     return sess.services.modelVisibleMcpToolNames.map { McpVisibleTool(name: $0) }
 }
 
-func builtTools(sess: Session?, stepContext: StepContext) -> [JSONValue] {
-    assembleToolRouter(sess: sess, stepContext: stepContext).modelVisibleSpecs.map { spec in
+func builtTools(sess: Session?, stepContext: StepContext) -> [CodexProtocol.JSONValue] {
+    let router = assembleToolRouter(sess: sess, stepContext: stepContext)
+    if let tools = sess?.services.sageResponsesTools {
+        return tools
+    }
+    return router.modelVisibleSpecs.map { spec in
         .object(["name": .string(spec.name())])
     }
 }
@@ -679,7 +689,7 @@ func runPreSamplingCompact(
             sess: sess,
             stepContext: stepContext,
             clientSession: &clientSession,
-            injection: .doNotInject
+            injection: .beforeLastUserMessage
         )
     }
 }
@@ -707,7 +717,7 @@ func maybeRunPreviousModelInlineCompact(
             sess: sess,
             stepContext: stepContext,
             clientSession: &clientSession,
-            injection: .doNotInject
+            injection: .beforeLastUserMessage
         )
         return
     }
@@ -733,7 +743,7 @@ func maybeRunPreviousModelInlineCompact(
             sess: sess,
             stepContext: stepContext,
             clientSession: &clientSession,
-            injection: .doNotInject
+            injection: .beforeLastUserMessage
         )
     }
 }
@@ -744,9 +754,17 @@ func runAutoCompact(
     clientSession: inout ModelClientSession?,
     injection: InitialContextInjection
 ) async throws {
+    if sess.features.enabled(.tokenBudget) {
+        try await runInlineTokenBudgetCompact(
+            sess: sess,
+            stepContext: stepContext,
+            injection: injection
+        )
+        return
+    }
     _ = clientSession
     let projectRoot = URL(fileURLWithPath: stepContext.turn.cwd, isDirectory: true)
-    let preCompact = HookRuntime.preCompact(projectRoot: projectRoot)
+    let preCompact = await HookRuntime.preCompact(projectRoot: projectRoot)
     if preCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }
@@ -787,12 +805,22 @@ func runAutoCompact(
             summaryText: summary
         )
     }
-    _ = injection
-    sess.replaceCompactedHistory(compacted)
+    let (windowNumber, _) = sess.advanceAutoCompactWindow()
+    let historyWithContext = applyCompactedHistoryInitialContext(
+        compacted,
+        sess: sess,
+        stepContext: stepContext,
+        injection: injection
+    )
+    sess.replaceCompactedHistory(historyWithContext)
+    sess.lastCompactCheckpoint = CompactionCheckpointMetadata(
+        windowNumber: windowNumber,
+        summary: summary
+    )
     sess.lastRemoteCompact = CompactRemoteV2Result(summary: summary, succeeded: usedRemote || sess.runCompactOverride != nil)
     sess.sendEvent(stepContext.turn, .contextCompacted(ContextCompactedEvent()))
 
-    let postCompact = HookRuntime.postCompact(projectRoot: projectRoot)
+    let postCompact = await HookRuntime.postCompact(projectRoot: projectRoot)
     if postCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }
@@ -898,6 +926,9 @@ func runSamplingRequest(
         return try await override(input, stepContext)
     }
 
+    if let prepare = sess.prepareSamplingPrompt {
+        await prepare()
+    }
     let baseInstructions = sess.getPromptBaseInstructions()
     var retryState = ResponsesStreamRetryState()
     let maxRetries = clientSession?.client.providerInfo.streamMaxRetries() ?? 0
@@ -1078,8 +1109,10 @@ func tryRunSamplingRequest(
     if cancellationToken.isCancelled {
         throw CodexErr(details: .turnAborted)
     }
-    let stream: ResponseStream
+    let stream: CodexCore.ResponseStream
     if let override = sess.runSamplingStreamOverride {
+        sess.samplingClientSession = clientSession
+        sess.samplingStepContext = stepContext
         stream = try await override(prompt)
     } else if let clientSession {
         stream = try await clientSession.stream(
@@ -1117,7 +1150,7 @@ func tryRunSamplingRequest(
             throw error
         }
         switch value {
-        case .created(let responseId):
+        case .created(responseId: let responseId):
             if let responseId {
                 sess.lastResponseId = responseId
             }
@@ -1174,7 +1207,7 @@ func tryRunSamplingRequest(
                 itemId: itemId,
                 parsed: parsed
             )
-        case .toolCallInputDelta(_, let callId, let delta):
+        case .toolCallInputDelta(itemId: _, callId: let callId, delta: let delta):
             let resolvedCallId = callId ?? activeToolCallId
             if let resolvedCallId {
                 sess.lastToolCallInputDeltas.append((callId: resolvedCallId, delta: delta))
@@ -1234,7 +1267,7 @@ func tryRunSamplingRequest(
                 }
                 return SamplingRequestResult(needsFollowUp: true, lastAgentMessage: lastAgentMessage)
             }
-        case .completed(let responseId, let tokenUsage, _, let endTurn):
+        case .completed(responseId: let responseId, tokenUsage: let tokenUsage, usageMetadata: _, endTurn: let endTurn):
             for (itemId, parsed) in parsers.drainFinished() {
                 emitStreamedAssistantTextDelta(
                     sess: sess,
@@ -1257,7 +1290,7 @@ func tryRunSamplingRequest(
             )
         case .rateLimits(let snapshot):
             sess.updateRateLimits(stepContext.turn, snapshot)
-        case .reasoningContentDelta(let delta, let contentIndex):
+        case .reasoningContentDelta(delta: let delta, contentIndex: let contentIndex):
             sess.sendEvent(
                 stepContext.turn,
                 .reasoningContentDelta(
@@ -1270,7 +1303,7 @@ func tryRunSamplingRequest(
                     )
                 )
             )
-        case .reasoningSummaryDelta(let delta, let summaryIndex):
+        case .reasoningSummaryDelta(delta: let delta, summaryIndex: let summaryIndex):
             sess.sendEvent(
                 stepContext.turn,
                 .reasoningContentDelta(
@@ -1283,7 +1316,7 @@ func tryRunSamplingRequest(
                     )
                 )
             )
-        case .reasoningSummaryPartAdded(let summaryIndex):
+        case .reasoningSummaryPartAdded(summaryIndex: let summaryIndex):
             sess.lastReasoningSummaryPartIndex = summaryIndex
             sess.sendEvent(
                 stepContext.turn,
@@ -1294,7 +1327,7 @@ func tryRunSamplingRequest(
                     )
                 )
             )
-        case .reasoningSummaryDone(_, let text, _):
+        case .reasoningSummaryDone(itemId: _, text: let text, summaryIndex: _):
             sess.sendEvent(
                 stepContext.turn,
                 .agentReasoning(AgentReasoningEvent(text: text))
@@ -1310,8 +1343,8 @@ func tryRunSamplingRequest(
     throw CodexErr.stream("stream closed before response.completed")
 }
 
-func makeResponseStream(_ events: [CodexResult<ResponseEvent>]) -> ResponseStream {
-    ResponseStream(events: AsyncStream { continuation in
+func makeResponseStream(_ events: [CodexResult<ResponseEvent>]) -> CodexCore.ResponseStream {
+    CodexCore.ResponseStream(events: AsyncStream { continuation in
         for event in events {
             continuation.yield(event)
         }
@@ -1350,14 +1383,14 @@ struct SessionRetrySink: ResponsesStreamRetrySink {
     }
 }
 
-func inspectPendingInput(_ inputItem: SessionTurnInput, projectRoot: URL) -> HookRuntimeOutcome {
+func inspectPendingInput(_ inputItem: SessionTurnInput, projectRoot: URL) async -> HookRuntimeOutcome {
     switch inputItem {
     case .userInput(let content, _, _):
         let prompt = content.compactMap { item -> String? in
             if case .text(let text, _) = item { return text }
             return nil
         }.joined(separator: "\n")
-        return HookRuntime.userPromptSubmit(prompt, projectRoot: projectRoot)
+        return await HookRuntime.userPromptSubmit(prompt, projectRoot: projectRoot)
     default:
         return .proceed
     }
@@ -1415,7 +1448,7 @@ func runPendingSessionStartHooks(sess: Session, turnContext: TurnContext) async 
     if sess.sessionStartHooksConsumed { return false }
     sess.sessionStartHooksConsumed = true
     let projectRoot = URL(fileURLWithPath: turnContext.cwd, isDirectory: true)
-    if let reason = HookRuntime.sessionStartDenial(projectRoot: projectRoot) {
+    if let reason = await HookRuntime.sessionStartDenial(projectRoot: projectRoot) {
         sess.sendEvent(turnContext, .error(ErrorEvent(message: reason)))
         return true
     }

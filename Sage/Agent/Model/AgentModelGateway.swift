@@ -108,6 +108,16 @@ final class AgentModelGateway {
         )
     }
 
+    /// System text and tool list for a harness Responses request.
+    func samplingPrefix(includeTools: Bool) async -> (system: String, tools: [ToolDefinition]) {
+        let req = await prepareRequest(includeTools: includeTools)
+        let system = req.events
+            .filter { $0.kind == .systemInstruction }
+            .map(\.content)
+            .joined(separator: "\n")
+        return (system, req.tools)
+    }
+
     func prepareRequest(includeTools: Bool) async -> PreparedModelRequest {
         let snapshot = settings.snapshot(for: .execute)
 

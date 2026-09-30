@@ -8,6 +8,7 @@
 //  Session.services.onSageToolCall, the same seam MCP uses for onMcpCall.
 //
 
+import CodexCore
 import CodexProtocol
 import Foundation
 

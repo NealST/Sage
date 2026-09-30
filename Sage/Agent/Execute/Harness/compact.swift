@@ -6,8 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Local compacted-history rebuild is live. Remote V2 / ModelClient
-//  summarization waits on Session compact streaming.
+//  Local compacted-history rebuild and initial-context insertion are
+//  live. Remote V2 / ModelClient summarization waits on Session compact
+//  streaming.
 //
 
 import CodexProtocol
@@ -150,6 +151,37 @@ public func buildCompactedHistory(
     return history
 }
 
+/// Codex `insert_initial_context_before_last_real_user_or_summary`.
+public func insertInitialContextBeforeLastRealUserOrSummary(
+    _ compactedHistory: [ResponseItemEnvelope],
+    initialContext: [ResponseItemEnvelope]
+) -> [ResponseItemEnvelope] {
+    guard !initialContext.isEmpty else { return compactedHistory }
+    var history = compactedHistory
+    var lastUserOrSummaryIndex: Int?
+    var lastRealUserIndex: Int?
+    for index in history.indices.reversed() {
+        let item = history[index].item
+        guard item.isUserMessage() else { continue }
+        if lastUserOrSummaryIndex == nil {
+            lastUserOrSummaryIndex = index
+        }
+        if !isSummaryLikeUserMessage(item) {
+            lastRealUserIndex = index
+            break
+        }
+    }
+    let lastCompactionIndex = history.indices.reversed().first { index in
+        isCompactionHistoryItem(history[index].item)
+    }
+    if let insertionIndex = lastRealUserIndex ?? lastUserOrSummaryIndex ?? lastCompactionIndex {
+        history.insert(contentsOf: initialContext, at: insertionIndex)
+    } else {
+        history.append(contentsOf: initialContext)
+    }
+    return history
+}
+
 func compactedUserMessage(
     _ item: ResponseItem,
     harnessMetadata: String?
@@ -174,4 +206,21 @@ func compactedUserMessage(
 func isCompactionSummaryItem(_ item: ResponseItem) -> Bool {
     guard case .message(_, _, _, _, let passthrough) = item else { return false }
     return passthrough?.contentItemKinds?.contains(ContentItemKind("compaction.summary")) == true
+}
+
+func isSummaryLikeUserMessage(_ item: ResponseItem) -> Bool {
+    if isCompactionSummaryItem(item) { return true }
+    guard case .message(_, _, let content, _, _) = item,
+          let text = contentItemsToText(content)
+    else { return false }
+    return isSummaryMessage(text)
+}
+
+func isCompactionHistoryItem(_ item: ResponseItem) -> Bool {
+    switch item {
+    case .compaction, .contextCompaction, .compactionTrigger:
+        return true
+    default:
+        return false
+    }
 }

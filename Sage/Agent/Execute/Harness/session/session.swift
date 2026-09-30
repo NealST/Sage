@@ -8,9 +8,11 @@
 //
 //  Session type shape plus the capture/history/token helpers `runTurn`
 //  and `RegularSessionTask` need (turn started, prewarm consume, MCP
-//  reprojection). The mutex/event loop still waits.
+//  reprojection). Live Execute reads the ModelClientSession `runTurn`
+//  already opened. The mutex/event loop still waits.
 //
 
+import CodexAPI
 import CodexAsyncUtils
 import CodexCore
 import CodexOtel
@@ -159,10 +161,18 @@ final class Session: @unchecked Sendable {
         )
     }
 
+    func advanceAutoCompactWindow() -> (UInt64, AutoCompactWindowIds) {
+        state.advanceAutoCompactWindow()
+    }
+
+    func startNewContextWindow() -> (UInt64, AutoCompactWindowIds) {
+        state.startNewContextWindow()
+    }
+
     func recordCompletedUsage(
         _ turnContext: TurnContext,
         responseId: String,
-        usage: TokenUsage?
+        usage: CodexProtocol.TokenUsage?
     ) {
         guard let usage else { return }
         _ = state.recordTokenUsage(
@@ -217,6 +227,7 @@ final class Session: @unchecked Sendable {
     var lastToolCallInputDeltas: [(callId: String, delta: String)] = []
     var lastReasoningSummaryPartIndex: Int64?
     var lastRemoteCompact: CompactRemoteV2Result?
+    var lastCompactCheckpoint: CompactionCheckpointMetadata?
     var lastCompactModelFallback: CompactModelFallback?
     var fallbackStepContext: StepContext?
     var runCompactOverride: (([ResponseItem]) async throws -> String)?
@@ -392,7 +403,14 @@ final class Session: @unchecked Sendable {
         (([ResponseItem], StepContext) async throws -> SamplingRequestResult)?
 
     /// Stream-level test seam for `try_run_sampling_request`.
-    var runSamplingStreamOverride: ((Prompt) async throws -> ResponseStream)?
+    var runSamplingStreamOverride: ((Prompt) async throws -> CodexCore.ResponseStream)?
+
+    /// Set for the duration of `runSamplingStreamOverride`. Live Execute
+    /// streams through this session instead of opening another one.
+    var samplingClientSession: ModelClientSession?
+    var samplingStepContext: StepContext?
+    /// Fills base instructions and tool schemas before `buildPrompt`.
+    var prepareSamplingPrompt: (@MainActor () async -> Void)?
 }
 
 struct HookSnapshot: Sendable {

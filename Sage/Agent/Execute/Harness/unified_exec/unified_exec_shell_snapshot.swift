@@ -4,11 +4,10 @@
 //
 //  Port of codex-rs/core/src/unified_exec/shell_snapshot.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
 //  R4a: basename `shell_snapshot.swift` is taken by core/src/shell_snapshot.rs.
-//  `Session.prewarm_shell_snapshots` waits on Phase 5 session + exec-server.
-//  Request construction is kept so later wiring can call it.
+//  Request construction is live. Session prewarm / exec-server stay out.
 //
 
 import CodexProtocol

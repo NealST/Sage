@@ -1107,6 +1107,24 @@ public struct ModelTokenBudgetConfig: Codable, Equatable, Sendable {
         case autoCompactFallbackBufferTokens = "auto_compact_fallback_buffer_tokens"
     }
 
+    public init(
+        enabled: Bool = false,
+        useHistoryNotesExtension: Bool = false,
+        reminderThresholdTokens: Int64,
+        reminderMessageTemplate: String,
+        guidanceMessage: String,
+        autoCompactFallbackPrompt: String,
+        autoCompactFallbackBufferTokens: Int64
+    ) {
+        self.enabled = enabled
+        self.useHistoryNotesExtension = useHistoryNotesExtension
+        self.reminderThresholdTokens = reminderThresholdTokens
+        self.reminderMessageTemplate = reminderMessageTemplate
+        self.guidanceMessage = guidanceMessage
+        self.autoCompactFallbackPrompt = autoCompactFallbackPrompt
+        self.autoCompactFallbackBufferTokens = autoCompactFallbackBufferTokens
+    }
+
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false

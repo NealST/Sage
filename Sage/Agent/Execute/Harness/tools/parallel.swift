@@ -7,11 +7,10 @@
 //  Port status: adapted
 //
 //  Codex admits tools through an RWLock: parallel-capable calls take a
-//  read lock, serial calls take a write lock. Sage already schedules by
-//  wave (`ToolBatchWave`). This file owns the policy that wave uses —
-//  observations may share a wave; apply_patch / shell / MCP / todo /
-//  explore / skill mutations / Mac mutations stay serial — and a
-//  generic runner for isolated batches (Explore).
+//  read lock, serial calls take a write lock. Live Execute dispatches
+//  through `ToolBatchExecutor.runAdmittedBatch` (approval first, then
+//  this gate). This file also owns the partition policy used by
+//  `ToolBatchWave` and a generic runner for isolated batches (Explore).
 //
 
 import CodexAsyncUtils

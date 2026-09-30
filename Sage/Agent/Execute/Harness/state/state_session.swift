@@ -217,9 +217,7 @@ final class SessionState: @unchecked Sendable {
     }
 
     func startNewContextWindow() -> (UInt64, AutoCompactWindowIds) {
-        let window = autoCompactWindow.advance()
-        autoCompactWindow.clearPrefill()
-        return window
+        CompactTask.resetWindow(&autoCompactWindow)
     }
 
     func tokenInfo() -> TokenUsageInfo? {

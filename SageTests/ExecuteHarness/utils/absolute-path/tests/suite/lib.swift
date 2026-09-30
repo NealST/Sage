@@ -24,8 +24,8 @@ final class AbsolutePathBufTests: XCTestCase {
         return dir
     }
 
-    override func tearDown() throws {
-        try super.tearDown()
+    override func tearDown() {
+        super.tearDown()
     }
 
     func testCreateWithAbsolutePathIgnoresBasePath() throws {

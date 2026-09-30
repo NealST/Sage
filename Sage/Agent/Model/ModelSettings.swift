@@ -31,6 +31,7 @@ final class ModelSettings {
         static let requestTimeout = "llm.requestTimeout"
         /// Legacy plaintext storage — migrated out on launch.
         static let apiKeyFallback = "llm.apiKey.fallback"
+        static let useHarnessRunTurn = "execute.useHarnessRunTurn"
     }
 
     var baseURL: String {
@@ -72,6 +73,12 @@ final class ModelSettings {
         didSet { UserDefaults.standard.set(requestTimeout, forKey: DefaultsKey.requestTimeout) }
     }
 
+    /// When true, Execute samples through Codex `runTurn` (compact / MCP / guardian).
+    /// Tool batches and HUD approval still go through `RegularTask.consume`.
+    var useHarnessRunTurn: Bool {
+        didSet { UserDefaults.standard.set(useHarnessRunTurn, forKey: DefaultsKey.useHarnessRunTurn) }
+    }
+
     var apiKey: String = "" {
         didSet {
             guard !isHydrating else { return }
@@ -103,6 +110,11 @@ final class ModelSettings {
             requestTimeout = min(max(storedTimeout, 30), 600)
         } else {
             requestTimeout = 120
+        }
+        if UserDefaults.standard.object(forKey: DefaultsKey.useHarnessRunTurn) == nil {
+            useHarnessRunTurn = true
+        } else {
+            useHarnessRunTurn = UserDefaults.standard.bool(forKey: DefaultsKey.useHarnessRunTurn)
         }
 
         if let key = KeychainStore.get(account: Account.apiKey), !key.isEmpty {

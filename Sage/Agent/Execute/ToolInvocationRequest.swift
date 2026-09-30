@@ -45,6 +45,8 @@ struct ToolInvocationRequest {
     var toolCallID: String = "exec"
     /// Set after the user approves a sandbox-escalation card for this call.
     var allowUnsandboxedRetry = false
+    /// Session-scoped Codex approval cache shared with `SessionToolAllowlist`.
+    var approvalStore: ApprovalStore?
 
     func resolvingAuthorization() -> Self {
         guard !didResolveAuthorization else { return self }

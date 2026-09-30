@@ -163,10 +163,11 @@ struct ToolOrchestrator {
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
         let prepared = try await ToolInvocationPipeline.prepare(request)
         let projectRoot = projectRoot(of: prepared.pathGuardPolicy)
-        let preTool = HookRuntime.preToolUse(
+        let preTool = await HookRuntime.preToolUse(
             tool: prepared.name,
             command: prepared.argumentsJSON,
-            projectRoot: projectRoot
+            projectRoot: projectRoot,
+            argumentsJSON: prepared.argumentsJSON
         )
         if preTool.shouldStop {
             throw HarnessToolError.rejected(preTool.additionalContexts.first ?? "Hook denied this tool.")
@@ -179,7 +180,7 @@ struct ToolOrchestrator {
         } else {
             output = try await ToolInvocationPipeline.dispatchTimed(prepared)
         }
-        _ = HookRuntime.postToolUse(tool: prepared.name, projectRoot: projectRoot)
+        _ = await HookRuntime.postToolUse(tool: prepared.name, projectRoot: projectRoot)
         return output
     }
 
@@ -206,7 +207,7 @@ struct ToolOrchestrator {
                 )
             }
             let ctx = ToolCtx.sage(request: request)
-            let orchestrator = ToolOrchestrator()
+            let orchestrator = ToolOrchestrator(approvalStore: request.approvalStore)
             let output = try await orchestrator.run(
                 tool: ShellRuntime(),
                 request: parsed,
@@ -236,13 +237,19 @@ struct ToolOrchestrator {
             approvalReason: approvalReason,
             retryReason: retryReason
         )
-        let permission = HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: Self.projectRoot(of: ctx.pathGuardPolicy))
+        let permission = await HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: Self.projectRoot(of: ctx.pathGuardPolicy))
         if permission.shouldStop {
             throw HarnessToolError.rejected(permission.additionalContexts.first ?? "Hook denied this approval.")
         }
         let decision = try await withCachedApproval(
             store: approvalStore,
-            keys: [action.cacheKey]
+            keys: [
+                action.cacheKey,
+                ApprovalStore.sessionCacheKey(
+                    name: ctx.toolName,
+                    argumentsJSON: ctx.argumentsJSON
+                ),
+            ]
         ) {
             let reviewed = await GuardianDecision.decide(
                 action: action,

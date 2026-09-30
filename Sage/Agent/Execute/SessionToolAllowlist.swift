@@ -3,6 +3,8 @@
 //  Sage
 //
 //  Remembers exact shell / MCP invocations the user approved for this task.
+//  Session-scoped grants also land in `ApprovalStore` so Codex escalate
+//  reuse and HUD allowlist share one cache.
 //
 
 import CryptoKit
@@ -15,9 +17,14 @@ final class SessionToolAllowlist {
     private var capabilityOneShotKeys: Set<String> = []
     private var hookOneShotKeys: Set<String> = []
     private let grantStore: ToolAuthorizationGrantStore
+    let approvalStore: ApprovalStore
 
-    init(grantStore: ToolAuthorizationGrantStore? = nil) {
+    init(
+        grantStore: ToolAuthorizationGrantStore? = nil,
+        approvalStore: ApprovalStore? = nil
+    ) {
         self.grantStore = grantStore ?? .shared
+        self.approvalStore = approvalStore ?? ApprovalStore()
     }
 
     nonisolated static func needsGate(
@@ -66,6 +73,7 @@ final class SessionToolAllowlist {
             requirement: requirement
         )
         return capabilityOneShotKeys.contains(key)
+            || hasSessionApproval(name: name, argumentsJSON: argumentsJSON)
             || grantStore.contains(requirement, scopeID: scopeID)
     }
 
@@ -105,6 +113,7 @@ final class SessionToolAllowlist {
             requirement: requirement
         )
         if capabilityOneShotKeys.remove(key) != nil { return true }
+        if hasSessionApproval(name: name, argumentsJSON: argumentsJSON) { return true }
         return grantStore.contains(requirement, scopeID: scopeID)
     }
 
@@ -220,6 +229,7 @@ final class SessionToolAllowlist {
             mcpTools: mcpTools
         ) else { return }
         grantStore.allowForTask(requirement, scopeID: scopeID)
+        rememberSessionApproval(name: name, argumentsJSON: argumentsJSON)
     }
 
     func allowLongTerm(
@@ -237,11 +247,25 @@ final class SessionToolAllowlist {
             mcpTools: mcpTools
         ) else { return }
         grantStore.allowLongTerm(requirement)
+        rememberSessionApproval(name: name, argumentsJSON: argumentsJSON)
     }
 
     func reset() {
         capabilityOneShotKeys.removeAll()
         hookOneShotKeys.removeAll()
+        approvalStore.reset()
+    }
+
+    private func hasSessionApproval(name: String, argumentsJSON: String) -> Bool {
+        approvalStore.get(ApprovalStore.sessionCacheKey(name: name, argumentsJSON: argumentsJSON))
+            == .approvedForSession
+    }
+
+    private func rememberSessionApproval(name: String, argumentsJSON: String) {
+        approvalStore.put(
+            ApprovalStore.sessionCacheKey(name: name, argumentsJSON: argumentsJSON),
+            .approvedForSession
+        )
     }
 
     /// SHA-256 of tool name + canonical JSON so approval is exact without storing secrets.

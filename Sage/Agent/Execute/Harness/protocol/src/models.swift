@@ -2121,3 +2121,45 @@ private func convertMcpContentToItems(_ contents: [JSONValue]) -> [FunctionCallO
     }
     return items
 }
+
+private let maxRenderedPrefixes = 100
+private let maxAllowPrefixTextBytes = 5000
+private let truncatedAllowPrefixMarker = "...\n[Some commands were truncated]"
+
+/// Codex `format_allow_prefixes`. Sorted prefix lists for compact / permissions.
+public func formatAllowPrefixes(_ prefixes: [[String]]) -> String? {
+    var truncated = prefixes.count > maxRenderedPrefixes
+    let sorted = prefixes.sorted { lhs, rhs in
+        if lhs.count != rhs.count { return lhs.count < rhs.count }
+        let lhsLen = lhs.reduce(0) { $0 + $1.count }
+        let rhsLen = rhs.reduce(0) { $0 + $1.count }
+        if lhsLen != rhsLen { return lhsLen < rhsLen }
+        return lhs.lexicographicallyPrecedes(rhs)
+    }
+    let fullText = sorted
+        .prefix(maxRenderedPrefixes)
+        .map { "- \(renderCommandPrefix($0))" }
+        .joined(separator: "\n")
+    var output = fullText
+    if output.count > maxAllowPrefixTextBytes {
+        truncated = true
+        let end = output.index(output.startIndex, offsetBy: maxAllowPrefixTextBytes)
+        output = String(output[..<end])
+    }
+    if truncated {
+        return output + truncatedAllowPrefixMarker
+    }
+    return output.isEmpty ? nil : output
+}
+
+func renderCommandPrefix(_ prefix: [String]) -> String {
+    let tokens = prefix.map { token -> String in
+        guard let data = try? JSONEncoder().encode(token),
+              let text = String(data: data, encoding: .utf8)
+        else {
+            return "\"\(token)\""
+        }
+        return text
+    }
+    return "[\(tokens.joined(separator: ", "))]"
+}

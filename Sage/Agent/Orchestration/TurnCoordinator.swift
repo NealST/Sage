@@ -83,6 +83,7 @@ final class TurnCoordinator {
             modelGateway: modelGateway,
             streaming: streaming
         )
+        self.execute.useHarnessRunTurn = settings.useHarnessRunTurn
     }
 
     func bind(

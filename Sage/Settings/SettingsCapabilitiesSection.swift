@@ -8,12 +8,20 @@ import SwiftUI
 struct SettingsCapabilitiesSection: View {
     @Environment(AppState.self) private var appState
     @Environment(\.sageTypography) private var type
+    @Bindable var settings: ModelSettings
     @Binding var pinnedSkillsSession: AgentSession?
     @Binding var showMCPManage: Bool
     @Binding var showSkillsManage: Bool
     @State private var mutedTipKinds: Set<SkillTipKind> = []
 
     var body: some View {
+        Section {
+            Toggle("Codex execute loop", isOn: $settings.useHarnessRunTurn)
+                .help("Sample Execute turns through the Codex runTurn loop. Tool approval still uses the HUD cards.")
+        } footer: {
+            Text("Uses Codex compact, MCP startup, and guardian gates. Applies to new agent windows. Turn this off to go back to the previous Execute loop.")
+        }
+
         Section {
             Button {
                 let session = pinnedSkillsSession ?? appState.keySession

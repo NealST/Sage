@@ -4,15 +4,21 @@
 //
 //  Port of codex-rs/core/src/guardian/prompt.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Reviewer contract (ALLOW/DENY/ASK) only; the full upstream prompt
-//  assembly lands with the Guardian phase (Phase 8).
+//  Reviewer contract (ALLOW/DENY/ASK) plus the action + truncated
+//  transcript the live HUD reviewer sees. Full composed context
+//  sections stay out.
 //
 
 import Foundation
 
 enum GuardianPrompt {
+    /// Codex `GUARDIAN_TRANSCRIPT_START`.
+    static let transcriptStart = ">>> TRANSCRIPT START\n"
+    static let emptyTranscriptPlaceholder = "<no retained transcript entries>"
+    static let maxApprovalReasonTokens = 512
+
     static let system = """
     You are Guardian, an isolated reviewer. The execute agent proposed one action.
     You do not run tools. Reply with exactly one decision:
@@ -29,17 +35,29 @@ enum GuardianPrompt {
     static func user(
         request: GuardianApprovalRequest,
         approvalReason: String?,
-        retryReason: String?
+        retryReason: String?,
+        transcript: String? = nil
     ) -> String {
         var parts = [
             ">>> ACTION",
             request.pretty(),
         ]
         if let approvalReason, !approvalReason.isEmpty {
-            parts.append("approval_reason: \(approvalReason)")
+            parts.append(
+                "approval_reason: \(truncate(approvalReason, tokenCap: maxApprovalReasonTokens))"
+            )
         }
         if let retryReason, !retryReason.isEmpty {
-            parts.append("retry_reason: \(retryReason)")
+            parts.append(
+                "retry_reason: \(truncate(retryReason, tokenCap: maxApprovalReasonTokens))"
+            )
+        }
+        let body = transcript?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let body, !body.isEmpty {
+            parts.append(transcriptStart + body)
+        } else {
+            parts.append(transcriptStart + emptyTranscriptPlaceholder)
         }
         return parts.joined(separator: "\n")
     }

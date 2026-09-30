@@ -13,6 +13,7 @@
 
 import CodexCore
 import CodexProtocol
+import Foundation
 
 struct SendMessageArgs: Decodable, Equatable, Sendable {
     var target: String

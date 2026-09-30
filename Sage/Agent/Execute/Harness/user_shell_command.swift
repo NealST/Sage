@@ -4,11 +4,10 @@
 //
 //  Port of codex-rs/core/src/user_shell_command.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Formats a user-shell command record. `TurnContext` / contextual fragments
-//  are Phase 5; this keeps the record payload so later session wiring can
-//  wrap it as `ResponseItem`.
+//  Formats a user-shell command record. Contextual fragments / TurnContext
+//  stay out; the record is the payload later session wiring wraps.
 //
 
 import CodexProtocol
@@ -37,4 +36,14 @@ func userShellCommandRecord(
 func formatUserShellCommandRecord(_ record: UserShellCommandRecord) -> String {
     let status = record.exitCode == 0 ? "ok" : "exit \(record.exitCode)"
     return "$ \(record.command)\n[\(status)]\n\(record.output)"
+}
+
+func userShellCommandRecordItem(_ record: UserShellCommandRecord) -> ResponseItem {
+    .message(
+        id: nil,
+        role: "user",
+        content: [.inputText(text: formatUserShellCommandRecord(record))],
+        phase: nil,
+        internalChatMessageMetadataPassthrough: nil
+    )
 }

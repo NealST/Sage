@@ -141,6 +141,13 @@ extension AgentRuntime {
                 toolCallID: call.id
             )
         }
+        turns.execute.admitHarnessBatch = { [weak self] in
+            guard let self else { return .persistFailed }
+            guard var plan = self.planProgress.plan ?? self.state.activeTask?.pendingPlan else {
+                return .persistFailed
+            }
+            return await ToolBatchExecutor.admit(plan: &plan, services: self.makeExecuteServices())
+        }
     }
 
     func makeExecuteServices() -> ExecuteServices {

@@ -83,12 +83,12 @@ enum ExploreSubagentRunner {
                 Investigate the assigned question with the available filesystem tools.
                 Stay inside this sandbox: \(request.pathGuardPolicy.boundaryDescription)
                 Do not propose or perform mutations. Return concise findings with relevant paths and evidence.
-                \(request.instructions?.nilIfEmpty ?? "")
+                \(nonEmptyOrNil(request.instructions) ?? "")
                 """
             ),
             AgentEvent(
                 kind: .userInput,
-                content: [request.task, request.context?.nilIfEmpty]
+                content: [request.task, nonEmptyOrNil(request.context)]
                     .compactMap { $0 }
                     .joined(separator: "\n\nContext:\n")
             ),

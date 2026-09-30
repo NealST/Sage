@@ -165,6 +165,16 @@ struct ApplyPatchToolRuntime: ToolRuntime {
 
     func escalateOnFailure() -> Bool { true }
 
+    /// Codex apply_patch: OnRequest and UnlessTrusted ask before dropping the sandbox.
+    func wantsNoSandboxApproval(policy: AskForApproval) -> Bool {
+        switch policy {
+        case .never:
+            return false
+        case .onRequest, .unlessTrusted:
+            return true
+        }
+    }
+
     func execApprovalRequirement(_ request: ApplyPatchExecRequest) -> ExecApprovalRequirement? {
         let protected = request.paths.contains(where: WorkspaceMetadataPaths.isProtected)
         return protected ? .needsApproval(reason: "Patch writes .git, .sage, or .agents.") : .skip(bypassSandbox: false)
@@ -205,7 +215,7 @@ struct ApplyPatchToolRuntime: ToolRuntime {
             _ = try PathGuard.resolveAllowed(path.path, policy: invocation.pathGuardPolicy, access: .write)
         }
         let request = ApplyPatchExecRequest(patch: patch, hunks: parsed.hunks, cwd: cwd, paths: paths)
-        let output = try await ToolOrchestrator().run(
+        let output = try await ToolOrchestrator(approvalStore: invocation.approvalStore).run(
             tool: ApplyPatchToolRuntime(),
             request: request,
             ctx: ToolCtx.sage(request: invocation),

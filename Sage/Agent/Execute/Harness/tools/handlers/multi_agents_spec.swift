@@ -569,7 +569,7 @@ func waitAgentToolParametersV2(_ options: WaitAgentTimeoutOptions) -> JsonSchema
     )
 }
 
-func agentStatusOutputSchema() -> JSONValue {
+func agentStatusOutputSchema() -> HarnessJSON {
     .object([
         "oneOf": .array([
             .object([
@@ -595,7 +595,7 @@ func agentStatusOutputSchema() -> JSONValue {
     ])
 }
 
-func spawnAgentOutputSchemaV1() -> JSONValue {
+func spawnAgentOutputSchemaV1() -> HarnessJSON {
     jsonSchemaObject(
         [
             "agent_id": jsonProperty(type: "string", description: "Thread identifier for the spawned agent."),
@@ -608,7 +608,7 @@ func spawnAgentOutputSchemaV1() -> JSONValue {
     )
 }
 
-func spawnAgentOutputSchemaV2(hideAgentMetadata: Bool) -> JSONValue {
+func spawnAgentOutputSchemaV2(hideAgentMetadata: Bool) -> HarnessJSON {
     if hideAgentMetadata {
         return jsonSchemaObject(
             [
@@ -635,7 +635,7 @@ func spawnAgentOutputSchemaV2(hideAgentMetadata: Bool) -> JSONValue {
     )
 }
 
-func sendInputOutputSchema() -> JSONValue {
+func sendInputOutputSchema() -> HarnessJSON {
     jsonSchemaObject(
         [
             "submission_id": jsonProperty(
@@ -647,7 +647,7 @@ func sendInputOutputSchema() -> JSONValue {
     )
 }
 
-func listAgentsOutputSchema() -> JSONValue {
+func listAgentsOutputSchema() -> HarnessJSON {
     jsonSchemaObject(
         [
             "agents": .object([
@@ -673,11 +673,11 @@ func listAgentsOutputSchema() -> JSONValue {
     )
 }
 
-func resumeAgentOutputSchema() -> JSONValue {
+func resumeAgentOutputSchema() -> HarnessJSON {
     jsonSchemaObject(["status": agentStatusOutputSchema()], required: ["status"])
 }
 
-func waitOutputSchemaV1() -> JSONValue {
+func waitOutputSchemaV1() -> HarnessJSON {
     jsonSchemaObject(
         [
             "status": .object([
@@ -695,7 +695,7 @@ func waitOutputSchemaV1() -> JSONValue {
     )
 }
 
-func waitOutputSchemaV2() -> JSONValue {
+func waitOutputSchemaV2() -> HarnessJSON {
     jsonSchemaObject(
         [
             "message": jsonProperty(
@@ -713,7 +713,7 @@ func waitOutputSchemaV2() -> JSONValue {
     )
 }
 
-func agentPreviousStatusOutputSchema(_ previousStatusDescription: String) -> JSONValue {
+func agentPreviousStatusOutputSchema(_ previousStatusDescription: String) -> HarnessJSON {
     jsonSchemaObject(
         [
             "previous_status": .object([
@@ -725,7 +725,7 @@ func agentPreviousStatusOutputSchema(_ previousStatusDescription: String) -> JSO
     )
 }
 
-func jsonSchemaObject(_ properties: [String: JSONValue], required: [String]) -> JSONValue {
+func jsonSchemaObject(_ properties: [String: HarnessJSON], required: [String]) -> HarnessJSON {
     .object([
         "type": .string("object"),
         "properties": .object(properties),
@@ -734,10 +734,10 @@ func jsonSchemaObject(_ properties: [String: JSONValue], required: [String]) -> 
     ])
 }
 
-func jsonProperty(type: String, description: String) -> JSONValue {
+func jsonProperty(type: String, description: String) -> HarnessJSON {
     .object(["type": .string(type), "description": .string(description)])
 }
 
-func jsonProperty(types: [String], description: String) -> JSONValue {
+func jsonProperty(types: [String], description: String) -> HarnessJSON {
     .object(["type": .array(types.map { .string($0) }), "description": .string(description)])
 }

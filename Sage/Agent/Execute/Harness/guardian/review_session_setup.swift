@@ -4,7 +4,10 @@
 //
 //  Port of codex-rs/core/src/guardian/review_session_setup.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
+//
+//  Assembles the isolated reviewer prompt from `GuardianReviewerConfig`.
+//  Session spawn / prewarm stay out.
 //
 
 import Foundation
@@ -18,15 +21,18 @@ struct PreparedGuardianContext: Sendable {
     static func prepare(
         request: GuardianApprovalRequest,
         approvalReason: String?,
-        retryReason: String?
+        retryReason: String?,
+        events: [AgentEvent] = [],
+        config: GuardianReviewerConfig? = nil
     ) -> PreparedGuardianContext {
         PreparedGuardianContext(
             reviewID: Guardian.newReviewID(),
-            system: GuardianPrompt.system,
+            system: config?.instructions ?? GuardianPrompt.system,
             user: GuardianPrompt.user(
                 request: request,
                 approvalReason: approvalReason,
-                retryReason: retryReason
+                retryReason: retryReason,
+                transcript: GuardianReviewSessionContext.transcript(events: events)
             ),
             scope: request.scope
         )

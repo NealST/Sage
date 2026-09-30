@@ -1,5 +1,5 @@
 //
-//  mod.swift
+//  tools_mod.swift
 //  Sage
 //
 //  Port of codex-rs/core/src/tools/mod.rs (Apache-2.0).

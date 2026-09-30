@@ -4,10 +4,11 @@
 //
 //  Port of codex-rs/core/src/unified_exec/process_manager.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Process-id allocation, env overlay, and local spawn are implemented.
-//  Session/orchestrator/approval/plugin paths wait on Phase 4–5.
+//  Process-id allocation, env overlay, local spawn, and stdin approval
+//  checks before write. HUD still owns the card; a needed review throws
+//  instead of waiting inside `runTurn`. Plugin sidecar stays out.
 //
 
 import CodexAsyncUtils
@@ -164,9 +165,30 @@ extension UnifiedExecProcessManager {
         return entry
     }
 
-    func writeStdin(_ request: WriteStdinRequest) async throws {
+    func writeStdin(
+        _ request: WriteStdinRequest,
+        current: PermissionProfile = .disabled,
+        writeStdinApprovalEnabled: Bool = true,
+        strictAutoReview: Bool = false,
+        alreadyApproved: Bool = false
+    ) async throws {
         guard let entry = process(for: request.processId) else {
             throw UnifiedExecError.unknownProcessId(processId: request.processId)
+        }
+        if !alreadyApproved {
+            switch entry.stdinApproval(
+                input: request.input,
+                current: current,
+                writeStdinApprovalEnabled: writeStdinApprovalEnabled,
+                strictAutoReview: strictAutoReview
+            ) {
+            case .failure(let error):
+                throw error
+            case .success(let need):
+                if let need {
+                    throw UnifiedExecError.stdinApproval(need.reason)
+                }
+            }
         }
         if request.input.isEmpty { return }
         if entry.process.hasExited() {

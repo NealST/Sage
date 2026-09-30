@@ -1,5 +1,5 @@
 //
-//  permissions.swift
+//  guardian_permissions.swift
 //  Sage
 //
 //  Port of codex-rs/core/src/guardian/permissions.rs (Apache-2.0).

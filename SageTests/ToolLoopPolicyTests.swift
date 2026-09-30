@@ -302,6 +302,7 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
     private var projectRoot: URL?
 
     override func tearDown() async throws {
+        GuardianReviewSession.shared.complete = nil
         if let tempDirectory {
             try? FileManager.default.removeItem(at: tempDirectory)
         }
@@ -311,30 +312,28 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testPrepareRunsApprovedSiblingsBeforeGatedRead() async throws {
+    func testAdmittedBatchPausesOnFirstGatedStepBeforeAnyRun() async throws {
+        GuardianReviewSession.shared.complete = { _ in "ASK" }
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         try attachHookProject(to: runtime, hookContains: "gated")
         var plan = mixedReadPlan()
-        let prepared = await ToolBatchExecutor.prepareParallelRun(
-            [0, 1, 2],
+        let outcome = await ToolBatchExecutor.runAdmittedBatch(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )
 
-        guard case .runnable(let approved, let deferred) = prepared else {
-            XCTFail("Expected approved siblings to run before JIT")
+        XCTAssertEqual(outcome, .paused)
+        XCTAssertEqual(plan.steps.map(\.status), [.pending, .pending, .pending])
+        guard case .toolApproval(let callID, _, _, _) = runtime.state.pendingPrompt else {
+            XCTFail("Expected the gated read to ask for approval")
             return
         }
-        XCTAssertEqual(approved, [0, 1])
-        XCTAssertEqual(deferred?.step.toolCallID, "gated")
-        XCTAssertEqual(plan.steps[0].status, .running)
-        XCTAssertEqual(plan.steps[1].status, .running)
-        XCTAssertEqual(plan.steps[2].status, .pending)
-        XCTAssertNil(runtime.state.pendingPrompt)
+        XCTAssertEqual(callID, "gated")
     }
 
-    func testPreparePausesImmediatelyWhenEveryStepNeedsApproval() async throws {
+    func testAdmittedBatchPausesImmediatelyWhenEveryStepNeedsApproval() async throws {
+        GuardianReviewSession.shared.complete = { _ in "ASK" }
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         try attachHookProject(to: runtime, hookContains: "secret")
@@ -345,54 +344,18 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
                 readStep(id: "secret-2", path: "secret-b.md"),
             ]
         )
-        let prepared = await ToolBatchExecutor.prepareParallelRun(
-            [0, 1],
+        let outcome = await ToolBatchExecutor.runAdmittedBatch(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )
 
-        XCTAssertEqual(prepared, .outcome(.paused))
-        XCTAssertEqual(plan.steps[0].status, .pending)
-        XCTAssertEqual(plan.steps[1].status, .pending)
+        XCTAssertEqual(outcome, .paused)
+        XCTAssertEqual(plan.steps.map(\.status), [.pending, .pending])
         guard case .toolApproval(let callID, _, _, _) = runtime.state.pendingPrompt else {
             XCTFail("Expected the first gated read to ask for approval")
             return
         }
         XCTAssertEqual(callID, "secret-1")
-    }
-
-    func testFinishParallelWaveAsksAfterApprovedSiblingsSucceed() async throws {
-        let runtime = try makeRuntime()
-        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
-        try attachHookProject(to: runtime, hookContains: "gated")
-        var plan = mixedReadPlan()
-        let outcome = await ToolBatchExecutor.finishParallelWave(
-            .succeeded,
-            deferredApproval: ToolBatchExecutor.DeferredApproval(step: plan.steps[2]),
-            plan: &plan,
-            services: runtime.makeExecuteServices()
-        )
-        XCTAssertEqual(outcome, .paused)
-        guard case .toolApproval(let callID, _, _, _) = runtime.state.pendingPrompt else {
-            XCTFail("Expected JIT after approved siblings finished")
-            return
-        }
-        XCTAssertEqual(callID, "gated")
-    }
-
-    func testFinishParallelWaveDoesNotAskAfterCancel() async throws {
-        let runtime = try makeRuntime()
-        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
-        try attachHookProject(to: runtime, hookContains: "gated")
-        var plan = mixedReadPlan()
-        let outcome = await ToolBatchExecutor.finishParallelWave(
-            .cancelled,
-            deferredApproval: ToolBatchExecutor.DeferredApproval(step: plan.steps[2]),
-            plan: &plan,
-            services: runtime.makeExecuteServices()
-        )
-        XCTAssertEqual(outcome, .cancelled)
-        XCTAssertNil(runtime.state.pendingPrompt)
     }
 
     private func mixedReadPlan() -> AgentPlan {
@@ -424,12 +387,14 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
             databaseURL: directory.appendingPathComponent("sage.sqlite"),
             legacyJSONURL: directory.appendingPathComponent("tasks.json")
         )
-        return AgentRuntime(
+        let runtime = AgentRuntime(
             settings: .shared,
             tools: .makeDefault(),
             taskRepository: repository,
             skills: SkillSessionController()
         )
+        runtime.turns.execute.useHarnessRunTurn = false
+        return runtime
     }
 
     private func attachHookProject(to runtime: AgentRuntime, hookContains: String) throws {

@@ -1,5 +1,5 @@
 //
-//  mod.swift
+//  guardian_mod.swift
 //  Sage
 //
 //  Port of codex-rs/core/src/guardian/mod.rs (Apache-2.0).

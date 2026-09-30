@@ -7,6 +7,7 @@
 //  Port status: faithful
 //
 
+import CodexContextFragments
 import CodexCore
 import CodexProtocol
 import Foundation

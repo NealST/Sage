@@ -10,7 +10,9 @@
 //  calls onto the registry and builds a Session-free ToolInvocation.
 //
 
+import CodexCore
 import CodexProtocol
+import Foundation
 
 struct ToolCall: Equatable, Sendable {
     var toolName: ToolName

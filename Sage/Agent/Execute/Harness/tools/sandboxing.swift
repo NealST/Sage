@@ -81,6 +81,12 @@ enum AskForApproval: Sendable, Equatable {
     case unlessTrusted
 }
 
+/// Codex `ApprovalRequestReasons` — hook / retry text the isolated reviewer sees.
+struct ApprovalRequestReasons: Sendable, Equatable {
+    var approval: String?
+    var retry: String?
+}
+
 enum ExecApprovalRequirement: Sendable, Equatable {
     case skip(bypassSandbox: Bool)
     case needsApproval(reason: String?)
@@ -173,6 +179,7 @@ struct ToolCtx: Sendable {
     var extraReadableRoots: [URL]
     /// User already approved dropping Seatbelt for this call.
     var allowUnsandboxedRetry = false
+    var argumentsJSON: String = "{}"
 
     static func sage(
         request: ToolInvocationRequest,
@@ -191,7 +198,8 @@ struct ToolCtx: Sendable {
             fileSystemPolicy: .sage(request.pathGuardPolicy),
             readAllowlist: allowlist,
             extraReadableRoots: [],
-            allowUnsandboxedRetry: request.allowUnsandboxedRetry
+            allowUnsandboxedRetry: request.allowUnsandboxedRetry,
+            argumentsJSON: request.argumentsJSON
         )
     }
 

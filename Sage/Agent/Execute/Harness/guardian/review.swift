@@ -4,10 +4,10 @@
 //
 //  Port of codex-rs/core/src/guardian/review.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  Isolated reviewer. Execute still asks the model; this pass only
-//  allows, denies, or hands the action back to the user card.
+//  Isolated reviewer. Live HUD batches call `GuardianDecision` first;
+//  ALLOW/DENY settle the step, ASK still pauses the card.
 //
 
 import CodexProtocol
@@ -46,4 +46,7 @@ enum Guardian {
 struct GuardianReviewOptions: Sendable {
     var requireGuardian = false
     var requireSynchronousReview = true
+    var approvalPolicy: CodexProtocol.AskForApproval = .onRequest
+    var approvalsReviewer: ApprovalsReviewer = .user
+    var reviewMode: GuardianReviewMode?
 }

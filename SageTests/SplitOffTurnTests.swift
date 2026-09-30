@@ -180,12 +180,14 @@ final class SplitOffTurnTests: XCTestCase {
             databaseURL: directory.appendingPathComponent("sage.sqlite"),
             legacyJSONURL: directory.appendingPathComponent("tasks.json")
         )
-        return AgentRuntime(
+        let runtime = AgentRuntime(
             settings: .shared,
             tools: .makeDefault(),
             taskRepository: repository,
             skills: SkillSessionController()
         )
+        runtime.turns.execute.useHarnessRunTurn = false
+        return runtime
     }
 
     private func makeTempDirectory() throws -> URL {

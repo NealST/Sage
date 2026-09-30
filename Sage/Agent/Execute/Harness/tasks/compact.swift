@@ -4,19 +4,26 @@
 //
 //  Port of codex-rs/core/src/tasks/compact.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: partial
+//  Port status: adapted
 //
-//  After the compressor returns, folded events are replaced by one
-//  summary event — the same history swap Codex does locally. Remote V2
-//  and token-budget window reset stay out.
+//  Routes like Codex CompactTask: token-budget installs a fresh window,
+//  otherwise `runAutoCompact` does remote V2 or a local fold. Occupancy
+//  helpers stay here so Sage fold and the harness window share one
+//  threshold and reset contract.
 //
 
+import CodexCore
 import Foundation
 
 enum CompactTask {
     /// Auto-fold when occupancy reaches this, even if pins still fit.
-    /// Codex's default auto-compact is ~90% of the window.
-    static let autoCompactThreshold = 0.90
+    static let autoCompactThreshold = CompactTokenBudget.autoCompactThreshold
+
+    enum Strategy: Equatable, Sendable {
+        case tokenBudget
+        case remoteV2
+        case local
+    }
 
     enum Outcome: Equatable, Sendable {
         case folded
@@ -38,6 +45,47 @@ enum CompactTask {
                 older tool output may be missing.
                 """
             }
+        }
+    }
+
+    static func selectStrategy(tokenBudgetEnabled: Bool, remoteV2Available: Bool) -> Strategy {
+        if tokenBudgetEnabled { return .tokenBudget }
+        if remoteV2Available { return .remoteV2 }
+        return .local
+    }
+
+    /// Codex `start_new_context_window`: bump the window id and drop prefill
+    /// so the next sample is measured against a new token-budget window.
+    @discardableResult
+    static func resetWindow(_ window: inout AutoCompactWindow) -> (UInt64, AutoCompactWindowIds) {
+        let advanced = window.advance()
+        window.clearPrefill()
+        return advanced
+    }
+
+    static func run(
+        sess: Session,
+        stepContext: StepContext,
+        clientSession: inout ModelClientSession?,
+        injection: InitialContextInjection
+    ) async throws {
+        switch selectStrategy(
+            tokenBudgetEnabled: sess.features.enabled(.tokenBudget),
+            remoteV2Available: clientSession != nil
+        ) {
+        case .tokenBudget:
+            try await runInlineTokenBudgetCompact(
+                sess: sess,
+                stepContext: stepContext,
+                injection: injection
+            )
+        case .remoteV2, .local:
+            try await runAutoCompact(
+                sess: sess,
+                stepContext: stepContext,
+                clientSession: &clientSession,
+                injection: injection
+            )
         }
     }
 

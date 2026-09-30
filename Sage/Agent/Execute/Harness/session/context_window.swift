@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Token-status math is faithful. Config.token_budget fallback buffer
-//  is 0 until TokenBudgetConfig lands.
+//  Token-status math is faithful. The auto-compact fallback buffer is
+//  reserved only when TokenBudgetConfig has a fallback prompt.
 //
 
 import CodexProtocol
@@ -69,8 +69,10 @@ func contextWindowTokenStatus(
         tokensRemaining(limit: fullContextWindowLimit, used: activeContextTokens),
     ].compactMap { $0 }.min()
 
-    let autoCompactFallbackBufferTokens: Int64 = 0
-    let bufferedAutoCompactLimit = autoCompactScopeLimit.map { $0 &+ autoCompactFallbackBufferTokens }
+    let autoCompactFallbackBufferTokens = config.tokenBudget?.fallbackBufferTokens() ?? 0
+    let bufferedAutoCompactLimit = autoCompactScopeLimit.map {
+        saturatingAdd($0, autoCompactFallbackBufferTokens)
+    }
     let fullContextWindowLimitReached = fullContextWindowLimit.map { activeContextTokens >= $0 } ?? false
     let tokenLimitReached =
         (bufferedAutoCompactLimit.map { autoCompactScopeTokens >= $0 } ?? false)
@@ -96,6 +98,14 @@ func contextWindowTokenStatus(
         tokenLimitReached: tokenLimitReached,
         turnEndCompactionThresholdReached: turnEndCompactionThresholdReached
     )
+}
+
+func saturatingAdd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+    let (result, overflow) = lhs.addingReportingOverflow(rhs)
+    if overflow {
+        return lhs > 0 ? Int64.max : Int64.min
+    }
+    return result
 }
 
 extension Session {

@@ -79,4 +79,71 @@ final class ExecuteHarnessApprovalTests: XCTestCase {
             XCTFail("unexpected error \(error)")
         }
     }
+
+    func testAllowlistSessionGrantIsVisibleToApprovalStore() async {
+        let store = ApprovalStore()
+        let list = isolatedAllowlist(approvalStore: store)
+        let args = #"{"path":"~/Documents/note.txt","content":"hello"}"#
+        XCTAssertNil(store.get(ApprovalStore.sessionCacheKey(name: "write_text_file", argumentsJSON: args)))
+        list.allowThisTask(
+            name: "write_text_file",
+            argumentsJSON: args,
+            policy: .home,
+            scopeID: "task-a"
+        )
+        XCTAssertEqual(
+            store.get(ApprovalStore.sessionCacheKey(name: "write_text_file", argumentsJSON: args)),
+            .approvedForSession
+        )
+        XCTAssertTrue(
+            list.contains(
+                name: "write_text_file",
+                argumentsJSON: args,
+                policy: .home,
+                scopeID: "task-a"
+            )
+        )
+    }
+
+    func testWithCachedApprovalReusesAllowlistSessionKey() async throws {
+        let store = ApprovalStore()
+        let list = isolatedAllowlist(approvalStore: store)
+        let args = #"{"path":"~/Documents/note.txt","content":"hello"}"#
+        list.allowThisTask(
+            name: "write_text_file",
+            argumentsJSON: args,
+            policy: .home,
+            scopeID: "task-a"
+        )
+        var fetches = 0
+        let decision = try await withCachedApproval(
+            store: store,
+            keys: [
+                ApprovalStore.sessionCacheKey(name: "write_text_file", argumentsJSON: args),
+            ]
+        ) {
+            fetches += 1
+            return .approved
+        }
+        XCTAssertEqual(decision, .approvedForSession)
+        XCTAssertEqual(fetches, 0)
+    }
+
+    func testApplyPatchAsksBeforeDroppingTheSandboxOnRequest() {
+        let runtime = ApplyPatchToolRuntime()
+        XCTAssertTrue(runtime.wantsNoSandboxApproval(policy: .onRequest))
+        XCTAssertTrue(runtime.wantsNoSandboxApproval(policy: .unlessTrusted))
+        XCTAssertFalse(runtime.wantsNoSandboxApproval(policy: .never))
+        XCTAssertFalse(ShellRuntime().wantsNoSandboxApproval(policy: .onRequest))
+    }
+
+    private func isolatedAllowlist(approvalStore: ApprovalStore) -> SessionToolAllowlist {
+        let suite = "ExecuteHarnessApprovalTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        defaults.removePersistentDomain(forName: suite)
+        return SessionToolAllowlist(
+            grantStore: ToolAuthorizationGrantStore(defaults: defaults),
+            approvalStore: approvalStore
+        )
+    }
 }

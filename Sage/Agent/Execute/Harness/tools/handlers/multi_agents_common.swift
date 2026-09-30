@@ -32,7 +32,7 @@ func toolOutputJsonText<T: Encodable>(_ value: T, toolName: String) -> String {
     if let data = try? encoder.encode(value), let text = String(data: data, encoding: .utf8) {
         return text
     }
-    return JSONValue.string("failed to serialize \(toolName) result").encodedString()
+    return HarnessJSON.string("failed to serialize \(toolName) result").encodedString()
 }
 
 func toolOutputResponseItem<T: Encodable>(
@@ -50,7 +50,7 @@ func toolOutputCodeModeResult<T: Encodable>(_ value: T, toolName: String) -> Har
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     if let data = try? encoder.encode(value),
-       let parsed = try? JSONDecoder().decode(JSONValue.self, from: data)
+       let parsed = try? JSONDecoder().decode(HarnessJSON.self, from: data)
     {
         return parsed
     }
@@ -145,8 +145,10 @@ func requireLocalAgentControl(_ invocation: ToolInvocation) throws -> LocalAgent
     return control
 }
 
-extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+func nonEmptyOrNil(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
 }
 
 func requireCallerThreadId(_ invocation: ToolInvocation) throws -> ThreadId {

@@ -102,4 +102,9 @@ public final class WorldState: @unchecked Sendable {
         add(tools.renderDiff(previous: previous?.sections["tools"]))
         return fragments
     }
+
+    /// Codex `WorldState::render_full`: every section with no previous snapshot.
+    public func renderFull() -> [any ContextualUserFragment] {
+        renderDiff(previous: nil)
+    }
 }

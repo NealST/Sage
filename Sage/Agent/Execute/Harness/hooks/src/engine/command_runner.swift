@@ -100,6 +100,32 @@ public final class CommandHookRuntime: @unchecked Sendable {
         )
     }
 
+    /// Sync command hook used by Sage `HookRuntime` for `.sage/hooks.json` `run`.
+    public func runLocalCommand(
+        _ command: String,
+        inputJSON: String,
+        cwd: String,
+        timeoutSec: UInt64 = 10
+    ) async -> HandlerRunResult {
+        let cwdPath = (try? AbsolutePathBuf.fromAbsolutePath(cwd))
+            ?? (try! AbsolutePathBuf.fromAbsolutePath("/tmp"))
+        let handler = ConfiguredHandler(
+            eventName: .sessionStart,
+            timeoutSec: timeoutSec,
+            sourcePath: .local(cwdPath),
+            displayOrder: 0,
+            kind: .command(command: command, env: [:], isAsync: false)
+        )
+        return await runCommand(
+            runtime: self,
+            handler: handler,
+            command: command,
+            env: [:],
+            inputJSON: inputJSON,
+            cwd: cwd
+        )
+    }
+
     public func scheduleAsyncHook<T: Sendable>(
         handler: ConfiguredHandler,
         inputJSON: String,

@@ -16,6 +16,17 @@ enum ToolBatchExecutor {
         case cancelled
     }
 
+    /// Approval gate for a harness turn, before `runTurn` dispatches tools.
+    /// `.ready` means every remaining step may run inside the harness.
+    /// `.halted` means a step was recorded terminal and the model should sample again.
+    enum AdmitOutcome: Equatable, Sendable {
+        case ready
+        case paused
+        case halted
+        case persistFailed
+        case cancelled
+    }
+
     enum StepCallResult: Sendable {
         case success(String)
         case failure(String)

@@ -8,8 +8,23 @@ import Foundation
 extension AgentModelGateway {
     func streamComplete(includeTools: Bool = true) async throws -> ModelTurn {
         let req = await prepareRequest(includeTools: includeTools)
+        return try await emitStream(req, events: req.events)
+    }
+
+    /// Uses harness turn history for the conversation and keeps Sage's system prefix.
+    func streamComplete(conversation: [AgentEvent], includeTools: Bool) async throws -> ModelTurn {
+        let req = await prepareRequest(includeTools: includeTools)
+        let system = req.events.filter { $0.kind == .systemInstruction }
+        let events = conversation.isEmpty ? req.events : system + conversation
+        return try await emitStream(req, events: events)
+    }
+
+    private func emitStream(
+        _ req: PreparedModelRequest,
+        events: [AgentEvent]
+    ) async throws -> ModelTurn {
         let stream = try await modelClient.streamComplete(
-            events: req.events,
+            events: events,
             tools: req.tools,
             settings: req.settings
         )

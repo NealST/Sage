@@ -37,6 +37,9 @@ final class SessionServices: @unchecked Sendable {
     var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
     /// Sage execute tools (list_directory, apply_patch, …). Wired by RegularTask.
     var sageToolNames: [String]
+    /// Full Responses tool schemas for the prompt `runTurn` builds.
+    /// Nil keeps the name-only specs from the tool router.
+    var sageResponsesTools: [CodexProtocol.JSONValue]?
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     var skillsLookup: SessionSkillsLookup
     var turnInputContributors: [any TurnInputContributor]
@@ -58,6 +61,7 @@ final class SessionServices: @unchecked Sendable {
         appsPolicy: AppsConfig? = nil,
         onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
         sageToolNames: [String] = [],
+        sageResponsesTools: [CodexProtocol.JSONValue]? = nil,
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         skillsLookup: SessionSkillsLookup = SessionSkillsLookup(),
         turnInputContributors: [any TurnInputContributor] = []
@@ -79,6 +83,7 @@ final class SessionServices: @unchecked Sendable {
         self.appsPolicy = appsPolicy
         self.onMcpCall = onMcpCall
         self.sageToolNames = sageToolNames
+        self.sageResponsesTools = sageResponsesTools
         self.onSageToolCall = onSageToolCall
         self.skillsLookup = skillsLookup
         self.turnInputContributors = turnInputContributors

@@ -175,11 +175,11 @@
 | `core/src/unified_exec/mod.rs` | 249 | `unified_exec/mod.swift` | 🟡 adapted |  |
 | `core/src/unified_exec/oneshot.rs` | 123 | `unified_exec/oneshot.swift` | 🟡 adapted |  |
 | `core/src/unified_exec/process.rs` | 652 | `unified_exec/process.swift` | 🟡 adapted |  |
-| `core/src/unified_exec/process_manager.rs` | 1,881 | `unified_exec/process_manager.swift` | 🟡 partial |  |
+| `core/src/unified_exec/process_manager.rs` | 1,881 | `unified_exec/process_manager.swift` | 🟡 adapted | spawn + stdin approval throw; HUD card stays out of runTurn |
 | `core/src/unified_exec/process_state.rs` | 27 | `unified_exec/process_state.swift` | ✅ faithful |  |
-| `core/src/unified_exec/shell_snapshot.rs` | 202 | `unified_exec/unified_exec_shell_snapshot.swift` | 🟡 partial |  |
-| `core/src/unified_exec/stdin_approval.rs` | 249 | `unified_exec/stdin_approval.swift` | 🟡 partial |  |
-| `core/src/user_shell_command.rs` | 44 | `user_shell_command.swift` | 🟡 partial |  |
+| `core/src/unified_exec/shell_snapshot.rs` | 202 | `unified_exec/unified_exec_shell_snapshot.swift` | 🟡 adapted | request construction; session prewarm stays out |
+| `core/src/unified_exec/stdin_approval.rs` | 249 | `unified_exec/stdin_approval.swift` | 🟡 adapted | StdinApprovalNeed + NUL/denied-read; TurnEnvironment stays out |
+| `core/src/user_shell_command.rs` | 44 | `user_shell_command.swift` | 🟡 adapted | record + format + ResponseItem; TurnContext fragments stay out |
 | `execpolicy/src/amend.rs` | 337 | `execpolicy/src/amend.swift` | 🟡 adapted |  |
 | `execpolicy/src/decision.rs` | 27 | `execpolicy/src/decision.swift` | ✅ faithful |  |
 | `execpolicy/src/error.rs` | 101 | `execpolicy/src/error.swift` | 🟡 adapted |  |
@@ -244,7 +244,7 @@
 |---|---:|---|---|---|
 | `core/src/function_tool.rs` | 1 | `function_tool.swift` | 🟡 adapted |  |
 | `core/src/network_policy_decision.rs` | 106 | `network_policy_decision.swift` | ✅ faithful |  |
-| `core/src/tools/approvals.rs` | 884 | `tools/approvals.swift` | 🟡 partial |  |
+| `core/src/tools/approvals.rs` | 884 | `tools/approvals.swift` | 🟡 adapted | HUD `from(step:)` classifies exec/stdin/patch/MCP/network/permissions; SessionToolAllowlist writes session keys into ApprovalStore |
 | `core/src/tools/call_trace.rs` | 88 | `tools/call_trace.swift` | 🟡 adapted |  |
 | `core/src/tools/catalog_parameters.rs` | 14 | `tools/catalog_parameters.swift` | ✅ faithful |  |
 | `core/src/tools/context.rs` | 607 | `tools/context.swift` | 🟡 adapted |  |
@@ -254,7 +254,7 @@
 | `core/src/tools/executed_tool_calls/request_metadata.rs` | 441 | `tools/executed_tool_calls/request_metadata.swift` | 🟡 adapted |  |
 | `core/src/tools/executed_tool_calls/seen_ids.rs` | 133 | `tools/executed_tool_calls/seen_ids.swift` | 🟡 adapted |  |
 | `core/src/tools/executed_tool_calls.rs` | 629 | `tools/executed_tool_calls.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/apply_patch.rs` | 641 | `tools/handlers/apply_patch.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/apply_patch.rs` | 641 | `tools/handlers/apply_patch.swift` | 🟡 adapted | OnRequest/UnlessTrusted ask before dropping sandbox |
 | `core/src/tools/handlers/apply_patch_spec.rs` | 32 | `tools/handlers/apply_patch_spec.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/current_time.rs` | 130 | `tools/handlers/current_time.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/dynamic.rs` | 251 | `tools/handlers/dynamic.swift` | 🟡 adapted |  |
@@ -291,7 +291,7 @@
 | `core/src/tools/hook_names.rs` | 67 | `tools/hook_names.swift` | ✅ faithful |  |
 | `core/src/tools/hosted_spec.rs` | 50 | `tools/hosted_spec.swift` | 🟡 adapted |  |
 | `core/src/tools/lifecycle.rs` | 175 | `tools/lifecycle.swift` | 🟡 adapted |  |
-| `core/src/tools/mod.rs` | 147 | `tools/mod.swift` | 🟡 adapted |  |
+| `core/src/tools/mod.rs` | 147 | `tools/tools_mod.swift` | 🟡 adapted | R4a basename |
 | `core/src/tools/multi_agent_tool.rs` | 133 | `tools/multi_agent_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
 | `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted |  |
@@ -359,7 +359,7 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/compact.rs` | 852 | `compact.swift` | 🟡 adapted |  |
+| `core/src/compact.rs` | 852 | `compact.swift` | 🟡 adapted | compacted history + insert before last real user; remote V2 stream stays on Session |
 | `core/src/compact_model_fallback.rs` | 59 | `compact_model_fallback.swift` | 🟡 adapted |  |
 | `core/src/compact_remote_history.rs` | 190 | `compact_remote_history.swift` | 🟡 adapted |  |
 | `core/src/compact_remote_v2.rs` | 1,273 | `compact_remote_v2.swift` | 🟡 adapted |  |
@@ -372,14 +372,14 @@
 | `core/src/config/edit.rs` | 1,001 | `config/edit.swift` | 🟡 adapted |  |
 | `core/src/config/managed_features.rs` | 340 | `config/managed_features.swift` | 🟡 adapted |  |
 | `core/src/config/metrics.rs` | 10 | `config/metrics.swift` | 🟡 adapted |  |
-| `core/src/config/mod.rs` | 4,893 | `config/config_mod.swift` | 🟡 adapted |  |
+| `core/src/config/mod.rs` | 4,893 | `config/config_mod.swift` | 🟡 adapted | TokenBudgetConfig + fallback_buffer_tokens; TOML layers stay out |
 | `core/src/config/network_config.rs` | 176 | `config/network_config.swift` | 🟡 adapted |  |
 | `core/src/config/network_proxy_spec.rs` | 546 | `config/network_proxy_spec.swift` | 🟡 adapted |  |
 | `core/src/config/otel.rs` | 118 | `config/otel.swift` | 🟡 adapted |  |
 | `core/src/config/permission_path.rs` | 75 | `config/permission_path.swift` | 🟡 adapted |  |
 | `core/src/config/permission_profile_catalog.rs` | 137 | `config/permission_profile_catalog.swift` | 🟡 adapted |  |
 | `core/src/config/permission_profile_selection.rs` | 39 | `config/permission_profile_selection.swift` | 🟡 adapted |  |
-| `core/src/config/permissions.rs` | 893 | `config/permissions.swift` | 🟡 adapted |  |
+| `core/src/config/permissions.rs` | 893 | `config/config_permissions.swift` | 🟡 adapted | R4a basename |
 | `core/src/config/requirements.rs` | 178 | `config/requirements.swift` | 🟡 adapted |  |
 | `core/src/config/resolved_permission_profile.rs` | 93 | `config/resolved_permission_profile.swift` | 🟡 adapted |  |
 | `core/src/config/schema.rs` | 7 | `config/schema.swift` | 🟡 adapted |  |
@@ -438,7 +438,7 @@
 | `core/src/context/world_state/environment.rs` | 557 | `context/world_state/environment.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/environments_instructions.rs` | 55 | `context/world_state/world_state_environments_instructions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/managed_developer_instructions.rs` | 157 | `context/world_state/managed_developer_instructions.swift` | 🟡 adapted |  |
-| `core/src/context/world_state/mod.rs` | 556 | `context/world_state/world_state_mod.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/mod.rs` | 556 | `context/world_state/world_state_mod.swift` | 🟡 adapted | snapshot + renderDiff/renderFull; SHA-1 hashing stays out |
 | `core/src/context/world_state/model.rs` | 65 | `context/world_state/model.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/multi_agent_mode.rs` | 91 | `context/world_state/multi_agent_mode.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/multi_agent_usage_hint.rs` | 50 | `context/world_state/world_state_multi_agent_usage_hint.swift` | 🟡 adapted |  |
@@ -462,7 +462,7 @@
 | `core/src/mcp_tool_call.rs` | 2,504 | `mcp_tool_call.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_exposure.rs` | 189 | `mcp_tool_exposure.swift` | 🟡 adapted | Apps omit/visibility/budget + binding generation cache |
 | `core/src/session/code_mode_warning.rs` | 26 | `session/code_mode_warning.swift` | 🟡 adapted |  |
-| `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted |  |
+| `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted | fallback buffer from TokenBudgetConfig when a prompt is set |
 | `core/src/session/daemon_recovery.rs` | 46 | `session/daemon_recovery.swift` | 🟡 adapted |  |
 | `core/src/session/environment.rs` | 307 | `session/environment.swift` | 🟡 adapted |  |
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
@@ -490,12 +490,12 @@
 | `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted |  |
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted |  |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
-| `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted |  |
-| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 partial | assembleToolRouter: Apps/visibility/budget + Sage execute tools |
+| `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |
+| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools |
 | `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted |  |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
-| `core/src/session/world_state.rs` | 295 | `session/world_state.swift` | 🟡 adapted |  |
+| `core/src/session/world_state.rs` | 295 | `session/world_state.swift` | 🟡 adapted | step snapshot + compact reinject + exec-policy prefixes; plugin contributors stay out |
 | `core/src/session_startup_prewarm.rs` | 328 | `session_startup_prewarm.swift` | 🟡 adapted |  |
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
@@ -505,10 +505,10 @@
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
 | `core/src/stream_events_utils.rs` | 586 | `stream_events_utils.swift` | 🟡 adapted |  |
-| `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 partial |  |
+| `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 adapted | token-budget window reset + occupancy share CompactTokenBudget; remote V2 stays on runAutoCompact |
 | `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
 | `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks |
-| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | RegularSessionTask → runTurn; live Execute attaches Session, still Turn.run until useHarnessRunTurn |
+| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission |
 | `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
 | `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted |  |
 | `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted |  |
@@ -707,24 +707,25 @@
 | `core/src/agents_md.rs` | 562 | `core_agents_md.swift` | 🟡 adapted |  |
 | `core/src/agents_md_manager.rs` | 182 | `agents_md_manager.swift` | 🟡 adapted |  |
 | `core/src/elicitation.rs` | 100 | `elicitation.swift` | ✅ faithful |  |
-| `core/src/guardian/approval_request.rs` | 564 | `guardian/approval_request.swift` | 🟡 partial |  |
+| `core/src/guardian/approval_request.rs` | 564 | `guardian/approval_request.swift` | 🟡 adapted | live HUD kinds + pretty; assessment JSON / analytics stay out |
 | `core/src/guardian/coverage.rs` | 33 | `guardian/coverage.swift` | ✅ faithful |  |
-| `core/src/guardian/decision.rs` | 132 | `guardian/decision.swift` | 🟡 partial |  |
+| `core/src/guardian/decision.rs` | 132 | `guardian/decision.swift` | 🟡 adapted | live HUD batches consult decide; nil still falls to the card |
 | `core/src/guardian/feedback.rs` | 44 | `guardian/feedback.swift` | ✅ faithful |  |
 | `core/src/guardian/input_budget.rs` | 197 | `guardian/input_budget.swift` | 🟡 adapted |  |
-| `core/src/guardian/mod.rs` | 208 | `guardian/mod.swift` | 🟡 adapted |  |
-| `core/src/guardian/prompt.rs` | 365 | `guardian/prompt.swift` | 🟡 partial |  |
+| `core/src/guardian/mod.rs` | 208 | `guardian/guardian_mod.swift` | 🟡 adapted | R4a basename |
+| `core/src/guardian/permissions.rs` |  | `guardian/guardian_permissions.swift` | 🟡 adapted | R4a basename |
+| `core/src/guardian/prompt.rs` | 365 | `guardian/prompt.swift` | 🟡 adapted | ACTION + truncated transcript; composed sections stay out |
 | `core/src/guardian/request_budget.rs` | 90 | `guardian/request_budget.swift` | 🟡 adapted |  |
-| `core/src/guardian/review.rs` | 287 | `guardian/review.swift` | 🟡 partial |  |
-| `core/src/guardian/review_request.rs` | 224 | `guardian/review_request.swift` | 🟡 partial |  |
-| `core/src/guardian/review_session.rs` | 947 | `guardian/review_session.swift` | 🟡 partial |  |
-| `core/src/guardian/review_session_context.rs` | 73 | `guardian/review_session_context.swift` | 🟡 partial |  |
-| `core/src/guardian/review_session_setup.rs` | 265 | `guardian/review_session_setup.swift` | 🟡 partial |  |
-| `core/src/guardian/reviewer_config.rs` | 109 | `guardian/reviewer_config.swift` | 🟡 partial |  |
-| `core/src/guardian/runtime.rs` | 92 | `guardian/runtime.swift` | 🟡 partial |  |
+| `core/src/guardian/review.rs` | 287 | `guardian/review.swift` | 🟡 adapted | source-kind + project/retry routing; isolated session spawn still thin |
+| `core/src/guardian/review_request.rs` | 224 | `guardian/review_request.swift` | 🟡 adapted | routes_approval_policy_to_guardian + project/retry; host prepare stays out |
+| `core/src/guardian/review_session.rs` | 947 | `guardian/review_session.swift` | 🟡 adapted | isolated complete + MAX_REVIEW_ATTEMPTS parse retry; trunk/fork spawn stays out |
+| `core/src/guardian/review_session_context.rs` | 73 | `guardian/review_session_context.swift` | 🟡 adapted | live transcript slice; checkpoint policy stays out |
+| `core/src/guardian/review_session_setup.rs` | 265 | `guardian/review_session_setup.swift` | 🟡 adapted | prompt assemble from reviewer config; session spawn / prewarm stay out |
+| `core/src/guardian/reviewer_config.rs` | 109 | `guardian/reviewer_config.swift` | 🟡 adapted | review-role + extra policy + live network; catalog prewarm stays out |
+| `core/src/guardian/runtime.rs` | 92 | `guardian/runtime.swift` | 🟡 adapted | ReviewAction + validate + ReviewRuntime.decide; session spawn / cancel stay out |
 | `core/src/guardian_review.rs` | 7 | `guardian_review.swift` | 🟡 adapted |  |
 | `core/src/hook_mcp_executor.rs` | 57 | `hook_mcp_executor.swift` | 🟡 adapted |  |
-| `core/src/hook_runtime.rs` | 1,352 | `hook_runtime.swift` | 🟡 partial |  |
+| `core/src/hook_runtime.rs` | 1,352 | `hook_runtime.swift` | 🟡 adapted | interrupt + arg match + CommandHookRuntime `run`; MCP execute stays out |
 | `core/src/mention_syntax.rs` | 2 | `mention_syntax.swift` | ✅ faithful |  |
 | `core/src/skills.rs` | 210 | `skills.swift` | 🟡 adapted |  |
 | `agent-roles/src/agent_role_config.rs` | 209 | `agent-roles/src/agent_role_config.swift` | 🟡 adapted |  |
@@ -920,7 +921,7 @@
 | `protocol/src/serde_helpers.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/uuid_v7.swift` | Sage 新增，无 codex 对应 |
 | `tasks/explore.swift` | Sage 新增，无 codex 对应 |
-| `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载 |
+| `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载；Responses client 租约 |
 | `tools/handlers/sage_execute.swift` | Sage 新增：execute 工具 → onSageToolCall |
 | `utils/io_error.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/file_url.swift` | Sage 新增，无 codex 对应 |

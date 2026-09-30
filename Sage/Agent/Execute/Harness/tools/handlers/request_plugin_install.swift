@@ -12,6 +12,7 @@
 
 import CodexCore
 import CodexProtocol
+import Foundation
 
 let REQUEST_PLUGIN_INSTALL_APPROVAL_KIND_VALUE = "tool_suggestion"
 let REQUEST_PLUGIN_INSTALL_PERSIST_KEY = "persist"
@@ -201,8 +202,8 @@ struct RequestPluginInstallHandler: CoreToolRuntime {
                 arguments: arguments,
                 presentation: presentation
             )
-        let suggestReason = suggestReason.trimmingCharacters(in: .whitespacesAndNewlines)
-        if suggestReason.isEmpty {
+        let trimmedReason = suggestReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedReason.isEmpty {
             throw FunctionCallError.respondToModel("suggest_reason must not be empty")
         }
         _ = try matchRequestPluginInstallTool(

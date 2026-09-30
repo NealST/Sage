@@ -87,9 +87,7 @@ struct SpawnAgentHandler: CoreToolRuntime {
                 "Agent depth limit reached. Solve the task yourself."
             )
         }
-        let roleName = args.agentType?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
+        let roleName = nonEmptyOrNil(args.agentType)
         let source = try threadSpawnSource(
             parentThreadId: caller,
             parentSessionSource: invocation.sessionSource,

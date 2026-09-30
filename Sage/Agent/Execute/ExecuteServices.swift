@@ -240,7 +240,8 @@ struct ExecuteServices {
             extraReadAllowlist: MessageAttachment.readAllowlist(
                 from: state.events,
                 visibleEventIDs: state.modelVisibleAttachmentEventIDs
-            )
+            ),
+            approvalStore: state.sessionAllowlist.approvalStore
         )
     }
 }

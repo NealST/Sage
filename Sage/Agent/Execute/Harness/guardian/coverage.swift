@@ -20,12 +20,16 @@ enum GuardianScope: String, Sendable {
 extension GuardianApprovalRequest {
     var scope: GuardianScope {
         switch self {
-        case .execCommand:
+        case .execCommand, .writeStdin:
             return .shell
         case .applyPatch:
             return .fileChanges
+        case .mcpToolCall:
+            return .mcp
         case .networkAccess:
             return .network
+        case .requestPermissions:
+            return .permissions
         }
     }
 }
