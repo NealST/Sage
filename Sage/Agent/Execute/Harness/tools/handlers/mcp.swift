@@ -6,9 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  MCP transport, approval, and Session services wait for Phase 5. This
-//  adapter registers one handler per MCP tool name and forwards through
-//  onMcpCall.
+//  One handler per catalog tool. Dispatch forwards through
+//  Session.services.onMcpCall (the live McpBinding seam).
 //
 
 import CodexCore

@@ -7,12 +7,13 @@
 //  Port status: adapted
 //
 //  Session type shape plus the capture/history/token helpers `runTurn`
-//  needs. The mutex/event loop still waits. Phase 4 handlers stay
-//  Session-free and talk through ToolInvocation callbacks.
+//  and `RegularSessionTask` need (turn started, prewarm consume, MCP
+//  reprojection). The mutex/event loop still waits.
 //
 
 import CodexAsyncUtils
 import CodexCore
+import CodexOtel
 import CodexProtocol
 import Foundation
 
@@ -219,6 +220,49 @@ final class Session: @unchecked Sendable {
     var lastCompactModelFallback: CompactModelFallback?
     var fallbackStepContext: StepContext?
     var runCompactOverride: (([ResponseItem]) async throws -> String)?
+    var startupPrewarm: SessionStartupPrewarmHandle?
+    var sessionTelemetry: SessionTelemetry?
+    var mcpReprojectionRequested = false
+    var lastTaskAgentMessage: String?
+    var lastTurnAbortReason: TurnAbortReason?
+    var lastTaskError: Error?
+
+    func emitTurnStarted(_ turnContext: TurnContext) {
+        sendEvent(
+            turnContext,
+            .turnStarted(TurnStartedEvent(turnId: turnContext.subId, model: turnContext.model))
+        )
+    }
+
+    func requestMcpRuntimeReprojection() {
+        mcpReprojectionRequested = true
+        services.mcpRuntime.markDirty()
+    }
+
+    func consumeStartupPrewarm(
+        cancellationToken: CancellationToken
+    ) async -> SessionStartupPrewarmResolution {
+        if cancellationToken.isCancelled {
+            return .cancelled
+        }
+        guard let startupPrewarm else {
+            return .unavailable(status: "not_scheduled", prewarmDuration: nil)
+        }
+        let telemetry = sessionTelemetry ?? SessionTelemetry(
+            conversationId: threadId,
+            model: "gpt-5",
+            slug: "gpt-5",
+            originator: "sage",
+            logUserPrompts: false,
+            terminalType: "unknown",
+            sessionSource: state.sessionConfiguration.sessionSource
+        )
+        return await consumeStartupPrewarmForRegularTurn(
+            startupPrewarm,
+            sessionTelemetry: telemetry,
+            cancellationToken: cancellationToken
+        )
+    }
 
     func hasPendingGuardianReviewContext() -> Bool {
         pendingReviewContext != nil

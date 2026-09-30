@@ -55,6 +55,7 @@ final class TurnContext: @unchecked Sendable {
     var cyberAccessProgram: Bool
     var realtimeActive: Bool
     var nextStepSettings: StepSettings
+    var terminalError: CodexErr?
 
     init(
         subId: String = UUID().uuidString,
@@ -77,7 +78,8 @@ final class TurnContext: @unchecked Sendable {
         finalOutputJsonSchema: String? = nil,
         cyberAccessProgram: Bool = false,
         realtimeActive: Bool = false,
-        nextStepSettings: StepSettings = StepSettings()
+        nextStepSettings: StepSettings = StepSettings(),
+        terminalError: CodexErr? = nil
     ) {
         self.subId = subId
         self.sessionId = sessionId
@@ -100,6 +102,7 @@ final class TurnContext: @unchecked Sendable {
         self.cyberAccessProgram = cyberAccessProgram
         self.realtimeActive = realtimeActive
         self.nextStepSettings = nextStepSettings
+        self.terminalError = terminalError
     }
 
     func collaborationModeValue() -> CollaborationMode? {

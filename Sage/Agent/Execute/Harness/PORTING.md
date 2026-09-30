@@ -261,7 +261,7 @@
 | `core/src/tools/handlers/extension_tools.rs` | 640 | `tools/handlers/extension_tools.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining.rs` | 94 | `tools/handlers/get_context_remaining.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining_spec.rs` | 36 | `tools/handlers/get_context_remaining_spec.swift` | ✅ faithful |  |
-| `core/src/tools/handlers/mcp.rs` | 882 | `tools/handlers/mcp.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/mcp.rs` | 882 | `tools/handlers/mcp.swift` | 🟡 adapted | per-tool handler; live invoke via Session.onMcpCall |
 | `core/src/tools/handlers/mcp_resource/list_mcp_resource_templates.rs` | 102 | `tools/handlers/mcp_resource/list_mcp_resource_templates.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/mcp_resource/list_mcp_resources.rs` | 100 | `tools/handlers/mcp_resource/list_mcp_resources.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/mcp_resource/read_mcp_resource.rs` | 99 | `tools/handlers/mcp_resource/read_mcp_resource.swift` | 🟡 adapted |  |
@@ -460,7 +460,7 @@
 | `core/src/mcp_tool_call/account.rs` | 39 | `mcp_tool_call/account.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call/telemetry.rs` | 166 | `mcp_tool_call/telemetry.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call.rs` | 2,504 | `mcp_tool_call.swift` | 🟡 adapted |  |
-| `core/src/mcp_tool_exposure.rs` | 189 | `mcp_tool_exposure.swift` | 🟡 adapted |  |
+| `core/src/mcp_tool_exposure.rs` | 189 | `mcp_tool_exposure.swift` | 🟡 adapted | Apps omit/visibility/budget + binding generation cache |
 | `core/src/session/code_mode_warning.rs` | 26 | `session/code_mode_warning.swift` | 🟡 adapted |  |
 | `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted |  |
 | `core/src/session/daemon_recovery.rs` | 46 | `session/daemon_recovery.swift` | 🟡 adapted |  |
@@ -482,7 +482,7 @@
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_budget.rs` | 34 | `session/rollout_budget.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted |  |
-| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted |  |
+| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | emitTurnStarted + startup prewarm consume + MCP reprojection |
 | `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
 | `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted |  |
@@ -491,7 +491,7 @@
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted |  |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted |  |
-| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 partial |  |
+| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 partial | assembleToolRouter: Apps/visibility/budget + Sage execute tools |
 | `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted |  |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
@@ -507,8 +507,8 @@
 | `core/src/stream_events_utils.rs` | 586 | `stream_events_utils.swift` | 🟡 adapted |  |
 | `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 partial |  |
 | `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
-| `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted |  |
-| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted |  |
+| `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks |
+| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | RegularSessionTask → runTurn; live Execute attaches Session, still Turn.run until useHarnessRunTurn |
 | `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
 | `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted |  |
 | `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted |  |
@@ -920,6 +920,8 @@
 | `protocol/src/serde_helpers.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/uuid_v7.swift` | Sage 新增，无 codex 对应 |
 | `tasks/explore.swift` | Sage 新增，无 codex 对应 |
+| `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载 |
+| `tools/handlers/sage_execute.swift` | Sage 新增：execute 工具 → onSageToolCall |
 | `utils/io_error.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/file_url.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/url_encoding.swift` | Sage 新增，无 codex 对应 |

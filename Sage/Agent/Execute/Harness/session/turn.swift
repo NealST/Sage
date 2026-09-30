@@ -12,6 +12,8 @@
 //  text (plan-mode) / token usage / local auto-compact / time reminder
 //  / mailbox preempt / SSE metadata / itemCompleted / remote compact.
 //  MCP specs decode catalog JSON schema via parseCatalogParameters.
+//  Apps visibility/policy/agent-plugin budgets come from mcp_tool_exposure.
+//  Sage execute tools register through sage_execute / onSageToolCall.
 //  `ExecuteTurnLoop` / `Turn.run` remain the Sage RegularTask adapter.
 //
 
@@ -483,13 +485,26 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     let options = toolRouterPlanOptions(sess: sess, turnContext: stepContext.turn)
     var router = finalizeToolRouter(options)
     let mcpTools = mcpVisibleTools(from: sess)
-    appendMcpTools(
-        mcpTools,
-        to: &router,
-        searchToolEnabled: options.includeToolSearch
-    )
+    let registrations: [McpToolRegistration]
     if let sess {
-        sess.services.mcpHandlerCache.exposedToolNames = mcpTools.map(\.name)
+        registrations = sess.services.mcpHandlerCache.registerTools(
+            mcpTools,
+            bindingID: sess.services.mcpBindingID,
+            appsEnabled: sess.services.appsEnabled,
+            appsConfig: sess.services.appsPolicy,
+            searchToolEnabled: options.includeToolSearch
+        )
+    } else {
+        registrations = appendMcpTools(
+            mcpTools,
+            appsEnabled: true,
+            appsConfig: nil,
+            searchToolEnabled: options.includeToolSearch
+        )
+    }
+    registerMcpTools(registrations, on: &router)
+    if let sess {
+        registerSageTools(sess.services.sageToolNames, on: &router)
     }
     stepContext.toolRouter = router
     return router
@@ -517,29 +532,34 @@ func mcpToolSpec(_ tool: McpVisibleTool) -> ToolSpec {
     )
 }
 
-func appendMcpTools(
-    _ tools: [McpVisibleTool],
-    to router: inout ToolRouter,
-    searchToolEnabled: Bool
-) {
-    let exposure: ToolExposure = searchToolEnabled ? .deferred : .direct
+func registerMcpTools(_ registrations: [McpToolRegistration], on router: inout ToolRouter) {
     var existing = Set(router.registry.registeredEntries().map { flatToolName($0.runtime.toolName()) })
     existing.formUnion(router.modelVisibleSpecs.map { $0.name() })
-    for tool in tools {
-        guard !existing.contains(tool.name) else { continue }
-        existing.insert(tool.name)
-        let spec = mcpToolSpec(tool)
+    for registration in registrations {
+        guard !existing.contains(registration.tool.name) else { continue }
+        existing.insert(registration.tool.name)
+        let spec = mcpToolSpec(registration.tool)
+        let exposure = toolExposure(registration.exposure)
         router.registry.register(
             McpHandler(
-                name: ToolName(plain: tool.name),
+                name: ToolName(plain: registration.tool.name),
                 spec: spec,
-                serverName: tool.serverName,
+                serverName: registration.tool.serverName,
                 exposure: exposure
-            )
+            ),
+            exposure: exposure
         )
         if exposure != .hidden {
             router.modelVisibleSpecs.append(spec)
         }
+    }
+}
+
+func toolExposure(_ exposure: McpToolExposure) -> ToolExposure {
+    switch exposure {
+    case .direct: return .direct
+    case .deferred: return .deferred
+    case .hidden: return .hidden
     }
 }
 

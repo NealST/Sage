@@ -7,6 +7,8 @@
 //  Port status: adapted
 //
 
+import CodexAsyncUtils
+import CodexProtocol
 import Foundation
 
 final class ReviewTask: SessionTask, @unchecked Sendable {
@@ -14,7 +16,16 @@ final class ReviewTask: SessionTask, @unchecked Sendable {
 
     init() {}
 
-    func run(session: Session, context: TurnContext) async throws -> String? {
+    func run(
+        session: Session,
+        context: TurnContext,
+        input: [SessionTurnInput],
+        cancellationToken: CancellationToken
+    ) async throws -> String? {
+        _ = input
+        if cancellationToken.isCancelled {
+            throw CodexErr(details: .turnAborted)
+        }
         session.activeTurn = ActiveTurn(
             task: RunningTask(kind: .review, turnContext: context),
             turnState: TurnState()

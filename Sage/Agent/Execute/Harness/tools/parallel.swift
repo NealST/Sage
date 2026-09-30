@@ -189,7 +189,17 @@ struct ToolCallRuntime: Sendable {
             )
         }
         do {
-            let result = try await router.dispatch(call)
+            var invocation = router.buildInvocation(
+                call,
+                turnId: stepContext.turn.subId,
+                threadId: session.threadId,
+                modeKind: stepContext.turn.mode()
+            )
+            invocation.cancellationToken = cancellationToken
+            invocation.sessionSource = stepContext.turn.sessionSource
+            invocation.onMcpCall = session.services.onMcpCall
+            invocation.onSageToolCall = session.services.onSageToolCall
+            let result = try await router.registry.dispatch(invocation)
             session.services.executedToolCalls.complete(callId: call.callId, output: result.result)
             guard let item = responseInputToResponseItem(
                 result.result.toResponseItem(callId: result.callId, payload: result.payload)

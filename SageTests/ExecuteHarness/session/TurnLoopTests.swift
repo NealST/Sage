@@ -162,6 +162,145 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         })
     }
 
+    func testRegularSessionTaskEmitsStartAndReturnsLastAssistant() async throws {
+        let sess = Session()
+        let turn = TurnContext()
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done")
+        }
+        let message = try await RegularSessionTask().run(
+            session: sess,
+            context: turn,
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(message, "done")
+        XCTAssertTrue(sess.mcpReprojectionRequested)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnStarted(let started) = event {
+                return started.turnId == turn.subId
+            }
+            return false
+        })
+        XCTAssertEqual(sess.activeTurn?.task?.kind, .regular)
+    }
+
+    func testRegularSessionTaskReturnsNilWhenPrepareCancelled() async throws {
+        let sess = Session()
+        let turn = TurnContext()
+        let token = CancellationToken()
+        token.cancel()
+        let message = try await RegularSessionTask().run(
+            session: sess,
+            context: turn,
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+            cancellationToken: token
+        )
+        XCTAssertNil(message)
+        XCTAssertTrue(sess.mcpReprojectionRequested)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnStarted = event { return true }
+            return false
+        })
+    }
+
+    func testRegularSessionTaskLoopsWhenInputArrivesAfterTurn() async throws {
+        let sess = Session()
+        let turn = TurnContext()
+        var samples = 0
+        sess.runSamplingOverride = { _, _ in
+            samples += 1
+            return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "pass-\(samples)")
+        }
+        let task = RegularSessionTask()
+        task.afterRunTurn = {
+            if samples == 1 {
+                sess.inputQueue.enqueue(
+                    TurnInputBuilder.user([.text(text: "again", textElements: [])])
+                )
+            }
+        }
+        let message = try await task.run(
+            session: sess,
+            context: turn,
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(samples, 2)
+        XCTAssertEqual(message, "pass-2")
+    }
+
+    func testRegularSessionTaskStopsOnTerminalError() async throws {
+        let sess = Session()
+        let turn = TurnContext()
+        var samples = 0
+        sess.runSamplingOverride = { _, _ in
+            samples += 1
+            turn.terminalError = CodexErr.fatal("stop")
+            return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "partial")
+        }
+        let task = RegularSessionTask()
+        task.afterRunTurn = {
+            sess.inputQueue.enqueue(
+                TurnInputBuilder.user([.text(text: "again", textElements: [])])
+            )
+        }
+        let message = try await task.run(
+            session: sess,
+            context: turn,
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(samples, 1)
+        XCTAssertEqual(message, "partial")
+    }
+
+    func testSpawnTaskRunsRegularSessionTaskAndEmitsTurnComplete() async throws {
+        let sess = Session()
+        let turn = TurnContext()
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "spawned")
+        }
+        await sess.spawnTask(
+            RegularSessionTask(),
+            turnContext: turn,
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])]
+        )
+        XCTAssertEqual(sess.lastTaskAgentMessage, "spawned")
+        XCTAssertNil(sess.lastTurnAbortReason)
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnStarted(let started) = event { return started.turnId == turn.subId }
+            return false
+        })
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnComplete(let complete) = event { return complete.turnId == turn.subId }
+            return false
+        })
+    }
+
+    func testSpawnTaskReplacesInFlightTurn() async {
+        let sess = Session()
+        sess.activeTurn = ActiveTurn(
+            task: RunningTask(kind: .review, turnContext: TurnContext()),
+            turnState: TurnState()
+        )
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "next")
+        }
+        await sess.spawnTask(
+            RegularSessionTask(),
+            turnContext: TurnContext(),
+            input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])]
+        )
+        XCTAssertEqual(sess.lastTurnAbortReason, nil)
+        XCTAssertEqual(sess.lastTaskAgentMessage, "next")
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnAborted(let aborted) = event { return aborted.reason == .replaced }
+            return false
+        })
+    }
+
     func testCancelledTokenAbortsBeforeSampling() async {
         let sess = Session()
         let turn = TurnContext()
@@ -1133,6 +1272,87 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         } catch {
             XCTAssertTrue(String(describing: error).contains("not wired"))
         }
+    }
+
+    func testAssembleToolRouterOmitsAppsAndHiddenTools() {
+        let sess = Session()
+        sess.services.appsEnabled = false
+        sess.services.mcpVisibleTools = [
+            McpVisibleTool(name: "linear.search", serverName: "linear"),
+            McpVisibleTool(
+                name: "calendar_list_events",
+                serverName: CODEX_APPS_MCP_SERVER_NAME,
+                connectorId: "calendar"
+            ),
+            McpVisibleTool(
+                name: "hidden.search",
+                serverName: "linear",
+                visibility: ["app"]
+            ),
+        ]
+        let router = assembleToolRouter(sess: sess, stepContext: StepContext())
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "linear.search")))
+        XCTAssertNil(router.registry.entry(for: ToolName(plain: "calendar_list_events")))
+        XCTAssertNil(router.registry.entry(for: ToolName(plain: "hidden.search")))
+        XCTAssertEqual(sess.services.mcpHandlerCache.exposedToolNames, ["linear.search"])
+    }
+
+    func testAssembleToolRouterRegistersSageExecuteTools() {
+        let sess = Session()
+        sess.services.sageToolNames = ["list_directory", "read_text_file"]
+        let router = assembleToolRouter(sess: sess, stepContext: StepContext())
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "list_directory")))
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "read_text_file")))
+    }
+
+    func testToolCallRuntimeForwardsSageExecuteCall() async throws {
+        let sess = Session()
+        sess.services.sageToolNames = ["list_directory"]
+        sess.services.onSageToolCall = { name, callId, arguments in
+            "ok:\(name):\(callId):\(arguments)"
+        }
+        let step = StepContext()
+        _ = assembleToolRouter(sess: sess, stepContext: step)
+        let output = try await ToolCallRuntime(session: sess, stepContext: step).handleToolCall(
+            ToolCall(
+                toolName: ToolName(plain: "list_directory"),
+                callId: "c1",
+                payload: .function(arguments: "{}"),
+                encryptedFunctionArgs: nil
+            ),
+            cancellationToken: CancellationToken()
+        )
+        guard case .functionCallOutput(_, let callId, _, _, let payload, _) = output else {
+            return XCTFail("expected function call output")
+        }
+        XCTAssertEqual(callId, "c1")
+        XCTAssertEqual(payload.body.toText(), "ok:list_directory:c1:{}")
+    }
+
+    func testToolCallRuntimeForwardsSessionMcpCall() async throws {
+        let sess = Session()
+        sess.services.mcpVisibleTools = [
+            McpVisibleTool(name: "linear.search", serverName: "linear"),
+        ]
+        sess.services.onMcpCall = { name, callId, _ in
+            "ok:\(name):\(callId)"
+        }
+        let step = StepContext()
+        _ = assembleToolRouter(sess: sess, stepContext: step)
+        let output = try await ToolCallRuntime(session: sess, stepContext: step).handleToolCall(
+            ToolCall(
+                toolName: ToolName(plain: "linear.search"),
+                callId: "c1",
+                payload: .function(arguments: "{}"),
+                encryptedFunctionArgs: nil
+            ),
+            cancellationToken: CancellationToken()
+        )
+        guard case .functionCallOutput(_, let callId, _, _, let payload, _) = output else {
+            return XCTFail("expected function call output")
+        }
+        XCTAssertEqual(callId, "c1")
+        XCTAssertEqual(payload.body.toText(), "ok:linear.search:c1")
     }
 
     func testInputQueueMailboxAndSteerActivity() async throws {

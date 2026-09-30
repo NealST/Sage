@@ -89,13 +89,6 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A10SESSMODX000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/session" folder in "Sage" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				session_mod.swift,
-			);
-			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
-		};
 		A10HARNTOOLSEX000000001 /* Exceptions for "Sage/Agent/Execute/Harness/tools" folder in "Sage" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -112,6 +105,13 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+			);
+			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
+		};
+		A10SESSMODX000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/session" folder in "Sage" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				session_mod.swift,
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
 		};

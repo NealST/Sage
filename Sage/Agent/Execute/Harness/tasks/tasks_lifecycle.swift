@@ -13,6 +13,7 @@ import CodexProtocol
 import Foundation
 
 enum TurnStartPhase: Equatable, Sendable {
+    case beforeTaskRegistration
     case regularTaskStart
     case reviewTaskStart
     case compactTaskStart

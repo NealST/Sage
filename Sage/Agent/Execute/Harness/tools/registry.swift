@@ -85,22 +85,38 @@ struct HarnessToolRegistry {
     }
 
     func dispatch(_ invocation: ToolInvocation) async throws -> AnyToolResult {
-        guard let entry = entry(for: invocation.toolName) else {
-            throw FunctionCallError.respondToModel(
-                "unsupported tool \(flatToolName(invocation.toolName))"
+        if let entry = entry(for: invocation.toolName) {
+            let result = try await entry.runtime.handle(invocation)
+            return AnyToolResult(
+                callId: invocation.callId,
+                payload: invocation.payload,
+                result: result,
+                postToolUsePayload: PostToolUsePayload(
+                    toolName: HookToolName(flatToolName(invocation.toolName)),
+                    toolUseId: invocation.callId,
+                    toolInput: hookInput(invocation.payload),
+                    toolResponse: result.postToolUseResponse(callId: invocation.callId, payload: invocation.payload)
+                )
             )
         }
-        let result = try await entry.runtime.handle(invocation)
-        return AnyToolResult(
-            callId: invocation.callId,
-            payload: invocation.payload,
-            result: result,
-            postToolUsePayload: PostToolUsePayload(
-                toolName: HookToolName(flatToolName(invocation.toolName)),
-                toolUseId: invocation.callId,
-                toolInput: hookInput(invocation.payload),
-                toolResponse: result.postToolUseResponse(callId: invocation.callId, payload: invocation.payload)
+        if let onSage = invocation.onSageToolCall,
+           case .function(let arguments) = invocation.payload,
+           let output = await onSage(flatToolName(invocation.toolName), invocation.callId, arguments) {
+            let result = boxedToolOutput(FunctionToolOutput.fromText(output, success: !output.hasPrefix("ERROR:")))
+            return AnyToolResult(
+                callId: invocation.callId,
+                payload: invocation.payload,
+                result: result,
+                postToolUsePayload: PostToolUsePayload(
+                    toolName: HookToolName(flatToolName(invocation.toolName)),
+                    toolUseId: invocation.callId,
+                    toolInput: hookInput(invocation.payload),
+                    toolResponse: result.postToolUseResponse(callId: invocation.callId, payload: invocation.payload)
+                )
             )
+        }
+        throw FunctionCallError.respondToModel(
+            "unsupported tool \(flatToolName(invocation.toolName))"
         )
     }
 }

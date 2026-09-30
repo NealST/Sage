@@ -85,6 +85,7 @@ struct ToolInvocation: Sendable {
     var onViewImage: (@Sendable (String) async -> String?)?
     var onDynamicTool: (@Sendable (ToolName, HarnessJSON) async -> DynamicToolResponse?)?
     var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
+    var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     var onWaitForEnvironment: (@Sendable () async -> String?)?
 
     init(
@@ -115,6 +116,7 @@ struct ToolInvocation: Sendable {
         onViewImage: (@Sendable (String) async -> String?)? = nil,
         onDynamicTool: (@Sendable (ToolName, HarnessJSON) async -> DynamicToolResponse?)? = nil,
         onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
+        onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         onWaitForEnvironment: (@Sendable () async -> String?)? = nil
     ) {
         self.callId = callId
@@ -144,6 +146,7 @@ struct ToolInvocation: Sendable {
         self.onViewImage = onViewImage
         self.onDynamicTool = onDynamicTool
         self.onMcpCall = onMcpCall
+        self.onSageToolCall = onSageToolCall
         self.onWaitForEnvironment = onWaitForEnvironment
     }
 }

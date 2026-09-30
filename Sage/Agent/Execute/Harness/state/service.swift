@@ -8,6 +8,8 @@
 //
 //  Phase 6/9 services (ModelClient, AuthManager, plugins) stay optional.
 //  MCP catalog + handler cache names feed assembleToolRouter.
+//  Apps enablement / policy, onMcpCall, and onSageToolCall are the live
+//  binding seams.
 //  ExecutedToolCalls and unified exec are already in CodexCore / ToolsRuntimes.
 //
 
@@ -29,6 +31,13 @@ final class SessionServices: @unchecked Sendable {
     var modelVisibleMcpToolNames: [String]
     var mcpVisibleTools: [McpVisibleTool]
     var mcpHandlerCache: McpHandlerCache
+    var mcpBindingID: UInt64
+    var appsEnabled: Bool
+    var appsPolicy: AppsConfig?
+    var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
+    /// Sage execute tools (list_directory, apply_patch, …). Wired by RegularTask.
+    var sageToolNames: [String]
+    var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     var skillsLookup: SessionSkillsLookup
     var turnInputContributors: [any TurnInputContributor]
 
@@ -44,6 +53,12 @@ final class SessionServices: @unchecked Sendable {
         modelVisibleMcpToolNames: [String] = [],
         mcpVisibleTools: [McpVisibleTool] = [],
         mcpHandlerCache: McpHandlerCache = McpHandlerCache(),
+        mcpBindingID: UInt64 = 1,
+        appsEnabled: Bool = true,
+        appsPolicy: AppsConfig? = nil,
+        onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
+        sageToolNames: [String] = [],
+        onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         skillsLookup: SessionSkillsLookup = SessionSkillsLookup(),
         turnInputContributors: [any TurnInputContributor] = []
     ) {
@@ -59,6 +74,12 @@ final class SessionServices: @unchecked Sendable {
         self.modelVisibleMcpToolNames = modelVisibleMcpToolNames
         self.mcpVisibleTools = mcpVisibleTools
         self.mcpHandlerCache = mcpHandlerCache
+        self.mcpBindingID = mcpBindingID
+        self.appsEnabled = appsEnabled
+        self.appsPolicy = appsPolicy
+        self.onMcpCall = onMcpCall
+        self.sageToolNames = sageToolNames
+        self.onSageToolCall = onSageToolCall
         self.skillsLookup = skillsLookup
         self.turnInputContributors = turnInputContributors
     }

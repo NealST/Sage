@@ -131,6 +131,16 @@ extension AgentRuntime {
                 await self?.mcpHub?.ensureEnabledServersConnected()
             }
         )
+        turns.execute.invokeHarnessTool = { [weak self] call in
+            guard let self else {
+                throw ToolError.operationFailed("The agent session is no longer available.")
+            }
+            return try await self.makeExecuteServices().executeToolInvocation(
+                name: call.name,
+                argumentsJSON: call.argumentsJSON,
+                toolCallID: call.id
+            )
+        }
     }
 
     func makeExecuteServices() -> ExecuteServices {

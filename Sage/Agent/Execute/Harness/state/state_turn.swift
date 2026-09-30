@@ -10,6 +10,7 @@
 //  a SessionTask box instead of AbortOnDropHandle / OTel guards.
 //
 
+import CodexAsyncUtils
 import CodexProtocol
 import CodexSandboxing
 import Foundation
@@ -54,12 +55,18 @@ struct PendingRequestPermissions: Sendable {
 final class RunningTask: @unchecked Sendable {
     var kind: TaskKind
     var cancellation: Task<Void, Never>?
+    var cancellationToken: CancellationToken?
     var turnContext: TurnContext
     var done: Bool
 
-    init(kind: TaskKind, turnContext: TurnContext) {
+    init(
+        kind: TaskKind,
+        turnContext: TurnContext,
+        cancellationToken: CancellationToken? = nil
+    ) {
         self.kind = kind
         self.turnContext = turnContext
+        self.cancellationToken = cancellationToken
         self.done = false
     }
 }

@@ -192,6 +192,93 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         XCTAssertTrue(refusal?.content.hasPrefix("ERROR:") == true)
     }
 
+    func testStartAttachesHarnessSessionWithoutLeavingTurnRun() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [
+                AgentEvent(kind: .userInput, content: "first"),
+                AgentEvent(kind: .assistantResponse, content: "ok"),
+                AgentEvent(kind: .userInput, content: "again"),
+            ],
+            deleteEventIDs: []
+        ) { _ in }
+        var reply: String?
+        runtime.turns.execute.onCandidateReply = { reply = $0 }
+        runtime.turns.execute.modelSampler = { _ in
+            ModelTurn(content: "from-turn-run", toolCalls: [])
+        }
+
+        await runtime.turns.execute.start()
+
+        XCTAssertEqual(reply, "from-turn-run")
+        XCTAssertFalse(runtime.turns.execute.useHarnessRunTurn)
+        XCTAssertEqual(runtime.turns.execute.harnessInput.count, 1)
+        XCTAssertEqual(
+            runtime.turns.execute.harnessSession?.cloneHistory().forPrompt().count,
+            2
+        )
+    }
+
+    func testHarnessRunTurnDispatchesToolsThenFinishes() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "list it")],
+            deleteEventIDs: []
+        ) { _ in }
+        var samples = 0
+        var invoked: [String] = []
+        var reply: String?
+        runtime.turns.execute.useHarnessRunTurn = true
+        runtime.turns.execute.invokeHarnessTool = { call in
+            invoked.append(call.name)
+            XCTAssertEqual(call.id, "t1")
+            return "dir ok"
+        }
+        runtime.turns.execute.onCandidateReply = { reply = $0 }
+        runtime.turns.execute.modelSampler = { _ in
+            samples += 1
+            if samples == 1 {
+                return ModelTurn(
+                    content: nil,
+                    toolCalls: [ToolCallProposal(id: "t1", name: "list_directory", argumentsJSON: "{}")]
+                )
+            }
+            return ModelTurn(content: "listed", toolCalls: [])
+        }
+
+        await runtime.turns.execute.start()
+
+        XCTAssertEqual(invoked, ["list_directory"])
+        XCTAssertEqual(samples, 2)
+        XCTAssertEqual(reply, "listed")
+    }
+
+    func testHarnessRunTurnUsesAttachedSessionAndSampler() async throws {
+        let runtime = try makeRuntime()
+        _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
+        _ = await runtime.taskStore.commit(
+            appendEvents: [AgentEvent(kind: .userInput, content: "hello")],
+            deleteEventIDs: []
+        ) { _ in }
+        var reply: String?
+        runtime.turns.execute.useHarnessRunTurn = true
+        runtime.turns.execute.onCandidateReply = { reply = $0 }
+        runtime.turns.execute.modelSampler = { _ in
+            ModelTurn(content: "from-harness", toolCalls: [])
+        }
+
+        await runtime.turns.execute.start()
+
+        XCTAssertEqual(reply, "from-harness")
+        XCTAssertTrue(runtime.turns.execute.harnessSession?.mcpReprojectionRequested == true)
+        XCTAssertTrue(runtime.turns.execute.harnessSession?.emittedEvents.contains { event in
+            if case .turnComplete = event { return true }
+            return false
+        } == true)
+    }
+
     func testWorkPlanAppendixStaysOnTheExecutePrompt() async throws {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])

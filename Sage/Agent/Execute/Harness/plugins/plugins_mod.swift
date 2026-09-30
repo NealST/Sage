@@ -57,17 +57,53 @@ public struct McpVisibleTool: Equatable, Sendable {
     public var description: String
     public var serverName: String?
     public var parametersJSON: String?
+    public var connectorId: String?
+    public var toolTitle: String?
+    public var visibility: [String]?
+    public var destructiveHint: Bool?
+    public var openWorldHint: Bool?
+    public var isAgentPlugin: Bool
+    public var modelSpecBytes: Int?
+    public var namespaceDescription: String?
 
     public init(
         name: String,
         description: String = "",
         serverName: String? = nil,
-        parametersJSON: String? = nil
+        parametersJSON: String? = nil,
+        connectorId: String? = nil,
+        toolTitle: String? = nil,
+        visibility: [String]? = nil,
+        destructiveHint: Bool? = nil,
+        openWorldHint: Bool? = nil,
+        isAgentPlugin: Bool = false,
+        modelSpecBytes: Int? = nil,
+        namespaceDescription: String? = nil
     ) {
         self.name = name
         self.description = description
         self.serverName = serverName
         self.parametersJSON = parametersJSON
+        self.connectorId = connectorId
+        self.toolTitle = toolTitle
+        self.visibility = visibility
+        self.destructiveHint = destructiveHint
+        self.openWorldHint = openWorldHint
+        self.isAgentPlugin = isAgentPlugin
+        self.modelSpecBytes = modelSpecBytes
+        self.namespaceDescription = namespaceDescription
+    }
+
+    public var resolvedServerName: String {
+        serverName ?? ""
+    }
+
+    public var resolvedModelSpecBytes: Int {
+        if let modelSpecBytes { return modelSpecBytes }
+        return name.utf8.count
+            + description.utf8.count
+            + (parametersJSON?.utf8.count ?? 0)
+            + (namespaceDescription?.utf8.count ?? 0)
     }
 }
 
