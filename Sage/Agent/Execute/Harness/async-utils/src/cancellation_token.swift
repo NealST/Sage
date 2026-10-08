@@ -53,9 +53,15 @@ public final class CancellationToken: @unchecked Sendable {
         }
     }
 
+    private final class WeakToken: @unchecked Sendable {
+        weak var token: CancellationToken?
+        init(_ token: CancellationToken) { self.token = token }
+    }
+
     private struct State {
         var isCancelled = false
         var waiters: [UUID: Waiter] = [:]
+        var children: [WeakToken] = []
     }
 
     /// `NSLock` + `withLock` stands in for a mutex-protected state.
@@ -69,14 +75,18 @@ public final class CancellationToken: @unchecked Sendable {
     public init() {}
 
     /// `CancellationToken::child_token` — a token cancelled when this one is.
+    ///
+    /// The parent keeps a weak child list so dropping the parent does not
+    /// cancel in-flight work. A `Task` + `[weak self]` watcher used to fire
+    /// `child.cancel()` as soon as the parent was released.
     public func childToken() -> CancellationToken {
         let child = CancellationToken()
-        if isCancelled {
-            child.cancel()
-            return child
+        let alreadyCancelled = withState { state -> Bool in
+            if state.isCancelled { return true }
+            state.children.append(WeakToken(child))
+            return false
         }
-        Task { [weak self] in
-            await self?.waitForCancellation()
+        if alreadyCancelled {
             child.cancel()
         }
         return child
@@ -84,14 +94,19 @@ public final class CancellationToken: @unchecked Sendable {
 
     /// `CancellationToken::cancel` — wakes every current and future waiter.
     public func cancel() {
-        let waiters = withState { state -> [Waiter] in
+        let (waiters, children) = withState { state -> ([Waiter], [CancellationToken]) in
             state.isCancelled = true
             let waiters = Array(state.waiters.values)
             state.waiters.removeAll()
-            return waiters
+            let children = state.children.compactMap(\.token)
+            state.children.removeAll()
+            return (waiters, children)
         }
         for waiter in waiters {
             waiter.fire()?.resume()
+        }
+        for child in children {
+            child.cancel()
         }
     }
 

@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Dispatch, exposure, and hook payload assembly. Pre/post hook execution
-//  and Session services wait for Phase 5 / Phase 8.
+//  Dispatch, exposure, and hook payload assembly. `dispatch` runs rust's
+//  PreToolUse → handle → PostToolUse sandwich through `HookRuntime`.
 //
 
 import CodexCore
@@ -85,40 +85,128 @@ struct HarnessToolRegistry {
     }
 
     func dispatch(_ invocation: ToolInvocation) async throws -> AnyToolResult {
+        var invocation = invocation
+        let toolName = flatToolName(invocation.toolName)
+        if let projectRoot = invocation.hookProjectRoot {
+            let command = hookCommand(invocation.payload)
+            let pre = await HookRuntime.preToolUse(
+                tool: toolName,
+                command: command,
+                projectRoot: projectRoot,
+                argumentsJSON: command,
+                activatedSkills: invocation.hookActivatedSkills,
+                sessionId: invocation.threadId?.description ?? "",
+                turnId: invocation.turnId,
+                cwd: projectRoot.path,
+                model: invocation.hookModel,
+                permissionMode: invocation.hookPermissionMode,
+                toolUseId: invocation.callId
+            )
+            invocation.onAdditionalContexts?(pre.additionalContexts)
+            if pre.shouldStop {
+                throw FunctionCallError.respondToModel(
+                    preToolUseBlockMessage(
+                        toolName: toolName,
+                        reason: pre.additionalContexts.first ?? "Hook denied this tool.",
+                        payload: invocation.payload
+                    )
+                )
+            }
+            if let updated = pre.updatedInput, case .function = invocation.payload {
+                invocation.payload = .function(arguments: updated)
+            }
+        }
+
+        var result = try await handleRegisteredOrSage(invocation)
+        let success = result.result.successForLogging()
+        guard success, let projectRoot = invocation.hookProjectRoot else {
+            return result
+        }
+
+        let post = await HookRuntime.postToolUse(
+            tool: toolName,
+            projectRoot: projectRoot,
+            argumentsJSON: hookCommand(invocation.payload),
+            activatedSkills: invocation.hookActivatedSkills,
+            sessionId: invocation.threadId?.description ?? "",
+            turnId: invocation.turnId,
+            cwd: projectRoot.path,
+            model: invocation.hookModel,
+            permissionMode: invocation.hookPermissionMode,
+            toolUseId: invocation.callId,
+            toolResponse: result.result.logOutput()
+        )
+        invocation.onAdditionalContexts?(post.additionalContexts)
+        if post.shouldStop {
+            throw FunctionCallError.respondToModel(
+                post.additionalContexts.first ?? "PostToolUse hook blocked the tool result"
+            )
+        }
+        if let feedback = post.feedbackMessage, !feedback.isEmpty {
+            result.result = PostToolUseFeedbackOutput(
+                original: result.result,
+                modelVisible: FunctionToolOutput.fromText(feedback, success: nil)
+            )
+        }
+        return result
+    }
+
+    private func handleRegisteredOrSage(_ invocation: ToolInvocation) async throws -> AnyToolResult {
         if let entry = entry(for: invocation.toolName) {
             let result = try await entry.runtime.handle(invocation)
-            return AnyToolResult(
-                callId: invocation.callId,
-                payload: invocation.payload,
-                result: result,
-                postToolUsePayload: PostToolUsePayload(
-                    toolName: HookToolName(flatToolName(invocation.toolName)),
-                    toolUseId: invocation.callId,
-                    toolInput: hookInput(invocation.payload),
-                    toolResponse: result.postToolUseResponse(callId: invocation.callId, payload: invocation.payload)
-                )
-            )
+            return makeToolResult(invocation: invocation, result: result)
         }
         if let onSage = invocation.onSageToolCall,
            case .function(let arguments) = invocation.payload,
            let output = await onSage(flatToolName(invocation.toolName), invocation.callId, arguments) {
-            let result = boxedToolOutput(FunctionToolOutput.fromText(output, success: !output.hasPrefix("ERROR:")))
-            return AnyToolResult(
-                callId: invocation.callId,
-                payload: invocation.payload,
-                result: result,
-                postToolUsePayload: PostToolUsePayload(
-                    toolName: HookToolName(flatToolName(invocation.toolName)),
-                    toolUseId: invocation.callId,
-                    toolInput: hookInput(invocation.payload),
-                    toolResponse: result.postToolUseResponse(callId: invocation.callId, payload: invocation.payload)
-                )
+            let result = boxedToolOutput(
+                FunctionToolOutput.fromText(output, success: !output.hasPrefix("ERROR:"))
             )
+            return makeToolResult(invocation: invocation, result: result)
         }
         throw FunctionCallError.respondToModel(
             "unsupported tool \(flatToolName(invocation.toolName))"
         )
     }
+}
+
+private func makeToolResult(invocation: ToolInvocation, result: any ToolOutput) -> AnyToolResult {
+    AnyToolResult(
+        callId: invocation.callId,
+        payload: invocation.payload,
+        result: result,
+        postToolUsePayload: PostToolUsePayload(
+            toolName: HookToolName(flatToolName(invocation.toolName)),
+            toolUseId: invocation.callId,
+            toolInput: hookInput(invocation.payload),
+            toolResponse: result.postToolUseResponse(
+                callId: invocation.callId,
+                payload: invocation.payload
+            )
+        )
+    )
+}
+
+func hookCommand(_ payload: ToolPayload) -> String? {
+    switch payload {
+    case .function(let arguments):
+        return arguments
+    case .toolSearch(let arguments):
+        return arguments.query
+    case .custom(let input):
+        return input
+    }
+}
+
+func preToolUseBlockMessage(toolName: String, reason: String, payload: ToolPayload) -> String {
+    if (toolName == "Bash" || toolName == "apply_patch" || toolName == "run_shell_command"),
+       case .function(let arguments) = payload,
+       let data = arguments.data(using: .utf8),
+       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let command = object["command"] as? String {
+        return "Command blocked by PreToolUse hook: \(reason). Command: \(command)"
+    }
+    return "Tool call blocked by PreToolUse hook: \(reason). Tool: \(toolName)"
 }
 
 func hookInput(_ payload: ToolPayload) -> HarnessJSON {

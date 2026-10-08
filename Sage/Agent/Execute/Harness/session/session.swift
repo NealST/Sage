@@ -8,16 +8,133 @@
 //
 //  Session type shape plus the capture/history/token helpers `runTurn`
 //  and `RegularSessionTask` need (turn started, prewarm consume, MCP
-//  reprojection). Live Execute reads the ModelClientSession `runTurn`
-//  already opened. The mutex/event loop still waits.
+//  reprojection). `submit` / `nextEvent` are rust `SessionIo`: a
+//  dedicated loop receives Op, starts Regular/Compact tasks without
+//  blocking, and publishes EventMsg. HUD cards stay out of the loop.
+//  Compact queues SessionStart `compact`; `/clear` queues `clear`.
 //
 
 import CodexAPI
 import CodexAsyncUtils
 import CodexCore
+import CodexHooks
 import CodexOtel
 import CodexProtocol
 import Foundation
+
+private let sessionSubmissionCapacity = 512
+
+/// rust `tx_sub` / `rx_sub` for the app-target Session loop.
+private final class SessionInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [Submission] = []
+    private var recvWaiters: [CheckedContinuation<Submission?, Never>] = []
+    private var closed = false
+
+    func send(_ item: Submission) -> Bool {
+        lock.lock()
+        if closed {
+            lock.unlock()
+            return false
+        }
+        if !recvWaiters.isEmpty {
+            let waiter = recvWaiters.removeFirst()
+            lock.unlock()
+            waiter.resume(returning: item)
+            return true
+        }
+        if items.count >= sessionSubmissionCapacity {
+            lock.unlock()
+            return false
+        }
+        items.append(item)
+        lock.unlock()
+        return true
+    }
+
+    func recv() async -> Submission? {
+        lock.lock()
+        if !items.isEmpty {
+            let item = items.removeFirst()
+            lock.unlock()
+            return item
+        }
+        if closed {
+            lock.unlock()
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            recvWaiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func closeAndDrain() -> [Submission] {
+        lock.lock()
+        closed = true
+        let pending = items
+        items = []
+        let receivers = recvWaiters
+        recvWaiters = []
+        lock.unlock()
+        for waiter in receivers {
+            waiter.resume(returning: nil)
+        }
+        return pending
+    }
+}
+
+/// rust `tx_event` / `rx_event`.
+private final class EventMailbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [Event] = []
+    private var waiters: [CheckedContinuation<Event?, Never>] = []
+    private var closed = false
+
+    func send(_ event: Event) {
+        lock.lock()
+        if closed {
+            lock.unlock()
+            return
+        }
+        if !waiters.isEmpty {
+            let waiter = waiters.removeFirst()
+            lock.unlock()
+            waiter.resume(returning: event)
+            return
+        }
+        items.append(event)
+        lock.unlock()
+    }
+
+    func recv() async -> Event? {
+        lock.lock()
+        if !items.isEmpty {
+            let event = items.removeFirst()
+            lock.unlock()
+            return event
+        }
+        if closed {
+            lock.unlock()
+            return nil
+        }
+        return await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func close() {
+        lock.lock()
+        closed = true
+        let waiters = self.waiters
+        self.waiters = []
+        lock.unlock()
+        for waiter in waiters {
+            waiter.resume(returning: nil)
+        }
+    }
+}
 
 struct TurnEnvironmentSelection: Equatable, Sendable {
     var environmentId: String
@@ -103,6 +220,12 @@ final class Session: @unchecked Sendable {
     var services: SessionServices
     var inputQueue: InputQueue
     var features: Features
+    private let inbox = SessionInbox()
+    private let eventMailbox = EventMailbox()
+    private let idleLock = NSLock()
+    private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    private var loopTask: Task<Void, Never>?
+    var lastSubmissionId: String?
 
     init(
         threadId: ThreadId = ThreadId(),
@@ -119,6 +242,92 @@ final class Session: @unchecked Sendable {
         self.features = features
     }
 
+    /// rust `Session::submit`. Starts the loop on first use.
+    @discardableResult
+    func submit(_ op: SessionOp) async throws -> String {
+        let id = UUID().uuidString
+        try await submit(Submission(id: id, op: op))
+        return id
+    }
+
+    func submit(_ submission: Submission) async throws {
+        ensureSubmissionLoop()
+        lastSubmissionId = submission.id
+        var submission = submission
+        let ack = submission.ack ?? SubmissionAck()
+        submission.ack = ack
+        guard inbox.send(submission) else {
+            throw CodexErr.internalAgentDied
+        }
+        await ack.wait()
+    }
+
+    /// rust `Session::next_event`.
+    func nextEvent() async throws -> Event {
+        ensureSubmissionLoop()
+        guard let event = await eventMailbox.recv() else {
+            throw CodexErr.internalAgentDied
+        }
+        return event
+    }
+
+    func shutdownAndWait() async {
+        ensureSubmissionLoop()
+        _ = try? await submit(.shutdown)
+        await loopTask?.value
+    }
+
+    func waitUntilIdle() async {
+        if !hasRunningTask { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            idleLock.lock()
+            if !hasRunningTask {
+                idleLock.unlock()
+                continuation.resume()
+                return
+            }
+            idleWaiters.append(continuation)
+            idleLock.unlock()
+        }
+    }
+
+    var hasRunningTask: Bool {
+        guard let task = activeTurn?.task else { return false }
+        return !task.done
+    }
+
+    func ensureSubmissionLoop() {
+        guard loopTask == nil, !state.shuttingDown else { return }
+        loopTask = Task { [weak self] in
+            await self?.runSubmissionLoop()
+        }
+    }
+
+    func newTurnContext(subId: String? = nil) -> TurnContext {
+        let configuration = state.sessionConfiguration
+        return TurnContext(
+            subId: subId ?? UUID().uuidString,
+            threadId: threadId,
+            cwd: configuration.legacyFallbackCwd,
+            model: configuration.stepSettings.model,
+            sessionSource: configuration.sessionSource,
+            config: configuration.originalConfig,
+            disabledPluginIds: configuration.disabledPluginIds
+        )
+    }
+
+    func submissionInboxRecv() async -> Submission? {
+        await inbox.recv()
+    }
+
+    func submissionInboxCloseAndDrain() -> [Submission] {
+        inbox.closeAndDrain()
+    }
+
+    func closeEventMailbox() {
+        eventMailbox.close()
+    }
+
     func isInterrupted() -> Bool {
         activeTurn?.task?.done == true
     }
@@ -126,7 +335,7 @@ final class Session: @unchecked Sendable {
     func markMcpRuntimeDirty() {}
 
     func hooks() -> HookSnapshot {
-        HookSnapshot()
+        HookSnapshot(afterAgent: services.afterAgentHooks)
     }
 
     func refreshHooks(_ config: Config) async {}
@@ -159,6 +368,29 @@ final class Session: @unchecked Sendable {
             referenceContextItem: nil,
             replacement: .compaction(reviewerCompactionHash: nil)
         )
+        state.queuePendingSessionStartSource(.compact)
+    }
+
+    /// rust `/clear`: drop history and queue SessionStart `clear`.
+    func replaceResetHistory(_ items: [ResponseItemEnvelope] = []) {
+        state.replaceAnnotatedHistory(
+            items,
+            referenceContextItem: nil,
+            replacement: .reset
+        )
+        state.queuePendingSessionStartSource(.clear)
+    }
+
+    func queuePendingSessionStartSource(_ value: SessionStartSource) {
+        state.queuePendingSessionStartSource(value)
+    }
+
+    func takePendingSessionStartSource() -> SessionStartSource? {
+        state.takePendingSessionStartSource()
+    }
+
+    func hasPendingSessionStartSource() -> Bool {
+        !state.pendingSessionStartSources.isEmpty
     }
 
     func advanceAutoCompactWindow() -> (UInt64, AutoCompactWindowIds) {
@@ -185,6 +417,10 @@ final class Session: @unchecked Sendable {
         )
         state.updateTokenInfoFromUsage(usage, modelContextWindow: turnContext.resolvedContextWindow())
         state.ensureAutoCompactWindowServerPrefillFromUsage(usage)
+    }
+
+    func enqueuePendingHookContexts(_ contexts: [String]) {
+        pendingHookContexts.append(contentsOf: contexts)
     }
 
     func takePendingHookContexts() -> [String] {
@@ -222,6 +458,7 @@ final class Session: @unchecked Sendable {
     var emittedEvents: [EventMsg] = []
     var pendingHookContexts: [String] = []
     var sessionStartHooksConsumed = false
+    var stopHookActive = false
     var lastResponseId: String?
     var lastSafetyBuffering: SafetyBuffering?
     var lastToolCallInputDeltas: [(callId: String, delta: String)] = []
@@ -336,8 +573,24 @@ final class Session: @unchecked Sendable {
     }
 
     func sendEvent(_ turnContext: TurnContext, _ event: EventMsg) {
-        _ = turnContext
-        emittedEvents.append(event)
+        let id = turnContext.subId.isEmpty ? (lastSubmissionId ?? "") : turnContext.subId
+        sendEventRaw(Event(id: id, msg: event))
+    }
+
+    func sendEventRaw(_ event: Event) {
+        emittedEvents.append(event.msg)
+        eventMailbox.send(event)
+    }
+
+    func notifyIdleIfNeeded() {
+        guard !hasRunningTask else { return }
+        idleLock.lock()
+        let waiters = idleWaiters
+        idleWaiters = []
+        idleLock.unlock()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     func emitTurnItemStarted(_ turnContext: TurnContext, _ item: TurnItem) {
@@ -414,9 +667,25 @@ final class Session: @unchecked Sendable {
 }
 
 struct HookSnapshot: Sendable {
-    init() {}
+    var afterAgent: [Hook]
+
+    init(afterAgent: [Hook] = []) {
+        self.afterAgent = afterAgent
+    }
 
     func matchesPluginHooks(_ sources: [String], _ warnings: [String]) -> Bool {
         true
+    }
+
+    /// rust `Hooks::dispatch` for AfterAgent only. ClaudeHooksEngine stays off.
+    func dispatch(_ hookPayload: HookPayload) async -> [HookResponse] {
+        var outcomes: [HookResponse] = []
+        outcomes.reserveCapacity(afterAgent.count)
+        for hook in afterAgent {
+            let outcome = await hook.execute(hookPayload)
+            outcomes.append(outcome)
+            if outcome.result.shouldAbortOperation { break }
+        }
+        return outcomes
     }
 }

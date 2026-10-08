@@ -12,7 +12,9 @@
 //  threshold and reset contract.
 //
 
+import CodexAsyncUtils
 import CodexCore
+import CodexProtocol
 import Foundation
 
 enum CompactTask {
@@ -77,14 +79,16 @@ enum CompactTask {
             try await runInlineTokenBudgetCompact(
                 sess: sess,
                 stepContext: stepContext,
-                injection: injection
+                injection: injection,
+                trigger: .manual
             )
         case .remoteV2, .local:
             try await runAutoCompact(
                 sess: sess,
                 stepContext: stepContext,
                 clientSession: &clientSession,
-                injection: injection
+                injection: injection,
+                trigger: .manual
             )
         }
     }
@@ -193,5 +197,25 @@ enum CompactTask {
 
     private static func capForCompact(_ event: AgentEvent, maxTokens: Int) -> AgentEvent {
         ContextBudget.capToolResult(event, maxTokens: maxTokens)
+    }
+}
+
+/// rust `CompactTask` as a SessionTask. Full remote V2 stays in `runTurn`.
+final class CompactSessionTask: SessionTask, @unchecked Sendable {
+    var kind: TaskKind { .compact }
+
+    func run(
+        session: Session,
+        context: TurnContext,
+        input: [SessionTurnInput],
+        cancellationToken: CancellationToken
+    ) async throws -> String? {
+        _ = input
+        if cancellationToken.isCancelled {
+            throw CodexErr(details: .turnAborted)
+        }
+        _ = session.startNewContextWindow()
+        session.sendEvent(context, .contextCompacted(ContextCompactedEvent()))
+        return nil
     }
 }

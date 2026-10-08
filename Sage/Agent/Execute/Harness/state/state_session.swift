@@ -54,9 +54,21 @@ struct PreviousTurnSettings: Equatable, Sendable {
 }
 
 enum SessionStartSource: Equatable, Sendable {
-    case user
+    case startup
     case resume
+    case clear
+    case compact
     case fork
+
+    func asStr() -> String {
+        switch self {
+        case .startup: return "startup"
+        case .resume: return "resume"
+        case .clear: return "clear"
+        case .compact: return "compact"
+        case .fork: return "fork"
+        }
+    }
 }
 
 final class SessionState: @unchecked Sendable {

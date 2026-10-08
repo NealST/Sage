@@ -59,6 +59,10 @@ public protocol AuthProvider: Sendable {
 
     /// Applies auth to a complete outbound request and returns the request to send.
     func applyAuth(_ request: URLRequest) async throws -> URLRequest
+
+    /// rust `recover_from_unauthorized` / ChatGPT refresh. Returns true when
+    /// the caller should retry the same request with new credentials.
+    func recoverFromUnauthorized() async -> Bool
 }
 
 extension AuthProvider {
@@ -80,10 +84,18 @@ extension AuthProvider {
         }
         return request
     }
+
+    public func recoverFromUnauthorized() async -> Bool {
+        false
+    }
 }
 
 /// Shared auth handle passed through API clients.
 public typealias SharedAuthProvider = any AuthProvider
+
+public func recoverAuthFromUnauthorized(_ auth: SharedAuthProvider) async -> Bool {
+    await auth.recoverFromUnauthorized()
+}
 
 /// API-key bearer auth. ChatGPT / OAuth providers are deferred.
 public struct BearerAuthProvider: AuthProvider, Sendable {

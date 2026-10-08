@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Session / TurnContext / StepContext wait for Phase 5. Invocation carries
-//  the call identity plus optional session callbacks handlers need.
+//  Invocation carries the call identity, optional session callbacks, and
+//  the HookRuntime project/skills `registry.dispatch` needs for Pre/Post.
 //
 
 import CodexAsyncUtils
@@ -87,6 +87,12 @@ struct ToolInvocation: Sendable {
     var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     var onWaitForEnvironment: (@Sendable () async -> String?)?
+    /// Project root for `HookRuntime` Pre/PostToolUse on `registry.dispatch`.
+    var hookProjectRoot: URL?
+    var hookModel: String
+    var hookPermissionMode: String
+    var hookActivatedSkills: [SkillRecord]
+    var onAdditionalContexts: (@Sendable ([String]) -> Void)?
 
     init(
         callId: String,
@@ -117,7 +123,12 @@ struct ToolInvocation: Sendable {
         onDynamicTool: (@Sendable (ToolName, HarnessJSON) async -> DynamicToolResponse?)? = nil,
         onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
-        onWaitForEnvironment: (@Sendable () async -> String?)? = nil
+        onWaitForEnvironment: (@Sendable () async -> String?)? = nil,
+        hookProjectRoot: URL? = nil,
+        hookModel: String = "",
+        hookPermissionMode: String = "default",
+        hookActivatedSkills: [SkillRecord] = [],
+        onAdditionalContexts: (@Sendable ([String]) -> Void)? = nil
     ) {
         self.callId = callId
         self.toolName = toolName
@@ -148,6 +159,11 @@ struct ToolInvocation: Sendable {
         self.onMcpCall = onMcpCall
         self.onSageToolCall = onSageToolCall
         self.onWaitForEnvironment = onWaitForEnvironment
+        self.hookProjectRoot = hookProjectRoot
+        self.hookModel = hookModel
+        self.hookPermissionMode = hookPermissionMode
+        self.hookActivatedSkills = hookActivatedSkills
+        self.onAdditionalContexts = onAdditionalContexts
     }
 }
 
@@ -209,6 +225,25 @@ struct ApplyPatchToolOutput: ToolOutput, Sendable {
 
     func codeModeResult(_ payload: ToolPayload) -> HarnessJSON {
         .object([:])
+    }
+}
+
+/// rust `PostToolUseFeedbackOutput`. Model sees the hook text; the
+/// original output stays for logging / hook payload.
+struct PostToolUseFeedbackOutput: ToolOutput, Sendable {
+    var original: any ToolOutput
+    var modelVisible: FunctionToolOutput
+
+    func logOutput() -> String { modelVisible.logOutput() }
+
+    func successForLogging() -> Bool { original.successForLogging() }
+
+    func toResponseItem(callId: String, payload: ToolPayload) -> ResponseInputItem {
+        modelVisible.toResponseItem(callId: callId, payload: payload)
+    }
+
+    func postToolUseResponse(callId: String, payload: ToolPayload) -> HarnessJSON? {
+        original.postToolUseResponse(callId: callId, payload: payload)
     }
 }
 

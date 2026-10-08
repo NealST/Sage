@@ -3,7 +3,8 @@
 //  Sage
 //
 //  Approval-first dispatch: pause the whole batch if any step still needs a
-//  gate, then admit the rest through ParallelAdmission (read vs write lock).
+//  gate, then admit the rest through the session ParallelAdmission
+//  (read vs write lock) that ToolCallRuntime also uses.
 //
 
 import Foundation
@@ -59,7 +60,7 @@ extension ToolBatchExecutor {
             return .persistFailed
         }
         let steps = plan.steps
-        let gate = ParallelAdmission()
+        let gate = services.state.parallelAdmission
         let tasks = approved.map { index in
             Task { @MainActor in
                 let exclusive = !ParallelToolRuntime.supportsParallel(steps[index].toolName)

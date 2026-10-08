@@ -64,6 +64,11 @@ struct ToolRouter {
         try await registry.dispatch(buildInvocation(call))
     }
 
+    /// rust `ToolRouter::tool_supports_parallel`.
+    func toolSupportsParallel(_ call: ToolCall) -> Bool {
+        ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
+    }
+
     /// Codex `ToolRouter::build_tool_call`.
     static func buildToolCall(_ item: ResponseItem) throws -> ToolCall? {
         switch item {

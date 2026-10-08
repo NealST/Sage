@@ -145,6 +145,7 @@ final class AgentTaskStore {
         if let closing = state.activeTask {
             let closed = await closeActiveTask(closing)
             if !closed { return nil }
+            state.queuePendingSessionStartSource(.clear)
         }
         state.activeTask = nil
         state.activeTaskID = nil

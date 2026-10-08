@@ -107,16 +107,20 @@ final class ToolImpactTests: XCTestCase {
 
     func testPipelineTimeoutCoversAllBackends() {
         XCTAssertEqual(
-            ToolInvocationPipeline.timeoutDuration(for: "read_text_file"),
+            ToolOrchestrator.timeoutDuration(for: "read_text_file"),
             toolExecutionTimeout
         )
         XCTAssertEqual(
-            ToolInvocationPipeline.timeoutDuration(for: "mcp__demo__search"),
+            ToolOrchestrator.timeoutDuration(for: "mcp__demo__search"),
             .seconds(130)
         )
         XCTAssertEqual(
-            ToolInvocationPipeline.timeoutDuration(for: "run_skill_script"),
+            ToolOrchestrator.timeoutDuration(for: "run_skill_script"),
             .seconds(130)
+        )
+        XCTAssertEqual(
+            ToolInvocationPipeline.timeoutDuration(for: "read_text_file"),
+            ToolOrchestrator.timeoutDuration(for: "read_text_file")
         )
     }
 

@@ -48,6 +48,8 @@ final class AgentSessionState {
     private(set) var confirmationActionsFrozen = false
     /// After dismissing the context chip, the next submit starts a clean task.
     var forceFreshOnNextSubmit = false
+    /// Next harness attach SessionStart source (`clear` / `fork`).
+    var pendingSessionStartSource: SessionStartSource?
     /// True while Review is inspecting the current world off-transcript.
     var isReviewing = false
     /// Reviewer notes for the next execute pass. Cleared on accept / new submit.
@@ -63,6 +65,8 @@ final class AgentSessionState {
     var didBootstrap = false
     /// Exact shell / MCP invocations approved for the current task.
     let sessionAllowlist = SessionToolAllowlist()
+    /// Shared RWLock for HUD `ToolBatchExecutor` and harness `ToolCallRuntime`.
+    let parallelAdmission = ParallelAdmission()
     /// Tool calls the user approved to rerun outside Seatbelt.
     var unsandboxedToolCallIDs: Set<String> = []
     /// Attachment-bearing events retained in the most recently assembled model context.
@@ -164,6 +168,16 @@ final class AgentSessionState {
         if let taskID = activeTaskID {
             suppressedContextBudgetTaskID = taskID
         }
+    }
+
+    func queuePendingSessionStartSource(_ value: SessionStartSource) {
+        pendingSessionStartSource = value
+    }
+
+    func takePendingSessionStartSource() -> SessionStartSource? {
+        let value = pendingSessionStartSource
+        pendingSessionStartSource = nil
+        return value
     }
 
     func clearThreadRoutingNotices() {

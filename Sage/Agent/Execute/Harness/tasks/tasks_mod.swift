@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 //  SessionTask plus Session.spawnTask / startTask / onTaskFinished /
-//  abortAllTasks. `RegularSessionTask` runs `runTurn`. Sage RegularTask
-//  still owns ExecuteTurnLoop until AgentRuntime switches.
+//  abortAllTasks. `RegularSessionTask` runs `runTurn`. The submission
+//  loop starts regular/compact tasks without blocking on them.
 //
 
 import CodexAsyncUtils
@@ -114,6 +114,7 @@ extension Session {
             }
         }
         running.done = true
+        notifyIdleIfNeeded()
     }
 
     func abortAllTasks(reason: TurnAbortReason) async {
@@ -126,6 +127,9 @@ extension Session {
         if hadTask {
             lastTurnAbortReason = reason
             if let turnContext {
+                if reason == .interrupted {
+                    await runInterruptHook(sess: self, turnContext: turnContext)
+                }
                 await emitTurnAbortLifecycle(reason.rawValue)
                 sendEvent(
                     turnContext,
@@ -135,6 +139,7 @@ extension Session {
             inputQueue.clearPending(active)
             activeTurn = nil
         }
+        notifyIdleIfNeeded()
     }
 
     func onTaskFinished(_ turnContext: TurnContext, result: Result<String?, Error>) async {
@@ -187,5 +192,6 @@ extension Session {
         }
         await emitTurnStopLifecycle()
         activeTurn = nil
+        notifyIdleIfNeeded()
     }
 }

@@ -17,7 +17,9 @@
 //  `runTurn` as they arrive. Function calls stay out until HUD admission.
 //  A host without `/responses` falls back to chat completions.
 //  HUD approval is admitted before dispatch so the card never waits
-//  inside `runTurn`.
+//  inside `runTurn`. Attach binds the allowlist ApprovalStore, the
+//  session ParallelAdmission, and HookRuntime project/skills so
+//  `registry.dispatch` owns Pre/PostToolUse.
 //  Resume replays the pending calls through that same dispatch.
 //
 
@@ -79,6 +81,9 @@ final class RegularSessionTask: SessionTask, @unchecked Sendable {
             )
             prewarmed = nil
             afterRunTurn?()
+            if cancellationToken.isCancelled {
+                throw CodexErr(details: .turnAborted)
+            }
             if context.terminalError != nil {
                 return lastAgentMessage
             }
@@ -166,6 +171,8 @@ final class RegularTask: ExecuteTurnLoop {
     var harnessSampleConversations: [[AgentEvent]] = []
     /// Live Sage tool invoke (ExecuteServices). Tests can stub this.
     var invokeHarnessTool: ((ToolCallProposal) async throws -> String)?
+    /// Activated skills for registry Pre/PostToolUse (skill `hooks.json`).
+    var hookActivatedSkills: (() -> [SkillRecord])?
     /// Approval / validation gate for a tool-bearing sample. Nil means the
     /// calls are ready for `runTurn` to dispatch.
     var admitHarnessBatch: (() async -> ToolBatchExecutor.AdmitOutcome)?
@@ -184,6 +191,7 @@ final class RegularTask: ExecuteTurnLoop {
     private var stopHookActive = false
     /// SessionStart / UserPromptSubmit fire once per execute loop.
     private var sessionStartConsumed = false
+    private var pendingAttachSessionStartSource: SessionStartSource?
     private var userPromptSubmitConsumed = false
     private var abortReason: String?
 
@@ -219,6 +227,7 @@ final class RegularTask: ExecuteTurnLoop {
         toolBatchCount = 0
         stopHookActive = false
         sessionStartConsumed = false
+        pendingAttachSessionStartSource = nil
         userPromptSubmitConsumed = false
         abortReason = nil
     }
@@ -271,12 +280,23 @@ final class RegularTask: ExecuteTurnLoop {
         if let previousURL, responsesLease?.baseURL != previousURL {
             responsesTransportUnavailable = false
         }
+        let startSource = ExecuteHarnessAttach.attachStartSource(
+            pending: state.takePendingSessionStartSource(),
+            historyEmpty: snapshot.history.isEmpty
+        )
+        pendingAttachSessionStartSource = startSource
         let session = ExecuteHarnessAttach.makeSession(
             history: snapshot.history,
-            threadId: responsesLease?.client.threadId ?? ThreadId()
+            threadId: responsesLease?.client.threadId ?? ThreadId(),
+            startSource: startSource
         )
         session.services.modelClient = responsesTransportUnavailable ? nil : responsesLease?.client
+        session.services.parallelAdmission = state.parallelAdmission
+        session.services.approvalStore = state.sessionAllowlist.approvalStore
+        session.services.hookProjectRoot = projectRoot
+        session.services.hookActivatedSkills = hookActivatedSkills?() ?? []
         bindHarnessSampling(session)
+        session.ensureSubmissionLoop()
         harnessSession = session
         harnessTurnContext = ExecuteHarnessAttach.makeTurnContext(
             cwd: snapshot.cwd,
@@ -625,7 +645,19 @@ final class RegularTask: ExecuteTurnLoop {
         }
         if abortReason == nil, !sessionStartConsumed {
             sessionStartConsumed = true
-            let start = await HookRuntime.sessionStart(projectRoot: projectRoot)
+            let start = await HookRuntime.sessionStart(
+                projectRoot: projectRoot,
+                source: pendingAttachSessionStartSource
+                    ?? ExecuteHarnessAttach.inferredSessionStartSource(
+                        historyEmpty: !state.events.contains(where: { $0.kind == .userInput })
+                    ),
+                sessionId: harnessSession?.threadId.description ?? "",
+                cwd: projectRoot?.path,
+                model: harnessTurnContext?.model ?? modelGateway.settings.snapshot(for: .execute).model,
+                permissionMode: hookPermissionMode(
+                    harnessTurnContext?.approvalPolicy ?? .onRequest
+                )
+            )
             if start.shouldStop {
                 abortReason = start.additionalContexts.first ?? "Hook denied this turn."
             } else {
@@ -635,7 +667,17 @@ final class RegularTask: ExecuteTurnLoop {
         if abortReason == nil, !userPromptSubmitConsumed {
             userPromptSubmitConsumed = true
             let lastUser = state.events.last(where: { $0.kind == .userInput })?.content ?? ""
-            let submit = await HookRuntime.userPromptSubmit(lastUser, projectRoot: projectRoot)
+            let submit = await HookRuntime.userPromptSubmit(
+                lastUser,
+                projectRoot: projectRoot,
+                sessionId: harnessSession?.threadId.description ?? "",
+                turnId: harnessTurnContext?.subId ?? "",
+                cwd: projectRoot?.path,
+                model: harnessTurnContext?.model ?? modelGateway.settings.snapshot(for: .execute).model,
+                permissionMode: hookPermissionMode(
+                    harnessTurnContext?.approvalPolicy ?? .onRequest
+                )
+            )
             if submit.shouldStop {
                 abortReason = submit.additionalContexts.first ?? "Hook denied this turn."
             } else {
@@ -645,14 +687,35 @@ final class RegularTask: ExecuteTurnLoop {
     }
 
     func didCancel() async {
-        _ = await HookRuntime.interrupt(projectRoot: projectRoot)
-        _ = await HookRuntime.sessionEnd(projectRoot: projectRoot)
+        if !useHarnessRunTurn {
+            _ = await HookRuntime.interrupt(
+                projectRoot: projectRoot,
+                sessionId: harnessSession?.threadId.description ?? "",
+                turnId: harnessTurnContext?.subId ?? "",
+                cwd: projectRoot?.path,
+                model: harnessTurnContext?.model ?? "",
+                permissionMode: hookPermissionMode(
+                    harnessTurnContext?.approvalPolicy ?? .onRequest
+                )
+            )
+            _ = await HookRuntime.sessionEnd(
+                projectRoot: projectRoot,
+                sessionId: harnessSession?.threadId.description ?? "",
+                cwd: projectRoot?.path
+            )
+        }
         streaming.clear()
         await handleStop?(nil)
     }
 
     func didFail(_ error: Error) async {
-        _ = await HookRuntime.sessionEnd(projectRoot: projectRoot)
+        if !useHarnessRunTurn {
+            _ = await HookRuntime.sessionEnd(
+                projectRoot: projectRoot,
+                sessionId: harnessSession?.threadId.description ?? "",
+                cwd: projectRoot?.path
+            )
+        }
         let partial = streaming.currentVisibleText
         streaming.clear()
         await taskStore.markFailed(error.localizedDescription, partialReply: partial)
@@ -798,7 +861,15 @@ final class RegularTask: ExecuteTurnLoop {
         if turn.toolCalls.isEmpty {
             if let prompt = await HookRuntime.stopContinuation(
                 projectRoot: projectRoot,
-                alreadyActive: stopHookActive
+                alreadyActive: stopHookActive,
+                sessionId: harnessSession?.threadId.description ?? "",
+                turnId: harnessTurnContext?.subId ?? "",
+                cwd: projectRoot?.path,
+                model: harnessTurnContext?.model ?? "",
+                permissionMode: hookPermissionMode(
+                    harnessTurnContext?.approvalPolicy ?? .onRequest
+                ),
+                lastAssistantMessage: turn.content
             ) {
                 stopHookActive = true
                 guard await taskStore.commit(

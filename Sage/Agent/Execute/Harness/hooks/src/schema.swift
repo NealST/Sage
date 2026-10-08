@@ -344,6 +344,29 @@ public struct UserPromptSubmitCommandInput: Equatable, Sendable {
     public var model: String
     public var permissionMode: String
     public var prompt: String
+
+    public init(
+        sessionId: String,
+        turnId: String,
+        agentId: String? = nil,
+        agentType: String? = nil,
+        transcriptPath: String? = nil,
+        cwd: String,
+        model: String,
+        permissionMode: String,
+        prompt: String
+    ) {
+        self.sessionId = sessionId
+        self.turnId = turnId
+        self.agentId = agentId
+        self.agentType = agentType
+        self.transcriptPath = .fromPath(transcriptPath)
+        self.cwd = cwd
+        self.hookEventName = "UserPromptSubmit"
+        self.model = model
+        self.permissionMode = permissionMode
+        self.prompt = prompt
+    }
 }
 
 public struct StopCommandInput: Equatable, Sendable {

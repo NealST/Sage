@@ -7,8 +7,9 @@
 //  Port status: adapted
 //
 //  Approval → select sandbox → attempt → one escalate retry on denial.
-//  Already-approved commands are not re-asked. `ToolInvocationPipeline`
-//  is the validate / timeout / dispatch hop inside `execute`.
+//  Already-approved commands are not re-asked. `execute` owns validate,
+//  timeout, and Sage dispatch; `ToolInvocationPipeline` only forwards.
+//  `skipEventHooks` is set when `registry.dispatch` already ran Pre/Post.
 //
 
 import Foundation
@@ -157,20 +158,32 @@ struct ToolOrchestrator {
         }
     }
 
-    /// Single execute entry. Pipeline validates; shell takes the sandbox loop;
-    /// every other tool is the timed dispatch hop.
+    /// Single execute entry. Validate, then shell/patch through the sandbox
+    /// loop and every other tool through timed Sage dispatch.
     @MainActor
     static func execute(_ request: ToolInvocationRequest) async throws -> String {
-        let prepared = try await ToolInvocationPipeline.prepare(request)
+        let prepared = try await prepare(request)
         let projectRoot = projectRoot(of: prepared.pathGuardPolicy)
-        let preTool = await HookRuntime.preToolUse(
-            tool: prepared.name,
-            command: prepared.argumentsJSON,
-            projectRoot: projectRoot,
-            argumentsJSON: prepared.argumentsJSON
-        )
-        if preTool.shouldStop {
-            throw HarnessToolError.rejected(preTool.additionalContexts.first ?? "Hook denied this tool.")
+        let activatedSkills = prepared.enabledSkills.filter { skill in
+            prepared.activatedSkillNames.contains(skill.name)
+        }
+        if !prepared.skipEventHooks {
+            let preTool = await HookRuntime.preToolUse(
+                tool: prepared.name,
+                command: prepared.argumentsJSON,
+                projectRoot: projectRoot,
+                argumentsJSON: prepared.argumentsJSON,
+                activatedSkills: activatedSkills,
+                sessionId: prepared.sessionId ?? "",
+                turnId: prepared.turnId ?? "",
+                cwd: projectRoot?.path,
+                model: prepared.modelSettings?.model ?? "",
+                permissionMode: "default",
+                toolUseId: prepared.toolCallID
+            )
+            if preTool.shouldStop {
+                throw HarnessToolError.rejected(preTool.additionalContexts.first ?? "Hook denied this tool.")
+            }
         }
         let output: String
         if prepared.name == "run_shell_command" {
@@ -178,10 +191,114 @@ struct ToolOrchestrator {
         } else if prepared.name == "apply_patch" {
             output = try await ApplyPatchToolRuntime.execute(prepared)
         } else {
-            output = try await ToolInvocationPipeline.dispatchTimed(prepared)
+            output = try await dispatchTimed(prepared)
         }
-        _ = await HookRuntime.postToolUse(tool: prepared.name, projectRoot: projectRoot)
+        if !prepared.skipEventHooks {
+            _ = await HookRuntime.postToolUse(
+                tool: prepared.name,
+                projectRoot: projectRoot,
+                argumentsJSON: prepared.argumentsJSON,
+                activatedSkills: activatedSkills,
+                sessionId: prepared.sessionId ?? "",
+                turnId: prepared.turnId ?? "",
+                cwd: projectRoot?.path,
+                model: prepared.modelSettings?.model ?? "",
+                permissionMode: "default",
+                toolUseId: prepared.toolCallID,
+                toolResponse: output
+            )
+        }
         return output
+    }
+
+    /// Validate, hook, capability, observe. First hop of `execute`.
+    @MainActor
+    static func prepare(_ request: ToolInvocationRequest) async throws -> ToolInvocationRequest {
+        let request = request.resolvingAuthorization()
+        let definition = try validateForAuthorization(request)
+        try await assertHookAuthorized(request)
+        try assertCapabilityAuthorized(request)
+        let writesLocally = request.authorization?.capabilities.contains { capability in
+            capability == .localWrite || capability == .protectedMetadataWrite
+        } == true
+        try ToolInvocationDispatcher.assertMutatingToolsAllowed(
+            for: request.name,
+            workPlanKind: request.workPlanKind,
+            requiresConfirmation: definition.requiresConfirmation || writesLocally
+        )
+        return request
+    }
+
+    @MainActor
+    static func dispatchTimed(_ request: ToolInvocationRequest) async throws -> String {
+        try await withTimeout(name: request.name) {
+            capToolResult(try await ToolInvocationDispatcher.dispatch(request))
+        }
+    }
+
+    @MainActor
+    static func withTimeout<T: Sendable>(
+        name: String,
+        operation: @escaping @MainActor () async throws -> T
+    ) async throws -> T {
+        let timeout = timeoutDuration(for: name)
+        let work = Task { @MainActor in
+            try await operation()
+        }
+        defer { work.cancel() }
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work.value }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw ToolError.operationFailed(
+                    "Tool '\(name)' timed out after \(Int(timeout.components.seconds))s"
+                )
+            }
+            guard let result = try await group.next() else {
+                throw ToolError.operationFailed("Tool '\(name)' produced no result.")
+            }
+            group.cancelAll()
+            return result
+        }
+    }
+
+    @MainActor
+    static func validateForAuthorization(
+        _ request: ToolInvocationRequest
+    ) throws -> ToolDefinition {
+        let request = request.resolvingAuthorization()
+        try SkillToolPolicy.assertToolAllowed(
+            request.name,
+            activatedSkillNames: request.activatedSkillNames,
+            enabledSkills: request.enabledSkills
+        )
+
+        let definition = try definition(
+            for: request.name,
+            tools: request.tools,
+            mcp: request.mcp
+        )
+        try ToolArgumentValidator.validate(
+            argumentsJSON: request.argumentsJSON,
+            against: definition.parameters
+        )
+        if let validationError = request.authorization?.validationError {
+            throw ToolError.invalidArguments(validationError)
+        }
+        return definition
+    }
+
+    nonisolated static func timeoutDuration(for name: String) -> Duration {
+        if name.hasPrefix("mcp__")
+            || name == ExploreSubagentTool.name
+            || name == "run_shell_command"
+            || name == "take_screenshot"
+            || name == "toggle_appearance"
+            || name == "create_reminder"
+            || name == SkillToolExecutor.runSkillScriptDefinition.name {
+            return .seconds(130)
+        }
+        return toolExecutionTimeout
     }
 
     private static func projectRoot(of policy: PathGuard.Policy) -> URL? {
@@ -191,7 +308,7 @@ struct ToolOrchestrator {
 
     @MainActor
     private static func executeShell(_ request: ToolInvocationRequest) async throws -> String {
-        try await ToolInvocationPipeline.withTimeout(name: request.name) {
+        try await withTimeout(name: request.name) {
             let parsed = try ShellExecRequest.parse(
                 request.argumentsJSON,
                 policy: request.pathGuardPolicy
@@ -237,7 +354,16 @@ struct ToolOrchestrator {
             approvalReason: approvalReason,
             retryReason: retryReason
         )
-        let permission = await HookRuntime.permissionRequest(tool: ctx.toolName, projectRoot: Self.projectRoot(of: ctx.pathGuardPolicy))
+        let permission = await HookRuntime.permissionRequest(
+            tool: ctx.toolName,
+            projectRoot: Self.projectRoot(of: ctx.pathGuardPolicy),
+            argumentsJSON: ctx.argumentsJSON,
+            sessionId: "",
+            turnId: "",
+            cwd: ctx.workspaceRoot.path,
+            model: "",
+            permissionMode: ctx.approvalPolicy == .never ? "bypassPermissions" : "default"
+        )
         if permission.shouldStop {
             throw HarnessToolError.rejected(permission.additionalContexts.first ?? "Hook denied this approval.")
         }
@@ -280,5 +406,114 @@ struct ToolOrchestrator {
 
     private func permissionBits<Request>(from request: Request) -> SandboxPermissionBits {
         (request as? ShellExecRequest)?.permissionBits ?? []
+    }
+
+    @MainActor
+    private static func assertHookAuthorized(
+        _ request: ToolInvocationRequest
+    ) async throws {
+        let projectRoot: URL? = if case .project(let root) = request.pathGuardPolicy {
+            root
+        } else {
+            nil
+        }
+        let activatedSkills = request.enabledSkills.filter { skill in
+            request.activatedSkillNames.contains(skill.name)
+        }
+        let decision = if let hookDecision = request.hookDecision {
+            hookDecision
+        } else {
+            HookRuntime.preToolUseDecision(
+                tool: request.name,
+                argumentsJSON: request.argumentsJSON,
+                projectRoot: projectRoot,
+                activatedSkills: activatedSkills
+            )
+        }
+        switch decision {
+        case .allow:
+            return
+
+        case .deny(let reason):
+            throw ToolError.operationFailed("Blocked by PreToolUse hook: \(reason)")
+
+        case .ask(let approval):
+            let key = SessionToolAllowlist.hookApprovalKey(
+                name: request.name,
+                argumentsJSON: request.argumentsJSON,
+                hookIdentity: approval.identity
+            )
+            guard request.hookEvidence?.invocationKey == key else {
+                throw ToolError.operationFailed(
+                    "PreToolUse hook requires interactive approval: \(approval.reason)"
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private static func assertCapabilityAuthorized(
+        _ request: ToolInvocationRequest
+    ) throws {
+        guard let requirement = request.resolvingAuthorization().authorization else { return }
+        guard request.authorizationEvidence?.requirementKey == requirement.stableKey else {
+            throw ToolError.operationFailed("This tool call requires authorization.")
+        }
+    }
+
+    @MainActor
+    private static func definition(
+        for name: String,
+        tools: ToolRegistry,
+        mcp: CapabilityStore?
+    ) throws -> ToolDefinition {
+        if name == RecallTaskTranscriptTool.name {
+            return RecallTaskTranscriptTool.definition
+        }
+        if name == ManageTodoListTool.name {
+            return ManageTodoListTool.definition
+        }
+        if name == ExploreSubagentTool.name {
+            return ExploreSubagentTool.definition
+        }
+        if let server = MCPToolGroupTool.serverName(fromGroupTool: name) {
+            let definitions = mcp?.mcpToolDefinitions().filter { definition in
+                MCPToolGroupTool.serverName(fromQualifiedTool: definition.name) == server
+            } ?? []
+            guard !definitions.isEmpty else {
+                throw ToolError.operationFailed("MCP server '\(server)' has no available tools.")
+            }
+            return MCPToolGroupTool.groupDefinition(server: server, tools: definitions)
+        }
+        if name.hasPrefix("mcp__"),
+           let definition = mcp?.mcpToolDefinitions().first(where: { $0.name == name }) {
+            return definition
+        }
+        if let definition = skillDefinition(named: name) {
+            return definition
+        }
+        if let definition = tools.tool(named: name)?.definition {
+            return definition
+        }
+        throw ToolError.operationFailed("Unknown tool: \(name)")
+    }
+
+    private static func skillDefinition(named name: String) -> ToolDefinition? {
+        switch name {
+        case SkillToolExecutor.loadSkillDefinition.name:
+            return SkillToolExecutor.loadSkillDefinition
+
+        case SkillToolExecutor.loadSkillResourceDefinition.name:
+            return SkillToolExecutor.loadSkillResourceDefinition
+
+        case SkillToolExecutor.runSkillScriptDefinition.name:
+            return SkillToolExecutor.runSkillScriptDefinition
+
+        case SkillToolExecutor.saveSkillDefinition.name:
+            return SkillToolExecutor.saveSkillDefinition
+
+        default:
+            return nil
+        }
     }
 }
