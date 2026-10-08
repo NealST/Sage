@@ -6,9 +6,10 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. WebSocket
-//  transport, ChatGPT auth refresh, attestation, otel, and extension
-//  interceptors wait. Auth is AuthProvider (Bearer API key).
+//  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. Outbound items
+//  drop unprefixed ids, and content-item kinds unless that feature is on.
+//  WebSocket transport, ChatGPT auth refresh, attestation, otel, and
+//  extension interceptors wait. Auth is AuthProvider (Bearer API key).
 //  Sage already has Agent/Model/ModelClient; this type lives in CodexCore.
 //
 
@@ -235,7 +236,22 @@ public final class ModelClient: @unchecked Sendable {
         if let bounded = boundedInput(message: request, input: request.input) {
             request.input = bounded
         }
+        prepareResponseItemsForRequest(&request.input)
         return request
+    }
+
+    /// `ModelClient::prepare_response_items_for_request`. Server-shaped ids
+    /// stay. Client ids without a prefix are omitted, and content-item kinds
+    /// stay off the wire unless the session turned that feature on.
+    func prepareResponseItemsForRequest(_ input: inout [ResponseItem]) {
+        for index in input.indices {
+            if let id = input[index].id(), !id.isPrefixed {
+                input[index].setId(nil)
+            }
+            if !contentItemKindsEnabled {
+                input[index].clearContentItemKinds()
+            }
+        }
     }
 
     func buildReasoning(

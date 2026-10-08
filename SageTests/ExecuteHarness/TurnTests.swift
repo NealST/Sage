@@ -2,6 +2,7 @@
 import CodexAPI
 import CodexAsyncUtils
 import CodexCore
+import CodexModelProviderInfo
 import CodexProtocol
 import XCTest
 
@@ -533,6 +534,67 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         XCTAssertEqual(session.lastResponseId, "resp_live")
         XCTAssertEqual(session.getTotalTokenUsage(), 14)
         XCTAssertEqual(result.lastAgentMessage, "hi")
+    }
+
+    func testResponsesRequestDropsUnprefixedIdsAndContentKinds() {
+        let legacy = ResponseItem.message(
+            id: ResponseItemId.fromServer("legacy"),
+            role: "user",
+            content: [.inputText(text: "old")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: InternalChatMessageMetadataPassthrough(
+                turnId: "turn-1",
+                contentItemKinds: [ContentItemKind("text")]
+            )
+        )
+        let kept = ResponseItem.message(
+            id: ResponseItemId(withSuffix: "msg", suffix: "keep"),
+            role: "user",
+            content: [.inputText(text: "new")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: InternalChatMessageMetadataPassthrough(
+                contentItemKinds: [ContentItemKind("text")]
+            )
+        )
+        let stripped = requestInput(contentItemKindsEnabled: false, items: [legacy, kept])
+        XCTAssertNil(stripped[0].id())
+        XCTAssertEqual(stripped[0].internalChatMessageMetadataPassthrough()?.turnId, "turn-1")
+        XCTAssertNil(stripped[0].internalChatMessageMetadataPassthrough()?.contentItemKinds)
+        XCTAssertEqual(stripped[1].id()?.asStr, "msg_keep")
+        XCTAssertNil(stripped[1].internalChatMessageMetadataPassthrough())
+
+        let keptKinds = requestInput(contentItemKindsEnabled: true, items: [kept])
+        XCTAssertEqual(
+            keptKinds[0].internalChatMessageMetadataPassthrough()?.contentItemKinds,
+            [ContentItemKind("text")]
+        )
+    }
+
+    private func requestInput(
+        contentItemKindsEnabled: Bool,
+        items: [ResponseItem]
+    ) -> [ResponseItem] {
+        let client = ModelClient(
+            threadId: ThreadId(),
+            providerInfo: ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1"),
+            auth: BearerAuthProvider(apiKey: "sk-test"),
+            contentItemKindsEnabled: contentItemKindsEnabled
+        )
+        let request = client.buildResponsesRequest(
+            prompt: Prompt(input: items, baseInstructions: BaseInstructions(text: "Be brief")),
+            modelInfo: minimalModelInfo(),
+            effort: nil,
+            summary: .auto,
+            serviceTier: nil,
+            responsesMetadata: CodexResponsesMetadata(
+                installationId: "inst",
+                sessionId: "sess",
+                threadId: "thr",
+                windowId: "win"
+            ),
+            includeInternal: true
+        )
+        return request.input
     }
 
     func testResponsesStreamBecomesAModelTurn() async throws {

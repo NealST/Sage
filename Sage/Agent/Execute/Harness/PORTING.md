@@ -519,7 +519,7 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/client.rs` | 2,852 | `client.swift` | 🟡 adapted |  |
+| `core/src/client.rs` | 2,852 | `client.swift` | 🟡 adapted | prepareResponseItemsForRequest strips unprefixed ids and content-item kinds |
 | `core/src/client_common.rs` | 141 | `client_common.swift` | 🟡 adapted |  |
 | `core/src/current_time.rs` | 55 | `current_time.swift` | 🟡 adapted |  |
 | `core/src/image_preparation.rs` | 428 | `image_preparation.swift` | 🟡 adapted |  |
