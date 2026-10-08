@@ -79,7 +79,7 @@ extension ReviewAgent {
                 name: call.name,
                 argumentsJSON: call.argumentsJSON
             )
-            return try await ToolInvocationPipeline.execute(invocation)
+            return try await ToolOrchestrator.execute(invocation)
         } catch is CancellationError {
             throw CancellationError()
         } catch {

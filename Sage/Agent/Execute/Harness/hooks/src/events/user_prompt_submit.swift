@@ -108,9 +108,8 @@ func commandInputJSON(_ request: UserPromptSubmitRequest) -> String {
         turnId: request.turnId,
         agentId: subagent.agentId,
         agentType: subagent.agentType,
-        transcriptPath: .fromPath(request.transcriptPath),
+        transcriptPath: request.transcriptPath,
         cwd: request.cwd.asPath,
-        hookEventName: "UserPromptSubmit",
         model: request.model,
         permissionMode: request.permissionMode,
         prompt: request.prompt

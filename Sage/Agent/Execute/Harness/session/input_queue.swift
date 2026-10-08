@@ -85,6 +85,12 @@ final class InputQueue: @unchecked Sendable {
         }
     }
 
+    func hasSessionPendingItems() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !pending.isEmpty
+    }
+
     func takeAll() -> [SessionTurnInput] {
         lock.lock()
         let items = pending

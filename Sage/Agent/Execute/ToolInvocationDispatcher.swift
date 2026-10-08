@@ -9,7 +9,7 @@ nonisolated enum ToolInvocationDispatcher {
         try await ToolOrchestrator.execute(request)
     }
 
-    /// Dispatches an invocation after `ToolInvocationPipeline` applies policy and schema checks.
+    /// Dispatches an invocation after `ToolOrchestrator.prepare` applies policy and schema checks.
     @MainActor
     static func dispatch(_ request: ToolInvocationRequest) async throws -> String {
         if let result = try await dispatchSpecializedTool(request) {

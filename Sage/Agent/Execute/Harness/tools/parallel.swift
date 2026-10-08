@@ -7,10 +7,10 @@
 //  Port status: adapted
 //
 //  Codex admits tools through an RWLock: parallel-capable calls take a
-//  read lock, serial calls take a write lock. Live Execute dispatches
-//  through `ToolBatchExecutor.runAdmittedBatch` (approval first, then
-//  this gate). This file also owns the partition policy used by
-//  `ToolBatchWave` and a generic runner for isolated batches (Explore).
+//  read lock, serial calls take a write lock. `ToolCallRuntime` (runTurn)
+//  and `ToolBatchExecutor.runAdmittedBatch` share `SessionServices.parallelAdmission`.
+//  HUD approval still happens first. This file also owns the partition
+//  policy used by `ToolBatchWave` and a generic runner for isolated batches.
 //
 
 import CodexAsyncUtils
@@ -165,6 +165,22 @@ actor ParallelAdmission {
         if exclusive { return readers == 0 }
         return true
     }
+
+    /// rust `RwLock` admit: writers wait for readers; readers overlap.
+    func run<T: Sendable>(
+        exclusive: Bool,
+        _ body: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        await acquire(exclusive: exclusive)
+        do {
+            let value = try await body()
+            release(exclusive: exclusive)
+            return value
+        } catch {
+            release(exclusive: exclusive)
+            throw error
+        }
+    }
 }
 
 /// Codex `ToolCallRuntime` — dispatch one model tool call through the step router.
@@ -179,6 +195,16 @@ struct ToolCallRuntime: Sendable {
         if cancellationToken.isCancelled {
             throw CodexErr(details: .turnAborted)
         }
+        let exclusive = !ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
+        return try await session.services.parallelAdmission.run(exclusive: exclusive) {
+            try await self.dispatchUnlocked(call, cancellationToken: cancellationToken)
+        }
+    }
+
+    private func dispatchUnlocked(
+        _ call: ToolCall,
+        cancellationToken: CancellationToken
+    ) async throws -> ResponseItem {
         let source = call.directSource()
         _ = session.services.executedToolCalls.prepare(call: call, source: source)
         guard let router = stepContext.toolRouter else {
@@ -198,6 +224,13 @@ struct ToolCallRuntime: Sendable {
             invocation.sessionSource = stepContext.turn.sessionSource
             invocation.onMcpCall = session.services.onMcpCall
             invocation.onSageToolCall = session.services.onSageToolCall
+            invocation.hookProjectRoot = session.services.hookProjectRoot
+            invocation.hookModel = stepContext.turn.model
+            invocation.hookPermissionMode = hookPermissionMode(stepContext.turn.approvalPolicy)
+            invocation.hookActivatedSkills = session.services.hookActivatedSkills
+            invocation.onAdditionalContexts = { [session, turn = stepContext.turn] contexts in
+                recordAdditionalContexts(sess: session, turnContext: turn, contexts: contexts)
+            }
             let result = try await router.registry.dispatch(invocation)
             session.services.executedToolCalls.complete(callId: call.callId, output: result.result)
             guard let item = responseInputToResponseItem(

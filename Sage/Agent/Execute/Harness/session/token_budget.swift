@@ -24,10 +24,18 @@ func hasExplicitSettings(_ settings: StepSettings) -> Bool {
 func runInlineTokenBudgetCompact(
     sess: Session,
     stepContext: StepContext,
-    injection: InitialContextInjection = .doNotInject
+    injection: InitialContextInjection = .doNotInject,
+    trigger: CompactHookTrigger = .auto
 ) async throws {
     let projectRoot = URL(fileURLWithPath: stepContext.turn.cwd, isDirectory: true)
-    let preCompact = await HookRuntime.preCompact(projectRoot: projectRoot)
+    let preCompact = await HookRuntime.preCompact(
+        projectRoot: projectRoot,
+        trigger: trigger,
+        sessionId: sess.threadId.description,
+        turnId: stepContext.turn.subId,
+        cwd: stepContext.turn.cwd,
+        model: stepContext.turn.model
+    )
     if preCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }
@@ -60,7 +68,14 @@ func runInlineTokenBudgetCompact(
     sess.emitTurnItemCompleted(stepContext.turn, compactionItem)
     sess.sendEvent(stepContext.turn, .contextCompacted(ContextCompactedEvent()))
 
-    let postCompact = await HookRuntime.postCompact(projectRoot: projectRoot)
+    let postCompact = await HookRuntime.postCompact(
+        projectRoot: projectRoot,
+        trigger: trigger,
+        sessionId: sess.threadId.description,
+        turnId: stepContext.turn.subId,
+        cwd: stepContext.turn.cwd,
+        model: stepContext.turn.model
+    )
     if postCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }

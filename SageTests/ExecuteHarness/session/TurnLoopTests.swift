@@ -1,6 +1,9 @@
 @testable import Sage
+import ApplyPatch
+import CodexAPI
 import CodexAsyncUtils
 import CodexCore
+import CodexHooks
 import CodexProtocol
 import XCTest
 
@@ -124,6 +127,31 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             return false
         })
         XCTAssertEqual(sess.previousTurnSettingsValue()?.model, turn.model)
+    }
+
+    func testUserPromptSubmitScriptSeesTurnPrompt() async {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-ups-source-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try? FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try? #"""
+        { "user_prompt_submit": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('prompt.txt','w').write(d.get('prompt','')+'|'+d.get('hook_event_name',''))\"" }] }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        let turn = TurnContext(cwd: temp.path, model: "gpt-5")
+        let outcome = await inspectPendingInput(
+            TurnInputBuilder.user([.text(text: "ship the patch", textElements: [])]),
+            sess: sess,
+            turnContext: turn
+        )
+        XCTAssertFalse(outcome.shouldStop)
+        let written = (try? String(
+            contentsOf: temp.appendingPathComponent("prompt.txt"),
+            encoding: .utf8
+        )) ?? ""
+        XCTAssertEqual(written, "ship the patch|UserPromptSubmit")
     }
 
     func testRunTurnReturnsNilWhenPromptHookBlocks() async throws {
@@ -301,6 +329,152 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         })
     }
 
+    func testSubmitStartsRegularTurnWhenIdle() async throws {
+        let sess = Session()
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "from-submit")
+        }
+        let id = try await sess.submit(
+            .userInput(TurnInputBuilder.user([.text(text: "hello", textElements: [])]))
+        )
+        XCTAssertFalse(id.isEmpty)
+        await sess.waitUntilIdle()
+        XCTAssertEqual(sess.lastTaskAgentMessage, "from-submit")
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnComplete = event { return true }
+            return false
+        })
+    }
+
+    func testSubmitWhileSamplingSteersTheNextLoop() async throws {
+        let sess = Session()
+        let firstSample = expectation(description: "first sample")
+        let gate = SubmissionAck()
+        var samples = 0
+        sess.runSamplingOverride = { _, _ in
+            samples += 1
+            if samples == 1 {
+                firstSample.fulfill()
+                await gate.wait()
+            }
+            return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "pass-\(samples)")
+        }
+        let turn = TurnContext()
+        let running = Task {
+            await sess.spawnTask(
+                RegularSessionTask(),
+                turnContext: turn,
+                input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])]
+            )
+        }
+        await fulfillment(of: [firstSample], timeout: 1)
+        _ = try await sess.submit(
+            .userInput(TurnInputBuilder.user([.text(text: "again", textElements: [])]))
+        )
+        gate.signal()
+        await running.value
+        XCTAssertEqual(samples, 2)
+        XCTAssertEqual(sess.lastTaskAgentMessage, "pass-2")
+    }
+
+    func testSubmitInterruptAbortsInFlightTurn() async throws {
+        let sess = Session()
+        let token = CancellationToken()
+        let entered = expectation(description: "sampling")
+        sess.runSamplingOverride = { _, _ in
+            entered.fulfill()
+            while !token.isCancelled {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            throw CodexErr(details: .turnAborted)
+        }
+        let running = Task {
+            await sess.spawnTask(
+                RegularSessionTask(),
+                turnContext: TurnContext(),
+                input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+                cancellationToken: token
+            )
+        }
+        await fulfillment(of: [entered], timeout: 1)
+        _ = try await sess.submit(.interrupt)
+        await running.value
+        XCTAssertEqual(sess.lastTurnAbortReason, .interrupted)
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnAborted(let aborted) = event { return aborted.reason == .interrupted }
+            return false
+        })
+    }
+
+    func testSubmitInterAgentTriggerStartsATurn() async throws {
+        let sess = Session()
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "mailbox")
+        }
+        _ = try await sess.submit(
+            .interAgent(
+                InterAgentCommunication(
+                    author: .root(),
+                    recipient: .root(),
+                    otherRecipients: [],
+                    content: "wake",
+                    triggerTurn: true
+                )
+            )
+        )
+        await sess.waitUntilIdle()
+        XCTAssertEqual(sess.lastTaskAgentMessage, "mailbox")
+    }
+
+    func testSubmitCompactEmitsContextCompacted() async throws {
+        let sess = Session()
+        _ = try await sess.submit(.compact)
+        await sess.waitUntilIdle()
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .contextCompacted = event { return true }
+            return false
+        })
+    }
+
+    func testNextEventReceivesTurnLifecycle() async throws {
+        let sess = Session()
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done")
+        }
+        _ = try await sess.submit(
+            .userInput(TurnInputBuilder.user([.text(text: "hello", textElements: [])]))
+        )
+        var sawStart = false
+        var sawComplete = false
+        for _ in 0..<12 {
+            let event = try await sess.nextEvent()
+            if case .turnStarted = event.msg { sawStart = true }
+            if case .turnComplete = event.msg { sawComplete = true }
+            if sawStart && sawComplete { break }
+        }
+        XCTAssertTrue(sawStart)
+        XCTAssertTrue(sawComplete)
+        await sess.waitUntilIdle()
+    }
+
+    func testShutdownCompletesAndClosesTheLoop() async throws {
+        let sess = Session()
+        await sess.shutdownAndWait()
+        XCTAssertTrue(sess.state.shuttingDown)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .shutdownComplete = event { return true }
+            return false
+        })
+        do {
+            _ = try await sess.submit(.interrupt)
+            XCTFail("submit after shutdown should fail")
+        } catch let error as CodexErr {
+            XCTAssertEqual(error.details, .internalAgentDied)
+        }
+    }
+
     func testCancelledTokenAbortsBeforeSampling() async {
         let sess = Session()
         let turn = TurnContext()
@@ -465,6 +639,42 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertFalse(result.needsFollowUp)
     }
 
+    func testTryRunSamplingRequestEmitsTurnDiffAfterCompleted() async throws {
+        let sess = Session()
+        let file = URL(fileURLWithPath: "/tmp/turn-diff.txt")
+        sess.services.turnDiffTracker.trackDelta(
+            "",
+            AppliedPatchDelta(changes: [
+                AppliedPatchChange(path: file, kind: .add(content: "hi\n", overwrittenContent: nil)),
+            ])
+        )
+        let step = StepContext()
+        var client: ModelClientSession?
+        sess.runSamplingStreamOverride = { _ in
+            makeResponseStream([
+                .success(.completed(
+                    responseId: "r1",
+                    tokenUsage: nil,
+                    usageMetadata: nil,
+                    endTurn: true
+                )),
+            ])
+        }
+        _ = try await tryRunSamplingRequest(
+            sess: sess,
+            stepContext: step,
+            clientSession: &client,
+            prompt: Prompt(),
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .turnDiff(let payload) = event {
+                return payload.unifiedDiff.contains("turn-diff.txt")
+            }
+            return false
+        })
+    }
+
     func testTryRunSamplingRequestThrowsWhenStreamEndsEarly() async {
         let sess = Session()
         let step = StepContext()
@@ -565,7 +775,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(plugins.map(\.configName), ["weather"])
     }
 
-    func testBuildSkillsAndPluginsInjectsSkillAndPluginItems() async {
+    func testBuildSkillsAndPluginsInjectsSkillAndPluginItems() async throws {
         let sess = Session()
         sess.services.availablePlugins = [
             PluginCapabilitySummary(
@@ -744,13 +954,14 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         )
         let step = StepContext(turn: turn)
         var client: ModelClientSession?
+        let streamed = "intro\n<proposed_plan>\nstep one\n</proposed_plan>\n"
         sess.runSamplingStreamOverride = { _ in
             makeResponseStream([
-                .success(.outputTextDelta("intro <proposed_plan>step one</proposed_plan>")),
+                .success(.outputTextDelta(streamed)),
                 .success(.outputItemDone(.message(
                     id: nil,
                     role: "assistant",
-                    content: [.outputText(text: "intro <proposed_plan>step one</proposed_plan>")],
+                    content: [.outputText(text: streamed)],
                     phase: nil,
                     internalChatMessageMetadataPassthrough: nil
                 ))),
@@ -855,6 +1066,311 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         }
     }
 
+    func testRunAutoCompactScriptSeesAutoTrigger() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-compact-source-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try #"""
+        {
+          "pre_compact": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('pre.txt','w').write(d.get('trigger','')+'|'+d.get('hook_event_name',''))\"" }],
+          "post_compact": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('post.txt','w').write(d.get('trigger','')+'|'+d.get('hook_event_name',''))\"" }]
+        }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        var client: ModelClientSession?
+        try await runAutoCompact(
+            sess: sess,
+            stepContext: StepContext(turn: TurnContext(cwd: temp.path)),
+            clientSession: &client,
+            injection: .doNotInject
+        )
+        XCTAssertEqual(
+            try String(contentsOf: temp.appendingPathComponent("pre.txt"), encoding: .utf8),
+            "auto|PreCompact"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: temp.appendingPathComponent("post.txt"), encoding: .utf8),
+            "auto|PostCompact"
+        )
+    }
+
+    func testRunTurnStopHookSamplesOnceMore() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-stop-source-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try #"""
+        {
+          "stop": [
+            { "action": "continue", "reason": "one more look" },
+            { "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('stop.txt','a').write(d.get('hook_event_name','')+'|'+str(d.get('stop_hook_active')).lower()+'|'+str(d.get('last_assistant_message') or '')+'\\n')\"" }
+          ]
+        }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        var samples = 0
+        sess.runSamplingOverride = { _, _ in
+            samples += 1
+            return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done-\(samples)")
+        }
+        var input: [SessionTurnInput] = [
+            TurnInputBuilder.user([.text(text: "hello", textElements: [])]),
+        ]
+        var requirements = McpStartupRequirements()
+        let message = try await runTurn(
+            sess: sess,
+            turnContext: TurnContext(cwd: temp.path),
+            input: &input,
+            mcpStartupRequirements: &requirements,
+            prewarmedClientSession: nil,
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(samples, 2)
+        XCTAssertEqual(message, "done-2")
+        XCTAssertTrue(sess.stopHookActive)
+        XCTAssertEqual(
+            try String(contentsOf: temp.appendingPathComponent("stop.txt"), encoding: .utf8),
+            "Stop|false|done-1\n"
+        )
+    }
+
+    func testRunTurnAfterAgentSeesUserAndLastAssistant() async throws {
+        let probe = AfterAgentProbe()
+        let sess = Session()
+        sess.services.afterAgentHooks = [
+            Hook(name: "probe") { payload in
+                if case .afterAgent(let event) = payload.hookEvent {
+                    probe.record(event)
+                }
+                return .success
+            },
+        ]
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done")
+        }
+        var input: [SessionTurnInput] = [
+            TurnInputBuilder.user([.text(text: "hello", textElements: [])]),
+        ]
+        var requirements = McpStartupRequirements()
+        let message = try await runTurn(
+            sess: sess,
+            turnContext: TurnContext(),
+            input: &input,
+            mcpStartupRequirements: &requirements,
+            prewarmedClientSession: nil,
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(message, "done")
+        XCTAssertEqual(probe.callCount, 1)
+        XCTAssertEqual(probe.lastAssistant, "done")
+        XCTAssertTrue(probe.inputMessages.contains("hello"))
+    }
+
+    func testRunTurnAfterAgentAbortReturnsNilAndEmitsError() async throws {
+        let sess = Session()
+        sess.services.afterAgentHooks = [
+            Hook(name: "boom") { _ in
+                .failedAbort(CodexErr.fatal("nope"))
+            },
+        ]
+        sess.runSamplingOverride = { _, _ in
+            SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done")
+        }
+        var input: [SessionTurnInput] = [
+            TurnInputBuilder.user([.text(text: "hello", textElements: [])]),
+        ]
+        var requirements = McpStartupRequirements()
+        let message = try await runTurn(
+            sess: sess,
+            turnContext: TurnContext(),
+            input: &input,
+            mcpStartupRequirements: &requirements,
+            prewarmedClientSession: nil,
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertNil(message)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .error(let error) = event {
+                return error.message.contains("after_agent hook 'boom'")
+                    && error.message.contains("aborted turn completion")
+            }
+            return false
+        })
+    }
+
+    func testRunTurnAfterAgentWaitsUntilStopContinuationFinishes() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-after-agent-stop-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try #"""
+        {
+          "stop": [{ "action": "continue", "reason": "one more look" }]
+        }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let probe = AfterAgentProbe()
+        let sess = Session()
+        sess.services.afterAgentHooks = [
+            Hook(name: "probe") { payload in
+                if case .afterAgent(let event) = payload.hookEvent {
+                    probe.record(event)
+                }
+                return .success
+            },
+        ]
+        var samples = 0
+        sess.runSamplingOverride = { _, _ in
+            samples += 1
+            return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "done-\(samples)")
+        }
+        var input: [SessionTurnInput] = [
+            TurnInputBuilder.user([.text(text: "hello", textElements: [])]),
+        ]
+        var requirements = McpStartupRequirements()
+        let message = try await runTurn(
+            sess: sess,
+            turnContext: TurnContext(cwd: temp.path),
+            input: &input,
+            mcpStartupRequirements: &requirements,
+            prewarmedClientSession: nil,
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(samples, 2)
+        XCTAssertEqual(message, "done-2")
+        XCTAssertEqual(probe.callCount, 1)
+        XCTAssertEqual(probe.lastAssistant, "done-2")
+    }
+
+    func testInjectHookContextIfRunningRequiresLiveTask() {
+        let sess = Session()
+        let item = HookAdditionalContext(text: "hint").asResponseItem()
+        XCTAssertEqual(sess.injectHookContextIfRunning([item])?.count, 1)
+        sess.activeTurn = ActiveTurn(turnState: TurnState())
+        XCTAssertEqual(sess.injectHookContextIfRunning([item])?.count, 1)
+        sess.activeTurn = ActiveTurn(
+            task: RunningTask(kind: .regular, turnContext: TurnContext()),
+            turnState: TurnState()
+        )
+        XCTAssertNil(sess.injectHookContextIfRunning([item]))
+        XCTAssertEqual(sess.activeTurn?.turnState.pendingInput.items.count, 1)
+        XCTAssertNil(sess.injectIfRunning([item]))
+        XCTAssertEqual(sess.activeTurn?.turnState.pendingInput.items.count, 2)
+    }
+
+    func testRecordAdditionalContextsUsesHookFragment() {
+        let sess = Session()
+        recordAdditionalContexts(
+            sess: sess,
+            turnContext: TurnContext(),
+            contexts: ["remember this"]
+        )
+        guard case .message(_, let role, let content, _, let passthrough) =
+            sess.cloneHistory().forPrompt().last
+        else {
+            return XCTFail("expected hook context message")
+        }
+        XCTAssertEqual(role, "user")
+        XCTAssertEqual(content, [.inputText(text: "remember this")])
+        XCTAssertEqual(passthrough?.contentItemKinds, [ContentItemKind("hooks.additional_context")])
+    }
+
+    func testDrainAfterSamplingInjectsPendingHookContext() {
+        let sess = Session()
+        let turn = TurnContext()
+        sess.activeTurn = ActiveTurn(
+            task: RunningTask(kind: .regular, turnContext: turn),
+            turnState: TurnState()
+        )
+        sess.enqueuePendingHookContexts(["from async hook"])
+        drainAsyncHookResults(sess: sess, turnContext: turn, beforeUserPrompt: false)
+        XCTAssertTrue(sess.cloneHistory().forPrompt().isEmpty)
+        XCTAssertEqual(sess.activeTurn?.turnState.pendingInput.items.count, 1)
+        guard case .responseItem(let item) = sess.activeTurn?.turnState.pendingInput.items.first,
+              case .message(_, _, let content, _, let passthrough) = item
+        else {
+            return XCTFail("expected pending hook response item")
+        }
+        XCTAssertEqual(content, [.inputText(text: "from async hook")])
+        XCTAssertEqual(passthrough?.contentItemKinds, [ContentItemKind("hooks.additional_context")])
+    }
+
+    func testDrainBeforePromptRecordsPendingHookContext() {
+        let sess = Session()
+        sess.enqueuePendingHookContexts(["before prompt"])
+        drainAsyncHookResults(sess: sess, turnContext: TurnContext(), beforeUserPrompt: true)
+        XCTAssertEqual(sessionStartContextCount(sess, "before prompt"), 1)
+    }
+
+    func testSubmitInterruptScriptSeesInterruptEvent() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-interrupt-source-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try #"""
+        {
+          "interrupt": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('interrupt.txt','w').write(d.get('hook_event_name','')+'|'+d.get('turn_id',''))\"" }]
+        }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        sess.services.hookProjectRoot = temp
+        let token = CancellationToken()
+        let turn = TurnContext(cwd: temp.path)
+        let entered = expectation(description: "sampling")
+        sess.runSamplingOverride = { _, _ in
+            entered.fulfill()
+            while !token.isCancelled {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            throw CodexErr(details: .turnAborted)
+        }
+        let running = Task {
+            await sess.spawnTask(
+                RegularSessionTask(),
+                turnContext: turn,
+                input: [TurnInputBuilder.user([.text(text: "hello", textElements: [])])],
+                cancellationToken: token
+            )
+        }
+        await fulfillment(of: [entered], timeout: 1)
+        _ = try await sess.submit(.interrupt)
+        await running.value
+        XCTAssertEqual(sess.lastTurnAbortReason, .interrupted)
+        XCTAssertEqual(
+            try String(contentsOf: temp.appendingPathComponent("interrupt.txt"), encoding: .utf8),
+            "Interrupt|\(turn.subId)"
+        )
+    }
+
+    func testShutdownScriptSeesSessionEndReason() async throws {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-session-end-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try #"""
+        {
+          "session_end": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('end.txt','w').write(d.get('hook_event_name','')+'|'+d.get('reason',''))\"" }]
+        }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        sess.services.hookProjectRoot = temp
+        await sess.shutdownAndWait()
+        XCTAssertEqual(
+            try String(contentsOf: temp.appendingPathComponent("end.txt"), encoding: .utf8),
+            "SessionEnd|other"
+        )
+    }
+
     func testTryRunSamplingRequestRecordsUsageAndReasoningDelta() async throws {
         let sess = Session()
         let step = StepContext()
@@ -909,8 +1425,134 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let stopped = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
         XCTAssertTrue(stopped)
         XCTAssertTrue(sess.sessionStartHooksConsumed)
+        XCTAssertTrue(sess.emittedEvents.contains { event in
+            if case .error(let error) = event {
+                return error.message == "blocked start"
+            }
+            return false
+        })
         let again = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
         XCTAssertFalse(again)
+    }
+
+    func testSessionStartContinueInjectsContextIntoHistory() async {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-session-start-ctx-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try? FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try? """
+        { "session_start": [{ "action": "continue", "reason": "remember the work plan" }] }
+        """.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        let turn = TurnContext(cwd: temp.path)
+        let stopped = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(stopped)
+        XCTAssertEqual(sessionStartContextCount(sess, "remember the work plan"), 1)
+        let again = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(again)
+        XCTAssertEqual(sessionStartContextCount(sess, "remember the work plan"), 1)
+    }
+
+    func testSessionStartRunsAgainAfterCompact() async {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-session-start-compact-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try? FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try? """
+        { "session_start": [{ "action": "continue", "reason": "after compact" }] }
+        """.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        let turn = TurnContext(cwd: temp.path)
+        let first = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(first)
+        XCTAssertEqual(sessionStartContextCount(sess, "after compact"), 1)
+        sess.replaceCompactedHistory([])
+        XCTAssertEqual(sessionStartContextCount(sess, "after compact"), 0)
+        let afterCompact = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(afterCompact)
+        XCTAssertEqual(sessionStartContextCount(sess, "after compact"), 1)
+    }
+
+    func testSessionStartScriptSeesCompactSourceAfterHistoryReplace() async {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-session-start-source-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try? FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try? #"""
+        { "session_start": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('source.txt','a').write(d.get('source','')+'\\n')\"" }] }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        let turn = TurnContext(cwd: temp.path)
+        let first = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(first)
+        sess.replaceCompactedHistory([])
+        let afterCompact = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(afterCompact)
+        let written = (try? String(
+            contentsOf: temp.appendingPathComponent("source.txt"),
+            encoding: .utf8
+        )) ?? ""
+        XCTAssertEqual(
+            written.split(whereSeparator: \.isNewline).map(String.init),
+            ["startup", "compact"]
+        )
+    }
+
+    func testAttachStartSourcePrefersPendingClearAndFork() {
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: .clear, historyEmpty: true),
+            .clear
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: .fork, historyEmpty: true),
+            .fork
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: nil, historyEmpty: true),
+            .startup
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: nil, historyEmpty: false),
+            .resume
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.makeSession(history: [], startSource: .clear)
+                .takePendingSessionStartSource(),
+            .clear
+        )
+    }
+
+    func testSessionStartScriptSeesClearSourceAfterHistoryReset() async {
+        let temp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-session-start-clear-\(UUID().uuidString)", isDirectory: true)
+        let hooks = temp.appendingPathComponent(".sage", isDirectory: true)
+        try? FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        try? #"""
+        { "session_start": [{ "run": "python3 -c \"import json,sys; d=json.load(sys.stdin); open('source.txt','a').write(d.get('source','')+'\\n')\"" }] }
+        """#.write(to: hooks.appendingPathComponent("hooks.json"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: temp) }
+
+        let sess = Session()
+        let turn = TurnContext(cwd: temp.path)
+        let first = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(first)
+        sess.replaceResetHistory()
+        let afterClear = await runPendingSessionStartHooks(sess: sess, turnContext: turn)
+        XCTAssertFalse(afterClear)
+        let written = (try? String(
+            contentsOf: temp.appendingPathComponent("source.txt"),
+            encoding: .utf8
+        )) ?? ""
+        XCTAssertEqual(
+            written.split(whereSeparator: \.isNewline).map(String.init),
+            ["startup", "clear"]
+        )
     }
 
     func testBuiltToolsExposesRouterSpecsAndPromptUsesThem() {
@@ -1355,6 +1997,119 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(payload.body.toText(), "ok:linear.search:c1")
     }
 
+    func testToolRouterToolSupportsParallelMatchesRuntime() {
+        let sess = Session()
+        sess.services.sageToolNames = ["list_directory", "write_text_file"]
+        let router = assembleToolRouter(sess: sess, stepContext: StepContext())
+        XCTAssertTrue(
+            router.toolSupportsParallel(
+                ToolCall(
+                    toolName: ToolName(plain: "list_directory"),
+                    callId: "r1",
+                    payload: .function(arguments: "{}"),
+                    encryptedFunctionArgs: nil
+                )
+            )
+        )
+        XCTAssertFalse(
+            router.toolSupportsParallel(
+                ToolCall(
+                    toolName: ToolName(plain: "write_text_file"),
+                    callId: "w1",
+                    payload: .function(arguments: "{}"),
+                    encryptedFunctionArgs: nil
+                )
+            )
+        )
+    }
+
+    func testToolCallRuntimeSerializesWrites() async throws {
+        let probe = ToolAdmissionProbe()
+        let runtime = try makeSageToolRuntime(
+            names: ["write_text_file"],
+            onCall: { _, _, _ in
+                await probe.enter()
+                try? await Task.sleep(for: .milliseconds(80))
+                await probe.leave()
+                return "ok"
+            }
+        )
+        async let first = runtime.handleToolCall(
+            sageToolCall("write_text_file", id: "w1"),
+            cancellationToken: CancellationToken()
+        )
+        async let second = runtime.handleToolCall(
+            sageToolCall("write_text_file", id: "w2"),
+            cancellationToken: CancellationToken()
+        )
+        _ = try await (first, second)
+        let writePeak = await probe.peak
+        XCTAssertEqual(writePeak, 1)
+    }
+
+    func testToolCallRuntimeOverlapsParallelReads() async throws {
+        let probe = ToolAdmissionProbe()
+        let runtime = try makeSageToolRuntime(
+            names: ["list_directory"],
+            onCall: { _, _, _ in
+                await probe.enter()
+                let deadline = ContinuousClock.now + .milliseconds(400)
+                while await probe.peak < 2, ContinuousClock.now < deadline {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+                await probe.leave()
+                return "ok"
+            }
+        )
+        async let first = runtime.handleToolCall(
+            sageToolCall("list_directory", id: "r1"),
+            cancellationToken: CancellationToken()
+        )
+        async let second = runtime.handleToolCall(
+            sageToolCall("list_directory", id: "r2"),
+            cancellationToken: CancellationToken()
+        )
+        _ = try await (first, second)
+        let readPeak = await probe.peak
+        XCTAssertGreaterThanOrEqual(readPeak, 2)
+    }
+
+    func testToolCallRuntimeWriteExcludesOverlappingRead() async throws {
+        let probe = ToolAdmissionProbe()
+        let runtime = try makeSageToolRuntime(
+            names: ["write_text_file", "list_directory"],
+            onCall: { _, _, _ in
+                await probe.enter()
+                try? await Task.sleep(for: .milliseconds(80))
+                await probe.leave()
+                return "ok"
+            }
+        )
+        async let write = runtime.handleToolCall(
+            sageToolCall("write_text_file", id: "w1"),
+            cancellationToken: CancellationToken()
+        )
+        async let read = runtime.handleToolCall(
+            sageToolCall("list_directory", id: "r1"),
+            cancellationToken: CancellationToken()
+        )
+        _ = try await (write, read)
+        let mixedPeak = await probe.peak
+        XCTAssertEqual(mixedPeak, 1)
+    }
+
+    @MainActor
+    func testSessionServicesSharesAllowlistApprovalStore() {
+        let allowlist = SessionToolAllowlist()
+        let sess = Session()
+        sess.services.approvalStore = allowlist.approvalStore
+        let key = ApprovalStore.sessionCacheKey(name: "write_text_file", argumentsJSON: "{}")
+        allowlist.approvalStore.put(key, .approvedForSession)
+        XCTAssertTrue(sess.services.approvalStore === allowlist.approvalStore)
+        XCTAssertEqual(sess.services.approvalStore?.get(key), .approvedForSession)
+    }
+
     func testInputQueueMailboxAndSteerActivity() async throws {
         let inputQueue = InputQueue()
         let (_, nonePending) = inputQueue.subscribeActivity()
@@ -1508,6 +2263,70 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 private func messageContent(_ item: ResponseItem) -> [ContentItem] {
     if case .message(_, _, let content, _, _) = item { return content }
     return []
+}
+
+private actor ToolAdmissionProbe {
+    private(set) var current = 0
+    private(set) var peak = 0
+
+    func enter() {
+        current += 1
+        peak = max(peak, current)
+    }
+
+    func leave() {
+        current = max(0, current - 1)
+    }
+}
+
+private func sessionStartContextCount(_ sess: Session, _ text: String) -> Int {
+    sess.cloneHistory().forPrompt().filter { item in
+        if case .message(_, let role, let content, _, _) = item, role == "user" {
+            return content.contains { part in
+                if case .inputText(let partText) = part {
+                    return partText == text
+                }
+                return false
+            }
+        }
+        return false
+    }.count
+}
+
+private func sageToolCall(_ name: String, id: String) -> ToolCall {
+    ToolCall(
+        toolName: ToolName(plain: name),
+        callId: id,
+        payload: .function(arguments: "{}"),
+        encryptedFunctionArgs: nil
+    )
+}
+
+private final class AfterAgentProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var callCount = 0
+    private(set) var inputMessages: [String] = []
+    private(set) var lastAssistant: String?
+
+    func record(_ event: HookEventAfterAgent) {
+        lock.lock()
+        callCount += 1
+        inputMessages = event.inputMessages
+        lastAssistant = event.lastAssistantMessage
+        lock.unlock()
+    }
+}
+
+private func makeSageToolRuntime(
+    names: [String],
+    onCall: @escaping @Sendable (String, String, String) async -> String?
+) throws -> ToolCallRuntime {
+    let sess = Session()
+    sess.services.sageToolNames = names
+    sess.services.onSageToolCall = onCall
+    let step = StepContext()
+    _ = assembleToolRouter(sess: sess, stepContext: step)
+    return ToolCallRuntime(session: sess, stepContext: step)
 }
 
 private func turnLoopMail(_ content: String, triggerTurn: Bool) throws -> InterAgentCommunication {

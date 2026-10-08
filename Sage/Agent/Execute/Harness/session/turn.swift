@@ -17,6 +17,17 @@
 //  Live Execute calls `runTurn` when `useHarnessRunTurn`. Tool calls stay
 //  in the sampling stream and dispatch here. HUD admission happens before
 //  the stream is built, so a card pauses the turn instead of waiting inside it.
+//  apply_patch deltas feed TurnDiffTracker; the sample emits TurnDiff.
+//  SessionStart drains pending sources, injects continue contexts, and
+//  can stop the turn. Compact queues `compact`; reset queues `clear`.
+//  UserPromptSubmit stdin uses rust prompt / turn fields.
+//  Pre/PostCompact stdin carries rust trigger (auto / manual).
+//  Stop stdin uses rust stop_hook_active / last_assistant_message;
+//  a continuation injects context and samples once more.
+//  After a clean Stop, rust `after_agent` (legacy notify) runs, then
+//  post-turn compact when the occupancy threshold is crossed.
+//  Hook continue contexts record as rust `HookAdditionalContext`.
+//  After sampling, pending hook context injects into the turn queue.
 //
 
 import CodexAPI
@@ -257,8 +268,10 @@ func runTurn(
 
     var lastAgentMessage: String?
     var nextStepContext: StepContext? = firstStepContext
-    var turnDiffTracker = TurnDiffTracker()
-    _ = turnDiffTracker
+    let turnDiffTracker = sess.services.turnDiffTracker
+    turnDiffTracker.reset(displayRoots: displayRoots)
+    TurnDiffTracker.activate(turnDiffTracker)
+    defer { TurnDiffTracker.deactivate(turnDiffTracker) }
 
     while true {
         if cancellationToken.isCancelled {
@@ -373,6 +386,47 @@ func runTurn(
 
         if !needsFollowUp {
             lastAgentMessage = samplingResult.lastAgentMessage
+            if let prompt = await runStopHook(
+                sess: sess,
+                turnContext: turnContext,
+                lastAssistantMessage: lastAgentMessage
+            ) {
+                recordAdditionalContexts(
+                    sess: sess,
+                    turnContext: turnContext,
+                    contexts: [prompt]
+                )
+                nextStepContext = nil
+                continue
+            }
+            if await runLegacyAfterAgentHook(
+                sess: sess,
+                turnContext: turnContext,
+                input: samplingRequestInput,
+                lastAssistantMessage: lastAgentMessage
+            ) {
+                return nil
+            }
+            if turnContext.config.modelPostTurnCompactThresholdPercent > 0,
+               !turnContext.config.features.enabled(.tokenBudget),
+               tokenStatus.turnEndCompactionThresholdReached,
+               !sess.inputQueue.hasPendingInput(sess.activeTurn),
+               !cancellationToken.isCancelled
+            {
+                do {
+                    try await runAutoCompact(
+                        sess: sess,
+                        stepContext: stepContext,
+                        clientSession: &clientSession,
+                        injection: .doNotInject
+                    )
+                } catch {
+                    let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+                    if err.details == .turnAborted {
+                        throw err
+                    }
+                }
+            }
             break
         }
 
@@ -398,9 +452,12 @@ func runHooksAndRecordInputs(
     }
     var blockedInput = false
     var acceptedUserInput = false
-    let projectRoot = URL(fileURLWithPath: turnContext.cwd, isDirectory: true)
     for inputItem in input {
-        let hookOutcome = await inspectPendingInput(inputItem, projectRoot: projectRoot)
+        let hookOutcome = await inspectPendingInput(
+            inputItem,
+            sess: sess,
+            turnContext: turnContext
+        )
         if hookOutcome.shouldStop {
             blockedInput = true
             recordAdditionalContexts(sess: sess, turnContext: turnContext, contexts: hookOutcome.additionalContexts)
@@ -752,19 +809,28 @@ func runAutoCompact(
     sess: Session,
     stepContext: StepContext,
     clientSession: inout ModelClientSession?,
-    injection: InitialContextInjection
+    injection: InitialContextInjection,
+    trigger: CompactHookTrigger = .auto
 ) async throws {
     if sess.features.enabled(.tokenBudget) {
         try await runInlineTokenBudgetCompact(
             sess: sess,
             stepContext: stepContext,
-            injection: injection
+            injection: injection,
+            trigger: trigger
         )
         return
     }
     _ = clientSession
     let projectRoot = URL(fileURLWithPath: stepContext.turn.cwd, isDirectory: true)
-    let preCompact = await HookRuntime.preCompact(projectRoot: projectRoot)
+    let preCompact = await HookRuntime.preCompact(
+        projectRoot: projectRoot,
+        trigger: trigger,
+        sessionId: sess.threadId.description,
+        turnId: stepContext.turn.subId,
+        cwd: stepContext.turn.cwd,
+        model: stepContext.turn.model
+    )
     if preCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }
@@ -820,7 +886,14 @@ func runAutoCompact(
     sess.lastRemoteCompact = CompactRemoteV2Result(summary: summary, succeeded: usedRemote || sess.runCompactOverride != nil)
     sess.sendEvent(stepContext.turn, .contextCompacted(ContextCompactedEvent()))
 
-    let postCompact = await HookRuntime.postCompact(projectRoot: projectRoot)
+    let postCompact = await HookRuntime.postCompact(
+        projectRoot: projectRoot,
+        trigger: trigger,
+        sessionId: sess.threadId.description,
+        turnId: stepContext.turn.subId,
+        cwd: stepContext.turn.cwd,
+        model: stepContext.turn.model
+    )
     if postCompact.shouldStop {
         throw CodexErr(details: .turnAborted)
     }
@@ -900,6 +973,8 @@ func runRemoteCompactV2(
                     throw err
                 }
             }
+            if case .retryLimit = err.details { throw err }
+            if case .refreshTokenFailed = err.details { throw err }
             try await handleResponseStreamError(
                 retryState: &retryState,
                 maxRetries: maxRetries,
@@ -980,6 +1055,8 @@ func runSamplingRequest(
                 if let snapshot = limit.rateLimits {
                     sess.updateRateLimits(stepContext.turn, snapshot)
                 }
+                throw err
+            case .retryLimit, .refreshTokenFailed:
                 throw err
             default:
                 break
@@ -1284,6 +1361,9 @@ func tryRunSamplingRequest(
             for task in inFlight {
                 _ = try await task.value
             }
+            if let unifiedDiff = sess.services.turnDiffTracker.getUnifiedDiff() {
+                sess.sendEvent(stepContext.turn, .turnDiff(TurnDiffEvent(unifiedDiff: unifiedDiff)))
+            }
             return SamplingRequestResult(
                 needsFollowUp: needsFollowUp,
                 lastAgentMessage: lastAgentMessage
@@ -1383,14 +1463,27 @@ struct SessionRetrySink: ResponsesStreamRetrySink {
     }
 }
 
-func inspectPendingInput(_ inputItem: SessionTurnInput, projectRoot: URL) async -> HookRuntimeOutcome {
+func inspectPendingInput(
+    _ inputItem: SessionTurnInput,
+    sess: Session,
+    turnContext: TurnContext
+) async -> HookRuntimeOutcome {
     switch inputItem {
     case .userInput(let content, _, _):
         let prompt = content.compactMap { item -> String? in
             if case .text(let text, _) = item { return text }
             return nil
         }.joined(separator: "\n")
-        return await HookRuntime.userPromptSubmit(prompt, projectRoot: projectRoot)
+        let projectRoot = URL(fileURLWithPath: turnContext.cwd, isDirectory: true)
+        return await HookRuntime.userPromptSubmit(
+            prompt,
+            projectRoot: projectRoot,
+            sessionId: sess.threadId.description,
+            turnId: turnContext.subId,
+            cwd: turnContext.cwd,
+            model: turnContext.model,
+            permissionMode: hookPermissionMode(turnContext.approvalPolicy)
+        )
     default:
         return .proceed
     }
@@ -1417,40 +1510,109 @@ func recordPendingInput(
     recordAdditionalContexts(sess: sess, turnContext: turnContext, contexts: additionalContexts)
 }
 
+func additionalContextItems(_ contexts: [String]) -> [ResponseItem] {
+    contexts.compactMap { text in
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : HookAdditionalContext(text: trimmed).asResponseItem()
+    }
+}
+
 func recordAdditionalContexts(
     sess: Session,
     turnContext: TurnContext,
     contexts: [String]
 ) {
-    guard !contexts.isEmpty else { return }
-    let items = contexts.map { text in
-        ResponseItem.message(
-            id: nil,
-            role: "user",
-            content: [.inputText(text: text)],
-            phase: nil,
-            internalChatMessageMetadataPassthrough: nil
-        )
-    }
+    let items = additionalContextItems(contexts)
+    guard !items.isEmpty else { return }
     sess.recordConversationItems(turnContext, items: items)
 }
 
 func drainAsyncHookResults(sess: Session, turnContext: TurnContext, beforeUserPrompt: Bool) {
-    _ = beforeUserPrompt
-    recordAdditionalContexts(
-        sess: sess,
-        turnContext: turnContext,
-        contexts: sess.takePendingHookContexts()
+    let items = additionalContextItems(sess.takePendingHookContexts())
+    guard !items.isEmpty else { return }
+    if beforeUserPrompt {
+        sess.recordConversationItems(turnContext, items: items)
+        return
+    }
+    if sess.injectHookContextIfRunning(items) != nil {
+        sess.recordConversationItems(turnContext, items: items)
+    }
+}
+
+func runInterruptHook(sess: Session, turnContext: TurnContext) async {
+    _ = await HookRuntime.interrupt(
+        projectRoot: sess.services.hookProjectRoot
+            ?? URL(fileURLWithPath: turnContext.cwd, isDirectory: true),
+        sessionId: turnContext.sessionId.description,
+        turnId: turnContext.subId,
+        cwd: turnContext.cwd,
+        model: turnContext.model,
+        permissionMode: hookPermissionMode(turnContext.approvalPolicy)
     )
 }
 
+func runSessionEndHook(sess: Session, turnContext: TurnContext?) async {
+    let cwd = turnContext?.cwd ?? sess.services.hookProjectRoot?.path ?? ""
+    let projectRoot = sess.services.hookProjectRoot
+        ?? (cwd.isEmpty ? nil : URL(fileURLWithPath: cwd, isDirectory: true))
+    _ = await HookRuntime.sessionEnd(
+        projectRoot: projectRoot,
+        sessionId: turnContext?.sessionId.description ?? sess.threadId.description,
+        cwd: cwd
+    )
+}
+
+func runStopHook(
+    sess: Session,
+    turnContext: TurnContext,
+    lastAssistantMessage: String?
+) async -> String? {
+    let prompt = await HookRuntime.stopContinuation(
+        projectRoot: sess.services.hookProjectRoot
+            ?? URL(fileURLWithPath: turnContext.cwd, isDirectory: true),
+        alreadyActive: sess.stopHookActive,
+        sessionId: turnContext.sessionId.description,
+        turnId: turnContext.subId,
+        cwd: turnContext.cwd,
+        model: turnContext.model,
+        permissionMode: hookPermissionMode(turnContext.approvalPolicy),
+        lastAssistantMessage: lastAssistantMessage
+    )
+    if prompt != nil {
+        sess.stopHookActive = true
+    }
+    return prompt
+}
+
 func runPendingSessionStartHooks(sess: Session, turnContext: TurnContext) async -> Bool {
-    if sess.sessionStartHooksConsumed { return false }
+    if case .subAgent = turnContext.sessionSource {
+        return false
+    }
+    if !sess.hasPendingSessionStartSource() {
+        if sess.sessionStartHooksConsumed { return false }
+        sess.queuePendingSessionStartSource(.startup)
+    }
     sess.sessionStartHooksConsumed = true
     let projectRoot = URL(fileURLWithPath: turnContext.cwd, isDirectory: true)
-    if let reason = await HookRuntime.sessionStartDenial(projectRoot: projectRoot) {
-        sess.sendEvent(turnContext, .error(ErrorEvent(message: reason)))
-        return true
+    while let source = sess.takePendingSessionStartSource() {
+        let outcome = await HookRuntime.sessionStart(
+            projectRoot: projectRoot,
+            source: source,
+            sessionId: turnContext.sessionId.description,
+            cwd: turnContext.cwd,
+            model: turnContext.model,
+            permissionMode: hookPermissionMode(turnContext.approvalPolicy)
+        )
+        recordAdditionalContexts(
+            sess: sess,
+            turnContext: turnContext,
+            contexts: outcome.additionalContexts
+        )
+        if outcome.shouldStop {
+            let reason = outcome.additionalContexts.first ?? "Hook denied this turn."
+            sess.sendEvent(turnContext, .error(ErrorEvent(message: reason)))
+            return true
+        }
     }
     return false
 }

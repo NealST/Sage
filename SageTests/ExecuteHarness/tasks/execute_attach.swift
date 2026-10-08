@@ -133,6 +133,91 @@ final class ExecuteHarnessAttachTests: XCTestCase {
         XCTAssertEqual(result?.needsFollowUp, false)
     }
 
+    func testAttachStartSourcePrefersPendingClearAndFork() {
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: .clear, historyEmpty: true),
+            .clear
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: .fork, historyEmpty: true),
+            .fork
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: nil, historyEmpty: true),
+            .startup
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.attachStartSource(pending: nil, historyEmpty: false),
+            .resume
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.makeSession(history: [], startSource: .clear)
+                .takePendingSessionStartSource(),
+            .clear
+        )
+    }
+
+    func testInferredSessionStartSourceCoversRustCases() {
+        XCTAssertEqual(
+            ExecuteHarnessAttach.inferredSessionStartSource(historyEmpty: true),
+            .startup
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.inferredSessionStartSource(historyEmpty: false),
+            .resume
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.inferredSessionStartSource(
+                historyEmpty: true,
+                forkedFromThreadId: ThreadId()
+            ),
+            .fork
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.inferredSessionStartSource(
+                historyEmpty: false,
+                forkedFromThreadId: ThreadId()
+            ),
+            .fork
+        )
+    }
+
+    func testMakeSessionQueuesForkWhenForkedFromThreadId() {
+        let parent = ThreadId()
+        let session = ExecuteHarnessAttach.makeSession(
+            history: [
+                .message(
+                    id: nil,
+                    role: "user",
+                    content: [.inputText(text: "hi")],
+                    phase: nil,
+                    internalChatMessageMetadataPassthrough: nil
+                ),
+            ],
+            forkedFromThreadId: parent
+        )
+        XCTAssertEqual(session.takePendingSessionStartSource(), .fork)
+        XCTAssertEqual(session.state.sessionConfiguration.forkedFromThreadId, parent)
+        XCTAssertFalse(session.hasPendingSessionStartSource())
+    }
+
+    func testMakeSessionQueuesStartupAndResume() {
+        let empty = ExecuteHarnessAttach.makeSession(history: [])
+        XCTAssertEqual(empty.takePendingSessionStartSource(), .startup)
+        let resumed = ExecuteHarnessAttach.makeSession(
+            history: [
+                .message(
+                    id: nil,
+                    role: "user",
+                    content: [.inputText(text: "hi")],
+                    phase: nil,
+                    internalChatMessageMetadataPassthrough: nil
+                ),
+            ]
+        )
+        XCTAssertEqual(resumed.takePendingSessionStartSource(), .resume)
+    }
+
     private func assistantText(_ item: ResponseItem) -> String? {
         if case .message(_, let role, let content, _, _) = item, role == "assistant" {
             for part in content {

@@ -32,7 +32,7 @@ struct ToolInvocationRequest {
     var didResolveAuthorization = false
     /// Proof that the session consumed or matched a capability grant for this exact requirement.
     var authorizationEvidence: ToolInvocationAuthorizationEvidence?
-    /// When set, the pipeline skips a second PreToolUse evaluation.
+    /// When set, the orchestrator skips a second PreToolUse evaluation.
     var hookDecision: PreToolUseDecision?
     /// Proof that an exact invocation was approved after a PreToolUse hook returned `.ask`.
     var hookEvidence: ToolInvocationHookEvidence?
@@ -43,10 +43,14 @@ struct ToolInvocationRequest {
     /// Extra read-only paths (user attachments). Merged with skill dirs at dispatch.
     var extraReadAllowlist: [String] = []
     var toolCallID: String = "exec"
+    var sessionId: String? = nil
+    var turnId: String? = nil
     /// Set after the user approves a sandbox-escalation card for this call.
     var allowUnsandboxedRetry = false
     /// Session-scoped Codex approval cache shared with `SessionToolAllowlist`.
     var approvalStore: ApprovalStore?
+    /// Set when `registry.dispatch` already ran Pre/PostToolUse.
+    var skipEventHooks = false
 
     func resolvingAuthorization() -> Self {
         guard !didResolveAuthorization else { return self }

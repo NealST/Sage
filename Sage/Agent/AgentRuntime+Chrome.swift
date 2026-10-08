@@ -138,8 +138,14 @@ extension AgentRuntime {
             return try await self.makeExecuteServices().executeToolInvocation(
                 name: call.name,
                 argumentsJSON: call.argumentsJSON,
-                toolCallID: call.id
+                toolCallID: call.id,
+                skipEventHooks: true
             )
+        }
+        turns.execute.hookActivatedSkills = { [weak self] in
+            guard let self else { return [] }
+            let host = self.makeExecuteServices().skillHost
+            return host.enabledSkills.filter { host.activatedSkillNames.contains($0.name) }
         }
         turns.execute.admitHarnessBatch = { [weak self] in
             guard let self else { return .persistFailed }

@@ -9,12 +9,16 @@
 //  Phase 6/9 services (ModelClient, AuthManager, plugins) stay optional.
 //  MCP catalog + handler cache names feed assembleToolRouter.
 //  Apps enablement / policy, onMcpCall, and onSageToolCall are the live
-//  binding seams.
-//  ExecutedToolCalls and unified exec are already in CodexCore / ToolsRuntimes.
+//  binding seams. `parallelAdmission` is rust `parallel_execution`;
+//  `turnDiffTracker` is rust's per-turn apply_patch diff;
+//  `approvalStore` is the HUD SessionToolAllowlist cache when attached.
+//  Registry Pre/PostToolUse reads `hookProjectRoot` + activated skills.
+//  `afterAgentHooks` is rust `Hooks.after_agent` (legacy notify).
 //
 
 import CodexCore
 import CodexExecPolicy
+import CodexHooks
 import CodexProtocol
 import Foundation
 
@@ -41,6 +45,18 @@ final class SessionServices: @unchecked Sendable {
     /// Nil keeps the name-only specs from the tool router.
     var sageResponsesTools: [CodexProtocol.JSONValue]?
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
+    /// rust `SessionServices.parallel_execution` RWLock.
+    var parallelAdmission: ParallelAdmission
+    /// rust `TurnDiffTracker` for this execute turn.
+    var turnDiffTracker: TurnDiffTracker
+    /// HUD `SessionToolAllowlist.approvalStore` when RegularTask attaches.
+    var approvalStore: ApprovalStore?
+    /// `.sage/hooks.json` root for registry Pre/PostToolUse.
+    var hookProjectRoot: URL?
+    /// Activated skill records so skill `hooks.json` matches live Execute.
+    var hookActivatedSkills: [SkillRecord]
+    /// rust `Hooks.after_agent` (legacy `notify` argv). No ClaudeHooksEngine.
+    var afterAgentHooks: [Hook]
     var skillsLookup: SessionSkillsLookup
     var turnInputContributors: [any TurnInputContributor]
 
@@ -63,6 +79,12 @@ final class SessionServices: @unchecked Sendable {
         sageToolNames: [String] = [],
         sageResponsesTools: [CodexProtocol.JSONValue]? = nil,
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
+        parallelAdmission: ParallelAdmission = ParallelAdmission(),
+        turnDiffTracker: TurnDiffTracker = TurnDiffTracker(),
+        approvalStore: ApprovalStore? = nil,
+        hookProjectRoot: URL? = nil,
+        hookActivatedSkills: [SkillRecord] = [],
+        afterAgentHooks: [Hook] = [],
         skillsLookup: SessionSkillsLookup = SessionSkillsLookup(),
         turnInputContributors: [any TurnInputContributor] = []
     ) {
@@ -85,6 +107,12 @@ final class SessionServices: @unchecked Sendable {
         self.sageToolNames = sageToolNames
         self.sageResponsesTools = sageResponsesTools
         self.onSageToolCall = onSageToolCall
+        self.parallelAdmission = parallelAdmission
+        self.turnDiffTracker = turnDiffTracker
+        self.approvalStore = approvalStore
+        self.hookProjectRoot = hookProjectRoot
+        self.hookActivatedSkills = hookActivatedSkills
+        self.afterAgentHooks = afterAgentHooks
         self.skillsLookup = skillsLookup
         self.turnInputContributors = turnInputContributors
     }

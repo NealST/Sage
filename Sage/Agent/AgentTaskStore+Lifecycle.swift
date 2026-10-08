@@ -144,6 +144,7 @@ extension AgentTaskStore {
         planProgress.clear()
         state.sessionAllowlist.reset()
         state.clearThreadRoutingNotices()
+        state.queuePendingSessionStartSource(.fork)
         state.discardParkedTurnInput(for: oldID)
         onTaskClosed?(oldID)
         onActiveTaskChanged?()

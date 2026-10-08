@@ -294,10 +294,10 @@
 | `core/src/tools/mod.rs` | 147 | `tools/tools_mod.swift` | 🟡 adapted | R4a basename |
 | `core/src/tools/multi_agent_tool.rs` | 133 | `tools/multi_agent_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
-| `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted |  |
-| `core/src/tools/parallel.rs` | 787 | `tools/parallel.swift` | 🟡 adapted |  |
+| `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted | execute owns validate/timeout/dispatch; Pipeline is a forwarder |
+| `core/src/tools/parallel.rs` | 787 | `tools/parallel.swift` | 🟡 adapted | ToolCallRuntime admits through SessionServices.parallelAdmission (RWLock) |
 | `core/src/tools/registry.rs` | 851 | `tools/registry.swift` | 🟡 adapted |  |
-| `core/src/tools/router.rs` | 385 | `tools/router.swift` | 🟡 adapted |  |
+| `core/src/tools/router.rs` | 385 | `tools/router.swift` | 🟡 adapted | toolSupportsParallel → ParallelToolRuntime |
 | `core/src/tools/runtimes/apply_patch.rs` | 242 | `tools/runtimes/apply_patch.swift` | 🟡 partial |  |
 | `core/src/tools/runtimes/mod.rs` | 918 | `tools/runtimes/mod.swift` | 🟡 adapted |  |
 | `core/src/tools/runtimes/unified_exec.rs` | 975 | `tools/runtimes/unified_exec.swift` | 🟡 adapted |  |
@@ -468,7 +468,7 @@
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
 | `core/src/session/extension_metrics.rs` | 35 | `session/extension_metrics.swift` | 🟡 adapted |  |
 | `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
-| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted |  |
+| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | interrupt / userInput / mailbox / compact / shutdown; realtime stays out |
 | `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
 | `core/src/session/input_queue.rs` | 669 | `session/input_queue.swift` | 🟡 adapted | mailbox/steer activity watch; gauges omitted |
 | `core/src/session/mcp.rs` | 1,206 | `session/session_mcp.swift` | 🟡 adapted |  |
@@ -482,16 +482,16 @@
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_budget.rs` | 34 | `session/rollout_budget.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted |  |
-| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | emitTurnStarted + startup prewarm consume + MCP reprojection |
+| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | submit / nextEvent / mutex-free inbox; HUD cards stay out |
 | `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
 | `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted |  |
 | `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
-| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted |  |
+| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | interrupt/shutdown/userInput/interAgent/compact |
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted |  |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |
-| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools |
+| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools; emit TurnDiff after in-flight tools |
 | `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted |  |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
@@ -500,18 +500,18 @@
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
 | `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
-| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted |  |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore |
 | `core/src/state/session.rs` | 475 | `state/state_session.swift` | 🟡 adapted |  |
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
 | `core/src/stream_events_utils.rs` | 586 | `stream_events_utils.swift` | 🟡 adapted |  |
 | `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 adapted | token-budget window reset + occupancy share CompactTokenBudget; remote V2 stays on runAutoCompact |
 | `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
-| `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks |
-| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission |
+| `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks; detached start from Session loop |
+| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission; attach shares allowlist ApprovalStore + ParallelAdmission |
 | `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
 | `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted |  |
-| `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted |  |
+| `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted | trackDelta / invalidate / emit TurnDiff after sample; Myers timeout stays a line diff |
 | `core/src/turn_metadata.rs` | 569 | `turn_metadata.swift` | 🟡 adapted |  |
 | `core/src/turn_timing.rs` | 443 | `turn_timing.swift` | 🟡 adapted |  |
 
@@ -519,7 +519,7 @@
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/client.rs` | 2,852 | `client.swift` | 🟡 adapted |  |
+| `core/src/client.rs` | 2,852 | `client.swift` | 🟡 adapted | stream prepares images / item ids; open-path 401 + connection retry; WS / ChatGPT refresh wait |
 | `core/src/client_common.rs` | 141 | `client_common.swift` | 🟡 adapted |  |
 | `core/src/current_time.rs` | 55 | `current_time.swift` | 🟡 adapted |  |
 | `core/src/image_preparation.rs` | 428 | `image_preparation.swift` | 🟡 adapted |  |
@@ -725,7 +725,7 @@
 | `core/src/guardian/runtime.rs` | 92 | `guardian/runtime.swift` | 🟡 adapted | ReviewAction + validate + ReviewRuntime.decide; session spawn / cancel stay out |
 | `core/src/guardian_review.rs` | 7 | `guardian_review.swift` | 🟡 adapted |  |
 | `core/src/hook_mcp_executor.rs` | 57 | `hook_mcp_executor.swift` | 🟡 adapted |  |
-| `core/src/hook_runtime.rs` | 1,352 | `hook_runtime.swift` | 🟡 adapted | interrupt + arg match + CommandHookRuntime `run`; MCP execute stays out |
+| `core/src/hook_runtime.rs` | 1,352 | `hook_runtime.swift` | 🟡 adapted | interrupt + arg match + CommandHookRuntime `run`; HUD ask/deny + skill hooks.json; MCP execute stays out |
 | `core/src/mention_syntax.rs` | 2 | `mention_syntax.swift` | ✅ faithful |  |
 | `core/src/skills.rs` | 210 | `skills.swift` | 🟡 adapted |  |
 | `agent-roles/src/agent_role_config.rs` | 209 | `agent-roles/src/agent_role_config.swift` | 🟡 adapted |  |

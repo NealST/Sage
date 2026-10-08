@@ -6,9 +6,13 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. WebSocket
-//  transport, ChatGPT auth refresh, attestation, otel, and extension
-//  interceptors wait. Auth is AuthProvider (Bearer API key).
+//  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. Stream request
+//  prep matches rust: image resize, unprefixed item ids, content-item
+//  kinds, and Responses compatibility headers. Open-path 401 recover
+//  and connection retry live here; mid-stream reconnect stays in
+//  `runSamplingRequest`. WebSocket transport, ChatGPT token refresh,
+//  attestation, and extension interceptors wait.
+//  Auth is AuthProvider (Bearer API key).
 //  Sage already has Agent/Model/ModelClient; this type lives in CodexCore.
 //
 
@@ -49,6 +53,11 @@ public final class ModelClient: @unchecked Sendable {
     public var authMode: AuthMode?
     public var urlSession: URLSession
     public var requestContributors: [any ModelRequestContributor]
+    public var attachmentStore: any AttachmentStore
+    public var unifiedImageBudgetFeatureEnabled: Bool
+    public var unboundedConnectionRetries: Bool
+    /// rust `recover_from_unauthorized`. ChatGPT refresh waits; tests inject this.
+    public var recoverFromUnauthorized: (@Sendable () async -> Bool)? = nil
     public private(set) var disableWebsockets = true
 
     public init(
@@ -67,7 +76,10 @@ public final class ModelClient: @unchecked Sendable {
         promptCacheKeyOverride: String? = nil,
         codexResponsesHeaders: CodexResponsesHeaders? = nil,
         urlSession: URLSession = .shared,
-        requestContributors: [any ModelRequestContributor] = []
+        requestContributors: [any ModelRequestContributor] = [],
+        attachmentStore: any AttachmentStore = InlineAttachmentStore(),
+        unifiedImageBudgetFeatureEnabled: Bool = false,
+        unboundedConnectionRetries: Bool = false
     ) {
         self.threadId = threadId
         self.providerInfo = providerInfo
@@ -91,6 +103,9 @@ public final class ModelClient: @unchecked Sendable {
         self.authMode = authMode
         self.urlSession = urlSession
         self.requestContributors = requestContributors
+        self.attachmentStore = attachmentStore
+        self.unifiedImageBudgetFeatureEnabled = unifiedImageBudgetFeatureEnabled
+        self.unboundedConnectionRetries = unboundedConnectionRetries
     }
 
     public func withPromptCacheKeyOverride(_ key: String?) -> ModelClient {
@@ -260,12 +275,61 @@ public final class ModelClient: @unchecked Sendable {
         }
         return "internal"
     }
+
+    /// rust `ModelClient::prepare_response_items_for_request`.
+    func prepareResponseItemsForRequest(_ input: inout [ResponseItem]) {
+        for index in input.indices {
+            if let id = input[index].id(), !id.isPrefixed {
+                input[index].setId(nil)
+            }
+            if !contentItemKindsEnabled {
+                input[index].clearContentItemKinds()
+            }
+        }
+    }
+
+    func imagePreparationMode(_ modelInfo: ModelInfo) -> ImagePreparationMode {
+        unifiedImageBudgetEnabled(featureEnabled: unifiedImageBudgetFeatureEnabled, modelInfo: modelInfo)
+            ? .unifiedBudget
+            : .detailBased
+    }
+
+    func prepareImagesForRequest(
+        _ input: inout [ResponseItem],
+        modelInfo: ModelInfo
+    ) async {
+        _ = await prepareResponseItems(
+            threadId: threadId.description,
+            items: &input,
+            mode: imagePreparationMode(modelInfo),
+            resizeNoticeMode: .enabled,
+            imageStore: attachmentStore
+        )
+        sanitizeOriginalImageDetailOnItems(
+            canRequestOriginalImageDetail: canRequestOriginalImageDetail(modelInfo),
+            items: &input
+        )
+    }
+
+    /// rust `ModelClient::build_responses_compatibility_headers`.
+    func buildResponsesCompatibilityHeaders(
+        _ responsesMetadata: CodexResponsesMetadata
+    ) -> [String: String] {
+        var headers = responsesMetadata.compatibilityHeaders()
+        if case .internal(.memoryConsolidation) = sessionSource {
+            headers[xOpenaiMemgenRequestHeader] = "true"
+        }
+        return headers
+    }
 }
 
 /// Turn-scoped streaming session created from a ModelClient.
 public final class ModelClientSession: @unchecked Sendable {
     public let client: ModelClient
     public let turnState = TurnStateBox()
+    /// Test seam for `ResponsesClient.streamRequest`.
+    var streamRequestOverride: ((ResponsesApiRequest, ResponsesOptions) async throws -> CodexAPI.ResponseStream)?
+    var lastStreamRetryMessages: [String] = []
 
     public init(client: ModelClient) {
         self.client = client
@@ -301,6 +365,64 @@ public final class ModelClientSession: @unchecked Sendable {
         serviceTier: String?,
         responsesMetadata: CodexResponsesMetadata
     ) async throws -> ResponseStream {
+        var retryState = ResponsesStreamRetryState()
+        let maxRetries = client.providerInfo.streamMaxRetries()
+        let sink = ClientStreamRetrySink(
+            unboundedConnectionRetries: client.unboundedConnectionRetries,
+            sessionSourceIsInternal: {
+                if case .internal = client.sessionSource { return true }
+                return false
+            }(),
+            isAmazonBedrock: client.providerInfo.isAmazonBedrock(),
+            responsesWebsocketEnabled: client.responsesWebsocketEnabled(),
+            turnId: responsesMetadata.turnId ?? responsesMetadata.threadId
+        ) { [weak self] message, _ in
+            self?.lastStreamRetryMessages.append(message)
+        }
+        var unauthorizedRecoveryAttempted = false
+        while true {
+            do {
+                return try await streamResponsesAPIOnce(
+                    prompt: prompt,
+                    modelInfo: modelInfo,
+                    effort: effort,
+                    summary: summary,
+                    serviceTier: serviceTier,
+                    responsesMetadata: responsesMetadata
+                )
+            } catch let error as ApiError {
+                if isUnauthorizedApiError(error), !unauthorizedRecoveryAttempted {
+                    unauthorizedRecoveryAttempted = true
+                    if await client.recoverFromUnauthorized?() == true {
+                        continue
+                    }
+                    throw mapApiError(error)
+                }
+                try await retryOrThrowOpenPathError(
+                    mapApiError(error),
+                    retryState: &retryState,
+                    maxRetries: maxRetries,
+                    sink: sink
+                )
+            } catch let error as CodexErr {
+                try await retryOrThrowOpenPathError(
+                    error,
+                    retryState: &retryState,
+                    maxRetries: maxRetries,
+                    sink: sink
+                )
+            }
+        }
+    }
+
+    func streamResponsesAPIOnce(
+        prompt: Prompt,
+        modelInfo: ModelInfo,
+        effort: ReasoningEffort?,
+        summary: ReasoningSummary,
+        serviceTier: String?,
+        responsesMetadata: CodexResponsesMetadata
+    ) async throws -> ResponseStream {
         let provider = try client.apiProvider()
         let includeInternal = isInternalMetadataDestination(provider.baseUrl)
         var request = client.buildResponsesRequest(
@@ -312,30 +434,19 @@ public final class ModelClientSession: @unchecked Sendable {
             responsesMetadata: responsesMetadata,
             includeInternal: includeInternal
         )
-        var options = ResponsesOptions(
-            sessionId: client.responsesSessionId(responsesMetadata),
-            threadId: client.threadId.description,
-            sessionSource: client.sessionSource,
-            extraHeaders: buildResponsesHeaders(
-                betaFeaturesHeader: client.betaFeaturesHeader,
-                turnState: turnState
-            ),
-            compression: client.enableRequestCompression ? .zstd : .none,
-            turnState: turnState
+        await client.prepareImagesForRequest(&request.input, modelInfo: modelInfo)
+        client.prepareResponseItemsForRequest(&request.input)
+        var options = buildResponsesOptions(
+            responsesMetadata: responsesMetadata,
+            useResponsesLite: modelInfo.useResponsesLite
         )
-        if modelInfo.useResponsesLite {
-            options.extraHeaders[xOpenaiInternalCodexResponsesLiteHeader] = "true"
-        }
-        if client.includeTimingMetrics {
-            options.extraHeaders[xResponsesapiIncludeTimingMetricsHeader] = "true"
-        }
         if let extra = client.codexResponsesHeaders, extra.model == modelInfo.slug {
             for (name, value) in extra.headers {
                 options.extraHeaders[name.lowercased()] = value
             }
         }
-        for (name, value) in responsesMetadata.compatibilityHeaders() {
-            options.extraHeaders[name] = value
+        if let hint = responsesMetadata.routingHint, !hint.isEmpty {
+            options.extraHeaders[xCodexRoutingHintHeader] = hint
         }
         var metadata = request.clientMetadata
         let interceptors = prepareModelRequest(
@@ -346,23 +457,141 @@ public final class ModelClientSession: @unchecked Sendable {
             metadata: &metadata
         )
         request.clientMetadata = metadata
-        let apiClient = ResponsesClient(
-            urlSession: client.urlSession,
-            provider: provider,
-            auth: client.auth
-        )
-        do {
-            let apiStream = try await apiClient.streamRequest(request, options: options)
-            let intercepted = interceptStream(apiStream.events, interceptors: interceptors)
-            return mapAPIStream(
-                CodexAPI.ResponseStream(
-                    events: intercepted,
-                    upstreamRequestId: apiStream.upstreamRequestId
-                )
+        let apiStream: CodexAPI.ResponseStream
+        if let streamRequestOverride {
+            apiStream = try await streamRequestOverride(request, options)
+        } else {
+            let apiClient = ResponsesClient(
+                urlSession: client.urlSession,
+                provider: provider,
+                auth: client.auth
             )
-        } catch let error as ApiError {
-            throw mapApiError(error)
+            apiStream = try await apiClient.streamRequest(request, options: options)
         }
+        let intercepted = interceptStream(apiStream.events, interceptors: interceptors)
+        return mapAPIStream(
+            CodexAPI.ResponseStream(
+                events: intercepted,
+                upstreamRequestId: apiStream.upstreamRequestId
+            )
+        )
+    }
+
+    /// rust `ModelClientSession::build_responses_options`.
+    func buildResponsesOptions(
+        responsesMetadata: CodexResponsesMetadata,
+        useResponsesLite: Bool
+    ) -> ResponsesOptions {
+        var extraHeaders = buildResponsesHeaders(
+            betaFeaturesHeader: client.betaFeaturesHeader,
+            turnState: turnState
+        )
+        if useResponsesLite {
+            extraHeaders[xOpenaiInternalCodexResponsesLiteHeader] = "true"
+        }
+        if client.includeTimingMetrics {
+            extraHeaders[xResponsesapiIncludeTimingMetricsHeader] = "true"
+        }
+        for (name, value) in client.buildResponsesCompatibilityHeaders(responsesMetadata) {
+            extraHeaders[name] = value
+        }
+        let threadId = responsesMetadata.threadId.isEmpty
+            ? client.threadId.description
+            : responsesMetadata.threadId
+        return ResponsesOptions(
+            sessionId: client.responsesSessionId(responsesMetadata),
+            threadId: threadId,
+            sessionSource: client.sessionSource,
+            extraHeaders: extraHeaders,
+            compression: client.enableRequestCompression ? .zstd : .none,
+            turnState: turnState
+        )
+    }
+}
+
+func retryOrThrowOpenPathError(
+    _ error: CodexErr,
+    retryState: inout ResponsesStreamRetryState,
+    maxRetries: UInt64,
+    sink: ClientStreamRetrySink
+) async throws {
+    if isTerminalOpenPathError(error) {
+        throw error
+    }
+    do {
+        try await handleResponseStreamError(
+            retryState: &retryState,
+            maxRetries: maxRetries,
+            err: error,
+            trySwitchFallback: { false },
+            sink: sink,
+            request: .sampling
+        )
+    } catch let exhausted as CodexErr {
+        if exhausted.retryDelay(retryCount: 1) != nil {
+            throw CodexErr.retryLimit(RetryLimitReachedError(status: 0))
+        }
+        throw exhausted
+    }
+}
+
+func isTerminalOpenPathError(_ error: CodexErr) -> Bool {
+    switch error.details {
+    case .contextWindowExceeded, .usageLimitReached, .quotaExceeded, .usageNotIncluded,
+         .invalidRequest, .invalidPrompt, .invalidImageRequest, .cyberPolicy, .bioPolicy,
+         .misalignmentPolicyViolation, .flexUnavailable, .turnAborted, .refreshTokenFailed,
+         .retryLimit:
+        return true
+    default:
+        return false
+    }
+}
+
+func isUnauthorizedApiError(_ error: ApiError) -> Bool {
+    switch error {
+    case .transport(.http(let status, _, _, _, _)) where status == 401:
+        return true
+    case .api(let status, _) where status == 401:
+        return true
+    default:
+        return false
+    }
+}
+
+final class ClientStreamRetrySink: ResponsesStreamRetrySink, @unchecked Sendable {
+    let unboundedConnectionRetries: Bool
+    let sessionSourceIsInternal: Bool
+    let isAmazonBedrock: Bool
+    let responsesWebsocketEnabled: Bool
+    let turnId: String
+    private let onNotify: (@Sendable (String, CodexErr) async -> Void)?
+
+    init(
+        unboundedConnectionRetries: Bool,
+        sessionSourceIsInternal: Bool,
+        isAmazonBedrock: Bool,
+        responsesWebsocketEnabled: Bool,
+        turnId: String,
+        onNotify: (@Sendable (String, CodexErr) async -> Void)? = nil
+    ) {
+        self.unboundedConnectionRetries = unboundedConnectionRetries
+        self.sessionSourceIsInternal = sessionSourceIsInternal
+        self.isAmazonBedrock = isAmazonBedrock
+        self.responsesWebsocketEnabled = responsesWebsocketEnabled
+        self.turnId = turnId
+        self.onNotify = onNotify
+    }
+
+    func notifyStreamError(_ message: String, error: CodexErr) async {
+        await onNotify?(message, error)
+    }
+
+    func sendWarning(_ message: String) async {
+        await onNotify?(message, CodexErr.fatal(message))
+    }
+
+    func storeExhaustedRetry(_ retry: ExhaustedResponseRetry) async {
+        _ = retry
     }
 }
 

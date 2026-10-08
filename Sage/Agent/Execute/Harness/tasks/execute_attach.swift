@@ -52,13 +52,43 @@ enum ExecuteHarnessAttach {
 
     static func makeSession(
         history: [ResponseItem],
-        threadId: ThreadId = ThreadId()
+        threadId: ThreadId = ThreadId(),
+        startSource: SessionStartSource? = nil,
+        forkedFromThreadId: ThreadId? = nil
     ) -> Session {
         let session = Session(threadId: threadId)
+        session.state.sessionConfiguration.forkedFromThreadId = forkedFromThreadId
         if !history.isEmpty {
             session.state.recordItems(history)
         }
+        session.queuePendingSessionStartSource(
+            startSource ?? inferredSessionStartSource(
+                historyEmpty: history.isEmpty,
+                forkedFromThreadId: forkedFromThreadId
+            )
+        )
         return session
+    }
+
+    static func inferredSessionStartSource(
+        historyEmpty: Bool,
+        forkedFromThreadId: ThreadId? = nil
+    ) -> SessionStartSource {
+        if forkedFromThreadId != nil { return .fork }
+        return historyEmpty ? .startup : .resume
+    }
+
+    /// Live Sage task boundaries win over history inference: a fresh
+    /// thread is rust `clear`, a peeled turn is `fork`.
+    static func attachStartSource(
+        pending: SessionStartSource?,
+        historyEmpty: Bool,
+        forkedFromThreadId: ThreadId? = nil
+    ) -> SessionStartSource {
+        pending ?? inferredSessionStartSource(
+            historyEmpty: historyEmpty,
+            forkedFromThreadId: forkedFromThreadId
+        )
     }
 
     /// One Responses client for a thread. Same base URL and key keep the

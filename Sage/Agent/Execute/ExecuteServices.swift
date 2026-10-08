@@ -53,13 +53,15 @@ struct ExecuteServices {
     func executeToolInvocation(
         name: String,
         argumentsJSON: String,
-        toolCallID: String? = nil
+        toolCallID: String? = nil,
+        skipEventHooks: Bool = false
     ) async throws -> String {
         var request = try await preparedInvocation(name: name, argumentsJSON: argumentsJSON)
         if let toolCallID {
             request.toolCallID = toolCallID
             request.allowUnsandboxedRetry = state.unsandboxedToolCallIDs.contains(toolCallID)
         }
+        request.skipEventHooks = skipEventHooks
         return try await taskStore.withActiveTaskContext {
             try await ToolInvocationDispatcher.execute(request)
         }
@@ -168,7 +170,7 @@ struct ExecuteServices {
     }
 
     func validateToolInvocation(name: String, argumentsJSON: String) throws {
-        _ = try ToolInvocationPipeline.validateForAuthorization(
+        _ = try ToolOrchestrator.validateForAuthorization(
             invocationRequest(name: name, argumentsJSON: argumentsJSON)
         )
     }

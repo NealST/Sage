@@ -11,6 +11,7 @@
 //
 
 import ApplyPatch
+import CodexCore
 import Foundation
 import ToolsRuntimes
 
@@ -52,11 +53,12 @@ nonisolated struct ApplyPatchHandler: AgentTool {
             throw ToolError.operationFailed(error.localizedDescription)
         }
 
-        return Self.encodeResult(summary: result.summary, delta: result.delta)
+        return Self.encodeApplied(summary: result.summary, delta: result.delta)
     }
 
     static func encodeApplied(summary: String, delta: AppliedPatchDelta) -> String {
-        encodeResult(summary: summary, delta: delta)
+        TurnDiffTracker.active?.trackDelta("", delta)
+        return encodeResult(summary: summary, delta: delta)
     }
 
     static func extractPatch(from argumentsJSON: String) throws -> String {
