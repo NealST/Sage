@@ -112,6 +112,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				session_mod.swift,
+				turn_input.swift,
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
 		};
@@ -288,7 +289,6 @@
 				ExecuteHarness/tasks/execute_attach.swift,
 				ExecuteHarness/tasks/explore.swift,
 				ExecuteHarness/tools/parallel.swift,
-				ExecuteHarness/tools/Phase4ToolsTests.swift,
 				ExecuteHarness/tools/suite/orchestrator.swift,
 				ExecuteHarness/tools/suite/sandboxing.swift,
 				ExecuteHarness/unified_exec/head_tail_buffer.swift,

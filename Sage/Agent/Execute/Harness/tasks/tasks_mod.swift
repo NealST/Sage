@@ -121,6 +121,7 @@ extension Session {
         guard let active = activeTurn else { return }
         let hadTask = active.task != nil
         let turnContext = active.task?.turnContext
+        active.turnState.clearPendingWaiters()
         active.task?.cancellationToken?.cancel()
         active.task?.done = true
         active.task = nil

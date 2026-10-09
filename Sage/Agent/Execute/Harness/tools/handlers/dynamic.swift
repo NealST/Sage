@@ -6,8 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Session pending-dynamic-tool channels wait for Phase 5. The handler
-//  forwards through onDynamicTool.
+//  The live tool call waits on Session.requestDynamicTool. ToolCallRuntime
+//  installs that callback, and Op::DynamicToolResponse resumes it.
+//  appendDynamicToolRuntimes registers the admitted turn's tools.
 //
 
 import CodexCore

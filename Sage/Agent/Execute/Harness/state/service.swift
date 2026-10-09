@@ -18,6 +18,7 @@
 
 import CodexCore
 import CodexExecPolicy
+import CodexHistory
 import CodexHooks
 import CodexProtocol
 import Foundation
@@ -29,6 +30,17 @@ final class SessionServices: @unchecked Sendable {
     var selectedCapabilityRoots: [String]
     var executedToolCalls: ExecutedToolCalls
     var modelClient: CodexCore.ModelClient?
+    /// rust `thread_extension_data` `ExhaustedResponseRetry`. Guardian
+    /// reads `retryAt`; the turn loop does not wait on it.
+    var exhaustedResponseRetry: ExhaustedResponseRetry?
+    /// rust `thread_extension_data` `SleepItem`. The sleep tool is not
+    /// loaded; a set flag lets queue-only mailbox mail wake a turn.
+    var outstandingDurableSleep = false
+    /// Stand-in for `list_live_agent_subtree_thread_ids`. The root counts
+    /// as one. A larger count refuses root-turn suspension.
+    var liveAgentSubtreeCount = 1
+    /// rust `unified_exec_manager`. Background terminals for this thread.
+    var unifiedExecManager = UnifiedExecProcessManager()
     var availablePlugins: [PluginCapabilitySummary]
     var availableConnectors: [AppInfo]
     var mcpTools: [PluginToolInfo]
@@ -39,6 +51,17 @@ final class SessionServices: @unchecked Sendable {
     var appsEnabled: Bool
     var appsPolicy: AppsConfig?
     var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
+    /// Prepared catalog calls. Live Execute points this at `invokeHarnessTool`,
+    /// which reaches `MCPStdioClient` through `CapabilityStore`.
+    var mcpToolTransport: (@Sendable (McpToolCallRequest) async throws -> CallToolResult)?
+    /// Connect enabled MCP servers that are not already running.
+    var ensureMcpConnected: (@Sendable () async -> Void)?
+    /// Drop and reconnect enabled MCP servers after `reconnect_pending`.
+    var reconnectMcp: (@Sendable () async -> Void)?
+    /// Disconnect servers that a publish dropped. Names are connection keys.
+    var disconnectMcp: (@Sendable ([String]) async -> Void)?
+    /// Append rollout items. Nil means this session has no live writer.
+    var persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)?
     /// Sage execute tools (list_directory, apply_patch, …). Wired by RegularTask.
     var sageToolNames: [String]
     /// Full Responses tool schemas for the prompt `runTurn` builds.
@@ -76,6 +99,11 @@ final class SessionServices: @unchecked Sendable {
         appsEnabled: Bool = true,
         appsPolicy: AppsConfig? = nil,
         onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
+        mcpToolTransport: (@Sendable (McpToolCallRequest) async throws -> CallToolResult)? = nil,
+        ensureMcpConnected: (@Sendable () async -> Void)? = nil,
+        reconnectMcp: (@Sendable () async -> Void)? = nil,
+        disconnectMcp: (@Sendable ([String]) async -> Void)? = nil,
+        persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)? = nil,
         sageToolNames: [String] = [],
         sageResponsesTools: [CodexProtocol.JSONValue]? = nil,
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
@@ -104,6 +132,11 @@ final class SessionServices: @unchecked Sendable {
         self.appsEnabled = appsEnabled
         self.appsPolicy = appsPolicy
         self.onMcpCall = onMcpCall
+        self.mcpToolTransport = mcpToolTransport
+        self.ensureMcpConnected = ensureMcpConnected
+        self.reconnectMcp = reconnectMcp
+        self.disconnectMcp = disconnectMcp
+        self.persistRolloutItems = persistRolloutItems
         self.sageToolNames = sageToolNames
         self.sageResponsesTools = sageResponsesTools
         self.onSageToolCall = onSageToolCall

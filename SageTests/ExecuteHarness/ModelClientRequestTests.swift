@@ -1,5 +1,7 @@
 @testable import CodexCore
+@testable import Sage
 import CodexAPI
+import CodexAsyncUtils
 import CodexModelProviderInfo
 import CodexProtocol
 import XCTest
@@ -184,42 +186,12 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
         XCTAssertEqual(recover.count, 1)
     }
 
-    func testStreamRetriesConnectionFailureThenSucceeds() async throws {
-        var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
-        info.streamMaxRetriesOverride = 1
-        let client = ModelClient(
-            threadId: ThreadId(),
-            providerInfo: info,
-            auth: BearerAuthProvider(apiKey: "sk-test")
-        )
+    func testStreamPropagatesConnectionFailureWithoutRetry() async throws {
+        let client = try connectionClient(maxRetries: 1)
         let session = client.newSession()
         var attempts = 0
         session.streamRequestOverride = { _, _ in
             attempts += 1
-            if attempts == 1 {
-                throw ApiError.transport(.connection(HttpError(message: "offline")))
-            }
-            return emptyAPIStream()
-        }
-        _ = try await session.stream(
-            prompt: Prompt(),
-            modelInfo: try modelInfoFixture(),
-            responsesMetadata: streamMetadata()
-        )
-        XCTAssertEqual(attempts, 2)
-        XCTAssertFalse(session.lastStreamRetryMessages.isEmpty)
-    }
-
-    func testStreamThrowsRetryLimitAfterConnectionRetriesExhaust() async throws {
-        var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
-        info.streamMaxRetriesOverride = 0
-        let client = ModelClient(
-            threadId: ThreadId(),
-            providerInfo: info,
-            auth: BearerAuthProvider(apiKey: "sk-test")
-        )
-        let session = client.newSession()
-        session.streamRequestOverride = { _, _ in
             throw ApiError.transport(.connection(HttpError(message: "offline")))
         }
         do {
@@ -228,12 +200,133 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 modelInfo: try modelInfoFixture(),
                 responsesMetadata: streamMetadata()
             )
-            XCTFail("expected retryLimit")
+            XCTFail("expected connection failure")
         } catch let error as CodexErr {
-            guard case .retryLimit = error.details else {
-                return XCTFail("expected retryLimit, got \(error)")
+            guard case .connectionFailed = error.details else {
+                return XCTFail("expected connectionFailed, got \(error)")
             }
         }
+        XCTAssertEqual(attempts, 1)
+    }
+
+    func testResponsesWebsocketEnabledFollowsProviderAndFallback() throws {
+        let client = try makeClient()
+        XCTAssertFalse(client.responsesWebsocketEnabled())
+        XCTAssertFalse(client.forceHttpFallback())
+        client.disableWebsockets = false
+        XCTAssertTrue(client.responsesWebsocketEnabled())
+        XCTAssertTrue(client.forceHttpFallback())
+        XCTAssertFalse(client.responsesWebsocketEnabled())
+
+        var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
+        info.supportsWebsockets = false
+        let plain = CodexCore.ModelClient(
+            threadId: ThreadId(),
+            providerInfo: info,
+            auth: BearerAuthProvider(apiKey: "sk-test")
+        )
+        plain.disableWebsockets = false
+        XCTAssertFalse(plain.responsesWebsocketEnabled())
+        XCTAssertFalse(plain.forceHttpFallback())
+    }
+
+    func testSamplingRetriesConnectionFailureThenSucceeds() async throws {
+        let client = try connectionClient(maxRetries: 1)
+        let sess = Session()
+        sess.services.modelClient = client
+        var attempts = 0
+        sess.runSamplingStreamOverride = { _ in
+            attempts += 1
+            if attempts == 1 {
+                throw CodexErr.connectionFailed(
+                    ConnectionFailedError(source: HttpError(message: "offline"))
+                )
+            }
+            return makeResponseStream([
+                .success(.completed(
+                    responseId: "resp_1",
+                    tokenUsage: nil,
+                    usageMetadata: nil,
+                    endTurn: true
+                )),
+            ])
+        }
+        var clientSession: ModelClientSession? = client.newSession()
+        let turn = TurnContext(subId: "turn-retry")
+        let result = try await runSamplingRequest(
+            sess: sess,
+            stepContext: StepContext(turn: turn),
+            clientSession: &clientSession,
+            input: [],
+            cancellationToken: CancellationToken()
+        )
+        XCTAssertEqual(attempts, 2)
+        XCTAssertFalse(result.needsFollowUp)
+        let messages = sess.emittedEvents.compactMap { event -> String? in
+            if case .error(let error) = event { return error.message }
+            return nil
+        }
+        XCTAssertTrue(messages.contains { $0.contains("Reconnecting... 1/1") })
+    }
+
+    func testSamplingReturnsOriginalErrorWhenRetryBudgetIsZero() async throws {
+        let client = try connectionClient(maxRetries: 0)
+        let sess = Session()
+        sess.services.modelClient = client
+        var session = client.newSession()
+        var attempts = 0
+        session.streamRequestOverride = { _, _ in
+            attempts += 1
+            throw ApiError.transport(.connection(HttpError(message: "offline")))
+        }
+        var clientSession: ModelClientSession? = session
+        let turn = TurnContext(subId: "turn-exhausted")
+        do {
+            _ = try await runSamplingRequest(
+                sess: sess,
+                stepContext: StepContext(turn: turn),
+                clientSession: &clientSession,
+                input: [],
+                cancellationToken: CancellationToken()
+            )
+            XCTFail("expected connection failure")
+        } catch let error as CodexErr {
+            guard case .connectionFailed = error.details else {
+                return XCTFail("expected connectionFailed, got \(error)")
+            }
+        }
+        XCTAssertEqual(attempts, 1)
+        XCTAssertEqual(sess.services.exhaustedResponseRetry?.turnId, "turn-exhausted")
+        XCTAssertNil(sess.services.exhaustedResponseRetry?.retryAt)
+    }
+
+    func testSamplingSkipsUnboundedRetriesOnBedrock() async throws {
+        let client = try connectionClient(maxRetries: 0, name: "Amazon Bedrock")
+        let sess = Session()
+        sess.features.enable(.unboundedConnectionRetries)
+        sess.services.modelClient = client
+        var session = client.newSession()
+        var attempts = 0
+        session.streamRequestOverride = { _, _ in
+            attempts += 1
+            throw ApiError.transport(.connection(HttpError(message: "offline")))
+        }
+        var clientSession: ModelClientSession? = session
+        do {
+            _ = try await runSamplingRequest(
+                sess: sess,
+                stepContext: StepContext(turn: TurnContext(subId: "turn-bedrock")),
+                clientSession: &clientSession,
+                input: [],
+                cancellationToken: CancellationToken()
+            )
+            XCTFail("expected connection failure")
+        } catch let error as CodexErr {
+            guard case .connectionFailed = error.details else {
+                return XCTFail("expected connectionFailed, got \(error)")
+            }
+        }
+        XCTAssertEqual(attempts, 1)
     }
 
     func testStreamThrowsContextWindowWithoutRetry() async throws {
@@ -292,6 +385,17 @@ private func emptyAPIStream() -> CodexAPI.ResponseStream {
     )
 }
 
+private func connectionClient(maxRetries: UInt64, name: String = "OpenAI") throws -> CodexCore.ModelClient {
+    var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
+    info.name = name
+    info.streamMaxRetriesOverride = maxRetries
+    return CodexCore.ModelClient(
+        threadId: ThreadId(),
+        providerInfo: info,
+        auth: BearerAuthProvider(apiKey: "sk-test")
+    )
+}
+
 private func modelInfoFixture() throws -> ModelInfo {
     let json = """
     {
@@ -312,8 +416,8 @@ private func modelInfoFixture() throws -> ModelInfo {
 
 private func makeClient(
     sessionSource: SessionSource = .cli
-) throws -> ModelClient {
-    ModelClient(
+) throws -> CodexCore.ModelClient {
+    CodexCore.ModelClient(
         threadId: ThreadId(),
         providerInfo: ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1"),
         sessionSource: sessionSource,

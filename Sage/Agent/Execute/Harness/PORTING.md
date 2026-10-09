@@ -2,7 +2,7 @@
 
 > 由 `scripts/harness_port.py generate` 生成（0a2eb469 基线）。
 > 状态随 PR 手工更新；`check` 模式校验文件头与本表一致。
-> 重新生成会保留未移植行的手工状态与备注；已移植行以 Swift 文件头为准。
+> 重新生成会保留手工备注；已移植行的状态以 Swift 文件头为准。
 
 状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred
 
@@ -161,7 +161,7 @@
 | `core/src/exec_env.rs` | 117 | `exec_env.swift` | 🟡 adapted |  |
 | `core/src/exec_policy/executable_identity.rs` | 107 | `exec_policy/executable_identity.swift` | 🟡 adapted |  |
 | `core/src/exec_policy/model_policy.rs` | 60 | `exec_policy/model_policy.swift` | ✅ faithful |  |
-| `core/src/exec_policy.rs` | 1,175 | `exec_policy.swift` | 🟡 adapted |  |
+| `core/src/exec_policy.rs` | 1,175 | `exec_policy.swift` | 🟡 adapted | appendAmendmentAndUpdate writes the prefix rule and updates the in-memory policy |
 | `core/src/safety.rs` | 144 | `safety.swift` | ✅ faithful |  |
 | `core/src/sandbox_tags.rs` | 114 | `sandbox_tags.swift` | 🟡 adapted |  |
 | `core/src/sandboxing/mod.rs` | 218 | `sandboxing_mod.swift` | 🟡 adapted |  |
@@ -257,7 +257,7 @@
 | `core/src/tools/handlers/apply_patch.rs` | 641 | `tools/handlers/apply_patch.swift` | 🟡 adapted | OnRequest/UnlessTrusted ask before dropping sandbox |
 | `core/src/tools/handlers/apply_patch_spec.rs` | 32 | `tools/handlers/apply_patch_spec.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/current_time.rs` | 130 | `tools/handlers/current_time.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/dynamic.rs` | 251 | `tools/handlers/dynamic.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/dynamic.rs` | 251 | `tools/handlers/dynamic.swift` | 🟡 adapted | live call waits on Session.requestDynamicTool; appendDynamicToolRuntimes registers the admitted turn's tools |
 | `core/src/tools/handlers/extension_tools.rs` | 640 | `tools/handlers/extension_tools.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining.rs` | 94 | `tools/handlers/get_context_remaining.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/get_context_remaining_spec.rs` | 36 | `tools/handlers/get_context_remaining_spec.swift` | ✅ faithful |  |
@@ -272,8 +272,8 @@
 | `core/src/tools/handlers/new_context_window_spec.rs` | 17 | `tools/handlers/new_context_window_spec.swift` | ✅ faithful |  |
 | `core/src/tools/handlers/plan.rs` | 112 | `tools/handlers/plan.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/plan_spec.rs` | 58 | `tools/handlers/plan_spec.swift` | ✅ faithful |  |
-| `core/src/tools/handlers/request_permissions.rs` | 209 | `tools/handlers/request_permissions.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/request_user_input.rs` | 175 | `tools/handlers/request_user_input.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_permissions.rs` | 209 | `tools/handlers/request_permissions.swift` | 🟡 adapted | resolves paths against the turn environment; policy context includes workspace roots and temporary directories; guardian decision runs before the user waiter |
+| `core/src/tools/handlers/request_user_input.rs` | 175 | `tools/handlers/request_user_input.swift` | 🟡 adapted | live call waits on Session.requestUserInput; a verified answer is recorded when guardian_approval is on and history is thread-owned |
 | `core/src/tools/handlers/request_user_input_async.rs` | 144 | `tools/handlers/request_user_input_async.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/request_user_input_spec.rs` | 146 | `tools/handlers/request_user_input_spec.swift` | ✅ faithful |  |
 | `core/src/tools/handlers/send_message_to_user_async.rs` | 109 | `tools/handlers/send_message_to_user_async.swift` | 🟡 adapted |  |
@@ -295,7 +295,7 @@
 | `core/src/tools/multi_agent_tool.rs` | 133 | `tools/multi_agent_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
 | `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted | execute owns validate/timeout/dispatch; Pipeline is a forwarder |
-| `core/src/tools/parallel.rs` | 787 | `tools/parallel.swift` | 🟡 adapted | ToolCallRuntime admits through SessionServices.parallelAdmission (RWLock) |
+| `core/src/tools/parallel.rs` | 787 | `tools/parallel.swift` | 🟡 adapted | ToolCallRuntime admits through SessionServices.parallelAdmission and wires request_user_input, request_permissions, and dynamic tools to Session |
 | `core/src/tools/registry.rs` | 851 | `tools/registry.swift` | 🟡 adapted |  |
 | `core/src/tools/router.rs` | 385 | `tools/router.swift` | 🟡 adapted | toolSupportsParallel → ParallelToolRuntime |
 | `core/src/tools/runtimes/apply_patch.rs` | 242 | `tools/runtimes/apply_patch.swift` | 🟡 partial |  |
@@ -304,7 +304,7 @@
 | `core/src/tools/runtimes/zsh_fork/unix_escalation.rs` | 875 | `tools/runtimes/zsh_fork/unix_escalation.swift` | 🟡 adapted |  |
 | `core/src/tools/runtimes/zsh_fork.rs` | 105 | `tools/runtimes/zsh_fork.swift` | 🟡 adapted |  |
 | `core/src/tools/sandboxing.rs` | 561 | `tools/sandboxing.swift` | 🟡 adapted |  |
-| `core/src/tools/spec_plan.rs` | 1,479 | `tools/spec_plan.swift` | 🟡 adapted |  |
+| `core/src/tools/spec_plan.rs` | 1,479 | `tools/spec_plan.swift` | 🟡 adapted | appendDynamicToolRuntimes registers direct tools on the model-visible router and keeps deferred tools registered |
 | `core/src/tools/tool_dispatch_trace.rs` | 128 | `tools/tool_dispatch_trace.swift` | 🟡 adapted |  |
 | `core/src/tools/tool_namespaces_info.rs` | 111 | `tools/tool_namespaces_info.swift` | 🟡 adapted |  |
 | `core/src/tools/user_messaging.rs` | 33 | `tools/user_messaging.swift` | 🟡 adapted |  |
@@ -372,7 +372,7 @@
 | `core/src/config/edit.rs` | 1,001 | `config/edit.swift` | 🟡 adapted |  |
 | `core/src/config/managed_features.rs` | 340 | `config/managed_features.swift` | 🟡 adapted |  |
 | `core/src/config/metrics.rs` | 10 | `config/metrics.swift` | 🟡 adapted |  |
-| `core/src/config/mod.rs` | 4,893 | `config/config_mod.swift` | 🟡 adapted | TokenBudgetConfig + fallback_buffer_tokens; TOML layers stay out |
+| `core/src/config/mod.rs` | 4,893 | `config/config_mod.swift` | 🟡 adapted | TokenBudgetConfig + fallback_buffer_tokens; configured MCP servers; TOML layers stay out |
 | `core/src/config/network_config.rs` | 176 | `config/network_config.swift` | 🟡 adapted |  |
 | `core/src/config/network_proxy_spec.rs` | 546 | `config/network_proxy_spec.swift` | 🟡 adapted |  |
 | `core/src/config/otel.rs` | 118 | `config/otel.swift` | 🟡 adapted |  |
@@ -447,7 +447,7 @@
 | `core/src/context/world_state/plugins_instructions.rs` | 55 | `context/world_state/plugins_instructions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/realtime.rs` | 96 | `context/world_state/realtime.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/tools.rs` | 170 | `context/world_state/tools.swift` | 🟡 adapted |  |
-| `core/src/context_manager/history.rs` | 1,225 | `context_manager/history.swift` | 🟡 adapted |  |
+| `core/src/context_manager/history.rs` | 1,225 | `context_manager/history.swift` | 🟡 adapted | verified request_user_input answers stay on the history snapshot |
 | `core/src/context_manager/history_user_authorization.rs` | 105 | `context_manager/history_user_authorization.swift` | 🟡 adapted |  |
 | `core/src/context_manager/mod.rs` | 9 | `context_manager/context_manager_mod.swift` | ✅ faithful |  |
 | `core/src/context_manager/normalize.rs` | 420 | `context_manager/normalize.swift` | 🟡 adapted |  |
@@ -468,39 +468,39 @@
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
 | `core/src/session/extension_metrics.rs` | 35 | `session/extension_metrics.swift` | 🟡 adapted |  |
 | `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
-| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | interrupt / userInput / mailbox / compact / shutdown; realtime stays out |
+| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | single-agent ops through background-terminal cleanup; execpolicy amendments append to rules/default.rules; elicitation stays on ThreadSession; realtime stays out |
 | `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
 | `core/src/session/input_queue.rs` | 669 | `session/input_queue.swift` | 🟡 adapted | mailbox/steer activity watch; gauges omitted |
 | `core/src/session/mcp.rs` | 1,206 | `session/session_mcp.swift` | 🟡 adapted |  |
-| `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted |  |
-| `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted |  |
-| `core/src/session/mcp_runtime.rs` | 381 | `session/mcp_runtime.swift` | 🟡 adapted |  |
+| `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted | worker publishes a binding from the current config; an auth generation change marks dirty and publishes again; disabled or removed servers are disconnected |
+| `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted | dirty bit plus one in-flight permit |
+| `core/src/session/mcp_runtime.rs` | 381 | `session/mcp_runtime.swift` | 🟡 adapted | publish reuses a live connection when the url is unchanged; reconnect opens a fresh client; disabled or removed servers are closed |
 | `core/src/session/mod.rs` | 5,130 | `session/session_mod.swift` | 🟡 adapted |  |
 | `core/src/session/plugin_selection.rs` | 32 | `session/plugin_selection.swift` | 🟡 adapted |  |
 | `core/src/session/reasoning_effort.rs` | 162 | `session/reasoning_effort.swift` | 🟡 adapted |  |
-| `core/src/session/retained_context.rs` | 35 | `session/retained_context.swift` | 🟡 adapted |  |
+| `core/src/session/retained_context.rs` | 35 | `session/retained_context.swift` | 🟡 adapted | records a verified answer; a new record is appended to the rollout when persistence is enabled |
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_budget.rs` | 34 | `session/rollout_budget.swift` | 🟡 adapted |  |
-| `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted |  |
-| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | submit / nextEvent / mutex-free inbox; HUD cards stay out |
+| `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted | suffix replay restores history, world state, reference context, and previous turn settings |
+| `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | submit / nextEvent / mutex-free inbox; session dynamicTools is the protocol spec list; admitted turns copy config.approvalPolicy, runtime workspace roots, and local temporary directories; HUD cards stay out |
 | `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
-| `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted |  |
+| `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted | a step keeps the MCP binding it captured |
 | `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
-| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | interrupt/shutdown/userInput/interAgent/compact |
-| `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted |  |
+| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | single-agent ops through cleanBackgroundTerminals; ResolveElicitation stays on ThreadSession |
+| `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted | ThreadSettings writes later-turn StepSettings and clears lastStartedTurnId; persistence and MCP prewarm stay out |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |
-| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools; emit TurnDiff after in-flight tools |
-| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted |  |
+| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools + admitted dynamic tools; emit TurnDiff after in-flight tools |
+| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted | newTurnContext copies session dynamicTools onto the admitted turn |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
-| `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted |  |
+| `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted | suspend stops the unfinished root turn without a terminal event; rollout flush and writer close wait |
 | `core/src/session/world_state.rs` | 295 | `session/world_state.swift` | 🟡 adapted | step snapshot + compact reinject + exec-policy prefixes; plugin contributors stay out |
 | `core/src/session_startup_prewarm.rs` | 328 | `session_startup_prewarm.swift` | 🟡 adapted |  |
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
 | `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
-| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore; ensure, reconnect, and disconnect MCP hooks; rollout append hook |
 | `core/src/state/session.rs` | 475 | `state/state_session.swift` | 🟡 adapted |  |
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |

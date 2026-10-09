@@ -79,14 +79,21 @@ struct ToolInvocation: Sendable {
     var onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)?
     var onNewContextWindow: (@Sendable () -> Void)?
     var onAsyncUserMessage: (@Sendable (String) -> Void)?
-    var onRequestPermissions: (@Sendable (RequestPermissionsArgs) async -> RequestPermissionsResponse?)?
+    var onRequestPermissions: (
+        @Sendable (RequestPermissionsArgs, FileSystemSandboxPolicyContext) async -> RequestPermissionsResponse?
+    )?
     var onRequestUserInput: (@Sendable (RequestUserInputArgs) async -> RequestUserInputResponse?)?
     var onRequestUserInputAsync: (@Sendable ([AsyncUserInputQuestion]) -> Void)?
     var onViewImage: (@Sendable (String) async -> String?)?
     var onDynamicTool: (@Sendable (ToolName, HarnessJSON) async -> DynamicToolResponse?)?
     var onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)?
+    var mcpToolTransport: (@Sendable (McpToolCallRequest) async throws -> CallToolResult)?
+    var mcpInputModalities: [InputModality]
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     var onWaitForEnvironment: (@Sendable () async -> String?)?
+    /// Step environments used to resolve `request_permissions` paths.
+    /// Empty means the handler has no primary environment.
+    var turnEnvironments: [TurnEnvironment]
     /// Project root for `HookRuntime` Pre/PostToolUse on `registry.dispatch`.
     var hookProjectRoot: URL?
     var hookModel: String
@@ -116,14 +123,19 @@ struct ToolInvocation: Sendable {
         onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)? = nil,
         onNewContextWindow: (@Sendable () -> Void)? = nil,
         onAsyncUserMessage: (@Sendable (String) -> Void)? = nil,
-        onRequestPermissions: (@Sendable (RequestPermissionsArgs) async -> RequestPermissionsResponse?)? = nil,
+        onRequestPermissions: (
+            @Sendable (RequestPermissionsArgs, FileSystemSandboxPolicyContext) async -> RequestPermissionsResponse?
+        )? = nil,
         onRequestUserInput: (@Sendable (RequestUserInputArgs) async -> RequestUserInputResponse?)? = nil,
         onRequestUserInputAsync: (@Sendable ([AsyncUserInputQuestion]) -> Void)? = nil,
         onViewImage: (@Sendable (String) async -> String?)? = nil,
         onDynamicTool: (@Sendable (ToolName, HarnessJSON) async -> DynamicToolResponse?)? = nil,
         onMcpCall: (@Sendable (String, String, HarnessJSON) async -> String?)? = nil,
+        mcpToolTransport: (@Sendable (McpToolCallRequest) async throws -> CallToolResult)? = nil,
+        mcpInputModalities: [InputModality] = defaultInputModalities(),
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         onWaitForEnvironment: (@Sendable () async -> String?)? = nil,
+        turnEnvironments: [TurnEnvironment] = [],
         hookProjectRoot: URL? = nil,
         hookModel: String = "",
         hookPermissionMode: String = "default",
@@ -157,8 +169,11 @@ struct ToolInvocation: Sendable {
         self.onViewImage = onViewImage
         self.onDynamicTool = onDynamicTool
         self.onMcpCall = onMcpCall
+        self.mcpToolTransport = mcpToolTransport
+        self.mcpInputModalities = mcpInputModalities
         self.onSageToolCall = onSageToolCall
         self.onWaitForEnvironment = onWaitForEnvironment
+        self.turnEnvironments = turnEnvironments
         self.hookProjectRoot = hookProjectRoot
         self.hookModel = hookModel
         self.hookPermissionMode = hookPermissionMode

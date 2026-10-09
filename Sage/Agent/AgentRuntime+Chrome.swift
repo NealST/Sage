@@ -3,6 +3,7 @@
 //  Sage
 //
 
+import CodexCore
 import Foundation
 
 extension AgentRuntime {
@@ -129,8 +130,23 @@ extension AgentRuntime {
             },
             ensureMCPConnected: { [weak self] in
                 await self?.mcpHub?.ensureEnabledServersConnected()
+            },
+            reconnectMCP: { [weak self] in
+                await self?.mcpHub?.reconnectEnabledServers()
+            },
+            disconnectMCP: { [weak self] names in
+                await self?.mcpHub?.disconnectServers(names)
             }
         )
+        turns.execute.mcpVisibleCatalog = { [weak self] in
+            self?.mcpHub?.mcpTools.map { tool in
+                McpVisibleTool(
+                    name: tool.name,
+                    description: tool.description,
+                    serverName: tool.serverID
+                )
+            } ?? []
+        }
         turns.execute.invokeHarnessTool = { [weak self] call in
             guard let self else {
                 throw ToolError.operationFailed("The agent session is no longer available.")

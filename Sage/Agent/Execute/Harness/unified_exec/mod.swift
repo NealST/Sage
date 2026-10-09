@@ -77,13 +77,14 @@ final class ProcessStore {
     }
 }
 
-final class UnifiedExecProcessManager: @unchecked Sendable {
+public final class UnifiedExecProcessManager: @unchecked Sendable {
     let processStore = NSLock()
     var store = ProcessStore()
     var maxWriteStdinYieldTimeMs: UInt64
 
-    init(maxWriteStdinYieldTimeMs: UInt64 = DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS) {
-        self.maxWriteStdinYieldTimeMs = max(maxWriteStdinYieldTimeMs, MIN_EMPTY_YIELD_TIME_MS)
+    public init() {
+        self.maxWriteStdinYieldTimeMs = max(
+            DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS, MIN_EMPTY_YIELD_TIME_MS)
     }
 }
 

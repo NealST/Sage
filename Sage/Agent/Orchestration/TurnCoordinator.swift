@@ -90,7 +90,9 @@ final class TurnCoordinator {
         slashHost: SlashCommandHost,
         executeToolBatch: @escaping (Bool) async -> ToolBatchExecutor.WaveOutcome,
         handleStop: @escaping (AgentPlan?) async -> Void,
-        ensureMCPConnected: (() async -> Void)? = nil
+        ensureMCPConnected: (() async -> Void)? = nil,
+        reconnectMCP: (() async -> Void)? = nil,
+        disconnectMCP: (([String]) async -> Void)? = nil
     ) {
         self.slashHost = slashHost
         self.executeToolBatch = executeToolBatch
@@ -104,7 +106,9 @@ final class TurnCoordinator {
                 await self?.reviewAndFinish(text)
             },
             handleStop: handleStop,
-            ensureMCPConnected: ensureMCPConnected
+            ensureMCPConnected: ensureMCPConnected,
+            reconnectMCP: reconnectMCP,
+            disconnectMCP: disconnectMCP
         )
     }
 

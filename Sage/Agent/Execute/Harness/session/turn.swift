@@ -14,6 +14,7 @@
 //  MCP specs decode catalog JSON schema via parseCatalogParameters.
 //  Apps visibility/policy/agent-plugin budgets come from mcp_tool_exposure.
 //  Sage execute tools register through sage_execute / onSageToolCall.
+//  Dynamic tools on the admitted turn register through appendDynamicToolRuntimes.
 //  Live Execute calls `runTurn` when `useHarnessRunTurn`. Tool calls stay
 //  in the sampling stream and dispatch here. HUD admission happens before
 //  the stream is built, so a card pauses the turn instead of waiting inside it.
@@ -192,7 +193,7 @@ func runTurn(
 
     let firstStepContext: StepContext
     do {
-        firstStepContext = try sess.captureStepContextWithRequiredMcpServers(
+        firstStepContext = try await sess.captureStepContextWithRequiredMcpServers(
             turnContext,
             cancellationToken: cancellationToken,
             requiredServers: mcpStartupRequirements.requiredServers,
@@ -300,7 +301,7 @@ func runTurn(
             nextStepContext = nil
             stepContext = ready
         } else if nextStepContext == nil, pendingInput.isEmpty {
-            stepContext = try sess.captureStepContextWithRequiredMcpServers(
+            stepContext = try await sess.captureStepContextWithRequiredMcpServers(
                 turnContext,
                 cancellationToken: cancellationToken,
                 requiredServers: mcpStartupRequirements.requiredServers,
@@ -321,7 +322,7 @@ func runTurn(
             mcpStartupRequirements.requiredServers = uniquedPreservingOrder(
                 mcpStartupRequirements.requiredServers
             )
-            stepContext = try sess.captureStepContextWithRequiredMcpServers(
+            stepContext = try await sess.captureStepContextWithRequiredMcpServers(
                 turnContext,
                 cancellationToken: cancellationToken,
                 requiredServers: mcpStartupRequirements.requiredServers,
@@ -516,9 +517,9 @@ func buildPrompt(
         tools: tools,
         parallelToolCalls: parallelToolCalls,
         baseInstructions: baseInstructions,
-        outputSchema: nil,
+        outputSchema: turnContext.finalOutputJsonSchema,
         outputSchemaStrict: !Guardian.isBasicSessionSource(turnContext.sessionSource),
-        cyberAccessProgram: nil
+        cyberAccessProgram: turnContext.cyberAccessProgram
     )
 }
 
@@ -531,14 +532,28 @@ func prepareToolRecommendations(sess: Session, turnContext: TurnContext) -> Prep
 }
 
 func toolRouterPlanOptions(sess: Session?, turnContext: TurnContext) -> ToolRouterPlanOptions {
-    var options = ToolRouterPlanOptions()
-    let features = turnContext.config.features
-    let sessionFeatures = sess?.features
-    options.includeExecCommand = features.enabled(.unifiedExec)
-        || sessionFeatures?.enabled(.unifiedExec) == true
-    options.includeWriteStdin = options.includeExecCommand
-    options.includeMcpResources = !(sess?.services.mcpTools.isEmpty ?? true)
-    return options
+    var features = turnContext.config.features
+    if let sessionFeatures = sess?.features {
+        for feature in sessionFeatures.enabledFeatures {
+            features.enable(feature)
+        }
+    }
+    let model = turnContext.modelInfoValue()
+    return planCoreToolOptions(
+        CoreToolPlanInput(
+            features: features,
+            updatePlanEnabled: turnContext.config.updatePlanEnabled,
+            experimentalRequestUserInputEnabled: turnContext.config.experimentalRequestUserInputEnabled,
+            sleepToolMode: turnContext.config.sleepToolMode,
+            currentTimeReminder: turnContext.config.currentTimeReminder,
+            hasEnvironment: !turnContext.environment.environmentId.isEmpty,
+            sessionSource: turnContext.sessionSource,
+            experimentalSupportedTools: model.experimentalSupportedTools,
+            shellType: model.shellType,
+            supportsSearchTool: model.supportsSearchTool,
+            hasMcpServers: !(sess?.services.mcpTools.isEmpty ?? true)
+        )
+    )
 }
 
 func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter {
@@ -547,12 +562,13 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     }
     let options = toolRouterPlanOptions(sess: sess, turnContext: stepContext.turn)
     var router = finalizeToolRouter(options)
-    let mcpTools = mcpVisibleTools(from: sess)
+    let mcpTools = stepContext.mcp?.tools ?? mcpVisibleTools(from: sess)
+    let bindingID = stepContext.mcp?.id ?? sess?.services.mcpBindingID ?? 1
     let registrations: [McpToolRegistration]
     if let sess {
         registrations = sess.services.mcpHandlerCache.registerTools(
             mcpTools,
-            bindingID: sess.services.mcpBindingID,
+            bindingID: bindingID,
             appsEnabled: sess.services.appsEnabled,
             appsConfig: sess.services.appsPolicy,
             searchToolEnabled: options.includeToolSearch
@@ -566,6 +582,7 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
         )
     }
     registerMcpTools(registrations, on: &router)
+    appendDynamicToolRuntimes(stepContext.turn.dynamicTools, on: &router)
     if let sess {
         registerSageTools(sess.services.sageToolNames, on: &router)
     }
@@ -612,7 +629,7 @@ func registerMcpTools(_ registrations: [McpToolRegistration], on router: inout T
             ),
             exposure: exposure
         )
-        if exposure != .hidden {
+        if exposure.isDirect() {
             router.modelVisibleSpecs.append(spec)
         }
     }
@@ -741,7 +758,7 @@ func runPreSamplingCompact(
     )
     let tokenStatus = contextWindowTokenStatus(sess: sess, turnContext: turnContext)
     if tokenStatus.tokenLimitReached {
-        let stepContext = try sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
+        let stepContext = try await sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
         try await runAutoCompact(
             sess: sess,
             stepContext: stepContext,
@@ -769,7 +786,7 @@ func maybeRunPreviousModelInlineCompact(
         throw CodexErr(details: .turnAborted)
     }
     if shouldCompactForCompHashChange {
-        let stepContext = try sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
+        let stepContext = try await sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
         try await runAutoCompact(
             sess: sess,
             stepContext: stepContext,
@@ -795,7 +812,7 @@ func maybeRunPreviousModelInlineCompact(
         previousModelLimitReached = activeTokens >= newWindow
     }
     if previousModelLimitReached {
-        let stepContext = try sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
+        let stepContext = try await sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
         try await runAutoCompact(
             sess: sess,
             stepContext: stepContext,
@@ -1446,8 +1463,14 @@ struct SessionRetrySink: ResponsesStreamRetrySink {
         return false
     }
 
-    var isAmazonBedrock: Bool { false }
-    var responsesWebsocketEnabled: Bool { false }
+    var isAmazonBedrock: Bool {
+        session.services.modelClient?.providerInfo.isAmazonBedrock() ?? false
+    }
+
+    var responsesWebsocketEnabled: Bool {
+        session.services.modelClient?.responsesWebsocketEnabled() ?? false
+    }
+
     var turnId: String { turnContext.subId }
 
     func notifyStreamError(_ message: String, error: CodexErr) async {
@@ -1459,7 +1482,7 @@ struct SessionRetrySink: ResponsesStreamRetrySink {
     }
 
     func storeExhaustedRetry(_ retry: ExhaustedResponseRetry) async {
-        _ = retry
+        session.services.exhaustedResponseRetry = retry
     }
 }
 

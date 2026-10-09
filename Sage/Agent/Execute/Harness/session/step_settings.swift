@@ -43,18 +43,24 @@ struct StepSettingsUpdate: Equatable, Sendable {
 struct StepSettings: Equatable, Sendable {
     var model: String
     var reasoningEffort: ReasoningEffort?
+    var reasoningSummary: ReasoningSummary?
     var serviceTier: String?
+    var collaborationMode: CollaborationMode?
     var modelSnapshot: TurnModelSnapshot
 
     init(
         model: String = "gpt-5",
         reasoningEffort: ReasoningEffort? = nil,
+        reasoningSummary: ReasoningSummary? = nil,
         serviceTier: String? = nil,
+        collaborationMode: CollaborationMode? = nil,
         modelSnapshot: TurnModelSnapshot? = nil
     ) {
         self.model = model
         self.reasoningEffort = reasoningEffort
+        self.reasoningSummary = reasoningSummary
         self.serviceTier = serviceTier
+        self.collaborationMode = collaborationMode
         self.modelSnapshot = modelSnapshot ?? TurnModelSnapshot(slug: model)
     }
 
@@ -62,7 +68,9 @@ struct StepSettings: Equatable, Sendable {
         StepSettings(
             model: update.model ?? model,
             reasoningEffort: update.reasoningEffort ?? reasoningEffort,
+            reasoningSummary: reasoningSummary,
             serviceTier: serviceTier,
+            collaborationMode: collaborationMode,
             modelSnapshot: modelSnapshot
         )
     }

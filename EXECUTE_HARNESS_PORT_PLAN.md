@@ -4,7 +4,7 @@
 >
 > **上游基线**：`codex-rs` @ `0a2eb4696c26ac33204bcd255721ab30220a4774`（本工作区 `codex/` 仓库当前 HEAD，与现有移植文件头部一致）。
 >
-> **现状一句话**：已完成 37 个 Swift 文件 / ~4,700 行（apply-patch 栈最忠实，turn 循环与 guardian 为骨架），约占复写范围的 **2%**；本计划覆盖剩余全部工作。
+> **现状一句话**：范围内 830 个文件已有 Swift 对应 741 个（89%，`scripts/harness_port.py stats`，2026-10-09）。文件覆盖不是行为对齐。单代理回合的提交循环和 `request_user_input` 等待已经接上；深度缺口见 §3。
 
 ---
 
@@ -71,40 +71,38 @@ Sage 的 agent 架构分三层：**Plan → Execute → Review**。Execute 承�
 
 ## 3. 现状盘点
 
-### 3.1 已有移植（37 文件 / 4,722 行，全部 pin 在 `0a2eb469`）
+逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-09）。
 
-| 区域 | 文件 | 行数 | 保真度 |
-|---|---|---:|---|
-| `apply-patch/src/` | lib / parser / streaming_parser / file_update / text_file / invocation / seek_sequence | 1,401 | ✅ 忠实（最强区域；25 个 scenario fixture 全过） |
-| `file-system/src/lib.swift` | ← `file-system/src/lib.rs` 的 `FileSystemSandboxContext` | 90 | 🟡 部分（原 crate 1,140 行，仅移植沙盒上下文） |
-| `tools/runtimes/apply_patch.swift` | | 42 | 🟡 薄但对齐 |
-| `tools/` | orchestrator / parallel / approvals / sandboxing / network_approval / handlers/apply_patch(+spec) | 1,560 | 🟡 形状对齐、Sage 接线（orchestrator 调 `ToolInvocationPipeline`；parallel 用波次替代 RWLock 准入） |
-| `session/turn.swift` | ← `session/turn.rs` `run_turn` | 67 | 🟡 骨架（原文件 3,105 行） |
-| `tasks/` | regular / compact / explore | 612 | regular ✅+队列拆分；compact 🟡（remote V2 未做）；**explore 为 Sage 原生，无 codex 对应文件** |
-| `guardian/` | 14 个文件 | 527 | 🟡 多为薄抽取（原目录 ~3,600 行，如 `review_session.rs` 947 行 vs 现有 44 行） |
-| `hook_runtime.swift` | | 170 | 🟡 部分（原 1,352 行，无脚本 runner） |
-| `config/network_proxy_spec.swift` | | 186 | 🟡 适配（Mac 无本地代理进程，保留 allow/deny/ask 决策） |
+### 3.1 文件覆盖
 
-测试：`SageTests/ExecuteHarness/` 11 个文件 / ~1,525 行 / ~62 用例，覆盖 orchestrator、turn、explore、apply-patch（含 25 个 codex scenario fixture）、parallel、sandboxing、approvals、guardian prompt。
+范围内 830 个文件：已有 Swift 对应 **741（89%）**，stub 0，未开始 18，excluded/deferred 71。Phase 5（会话 / 回合）155/155 已有文件。文件在，不等于这一行的行为已经对齐上游。
 
-### 3.2 差距分析
-
-| 维度 | codex（范围内） | Sage 已移植 | 覆盖 |
+| Phase | 已有文件 | 范围内文件 | Rust 行数 |
 |---|---:|---:|---:|
-| core crate 文件 | 391 | ~30 个有对应 | **8%** |
-| core crate 行数 | ~118,200 | ~2,700（core 对应部分） | **~2.3%** |
-| 依赖 crate | ~16 万行 | ~1,500（apply-patch/file-system） | **~1%** |
+| 1 协议与基础类型 | 94 | 94 | 34,571 |
+| 2 文件与补丁 | 25 | 26 | 10,023 |
+| 3 执行与沙盒 | 71 | 82 | 26,801 |
+| 4 工具 | 71 | 112 | 44,290 |
+| 5 会话与回合 | 155 | 155 | 49,435 |
+| 6 模型客户端 | 36 | 49 | 18,848 |
+| 7 持久化与线程 | 126 | 126 | 58,121 |
+| 8 Guardian / hooks / skills | 69 | 70 | 20,322 |
+| 9 多智能体 | 69 | 73 | 16,025 |
+| 10 暂缓与平台 | 25 | 38 | 10,539 |
 
-**关键缺口**（无任何 Swift 对应物的核心机制）：
+### 3.2 单代理回合已经接上的行为
 
-- `protocol` crate 全部（harness 的类型地基，当前 Sage 用自有 `ModelTurn` 等类型代替）
-- `session/` 的 40 个文件（现有仅 67 行 turn 骨架；缺 `Session`、`TurnContext`、`turn_input` 准入、输入队列、step 设置、rollout 重建等）
-- `state/`、`tasks/mod.rs` 的任务生命周期、`context_manager/` 历史管理
-- `tools/` 的 router/registry/spec_plan/events/context 与全部 handler（现有仅 apply_patch 一个 handler）
-- `client.rs`（2,852 行 Responses 流式客户端）、compact remote V2
-- `unified_exec` PTY 进程管理（4,105 行）、`sandboxing` crate 的 seatbelt（1,122 行）
-- `hooks` crate（11,657 行）完整钩子引擎、guardian 完整审查会话
-- `rollout`/`state`/`thread-store` 持久化三件套
+Live Execute 在 `useHarnessRunTurn` 打开时走 `RegularTask` → `runTurn`。app `Session` 的提交循环目前包括：
+
+- 回合准入、工具计划与路由、MCP 调用、采样流里的一次可恢复 401
+- `Op::Review`（不起子线程）、ThreadSettings、TurnSettings、InterruptIfNoPendingInput、RecoverTurn、SuspendTurnAndShutdown
+- 不另开回合的应答：UserInputAnswer、RequestPermissionsResponse、DynamicToolResponse、ExecApproval、PatchApproval。`approvedExecpolicyAmendment` 追加到 `codexHome/rules/default.rules` 并更新内存策略；失败只发 warning，决定照常送达
+- RefreshMcpServers、ReloadUserConfig、CleanBackgroundTerminals。`RefreshMcpServers` 标记重连并抬高资源目录代际；prewarm worker 合并请求后，按当前配置的 MCP server、批准策略和可见工具发布一份新的 binding，并吃掉 `reconnect_pending`。已经截下的步骤保留旧 binding。auth 代际变化会把 runtime 标脏并再发布一次，不重连、不抬高资源目录代际。发布时，url 没变的已启用 server 沿用原来的连接；重连或 url 变化才打开新连接。Live Execute 的重连走 `CapabilityStore.reconnectEnabledServers`。已经禁用或移除的 server 在这次发布的 ensure 或 reconnect 之后，经 `CapabilityStore.disconnectServers` 断开，不改写保存的 server 列表
+- `request_user_input` 由 `ToolCallRuntime` 等到 `Session.requestUserInput`，`Op::UserInputAnswer` 唤醒它。回合打开 `guardian_approval` 且历史是 thread-owned 时，把已验证问答记进 retained context；空白回答、未问的 id、legacy 模式不记。同一条记录不重复写入。Live Execute 打开 rollout 写入后，新记录追加为 `retained_context`；没打开写入器时只留在内存里。下一次接上同一个 rollout 时，把能框住这次恢复的 `retained_context` 和 response item 记回历史：有替换历史、窗口号和 resume metadata 的最新压实点先装上替换历史和 verified-answer 快照，再只重放它后面的记录；否则整份文件都重放。system 消息、未署名的 configuration update、compaction trigger 不进历史。同一条 verified answer 不重复记。suffix 里的 function call output 和 custom tool output 按模型截断策略缩短，并乘上序列化余量；元数据里的 token 上限直接使用、不再乘余量。替换历史里的输出保持原样。suffix 里的 `ThreadRolledBack` 丢掉已经恢复历史中最近的那么多个用户回合，以及这些回合上的 verified answer；第一个用户回合之前的前缀留下。suffix 里没有替换历史的旧压实点，用到此为止的用户消息和这条摘要重建历史；thread-owned 保留这些消息的 id，其他模式清掉。已经记下的 verified answer 留在原处。带了替换历史的压实点不会在 suffix 里再重建一次。选检查点时，`ThreadRolledBack` 跳过那么多个更新的用户回合，那段里的 replacement history 不当检查点；被跳过之后，仍能框住重放的更早压实点才用来安装替换历史。更新的压实点自己框不住重放时，更早的也不能顶上。仍存活回合里的 world state 在历史装完后按时间重放：压实点清掉基线，完整快照换上新基线，补丁合并进已有基线；没有完整快照的补丁丢掉。被回滚的回合不贡献 world state。仍存活、并且有用户回合或更新的完整 world-state 快照的那段，恢复它的 reference context；压实点会清掉同一段里更早的 context。suffix 里没有替换历史的旧压实把恢复出来的 reference context 清掉。同一段还恢复 previous turn settings：模型、comp hash、realtime。裸的 `TurnContext` 不恢复。最新压实点带了 resume metadata、而它后面的回合没有完成时，用 metadata 里的设置；完成了的回合覆盖 metadata
+- `request_permissions` 先按回合环境解析文件系统路径，再由 `ToolCallRuntime` 等到 `Session.requestPermissions`。策略上下文带上该环境的工作区根目录和临时目录；根目录列表为空时用环境 cwd，临时目录未上报时保持空。进入用户等待之前，`Never` 和禁止该工具的 granular 策略直接返回空的回合授权；guardian 有决定时按决定记录授权（`strict_auto_review` 为 false）并且不发用户请求，没有决定才等到 `Op::RequestPermissionsResponse`。用户授权和 guardian 授权都按这个上下文做交集。步骤环境列表为空时用已准入回合的环境，准入时抄下会话的工作区根目录和本机临时目录
+- dynamic tool 由 `ToolCallRuntime` 等到 `Session.requestDynamicTool`，`Op::DynamicToolResponse` 唤醒它。开回合时从会话配置抄下 dynamic tools，`appendDynamicToolRuntimes` 把直接可见的注册进工具路由；延迟加载的只注册、不进模型可见列表
+
+`Op::ResolveElicitation` 留在 `ThreadSession`。语音 realtime、network-proxy、逐行 state / thread-store、多智能体不在这条单代理回合上。重放还不会恢复 last started turn id。
 
 ### 3.3 现有 Sage 粘合层（`Agent/Execute/` 根级，~3,900 行）的处理原则
 

@@ -15,18 +15,22 @@ final class StepContext: @unchecked Sendable {
     var turn: TurnContext
     var toolRouter: ToolRouter?
     var environments: [TurnEnvironment]
+    /// Binding captured for this step. A later publish does not replace it.
+    var mcp: PublishedMcpBinding?
 
     init(
         stepId: String = UUID().uuidString,
         settings: StepSettings = StepSettings(),
         turn: TurnContext = TurnContext(),
         toolRouter: ToolRouter? = nil,
-        environments: [TurnEnvironment] = []
+        environments: [TurnEnvironment] = [],
+        mcp: PublishedMcpBinding? = nil
     ) {
         self.stepId = stepId
         self.settings = settings
         self.turn = turn
         self.toolRouter = toolRouter
         self.environments = environments
+        self.mcp = mcp
     }
 }

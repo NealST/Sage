@@ -8,8 +8,8 @@
 //
 //  Session / TurnContext / otel retry macros wait on the Sage app
 //  module. This file takes a ResponsesStreamRetrySink so CodexCore
-//  stays Session-free. WebSocket fallback is a no-op while transport
-//  is HTTP-only (Phase 10).
+//  stays Session-free. `trySwitchFallback` is the caller's websocket
+//  switch; HTTP-only clients keep it false.
 //
 
 import CodexProtocol
@@ -109,7 +109,8 @@ public func handleResponseStreamError(
         return
     }
 
-    await sink.storeExhaustedRetry(ExhaustedResponseRetry(turnId: sink.turnId))
+    let retryAt = err.serverRetryDelay().map { ContinuousClock.now.advanced(by: $0) }
+    await sink.storeExhaustedRetry(ExhaustedResponseRetry(turnId: sink.turnId, retryAt: retryAt))
     throw err
 }
 

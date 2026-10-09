@@ -157,6 +157,12 @@ final class RegularTask: ExecuteTurnLoop {
     /// Connect enabled MCP servers that are not already running. Codex starts
     /// them inside `run_turn`, before the model is asked.
     var ensureMCPConnected: (() async -> Void)?
+    /// Replace live clients. A published reconnect uses this instead of ensure.
+    var reconnectMCP: (() async -> Void)?
+    /// Stop clients for servers a publish disabled or removed.
+    var disconnectMCP: (([String]) async -> Void)?
+    /// Model-visible MCP catalog. Server name is the CapabilityStore server id.
+    var mcpVisibleCatalog: (() -> [McpVisibleTool])?
     /// Test seam for `ModelClientSession::stream`. Production uses `modelGateway`.
     var modelSampler: ((Bool) async throws -> ModelTurn)?
     /// Prepared rust Session. Live Execute uses `runTurn` when
@@ -191,6 +197,7 @@ final class RegularTask: ExecuteTurnLoop {
     private var stopHookActive = false
     /// SessionStart / UserPromptSubmit fire once per execute loop.
     private var sessionStartConsumed = false
+    private var harnessRolloutPath: String?
     private var pendingAttachSessionStartSource: SessionStartSource?
     private var userPromptSubmitConsumed = false
     private var abortReason: String?
@@ -214,12 +221,16 @@ final class RegularTask: ExecuteTurnLoop {
         onCandidateReply: @escaping (String) async -> Void,
         handleStop: @escaping (AgentPlan?) async -> Void,
         ensureMCPConnected: (() async -> Void)? = nil,
+        reconnectMCP: (() async -> Void)? = nil,
+        disconnectMCP: (([String]) async -> Void)? = nil,
         invokeHarnessTool: ((ToolCallProposal) async throws -> String)? = nil
     ) {
         self.runToolBatch = runToolBatch
         self.onCandidateReply = onCandidateReply
         self.handleStop = handleStop
         self.ensureMCPConnected = ensureMCPConnected
+        self.reconnectMCP = reconnectMCP
+        self.disconnectMCP = disconnectMCP
         self.invokeHarnessTool = invokeHarnessTool
     }
 
@@ -296,18 +307,31 @@ final class RegularTask: ExecuteTurnLoop {
         session.services.hookProjectRoot = projectRoot
         session.services.hookActivatedSkills = hookActivatedSkills?() ?? []
         bindHarnessSampling(session)
-        session.ensureSubmissionLoop()
-        harnessSession = session
-        harnessTurnContext = ExecuteHarnessAttach.makeTurnContext(
+        let turnContext = ExecuteHarnessAttach.makeTurnContext(
             cwd: snapshot.cwd,
             model: snapshot.model,
             allowsMutation: snapshot.allowsMutation
         )
+        let previousRolloutPath = harnessSession?.persistedRolloutPath() ?? harnessRolloutPath
+        if let previousRolloutPath {
+            session.restoreVerifiedAnswers(
+                fromRolloutPath: previousRolloutPath,
+                truncationPolicy: TruncationPolicy(turnContext.modelInfoValue().truncationPolicy)
+            )
+            session.resumeRolloutPersistence(path: previousRolloutPath)
+            harnessRolloutPath = previousRolloutPath
+        } else {
+            session.enableRolloutPersistence()
+        }
+        session.ensureSubmissionLoop()
+        harnessSession = session
+        harnessTurnContext = turnContext
         harnessInput = snapshot.input
     }
 
     private func bindHarnessSampling(_ session: Session) {
         guard useHarnessRunTurn else { return }
+        installHarnessMcpBridge(on: session)
         session.services.sageToolNames = modelGateway.availableToolDefinitions().map(\.name)
         session.prepareSamplingPrompt = { [weak self] in
             guard let self else { return }
@@ -732,7 +756,42 @@ final class RegularTask: ExecuteTurnLoop {
 
     func pauseForToolRoundLimit() async {}
 
+    private func installHarnessMcpBridge(on session: Session) {
+        if session.services.mcpVisibleTools.isEmpty, let catalog = mcpVisibleCatalog?() {
+            session.services.mcpVisibleTools = catalog
+        }
+        session.services.ensureMcpConnected = { [weak self] in
+            await self?.ensureMCPConnected?()
+        }
+        session.services.reconnectMcp = { [weak self] in
+            await self?.reconnectMCP?()
+        }
+        session.services.disconnectMcp = { [weak self] names in
+            await self?.disconnectMCP?(names)
+        }
+        session.services.mcpToolTransport = { [weak self] request in
+            guard let self else {
+                throw McpToolCallFailure("MCP transport is gone")
+            }
+            let invoke = await self.invokeHarnessTool
+            guard let invoke else {
+                throw McpToolCallFailure("MCP transport is not attached")
+            }
+            let qualified = "mcp__\(request.serverName)__\(request.toolName)"
+            let text = try await invoke(
+                ToolCallProposal(
+                    id: UUID().uuidString,
+                    name: qualified,
+                    argumentsJSON: request.argumentsJSON
+                )
+            )
+            let failed = text.hasPrefix("ERROR:")
+            return callToolResult(fromTransportText: text, isError: failed)
+        }
+    }
+
     private func runHarnessTurn() async {
+        await harnessSession?.ensureMcpConnected()
         harnessTurnSettled = false
         guard let session = harnessSession else { return }
         let context = harnessTurnContext ?? TurnContext()

@@ -157,7 +157,10 @@ enum ExecuteHarnessAttach {
                 )
                 : .readOnly(networkAccess: false),
             permissionProfile: allowsMutation ? .workspaceWrite() : .readOnly(),
-            environment: TurnEnvironment(cwd: cwd)
+            environment: TurnEnvironment(
+                cwd: cwd,
+                temporaryDirectories: localTemporaryDirectoryPaths()
+            )
         )
     }
 

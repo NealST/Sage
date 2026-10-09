@@ -7,7 +7,14 @@
 //  Port status: adapted
 //
 //  App-target Session loop: interrupt, user input, mailbox, compact,
-//  shutdown. Realtime / elicitation / approval replies stay on
+//  review, thread settings, turn settings, conditional interrupt, recovery,
+//  suspend-and-shutdown, user-input answers, permission answers, dynamic-tool
+//  answers, exec approvals, patch approvals, MCP refresh, user-config reload,
+//  background-terminal cleanup, shutdown. An idle user submission starts `RegularSessionTask` with
+//  that submission's start options. Mailbox mail starts a turn when it
+//  sets `triggerTurn`, or when the thread has an outstanding durable
+//  sleep; queue-only mail inherits the reference context's cyber
+//  program. Realtime / elicitation replies stay on
 //  ThreadSession. A started regular turn is spawned so the loop can
 //  keep receiving steer and interrupt.
 //
@@ -15,6 +22,13 @@
 import CodexAsyncUtils
 import CodexProtocol
 import Foundation
+
+func triggersTurn(_ input: SessionTurnInput) -> Bool {
+    if case .interAgentCommunication(let mail) = input, mail.triggerTurn {
+        return true
+    }
+    return false
+}
 
 extension Session {
     func runSubmissionLoop() async {
@@ -52,19 +66,59 @@ extension Session {
     }
 
     /// rust `maybe_start_turn_for_pending_work`.
+    ///
+    /// Mailbox mail wakes an idle session when a message sets `triggerTurn`,
+    /// or when any mail is waiting and the thread is durably asleep.
+    /// Session-pending user input is started by `acceptUserInput` instead.
     func maybeStartTurnForPendingWork(subId: String? = nil) async {
         if state.shuttingDown { return }
         if hasRunningTask { return }
+        let hasMailbox = inputQueue.hasPendingMailboxItems()
         let hasMailboxTrigger = inputQueue.hasTriggerTurnMailboxItems()
-        let hasSessionPending = inputQueue.hasSessionPendingItems()
-        guard hasSessionPending || hasMailboxTrigger else { return }
+        guard hasMailbox, hasMailboxTrigger || hasOutstandingDurableSleep() else { return }
         let turnId = subId ?? UUID().uuidString
-        let (input, _) = inputQueue.getPendingInputWithStartOptions(activeTurn)
+        var (input, startOptions) = inputQueue.getPendingInputWithStartOptions(activeTurn)
         guard !input.isEmpty else { return }
+        if !input.contains(where: triggersTurn) {
+            startOptions.cyberAccessProgram = referenceCyberAccessProgram()
+        }
+        let turnContext = newTurnContext(
+            subId: turnId,
+            options: NewTurnContextOptions(
+                start: startOptions,
+                initiatingAgentPath: initiatingAgentPath(
+                    in: input,
+                    parentTurnId: startOptions.parentTurnId
+                )
+            )
+        )
+        lastStartedTurnContext = turnContext
+        lastStartedTurnId = turnContext.subId
         startDetachedTask(
             RegularSessionTask(),
-            turnContext: newTurnContext(subId: turnId),
+            turnContext: turnContext,
             input: input
+        )
+    }
+
+    /// Idle user input becomes a regular turn. Input that arrives while a
+    /// turn is sampling stays queued for that turn's next sample.
+    func acceptUserInput(_ item: SessionTurnInput, submission: Submission) async {
+        if state.shuttingDown { return }
+        if hasRunningTask {
+            inputQueue.enqueue(item)
+            return
+        }
+        let turnContext = newTurnContext(
+            subId: submission.id,
+            options: NewTurnContextOptions(start: submission.startOptions)
+        )
+        lastStartedTurnContext = turnContext
+        lastStartedTurnId = turnContext.subId
+        startDetachedTask(
+            RegularSessionTask(),
+            turnContext: turnContext,
+            input: [item]
         )
     }
 
@@ -114,16 +168,23 @@ extension Session {
         case .interrupt:
             await interruptTask()
             return false
+        case .interruptIfNoPendingInput(let turnId):
+            await interruptTurnIfNoPendingInput(turnId: turnId, ack: submission.ack)
+            return false
         case .shutdown:
             await finishShutdown(submissionId: submission.id)
             return true
+        case .suspendTurnAndShutdown:
+            return await suspendTurnAndShutdown(submissionId: submission.id)
         case .userInput(let item):
-            inputQueue.enqueue(item)
-            await maybeStartTurnForPendingWork(subId: submission.id)
+            await acceptUserInput(item, submission: submission)
             return false
         case .interAgent(let communication):
-            inputQueue.enqueueMailboxCommunication(communication)
-            if communication.triggerTurn {
+            inputQueue.enqueueMailboxCommunication(
+                communication,
+                startOptions: submission.startOptions
+            )
+            if communication.triggerTurn || hasOutstandingDurableSleep() {
                 await maybeStartTurnForPendingWork(subId: submission.id)
             }
             return false
@@ -135,11 +196,48 @@ extension Session {
                 input: []
             )
             return false
+        case .review(let request):
+            await startReview(submissionId: submission.id, request: request)
+            return false
+        case .threadSettings(let overrides):
+            await updateThreadSettings(submissionId: submission.id, overrides: overrides)
+            return false
+        case .turnSettings(let turnId, let update):
+            lastTurnSettingsOutcome = applyTurnSettings(turnId: turnId, update: update)
+            return false
+        case .recoverTurn(let request):
+            await recoverTurn(request)
+            return false
+        case .userInputAnswer(let id, let response):
+            notifyUserInputResponse(id: id, response: response)
+            return false
+        case .requestPermissionsResponse(let id, let response):
+            notifyRequestPermissionsResponse(id: id, response: response)
+            return false
+        case .dynamicToolResponse(let id, let response):
+            notifyDynamicToolResponse(id: id, response: response)
+            return false
+        case .execApproval(let id, let turnId, let decision):
+            await handleExecApproval(id: id, turnId: turnId, decision: decision)
+            return false
+        case .patchApproval(let id, let decision):
+            await handlePatchApproval(id: id, decision: decision)
+            return false
+        case .refreshMcpServers:
+            refreshMcpServers()
+            return false
+        case .reloadUserConfig:
+            await reloadUserConfigLayer()
+            return false
+        case .cleanBackgroundTerminals:
+            await closeUnifiedExecProcesses()
+            return false
         }
     }
 
-    fileprivate func finishShutdown(submissionId: String) async {
+    func finishShutdown(submissionId: String) async {
         state.shuttingDown = true
+        await stopMcpPrewarmWorker()
         let turn = activeTurn?.task?.turnContext
         await abortAllTasks(reason: .interrupted)
         await runSessionEndHook(sess: self, turnContext: turn)
@@ -150,7 +248,11 @@ extension Session {
 
     fileprivate func failLeftover(_ submission: Submission) {
         switch submission.op {
-        case .userInput, .interAgent, .compact, .interrupt, .shutdown:
+        case .userInput, .interAgent, .compact, .review, .threadSettings, .turnSettings,
+             .recoverTurn, .userInputAnswer, .requestPermissionsResponse, .dynamicToolResponse,
+             .execApproval, .patchApproval, .refreshMcpServers, .reloadUserConfig,
+             .cleanBackgroundTerminals, .interrupt,
+             .interruptIfNoPendingInput, .suspendTurnAndShutdown, .shutdown:
             break
         }
     }

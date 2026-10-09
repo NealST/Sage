@@ -8,6 +8,8 @@
 //
 //  Dispatch, exposure, and hook payload assembly. `dispatch` runs rust's
 //  PreToolUse → handle → PostToolUse sandwich through `HookRuntime`.
+//  A second registration of the same flat name records `firstCollision`
+//  and keeps the first runtime. Rust panics on a trusted duplicate.
 //
 
 import CodexCore
@@ -67,13 +69,28 @@ struct PostToolUsePayload: Equatable, Sendable {
 
 struct HarnessToolRegistry {
     private var entries: [String: ToolRegistryEntry] = [:]
+    private(set) var firstCollision: String?
 
     mutating func register(_ runtime: any CoreToolRuntime, exposure: ToolExposure? = nil) {
         let name = flatToolName(runtime.toolName())
+        if entries[name] != nil {
+            if firstCollision == nil {
+                firstCollision = name
+            }
+            return
+        }
         entries[name] = ToolRegistryEntry(
             runtime: runtime,
             exposure: exposure ?? runtime.exposure()
         )
+    }
+
+    /// rust `ToolRegistry::supports_parallel_tool_calls`.
+    /// Missing tools are `nil`. Hidden tools are serial even when the runtime opts in.
+    func supportsParallelToolCalls(_ name: ToolName) -> Bool? {
+        guard let entry = entry(for: name) else { return nil }
+        if entry.exposure == .hidden { return false }
+        return entry.runtime.supportsParallelToolCalls()
     }
 
     func entry(for toolName: ToolName) -> ToolRegistryEntry? {

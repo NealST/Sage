@@ -371,6 +371,18 @@ public struct CallToolResult: Codable, Equatable, Sendable {
     public var isError: Bool?
     public var meta: JSONValue?
 
+    public init(
+        content: [JSONValue],
+        structuredContent: JSONValue? = nil,
+        isError: Bool? = nil,
+        meta: JSONValue? = nil
+    ) {
+        self.content = content
+        self.structuredContent = structuredContent
+        self.isError = isError
+        self.meta = meta
+    }
+
     enum CodingKeys: String, CodingKey {
         case content
         case structuredContent = "structuredContent"

@@ -7,8 +7,10 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Guardian retained-context recording waits for Phase 8. The handler
-//  validates mode and invokes onRequestUserInput.
+//  The live tool call waits on Session.requestUserInput. ToolCallRuntime
+//  installs that callback, and Op::UserInputAnswer resumes it. The session
+//  records a verified answer when guardian_approval is enabled and history
+//  is thread-owned.
 //
 
 import CodexCore

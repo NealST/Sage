@@ -6,8 +6,9 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Session/StepContext wait for Phase 5. The router maps model-visible
-//  calls onto the registry and builds a Session-free ToolInvocation.
+//  The router maps model-visible calls onto the registry. Parallel
+//  admission follows the registered runtime. Child-management exposure
+//  stays false until collaboration tools are planned.
 //
 
 import CodexCore
@@ -18,7 +19,7 @@ struct ToolCall: Equatable, Sendable {
     var toolName: ToolName
     var callId: String
     var payload: ToolPayload
-    var encryptedFunctionArgs: [String]?
+    var encryptedFunctionArgs: [String]? = nil
 
     func directSource() -> ToolCallSource {
         if toolName.namespace == "collaboration",
@@ -64,9 +65,9 @@ struct ToolRouter {
         try await registry.dispatch(buildInvocation(call))
     }
 
-    /// rust `ToolRouter::tool_supports_parallel`.
+    /// rust `ToolRouter::tool_supports_parallel`. Unregistered names are serial.
     func toolSupportsParallel(_ call: ToolCall) -> Bool {
-        ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
+        registry.supportsParallelToolCalls(call.toolName) ?? false
     }
 
     /// Codex `ToolRouter::build_tool_call`.

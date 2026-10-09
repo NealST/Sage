@@ -31,6 +31,20 @@ enum SessionTurnInput: Equatable, Sendable {
     case interAgentCommunication(InterAgentCommunication)
 }
 
+enum TurnInputBuilder {
+    static func user(_ content: [UserInput], clientId: String? = nil) -> SessionTurnInput {
+        .userInput(content: content, clientId: clientId, metadata: UserInputMetadata())
+    }
+
+    static func responseItem(_ item: ResponseItem) -> SessionTurnInput {
+        .responseItem(item)
+    }
+
+    static func functionCallOutput(_ item: ResponseItem) -> SessionTurnInput {
+        .functionCallOutput(item)
+    }
+}
+
 enum InputQueueActivity: Equatable, Sendable {
     case mailbox
     case steer

@@ -1,5 +1,6 @@
 import CodexCore
 import CodexProtocol
+import CodexShellCommand
 import XCTest
 @testable import Sage
 
@@ -167,4 +168,231 @@ final class Phase4ToolsTests: XCTestCase {
             XCTFail("unexpected \(error)")
         }
     }
+
+    func testPlannedRouterOmitsUngatedUtilities() {
+        let names = plannedToolNames()
+        XCTAssertFalse(names.contains("clockcurr_time"))
+        XCTAssertFalse(names.contains("clocksleep"))
+        XCTAssertFalse(names.contains("update_plan"))
+        XCTAssertFalse(names.contains("new_context"))
+        XCTAssertFalse(names.contains("get_context_remaining"))
+        XCTAssertFalse(names.contains("request_permissions"))
+        XCTAssertTrue(names.contains("request_user_input"))
+    }
+
+    func testPlannedRouterIncludesClockFromReminderOrExperimentalTool() {
+        var reminder = Config(features: Features([.currentTimeReminder]))
+        XCTAssertTrue(plannedToolNames(config: reminder).contains("clockcurr_time"))
+        XCTAssertFalse(plannedToolNames(config: reminder).contains("clocksleep"))
+
+        reminder.currentTimeReminder = CurrentTimeReminderConfig(sleepTool: true)
+        reminder.features.enable(.sleepTool)
+        reminder.sleepToolMode = .modelDriven
+        XCTAssertTrue(plannedToolNames(config: reminder).contains("clocksleep"))
+
+        var clock = minimalModelInfo()
+        clock.experimentalSupportedTools = ["clock"]
+        var sleepOn = Config(features: Features([.sleepTool]))
+        sleepOn.experimentalRequestUserInputEnabled = false
+        let names = plannedToolNames(config: sleepOn, model: clock)
+        XCTAssertTrue(names.contains("clockcurr_time"))
+        XCTAssertTrue(names.contains("clocksleep"))
+    }
+
+    func testPlannedRouterIncludesTokenBudgetAndUnifiedExec() {
+        let budget = plannedToolNames(config: Config(features: Features([.tokenBudget])))
+        XCTAssertTrue(budget.contains("new_context"))
+        XCTAssertTrue(budget.contains("get_context_remaining"))
+        let router = plannedRouter(config: Config(features: Features([.tokenBudget])))
+        XCTAssertEqual(
+            router.registry.entry(for: ToolName(plain: "new_context"))?.exposure,
+            .directModelOnly
+        )
+        XCTAssertTrue(router.modelVisibleSpecs.contains { $0.name() == "new_context" })
+
+        let exec = plannedToolNames(config: Config(features: Features([.unifiedExec])))
+        XCTAssertTrue(exec.contains("exec_command"))
+        XCTAssertTrue(exec.contains("write_stdin"))
+
+        var disabled = minimalModelInfo()
+        disabled.shellType = .disabled
+        let blocked = plannedToolNames(
+            config: Config(features: Features([.unifiedExec])),
+            model: disabled
+        )
+        XCTAssertFalse(blocked.contains("exec_command"))
+        XCTAssertFalse(blocked.contains("write_stdin"))
+    }
+
+    func testDeferredToolStaysRegisteredAndOutOfModelSpecs() {
+        var options = ToolRouterPlanOptions()
+        options.includeCurrentTime = false
+        options.includeSleep = false
+        options.includePlan = false
+        options.includeNewContextWindow = false
+        options.includeGetContextRemaining = false
+        options.includeRequestPermissions = false
+        var router = finalizeToolRouter(options)
+        registerMcpTools(
+            [McpToolRegistration(tool: McpVisibleTool(name: "deferred.tool"), exposure: .deferred)],
+            on: &router
+        )
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "deferred.tool")))
+        XCTAssertFalse(router.modelVisibleSpecs.contains { $0.name() == "deferred.tool" })
+    }
+
+    func testRegistryParallelFollowsRuntimeAndKeepsFirstRegistration() {
+        var registry = HarnessToolRegistry()
+        registry.register(TestSyncHandler())
+        XCTAssertEqual(registry.supportsParallelToolCalls(ToolName(plain: "test_sync_tool")), true)
+        registry.register(TestSyncHandler())
+        XCTAssertEqual(registry.firstCollision, "test_sync_tool")
+        XCTAssertEqual(registry.registeredEntries().count, 1)
+
+        var hidden = HarnessToolRegistry()
+        hidden.register(TestSyncHandler(), exposure: .hidden)
+        XCTAssertEqual(hidden.supportsParallelToolCalls(ToolName(plain: "test_sync_tool")), false)
+
+        var model = minimalModelInfo()
+        model.experimentalSupportedTools = ["test_sync_tool"]
+        var config = Config()
+        config.experimentalRequestUserInputEnabled = false
+        let router = plannedRouter(config: config, model: model)
+        XCTAssertTrue(
+            router.toolSupportsParallel(
+                ToolCall(
+                    toolName: ToolName(plain: "test_sync_tool"),
+                    callId: "s1",
+                    payload: .function(arguments: "{}"),
+                    encryptedFunctionArgs: nil
+                )
+            )
+        )
+    }
+
+    func testMcpToolCallParsesSkipsAndSanitizes() async {
+        let invalid = await handleMcpToolCall(
+            server: "linear",
+            toolName: "search",
+            arguments: "{",
+            prepared: PreparedMcpToolCall(serverName: "linear", toolName: "search"),
+            transport: { _ in
+                XCTFail("invalid arguments must not reach transport")
+                return mcpTextResult("unused")
+            }
+        )
+        XCTAssertTrue(mcpToolResultText(invalid.result).hasPrefix("err:"))
+        XCTAssertEqual(invalid.result.isError, true)
+
+        let missing = await handleMcpToolCall(
+            server: "linear",
+            toolName: "search",
+            arguments: "{}",
+            prepared: nil,
+            transport: { _ in mcpTextResult("unused") }
+        )
+        XCTAssertEqual(
+            mcpToolResultText(missing.result),
+            "MCP tool `linear/search` is not available to the model"
+        )
+
+        let blocked = await handleMcpToolCall(
+            server: "codex_apps",
+            toolName: "list",
+            arguments: "",
+            prepared: PreparedMcpToolCall(serverName: "codex_apps", toolName: "list", enabled: false),
+            transport: { _ in mcpTextResult("unused") }
+        )
+        XCTAssertEqual(mcpToolResultText(blocked.result), "MCP tool call blocked by app configuration")
+        XCTAssertEqual(blocked.toolInputJSON, "{}")
+
+        let failed = await handleMcpToolCall(
+            server: "linear",
+            toolName: "search",
+            arguments: #"{"query":"a"}"#,
+            prepared: PreparedMcpToolCall(serverName: "linear", toolName: "search"),
+            transport: { _ in throw McpToolCallFailure("not running") }
+        )
+        XCTAssertEqual(mcpToolResultText(failed.result), "tool call error: not running")
+
+        let image = CallToolResult(
+            content: [
+                .object(["type": .string("image"), "data": .string("abc")]),
+                .object(["type": .string("text"), "text": .string("caption")]),
+            ],
+            structuredContent: nil,
+            isError: nil,
+            meta: nil
+        )
+        let sanitized = await handleMcpToolCall(
+            server: "linear",
+            toolName: "search",
+            arguments: "{}",
+            prepared: PreparedMcpToolCall(serverName: "linear", toolName: "search"),
+            inputModalities: [.text],
+            transport: { request in
+                XCTAssertEqual(request.argumentsJSON, "{}")
+                return image
+            }
+        )
+        XCTAssertEqual(
+            mcpToolResultText(sanitized.result),
+            "<image content omitted because you do not support image input>\ncaption"
+        )
+    }
+
+    func testSessionMcpListsConnectsAndCallsTransport() async throws {
+        let sess = Session()
+        sess.services.mcpVisibleTools = [
+            McpVisibleTool(name: "search", serverName: "srv"),
+        ]
+        var connected = false
+        sess.services.ensureMcpConnected = {
+            connected = true
+        }
+        sess.services.mcpToolTransport = { request in
+            XCTAssertEqual(request.serverName, "srv")
+            XCTAssertEqual(request.toolName, "search")
+            return mcpTextResult("found")
+        }
+        XCTAssertEqual(sess.listMcpTools(), ["search"])
+        await sess.ensureMcpConnected()
+        XCTAssertTrue(connected)
+        let handled = await sess.callMcpTool(server: "srv", toolName: "search", arguments: #"{"q":1}"#)
+        XCTAssertEqual(mcpToolResultText(handled.result), "found")
+
+        let handler = McpHandler(
+            name: ToolName(plain: "search"),
+            spec: .function(
+                ResponsesApiTool(
+                    name: "search",
+                    description: "Search",
+                    strict: false,
+                    parameters: .object([:], additionalProperties: true)
+                )
+            ),
+            serverName: "srv"
+        )
+        let output = try await handler.handle(
+            ToolInvocation(
+                callId: "c1",
+                toolName: handler.toolName(),
+                payload: .function(arguments: #"{"q":1}"#),
+                mcpToolTransport: { _ in mcpTextResult("from-handler") }
+            )
+        )
+        XCTAssertEqual(output.logOutput(), "from-handler")
+        XCTAssertTrue(output.successForLogging())
+    }
+}
+
+private func plannedRouter(config: Config = Config(), model: ModelInfo? = nil) -> ToolRouter {
+    let turn = TurnContext(config: config, catalogModelInfo: model)
+    return finalizeToolRouter(toolRouterPlanOptions(sess: nil, turnContext: turn))
+}
+
+private func plannedToolNames(config: Config = Config(), model: ModelInfo? = nil) -> Set<String> {
+    Set(plannedRouter(config: config, model: model).registry.registeredEntries().map {
+        flatToolName($0.runtime.toolName())
+    })
 }

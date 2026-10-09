@@ -68,6 +68,10 @@ enum ToolExposure: Equatable, Sendable {
     case codeModeOnly
     case hidden
 
+    func isDirect() -> Bool {
+        self == .direct || self == .directModelOnly
+    }
+
     func isDeferred() -> Bool {
         self == .deferred || self == .deferredModelOnly
     }

@@ -6,8 +6,8 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  One handler per catalog tool. Dispatch forwards through
-//  Session.services.onMcpCall (the live McpBinding seam).
+//  One handler per catalog tool. A prepared transport runs
+//  `handleMcpToolCall`. `onMcpCall` remains the string seam.
 //
 
 import CodexCore
@@ -44,6 +44,37 @@ struct McpHandler: CoreToolRuntime {
     }
 
     func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
-        try await invokeMcp(invocation, name: flatToolName(name))
+        if invocation.mcpToolTransport != nil {
+            return try await handlePreparedCall(invocation)
+        }
+        return try await invokeMcp(invocation, name: flatToolName(name))
+    }
+
+    private func handlePreparedCall(_ invocation: ToolInvocation) async throws -> any ToolOutput {
+        guard case .function(let arguments) = invocation.payload else {
+            throw FunctionCallError.respondToModel("mcp handler received unsupported payload")
+        }
+        let tool = flatToolName(name)
+        let server = serverName ?? ""
+        let prepared = server.isEmpty
+            ? nil
+            : PreparedMcpToolCall(serverName: server, toolName: tool, enabled: true)
+        let transport = invocation.mcpToolTransport ?? { _ in
+            throw McpToolCallFailure("MCP transport is not attached")
+        }
+        let handled = await handleMcpToolCall(
+            server: server,
+            toolName: tool,
+            arguments: arguments,
+            prepared: prepared,
+            inputModalities: invocation.mcpInputModalities,
+            transport: transport
+        )
+        return boxedToolOutput(
+            FunctionToolOutput.fromText(
+                mcpToolResultText(handled.result),
+                success: handled.result.isError != true
+            )
+        )
     }
 }

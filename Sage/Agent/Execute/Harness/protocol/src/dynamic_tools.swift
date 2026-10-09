@@ -183,6 +183,11 @@ public struct DynamicToolResponse: Codable, Equatable, Sendable {
         case contentItems = "contentItems"
         case success
     }
+
+    public init(contentItems: [DynamicToolCallOutputContentItem], success: Bool) {
+        self.contentItems = contentItems
+        self.success = success
+    }
 }
 
 // MARK: - DynamicToolCallOutputContentItem

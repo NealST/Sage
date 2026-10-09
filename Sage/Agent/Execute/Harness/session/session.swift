@@ -20,6 +20,7 @@ import CodexCore
 import CodexHooks
 import CodexOtel
 import CodexProtocol
+import CodexRollout
 import Foundation
 
 private let sessionSubmissionCapacity = 512
@@ -144,14 +145,6 @@ struct TurnEnvironmentSelection: Equatable, Sendable {
     }
 }
 
-struct DynamicToolSpec: Equatable, Sendable {
-    var name: String
-
-    init(name: String) {
-        self.name = name
-    }
-}
-
 final class SessionConfiguration: @unchecked Sendable {
     var stepSettings: StepSettings
     var environments: [TurnEnvironmentSelection]
@@ -170,6 +163,10 @@ final class SessionConfiguration: @unchecked Sendable {
     var forkedFromThreadId: ThreadId?
     var dynamicTools: [DynamicToolSpec]
     var trustedGuardianReviewer: Bool
+    /// Explicit user-layer files, low to high. Empty means `codexHome/config.toml`.
+    var userConfigPaths: [String]
+    /// Last user layer that reloaded cleanly. A failed reload leaves this in place.
+    var userConfigLayer: [String: UserConfigValue]
 
     init(
         stepSettings: StepSettings = StepSettings(),
@@ -188,7 +185,9 @@ final class SessionConfiguration: @unchecked Sendable {
         parentThreadId: ThreadId? = nil,
         forkedFromThreadId: ThreadId? = nil,
         dynamicTools: [DynamicToolSpec] = [],
-        trustedGuardianReviewer: Bool = false
+        trustedGuardianReviewer: Bool = false,
+        userConfigPaths: [String] = [],
+        userConfigLayer: [String: UserConfigValue] = [:]
     ) {
         self.stepSettings = stepSettings
         self.environments = environments
@@ -207,6 +206,8 @@ final class SessionConfiguration: @unchecked Sendable {
         self.forkedFromThreadId = forkedFromThreadId
         self.dynamicTools = dynamicTools
         self.trustedGuardianReviewer = trustedGuardianReviewer
+        self.userConfigPaths = userConfigPaths
+        self.userConfigLayer = userConfigLayer
     }
 
     var cwd: String { legacyFallbackCwd }
@@ -220,6 +221,8 @@ final class Session: @unchecked Sendable {
     var services: SessionServices
     var inputQueue: InputQueue
     var features: Features
+    let rolloutLock = NSLock()
+    var rolloutRecorder: RolloutRecorder?
     private let inbox = SessionInbox()
     private let eventMailbox = EventMailbox()
     private let idleLock = NSLock()
@@ -240,13 +243,23 @@ final class Session: @unchecked Sendable {
         self.services = services
         self.inputQueue = InputQueue()
         self.features = features
+        startMcpPrewarmWorker()
+    }
+
+    deinit {
+        mcpPrewarmShutdown.cancel()
+        mcpPrewarmRequests.close()
+        mcpRefresh.close()
     }
 
     /// rust `Session::submit`. Starts the loop on first use.
     @discardableResult
-    func submit(_ op: SessionOp) async throws -> String {
+    func submit(
+        _ op: SessionOp,
+        startOptions: TurnStartOptions = TurnStartOptions()
+    ) async throws -> String {
         let id = UUID().uuidString
-        try await submit(Submission(id: id, op: op))
+        try await submit(Submission(id: id, op: op, startOptions: startOptions))
         return id
     }
 
@@ -303,16 +316,44 @@ final class Session: @unchecked Sendable {
         }
     }
 
-    func newTurnContext(subId: String? = nil) -> TurnContext {
+    func newTurnContext(
+        subId: String? = nil,
+        options: NewTurnContextOptions = NewTurnContextOptions()
+    ) -> TurnContext {
         let configuration = state.sessionConfiguration
+        var settings = configuration.stepSettings
+        if let model = options.model {
+            settings.model = model
+            settings.modelSnapshot.slug = model
+            settings.collaborationMode = settings.collaborationMode?.withUpdates(model: model)
+        }
+        if let serviceTier = options.start.serviceTier {
+            settings.serviceTier = serviceTier
+        }
         return TurnContext(
-            subId: subId ?? UUID().uuidString,
+            subId: options.subId ?? subId ?? UUID().uuidString,
             threadId: threadId,
             cwd: configuration.legacyFallbackCwd,
-            model: configuration.stepSettings.model,
+            model: settings.model,
             sessionSource: configuration.sessionSource,
             config: configuration.originalConfig,
-            disabledPluginIds: configuration.disabledPluginIds
+            approvalPolicy: configuration.originalConfig.approvalPolicy,
+            disabledPluginIds: configuration.disabledPluginIds,
+            collaborationMode: settings.collaborationMode,
+            environment: TurnEnvironment(
+                cwd: configuration.legacyFallbackCwd,
+                workspaceRoots: configuration.runtimeWorkspaceRoots,
+                temporaryDirectories: localTemporaryDirectoryPaths()
+            ),
+            finalOutputJsonSchema: options.start.finalOutputJsonSchema,
+            cyberAccessProgram: options.start.cyberAccessProgram,
+            nextStepSettings: settings,
+            turnTrigger: options.start.turnTrigger,
+            parentTurnId: options.start.parentTurnId,
+            rootTurnId: options.start.rootTurnId,
+            responsesapiClientMetadata: options.responsesapiClientMetadata,
+            initiatingAgentPath: options.initiatingAgentPath,
+            dynamicTools: configuration.dynamicTools
         )
     }
 
@@ -332,15 +373,21 @@ final class Session: @unchecked Sendable {
         activeTurn?.task?.done == true
     }
 
-    func markMcpRuntimeDirty() {}
-
     func hooks() -> HookSnapshot {
         HookSnapshot(afterAgent: services.afterAgentHooks)
     }
 
     func refreshHooks(_ config: Config) async {}
 
-    func refreshMcpIfDirty() async {}
+    /// rust `Session::has_outstanding_durable_sleep`.
+    func hasOutstandingDurableSleep() -> Bool {
+        services.outstandingDurableSleep
+    }
+
+    /// rust `Session::reference_context_item` cyber program.
+    func referenceCyberAccessProgram() -> CyberAccessProgram? {
+        state.history.referenceContextItemValue()?.cyberAccessProgram
+    }
 
     func previousTurnSettingsValue() -> PreviousTurnSettings? {
         state.previousTurnSettingsValue()
@@ -471,7 +518,38 @@ final class Session: @unchecked Sendable {
     var startupPrewarm: SessionStartupPrewarmHandle?
     var sessionTelemetry: SessionTelemetry?
     var mcpReprojectionRequested = false
+    let mcpRefresh = McpRefresh()
+    let mcpPrewarmRequests = McpPrewarmRequests()
+    let mcpPrewarmShutdown = CancellationToken()
+    var mcpPrewarmTask: Task<Void, Never>?
+    /// rust `mcp_prewarm_tx` slot. True while a request is queued and the
+    /// worker has not received it yet.
+    var mcpPrewarmRequested: Bool { mcpPrewarmRequests.isPending }
+    /// Stand-ins for `skills_service.clear_cache` and `plugins_manager.clear_cache`.
+    var skillsCacheGeneration: UInt64 = 0
+    var pluginsCacheGeneration: UInt64 = 0
     var lastTaskAgentMessage: String?
+    var lastStartedTurnContext: TurnContext?
+    /// Rust `last_started_turn_id`. Cleared by a standalone settings update so
+    /// it no longer continues that turn. The context itself stays for tests
+    /// and the running turn.
+    var lastStartedTurnId: String?
+    /// Reply for the latest `Op::TurnSettings`. The submission loop is serial,
+    /// so the ack is not signaled until this is stored.
+    var lastTurnSettingsOutcome: TurnSettingsUpdateOutcome?
+    /// Decision for the latest `Op::InterruptIfNoPendingInput`. `true` means
+    /// the named turn was taken for abort. Stored before the abort runs.
+    var lastInterruptIfNoPendingInput: Bool?
+    /// Reply for the latest `Op::RecoverTurn`. An invalid settings override
+    /// leaves this nil and sets `lastTurnInputError` instead.
+    var lastTurnInputSubmission: TurnInputSubmission?
+    var lastTurnInputError: String?
+    /// Reply for the latest `Op::SuspendTurnAndShutdown`. A non-root thread
+    /// leaves this nil and sets `lastSuspendTurnError` instead.
+    var lastSuspendTurnOutcome: SuspendTurnOutcome?
+    var lastSuspendTurnError: String?
+    /// Next `reserve_input_order` value. Legacy guardian mode does not consume it.
+    var nextUserInputOrder: UInt64 = 0
     var lastTurnAbortReason: TurnAbortReason?
     var lastTaskError: Error?
 
@@ -484,7 +562,8 @@ final class Session: @unchecked Sendable {
 
     func requestMcpRuntimeReprojection() {
         mcpReprojectionRequested = true
-        services.mcpRuntime.markDirty()
+        markMcpRuntimeDirty()
+        scheduleMcpPrewarm()
     }
 
     func consumeStartupPrewarm(
@@ -519,17 +598,18 @@ final class Session: @unchecked Sendable {
     func captureStepContext(
         _ turnContext: TurnContext,
         cancellationToken: CancellationToken
-    ) throws -> StepContext {
+    ) async throws -> StepContext {
         if cancellationToken.isCancelled {
             throw CodexErr(details: .turnAborted)
         }
+        await refreshMcpIfDirty()
+        // Subsequent steps read the published settings. An earlier `StepContext`
+        // keeps the binding it captured, so a later publish does not rewrite it.
         return StepContext(
-            settings: StepSettings(
-                model: turnContext.model,
-                modelSnapshot: turnContext.captureCurrentModelInfo()
-            ),
+            settings: turnContext.nextStepSettings,
             turn: turnContext,
-            environments: [turnContext.environment]
+            environments: [turnContext.environment],
+            mcp: services.mcpRuntime.currentBinding
         )
     }
 
@@ -538,10 +618,10 @@ final class Session: @unchecked Sendable {
         cancellationToken: CancellationToken,
         requiredServers: [String],
         requiredPlugins: Set<String>
-    ) throws -> StepContext {
+    ) async throws -> StepContext {
         _ = requiredServers
         _ = requiredPlugins
-        return try captureStepContext(turnContext, cancellationToken: cancellationToken)
+        return try await captureStepContext(turnContext, cancellationToken: cancellationToken)
     }
 
     func recordContextUpdatesAndSetReferenceContextItem(
@@ -650,6 +730,13 @@ final class Session: @unchecked Sendable {
         metadata.subagentKind = subagentMetadataKind(stepContext.turn.sessionSource)
         return metadata
     }
+
+    /// rust `request_guardian_approval` for `request_permissions`.
+    /// `nil` falls through to the user card, which is the user reviewer.
+    /// A decision is applied inside `requestPermissions` and does not emit
+    /// `RequestPermissions`.
+    var requestPermissionsGuardian:
+        (@Sendable (RequestPermissionsArgs) async -> CodexProtocol.ReviewDecision?)?
 
     /// Result-only test seam. Prefer `runSamplingStreamOverride` when exercising SSE.
     var runSamplingOverride:

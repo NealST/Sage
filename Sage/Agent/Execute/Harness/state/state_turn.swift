@@ -28,27 +28,93 @@ enum TaskKind: Equatable, Sendable {
 
 struct AcceptedUserInputResponse: Sendable {
     var response: RequestUserInputResponse
-    var acceptanceOrder: UInt64
+    /// Absent in legacy guardian mode, which does not reserve an order.
+    var acceptanceOrder: UInt64?
 
-    init(response: RequestUserInputResponse, acceptanceOrder: UInt64) {
+    init(response: RequestUserInputResponse, acceptanceOrder: UInt64?) {
         self.response = response
         self.acceptanceOrder = acceptanceOrder
     }
 }
 
+/// Resumes a command-approval waiter at most once. Clearing the turn, a
+/// replacement request, and the user's decision can all observe the same id.
+final class ApprovalDecision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CodexProtocol.ReviewDecision, Never>?
+
+    init(_ continuation: CheckedContinuation<CodexProtocol.ReviewDecision, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: CodexProtocol.ReviewDecision) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: value)
+    }
+}
+
+/// Resumes a dynamic-tool waiter at most once. A replacement request holds
+/// the previous waiter until the new call finishes, and clearing the turn
+/// can resume it as well.
+final class DynamicToolDecision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<DynamicToolResponse?, Never>?
+
+    init(_ continuation: CheckedContinuation<DynamicToolResponse?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: DynamicToolResponse?) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: value)
+    }
+}
+
+/// Resumes a `request_permissions` waiter at most once. Cancellation, a
+/// replacement request, and the user's answer can all observe the same call.
+final class PermissionsDecision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<RequestPermissionsResponse?, Never>?
+
+    init(_ continuation: CheckedContinuation<RequestPermissionsResponse?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: RequestPermissionsResponse?) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: value)
+    }
+}
+
 struct PendingRequestPermissions: Sendable {
+    /// Distinguishes a replacement request that reused this call id.
+    var requestId: UUID
     var requestedPermissions: RequestPermissionProfile
     var environmentId: String
-    var resume: CheckedContinuation<RequestPermissionsResponse, Never>?
+    var policyContext: FileSystemSandboxPolicyContext?
+    var decision: PermissionsDecision
 
     init(
+        requestId: UUID,
         requestedPermissions: RequestPermissionProfile,
         environmentId: String,
-        resume: CheckedContinuation<RequestPermissionsResponse, Never>? = nil
+        policyContext: FileSystemSandboxPolicyContext? = nil,
+        decision: PermissionsDecision
     ) {
+        self.requestId = requestId
         self.requestedPermissions = requestedPermissions
         self.environmentId = environmentId
-        self.resume = resume
+        self.policyContext = policyContext
+        self.decision = decision
     }
 }
 
@@ -82,10 +148,10 @@ final class ActiveTurn: @unchecked Sendable {
 }
 
 final class TurnState: @unchecked Sendable {
-    var pendingApprovals: [String: CheckedContinuation<CodexProtocol.ReviewDecision, Never>] = [:]
+    var pendingApprovals: [String: ApprovalDecision] = [:]
     var pendingRequestPermissions: [String: PendingRequestPermissions] = [:]
-    var pendingUserInput: [String: CheckedContinuation<AcceptedUserInputResponse, Never>] = [:]
-    var pendingDynamicTools: [String: CheckedContinuation<DynamicToolResponse, Never>] = [:]
+    var pendingUserInput: [String: CheckedContinuation<AcceptedUserInputResponse?, Never>] = [:]
+    var pendingDynamicTools: [String: DynamicToolDecision] = [:]
     var pendingInput = SessionTurnInputQueue()
     var mailboxDeliveryPhase: MailboxDeliveryPhase = .currentTurn
     var grantedPermissionsByEnvironmentId: [String: AdditionalPermissionProfile] = [:]
@@ -100,22 +166,38 @@ final class TurnState: @unchecked Sendable {
 
     func insertPendingApproval(
         key: String,
-        continuation: CheckedContinuation<CodexProtocol.ReviewDecision, Never>
-    ) -> CheckedContinuation<CodexProtocol.ReviewDecision, Never>? {
+        decision: ApprovalDecision
+    ) -> ApprovalDecision? {
         let previous = pendingApprovals[key]
-        pendingApprovals[key] = continuation
+        pendingApprovals[key] = decision
         return previous
     }
 
-    func removePendingApproval(key: String) -> CheckedContinuation<CodexProtocol.ReviewDecision, Never>? {
+    func removePendingApproval(key: String) -> ApprovalDecision? {
         pendingApprovals.removeValue(forKey: key)
     }
 
     func clearPendingWaiters() {
+        let approvals = pendingApprovals
         pendingApprovals.removeAll()
+        for decision in approvals.values {
+            decision.resume(.abort)
+        }
+        let permissions = pendingRequestPermissions
         pendingRequestPermissions.removeAll()
+        for pending in permissions.values {
+            pending.decision.resume(nil)
+        }
+        let userInput = pendingUserInput
         pendingUserInput.removeAll()
+        for continuation in userInput.values {
+            continuation.resume(returning: nil)
+        }
+        let dynamicTools = pendingDynamicTools
         pendingDynamicTools.removeAll()
+        for decision in dynamicTools.values {
+            decision.resume(nil)
+        }
     }
 
     func insertPendingRequestPermissions(
@@ -133,27 +215,27 @@ final class TurnState: @unchecked Sendable {
 
     func insertPendingUserInput(
         key: String,
-        continuation: CheckedContinuation<AcceptedUserInputResponse, Never>
-    ) -> CheckedContinuation<AcceptedUserInputResponse, Never>? {
+        continuation: CheckedContinuation<AcceptedUserInputResponse?, Never>
+    ) -> CheckedContinuation<AcceptedUserInputResponse?, Never>? {
         let previous = pendingUserInput[key]
         pendingUserInput[key] = continuation
         return previous
     }
 
-    func removePendingUserInput(key: String) -> CheckedContinuation<AcceptedUserInputResponse, Never>? {
+    func removePendingUserInput(key: String) -> CheckedContinuation<AcceptedUserInputResponse?, Never>? {
         pendingUserInput.removeValue(forKey: key)
     }
 
     func insertPendingDynamicTool(
         key: String,
-        continuation: CheckedContinuation<DynamicToolResponse, Never>
-    ) -> CheckedContinuation<DynamicToolResponse, Never>? {
+        decision: DynamicToolDecision
+    ) -> DynamicToolDecision? {
         let previous = pendingDynamicTools[key]
-        pendingDynamicTools[key] = continuation
+        pendingDynamicTools[key] = decision
         return previous
     }
 
-    func removePendingDynamicTool(key: String) -> CheckedContinuation<DynamicToolResponse, Never>? {
+    func removePendingDynamicTool(key: String) -> DynamicToolDecision? {
         pendingDynamicTools.removeValue(forKey: key)
     }
 

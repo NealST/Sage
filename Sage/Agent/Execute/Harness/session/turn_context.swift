@@ -7,7 +7,11 @@
 //  Port status: adapted
 //
 //  Turn-scoped settings, sessionSource, and model snapshot used by
-//  `runTurn`. Shell snapshot futures and plugin metrics wait.
+//  `runTurn`. Start options (schema, cyber program, trigger, parent and
+//  root turn ids, service tier) are captured when the turn is admitted.
+//  `dynamicTools` is copied from the session configuration at admission.
+//  `TurnEnvironment` carries workspace roots and temporary directories
+//  for `request_permissions`. Shell snapshot futures and plugin metrics wait.
 //
 
 import CodexCore
@@ -19,18 +23,44 @@ struct TurnEnvironment: Sendable {
     var cwd: String
     var userHomeDir: String?
     var executorPlatformOS: String?
+    /// Empty means the environment did not configure roots. The permission
+    /// policy context then uses `cwd`.
+    var workspaceRoots: [String]
+    /// `nil` means the executor did not report temporary directories.
+    var temporaryDirectories: [String]?
 
     init(
         environmentId: String = "local",
         cwd: String = FileManager.default.currentDirectoryPath,
         userHomeDir: String? = NSHomeDirectory(),
-        executorPlatformOS: String? = "macos"
+        executorPlatformOS: String? = "macos",
+        workspaceRoots: [String] = [],
+        temporaryDirectories: [String]? = nil
     ) {
         self.environmentId = environmentId
         self.cwd = cwd
         self.userHomeDir = userHomeDir
         self.executorPlatformOS = executorPlatformOS
+        self.workspaceRoots = workspaceRoots
+        self.temporaryDirectories = temporaryDirectories
     }
+}
+
+/// rust `EnvironmentInfo::local_temporary_directories` for a local executor.
+func localTemporaryDirectoryPaths() -> [String] {
+    #if os(Windows)
+    let names = ["TEMP", "TMP"]
+    #else
+    let names = ["TMPDIR"]
+    #endif
+    var directories: [String] = []
+    for name in names {
+        guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else { continue }
+        if !directories.contains(value) {
+            directories.append(value)
+        }
+    }
+    return directories
 }
 
 final class TurnContext: @unchecked Sendable {
@@ -51,11 +81,20 @@ final class TurnContext: @unchecked Sendable {
     var disabledPluginIds: [String]
     var collaborationMode: CollaborationMode?
     var environment: TurnEnvironment
-    var finalOutputJsonSchema: String?
-    var cyberAccessProgram: Bool
+    var finalOutputJsonSchema: CodexProtocol.JSONValue?
+    var cyberAccessProgram: CyberAccessProgram?
     var realtimeActive: Bool
     var nextStepSettings: StepSettings
     var terminalError: CodexErr?
+    var turnTrigger: String?
+    var parentTurnId: String?
+    var rootTurnId: String?
+    var responsesapiClientMetadata: [String: String]?
+    var initiatingAgentPath: AgentPath?
+    /// Catalog snapshot used by tool planning. Absent turns use `minimalModelInfo`.
+    var catalogModelInfo: ModelInfo?
+    /// Copied from the session configuration when the turn is admitted.
+    var dynamicTools: [DynamicToolSpec]
 
     init(
         subId: String = UUID().uuidString,
@@ -75,11 +114,18 @@ final class TurnContext: @unchecked Sendable {
         disabledPluginIds: [String] = [],
         collaborationMode: CollaborationMode? = nil,
         environment: TurnEnvironment = TurnEnvironment(),
-        finalOutputJsonSchema: String? = nil,
-        cyberAccessProgram: Bool = false,
+        finalOutputJsonSchema: CodexProtocol.JSONValue? = nil,
+        cyberAccessProgram: CyberAccessProgram? = nil,
         realtimeActive: Bool = false,
         nextStepSettings: StepSettings = StepSettings(),
-        terminalError: CodexErr? = nil
+        terminalError: CodexErr? = nil,
+        turnTrigger: String? = nil,
+        parentTurnId: String? = nil,
+        rootTurnId: String? = nil,
+        responsesapiClientMetadata: [String: String]? = nil,
+        initiatingAgentPath: AgentPath? = nil,
+        catalogModelInfo: ModelInfo? = nil,
+        dynamicTools: [DynamicToolSpec] = []
     ) {
         self.subId = subId
         self.sessionId = sessionId
@@ -103,6 +149,13 @@ final class TurnContext: @unchecked Sendable {
         self.realtimeActive = realtimeActive
         self.nextStepSettings = nextStepSettings
         self.terminalError = terminalError
+        self.turnTrigger = turnTrigger
+        self.parentTurnId = parentTurnId
+        self.rootTurnId = rootTurnId
+        self.responsesapiClientMetadata = responsesapiClientMetadata
+        self.initiatingAgentPath = initiatingAgentPath
+        self.catalogModelInfo = catalogModelInfo
+        self.dynamicTools = dynamicTools
     }
 
     func collaborationModeValue() -> CollaborationMode? {
@@ -132,7 +185,7 @@ final class TurnContext: @unchecked Sendable {
     }
 
     func modelInfoValue() -> ModelInfo {
-        minimalModelInfo(slug: model)
+        catalogModelInfo ?? minimalModelInfo(slug: model)
     }
 
     func autoCompactTokenLimit() -> Int64? {
@@ -169,9 +222,31 @@ struct TurnModelSnapshot: Equatable, Sendable {
 struct NewTurnContextOptions: Sendable {
     var subId: String?
     var model: String?
+    var start: TurnStartOptions
+    var responsesapiClientMetadata: [String: String]?
+    var initiatingAgentPath: AgentPath?
 
-    init(subId: String? = nil, model: String? = nil) {
+    init(
+        subId: String? = nil,
+        model: String? = nil,
+        start: TurnStartOptions = TurnStartOptions(),
+        responsesapiClientMetadata: [String: String]? = nil,
+        initiatingAgentPath: AgentPath? = nil
+    ) {
         self.subId = subId
         self.model = model
+        self.start = start
+        self.responsesapiClientMetadata = responsesapiClientMetadata
+        self.initiatingAgentPath = initiatingAgentPath
     }
+}
+
+func initiatingAgentPath(in input: [SessionTurnInput], parentTurnId: String?) -> AgentPath? {
+    guard parentTurnId != nil else { return nil }
+    for item in input {
+        if case .interAgentCommunication(let communication) = item, communication.triggerTurn {
+            return communication.author
+        }
+    }
+    return nil
 }

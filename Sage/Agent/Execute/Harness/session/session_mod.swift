@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 //  Live thread admission: `ThreadSession` is the `SessionIo` submission
-//  loop `ThreadManager` starts for every thread. Turn-input routing
-//  follows `handlers.rs` / `turn_input.rs`. A started regular turn runs
+//  loop `ThreadManager` starts for every thread. Start, steer, and
+//  drain decisions are `turn_input.swift`. A started regular turn runs
 //  the `RegularTask` sample loop when a `TurnSampler` is attached
 //  (`ModelClientTurnSampler` streams through `ModelClient`). Function
 //  calls continue the turn through `TurnToolRunner`. Compact, hooks, and
@@ -331,6 +331,7 @@ public final class ThreadSession: @unchecked Sendable {
         var active: ActiveLiveTurn?
         var lastStartedTurnId: String?
         var pending: [TurnInput] = []
+        var additionalContext: [String: AdditionalContextEntry] = [:]
         var mailbox: [(InterAgentCommunication, TurnStartOptions)] = []
         var samplingToken: CancellationToken?
         var samplingResult: SamplingResultBox?
@@ -498,7 +499,7 @@ public final class ThreadSession: @unchecked Sendable {
         case .startOrSteer:
             return try startOrSteer(request, submissionId: submissionId)
         case .startIfIdle:
-            let kind = turnStartKind(request.input, idleDefault: .automatic)
+            let kind = turnStartKind(for: request.input, idleDefault: .automatic)
             return try startIfIdle(
                 request,
                 submissionId: submissionId,
@@ -527,11 +528,20 @@ public final class ThreadSession: @unchecked Sendable {
         try validateStartOrSteerInput(request.input)
         if let rejection = steerRejection(request, expectedTurnId: nil) {
             if rejection == .noActiveTurn {
-                return try startTurn(request, submissionId: submissionId, kind: .user)
+                if rejectedForDraining(request, kind: .user, route: .startOrSteer) {
+                    return .notSubmitted(reason: .serverDraining)
+                }
+                return try startTurn(
+                    request,
+                    submissionId: submissionId,
+                    kind: .user,
+                    route: .startOrSteer
+                )
             }
             return .notSubmitted(reason: rejection)
         }
-        appendPending(request.input)
+        appendPending(acceptedTurnInput(request, kind: .user, route: .startOrSteer))
+        applyAcceptedThreadSettings(request)
         let turnId = state.withLock { $0.active?.id ?? submissionId }
         return .steered(turnId: turnId)
     }
@@ -554,7 +564,7 @@ public final class ThreadSession: @unchecked Sendable {
         if let blocked {
             return .notSubmitted(reason: blocked)
         }
-        if !admits(request, kind: kind) {
+        if rejectedForDraining(request, kind: kind, route: .startIfIdle) {
             return .notSubmitted(reason: .serverDraining)
         }
         let idleBlock = state.withLock { loop -> NotSubmittedReason? in
@@ -569,7 +579,16 @@ public final class ThreadSession: @unchecked Sendable {
         if let idleBlock {
             return .notSubmitted(reason: idleBlock)
         }
-        return try startTurn(request, submissionId: submissionId, kind: kind)
+        let proposed = request.threadSettings.mode ?? state.withLock { $0.mode }
+        if kind == .automatic && !kind.permitsMode(proposed) {
+            return .notSubmitted(reason: .planMode)
+        }
+        return try startTurn(
+            request,
+            submissionId: submissionId,
+            kind: kind,
+            route: .startIfIdle
+        )
     }
 
     private func steer(
@@ -577,12 +596,13 @@ public final class ThreadSession: @unchecked Sendable {
         expectedTurnId: String,
         submissionId: String
     ) throws -> TurnInputSubmission {
-        try validateStartOrSteerInput(request.input)
+        try validateSteerOnlyInput(request.input)
         if let rejection = steerRejection(request, expectedTurnId: expectedTurnId) {
             return .notSubmitted(reason: rejection)
         }
         _ = submissionId
-        appendPending(request.input)
+        appendPending(acceptedTurnInput(request, kind: .user, route: .startOrSteer))
+        applyAcceptedThreadSettings(request)
         let turnId = state.withLock { $0.active?.id ?? expectedTurnId }
         return .steered(turnId: turnId)
     }
@@ -590,22 +610,26 @@ public final class ThreadSession: @unchecked Sendable {
     private func startTurn(
         _ request: TurnInputRequest,
         submissionId: String,
-        kind: TurnStartKind
+        kind: TurnStartKind,
+        route: TurnAdmissionRoute
     ) throws -> TurnInputSubmission {
         let mode = state.withLock { $0.mode }
-        if kind == .automatic && mode == .plan {
+        let proposed = request.threadSettings.mode ?? mode
+        if kind == .automatic && !kind.permitsMode(proposed) {
             return .notSubmitted(reason: .planMode)
         }
+        let queued = acceptedTurnInput(request, kind: kind, route: route)
         state.withLock { loop in
+            if let requested = request.threadSettings.mode {
+                loop.mode = requested
+            }
             loop.active = ActiveLiveTurn(
                 id: submissionId,
                 kind: .regular,
                 finalOutputJsonSchema: request.start.finalOutputJsonSchema
             )
             loop.lastStartedTurnId = submissionId
-        }
-        if explicitTurnInput(request.input) {
-            appendPending(request.input)
+            loop.pending.append(contentsOf: queued)
         }
         beginSampling(turnId: submissionId)
         return .started(turnId: submissionId)
@@ -662,21 +686,42 @@ public final class ThreadSession: @unchecked Sendable {
         }
     }
 
-    private func admits(_ request: TurnInputRequest, kind: TurnStartKind) -> Bool {
-        state.withLock { loop in
-            if loop.admitsTurnStart { return true }
-            if kind == .user,
-               request.start.parentTurnId != nil,
-               isThreadSpawn(sessionSource)
-            {
-                return true
-            }
-            return false
-        }
+    private func rejectedForDraining(
+        _ request: TurnInputRequest,
+        kind: TurnStartKind,
+        route: TurnAdmissionRoute
+    ) -> Bool {
+        turnInputRejectedForDraining(
+            admitsTurnStart: state.withLock { $0.admitsTurnStart },
+            route: route,
+            kind: kind,
+            source: sessionSource,
+            parentTurnId: request.start.parentTurnId
+        )
     }
 
-    private func appendPending(_ input: TurnInput) {
-        state.withLock { $0.pending.append(input) }
+    private func acceptedTurnInput(
+        _ request: TurnInputRequest,
+        kind: TurnStartKind,
+        route: TurnAdmissionRoute
+    ) -> [TurnInput] {
+        var items = state.withLock { loop in
+            additionalContextItems(merging: request.additionalContext, into: &loop.additionalContext)
+        }
+        if shouldEnqueueSubmittedInput(request.input, kind: kind, route: route) {
+            items.append(request.input)
+        }
+        return items
+    }
+
+    private func applyAcceptedThreadSettings(_ request: TurnInputRequest) {
+        guard let mode = request.threadSettings.mode else { return }
+        state.withLock { $0.mode = mode }
+    }
+
+    private func appendPending(_ items: [TurnInput]) {
+        guard !items.isEmpty else { return }
+        state.withLock { $0.pending.append(contentsOf: items) }
     }
 
     private func finishShutdown(submissionId: String) {
@@ -856,42 +901,8 @@ public final class ThreadSession: @unchecked Sendable {
     }
 }
 
-private enum TurnStartKind {
-    case user
-    case automatic
-    case recovery
-}
-
 private func newSubmissionId() -> String {
     UUID().uuidString.lowercased()
-}
-
-private func isThreadSpawn(_ source: SessionSource) -> Bool {
-    if case .subAgent(.threadSpawn) = source {
-        return true
-    }
-    return false
-}
-
-private func turnStartKind(_ input: TurnInput, idleDefault: TurnStartKind) -> TurnStartKind {
-    if case .userInput(let content, _) = input, !content.isEmpty {
-        return .user
-    }
-    return idleDefault
-}
-
-private func explicitTurnInput(_ input: TurnInput) -> Bool {
-    switch input {
-    case .userInput(let content, _):
-        return !content.isEmpty
-    case .responseItem(let item):
-        if case .functionCallOutput(_, let callId, _, _, _, _) = item {
-            return callId == nil
-        }
-        return false
-    case .interAgentCommunication:
-        return false
-    }
 }
 
 private func responseItems(from input: [TurnInput]) -> [ResponseItem] {
@@ -962,20 +973,4 @@ private func assistantMessageText(_ item: ResponseItem) -> String? {
         }
     }.joined()
     return text.isEmpty ? nil : text
-}
-
-private func validateStartOrSteerInput(_ input: TurnInput) throws {
-    switch input {
-    case .userInput:
-        return
-    case .responseItem(let item):
-        if case .functionCallOutput(_, let callId, _, _, _, _) = item, callId == nil {
-            return
-        }
-    case .interAgentCommunication:
-        break
-    }
-    throw CodexErr.invalidRequest(
-        "only user input or standalone function-call outputs can start or steer a turn"
-    )
 }

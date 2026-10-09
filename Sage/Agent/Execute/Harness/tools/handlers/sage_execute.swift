@@ -32,6 +32,10 @@ struct SageExecuteHandler: CoreToolRuntime {
     func toolName() -> ToolName { name }
     func spec() -> ToolSpec { toolSpec }
 
+    func supportsParallelToolCalls() -> Bool {
+        ParallelToolRuntime.supportsParallel(flatToolName(name))
+    }
+
     func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
         guard case .function(let arguments) = invocation.payload else {
             throw FunctionCallError.respondToModel(

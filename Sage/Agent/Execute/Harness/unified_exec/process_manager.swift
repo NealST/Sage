@@ -214,4 +214,77 @@ extension UnifiedExecProcessManager {
         }
         return process.snapshotOutput()
     }
+
+    /// rust `UnifiedExecProcessManager::terminate_all_processes`.
+    /// Network-approval unregistration waits.
+    public func terminateAllProcesses() async {
+        processStore.lock()
+        let entries = Array(store.processes.values)
+        store.processes.removeAll()
+        store.reservedProcessIds.removeAll()
+        processStore.unlock()
+        for entry in entries {
+            entry.process.terminate()
+        }
+    }
+
+    public func processCount() -> Int {
+        processStore.lock()
+        defer { processStore.unlock() }
+        return store.processes.count
+    }
+
+    public func reservedProcessIds() -> Set<Int32> {
+        processStore.lock()
+        defer { processStore.unlock() }
+        return store.reservedProcessIds
+    }
+
+    public func reserveProcessId(_ processId: Int32) {
+        processStore.lock()
+        store.reservedProcessIds.insert(processId)
+        processStore.unlock()
+    }
+
+    /// Records a spawned process in this thread's background-terminal store.
+    public func trackSpawnedProcess(
+        processId: Int32,
+        callId: String,
+        command: String,
+        cwd: String,
+        spawned: SpawnedProcess
+    ) async throws -> BackgroundTerminalHandle {
+        let process = try await UnifiedExecProcess.fromSpawned(
+            spawned,
+            sandboxType: .none,
+            spawnLifecycle: NoopSpawnLifecycle()
+        )
+        let entry = ProcessEntry(
+            process: process,
+            callId: callId,
+            processId: processId,
+            cwd: PathUri(try AbsolutePathBuf.fromAbsolutePath(cwd)),
+            hookCommand: command,
+            tty: false,
+            environmentId: "local",
+            permissions: TerminalPermissions.nativeDefault()
+        )
+        processStore.lock()
+        store.processes[processId] = entry
+        store.reservedProcessIds.insert(processId)
+        processStore.unlock()
+        return BackgroundTerminalHandle(process)
+    }
+}
+
+public final class BackgroundTerminalHandle: @unchecked Sendable {
+    private let process: UnifiedExecProcess
+
+    init(_ process: UnifiedExecProcess) {
+        self.process = process
+    }
+
+    public func hasExited() -> Bool { process.hasExited() }
+
+    public func terminate() { process.terminate() }
 }

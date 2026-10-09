@@ -335,6 +335,35 @@ extension CapabilityStore {
         return task
     }
 
+    /// Drops clients for servers a harness publish disabled or removed.
+    /// Does not rewrite the saved server list.
+    func disconnectServers(_ serverIDs: [String]) async {
+        var disconnectedIDs: [String] = []
+        for key in serverIDs {
+            let matches = mcpServers.indices.filter {
+                mcpServers[$0].id == key || mcpServers[$0].name == key
+            }
+            if matches.isEmpty {
+                await disconnect(serverID: key)
+                disconnectedIDs.append(key)
+                continue
+            }
+            for index in matches {
+                let id = mcpServers[index].id
+                await disconnect(serverID: id)
+                guard mcpServers.indices.contains(index) else { continue }
+                mcpServers[index].status = mcpServers[index].enabled ? .disconnected : .disabled
+                mcpServers[index].statusMessage = nil
+                mcpServers[index].toolCount = 0
+                mcpServers[index].reconnectAttempts = 0
+                disconnectedIDs.append(id)
+            }
+        }
+        if !disconnectedIDs.isEmpty {
+            mcpTools.removeAll { disconnectedIDs.contains($0.serverID) }
+        }
+    }
+
     private func disconnect(serverID: String) async {
         reconnectTasks[serverID]?.cancel()
         reconnectTasks[serverID] = nil

@@ -9,9 +9,12 @@
 //  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. Stream request
 //  prep matches rust: image resize, unprefixed item ids, content-item
 //  kinds, and Responses compatibility headers. Open-path 401 recover
-//  and connection retry live here; mid-stream reconnect stays in
-//  `runSamplingRequest`. WebSocket transport, ChatGPT token refresh,
-//  attestation, otel, and extension interceptors wait.
+//  lives here. Connection and mid-stream retries stay in
+//  `runSamplingRequest` / `runRemoteCompactV2`. WebSocket transport
+//  stays off (`disableWebsockets` defaults true) until the socket
+//  client exists, so OpenAI's `supportsWebsockets` does not emit a
+//  fallback warning. ChatGPT token refresh, attestation, otel, and
+//  extension interceptors wait.
 //  Auth is AuthProvider (Bearer API key).
 //  Sage already has Agent/Model/ModelClient; this type lives in CodexCore.
 //
@@ -58,7 +61,7 @@ public final class ModelClient: @unchecked Sendable {
     public var unboundedConnectionRetries: Bool
     /// rust `recover_from_unauthorized`. ChatGPT refresh waits; tests inject this.
     public var recoverFromUnauthorized: (@Sendable () async -> Bool)? = nil
-    public private(set) var disableWebsockets = true
+    public internal(set) var disableWebsockets = true
 
     public init(
         threadId: ThreadId,
@@ -122,12 +125,15 @@ public final class ModelClient: @unchecked Sendable {
         ModelClientSession(client: self)
     }
 
+    /// rust `ModelClient::responses_websocket_enabled`.
     public func responsesWebsocketEnabled() -> Bool {
-        false
+        providerInfo.supportsWebsockets && !disableWebsockets
     }
 
+    /// rust `ModelClient::force_http_fallback`. Returns true only when a
+    /// websocket transport was actually active.
     public func forceHttpFallback() -> Bool {
-        let activated = !disableWebsockets
+        let activated = responsesWebsocketEnabled()
         disableWebsockets = true
         return activated
     }
@@ -332,7 +338,6 @@ public final class ModelClientSession: @unchecked Sendable {
     public let turnState = TurnStateBox()
     /// Test seam for `ResponsesClient.streamRequest`.
     var streamRequestOverride: ((ResponsesApiRequest, ResponsesOptions) async throws -> CodexAPI.ResponseStream)?
-    var lastStreamRetryMessages: [String] = []
 
     public init(client: ModelClient) {
         self.client = client
@@ -360,6 +365,9 @@ public final class ModelClientSession: @unchecked Sendable {
         )
     }
 
+    /// rust `ModelClientSession::stream_responses_api`. Retries only a
+    /// recoverable 401. Other failures return immediately so
+    /// `runSamplingRequest` owns the stream retry budget.
     func streamResponsesAPI(
         prompt: Prompt,
         modelInfo: ModelInfo,
@@ -368,20 +376,6 @@ public final class ModelClientSession: @unchecked Sendable {
         serviceTier: String?,
         responsesMetadata: CodexResponsesMetadata
     ) async throws -> ResponseStream {
-        var retryState = ResponsesStreamRetryState()
-        let maxRetries = client.providerInfo.streamMaxRetries()
-        let sink = ClientStreamRetrySink(
-            unboundedConnectionRetries: client.unboundedConnectionRetries,
-            sessionSourceIsInternal: {
-                if case .internal = client.sessionSource { return true }
-                return false
-            }(),
-            isAmazonBedrock: client.providerInfo.isAmazonBedrock(),
-            responsesWebsocketEnabled: client.responsesWebsocketEnabled(),
-            turnId: responsesMetadata.turnId ?? responsesMetadata.threadId
-        ) { [weak self] message, _ in
-            self?.lastStreamRetryMessages.append(message)
-        }
         var unauthorizedRecoveryAttempted = false
         while true {
             do {
@@ -399,21 +393,8 @@ public final class ModelClientSession: @unchecked Sendable {
                     if await client.recoverFromUnauthorized?() == true {
                         continue
                     }
-                    throw mapApiError(error)
                 }
-                try await retryOrThrowOpenPathError(
-                    mapApiError(error),
-                    retryState: &retryState,
-                    maxRetries: maxRetries,
-                    sink: sink
-                )
-            } catch let error as CodexErr {
-                try await retryOrThrowOpenPathError(
-                    error,
-                    retryState: &retryState,
-                    maxRetries: maxRetries,
-                    sink: sink
-                )
+                throw mapApiError(error)
             }
         }
     }
@@ -512,44 +493,6 @@ public final class ModelClientSession: @unchecked Sendable {
     }
 }
 
-func retryOrThrowOpenPathError(
-    _ error: CodexErr,
-    retryState: inout ResponsesStreamRetryState,
-    maxRetries: UInt64,
-    sink: ClientStreamRetrySink
-) async throws {
-    if isTerminalOpenPathError(error) {
-        throw error
-    }
-    do {
-        try await handleResponseStreamError(
-            retryState: &retryState,
-            maxRetries: maxRetries,
-            err: error,
-            trySwitchFallback: { false },
-            sink: sink,
-            request: .sampling
-        )
-    } catch let exhausted as CodexErr {
-        if exhausted.retryDelay(retryCount: 1) != nil {
-            throw CodexErr.retryLimit(RetryLimitReachedError(status: 0))
-        }
-        throw exhausted
-    }
-}
-
-func isTerminalOpenPathError(_ error: CodexErr) -> Bool {
-    switch error.details {
-    case .contextWindowExceeded, .usageLimitReached, .quotaExceeded, .usageNotIncluded,
-         .invalidRequest, .invalidPrompt, .invalidImageRequest, .cyberPolicy, .bioPolicy,
-         .misalignmentPolicyViolation, .flexUnavailable, .turnAborted, .refreshTokenFailed,
-         .retryLimit:
-        return true
-    default:
-        return false
-    }
-}
-
 func isUnauthorizedApiError(_ error: ApiError) -> Bool {
     switch error {
     case .transport(.http(let status, _, _, _, _)) where status == 401:
@@ -558,43 +501,6 @@ func isUnauthorizedApiError(_ error: ApiError) -> Bool {
         return true
     default:
         return false
-    }
-}
-
-final class ClientStreamRetrySink: ResponsesStreamRetrySink, @unchecked Sendable {
-    let unboundedConnectionRetries: Bool
-    let sessionSourceIsInternal: Bool
-    let isAmazonBedrock: Bool
-    let responsesWebsocketEnabled: Bool
-    let turnId: String
-    private let onNotify: (@Sendable (String, CodexErr) async -> Void)?
-
-    init(
-        unboundedConnectionRetries: Bool,
-        sessionSourceIsInternal: Bool,
-        isAmazonBedrock: Bool,
-        responsesWebsocketEnabled: Bool,
-        turnId: String,
-        onNotify: (@Sendable (String, CodexErr) async -> Void)? = nil
-    ) {
-        self.unboundedConnectionRetries = unboundedConnectionRetries
-        self.sessionSourceIsInternal = sessionSourceIsInternal
-        self.isAmazonBedrock = isAmazonBedrock
-        self.responsesWebsocketEnabled = responsesWebsocketEnabled
-        self.turnId = turnId
-        self.onNotify = onNotify
-    }
-
-    func notifyStreamError(_ message: String, error: CodexErr) async {
-        await onNotify?(message, error)
-    }
-
-    func sendWarning(_ message: String) async {
-        await onNotify?(message, CodexErr.fatal(message))
-    }
-
-    func storeExhaustedRetry(_ retry: ExhaustedResponseRetry) async {
-        _ = retry
     }
 }
 

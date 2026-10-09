@@ -359,6 +359,7 @@ let package = Package(
                 "thread_manager",
                 "codex_thread.swift",
                 "session/session_mod.swift",
+                "session/turn_input.swift",
                 "codex_delegate.swift",
                 "mention_syntax.swift",
                 "elicitation.swift",

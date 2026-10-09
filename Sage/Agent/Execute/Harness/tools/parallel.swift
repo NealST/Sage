@@ -8,7 +8,9 @@
 //
 //  Codex admits tools through an RWLock: parallel-capable calls take a
 //  read lock, serial calls take a write lock. `ToolCallRuntime` (runTurn)
-//  and `ToolBatchExecutor.runAdmittedBatch` share `SessionServices.parallelAdmission`.
+//  wires `request_user_input`, `request_permissions`, and dynamic tools
+//  onto the session waiters and, with `ToolBatchExecutor.runAdmittedBatch`,
+//  shares `SessionServices.parallelAdmission`.
 //  HUD approval still happens first. This file also owns the partition
 //  policy used by `ToolBatchWave` and a generic runner for isolated batches.
 //
@@ -30,7 +32,7 @@ enum ParallelToolRuntime {
         "run_skill_script",
     ]
 
-    /// Codex `tool_supports_parallel`. Reads and context loads share a wave.
+    /// Sage observation names. Registered Codex handlers use their runtime flag instead.
     static func supportsParallel(_ toolName: String) -> Bool {
         if alwaysSerial.contains(toolName) { return false }
         if toolName.hasPrefix("mcp__") { return false }
@@ -183,6 +185,15 @@ actor ParallelAdmission {
     }
 }
 
+/// Registered tools follow the runtime flag. Sage names that are not in the
+/// registry keep the observation-name policy.
+func toolCallRunsInParallel(_ call: ToolCall, router: ToolRouter?) -> Bool {
+    if let router, router.registry.supportsParallelToolCalls(call.toolName) != nil {
+        return router.toolSupportsParallel(call)
+    }
+    return ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
+}
+
 /// Codex `ToolCallRuntime` — dispatch one model tool call through the step router.
 struct ToolCallRuntime: Sendable {
     var session: Session
@@ -195,7 +206,7 @@ struct ToolCallRuntime: Sendable {
         if cancellationToken.isCancelled {
             throw CodexErr(details: .turnAborted)
         }
-        let exclusive = !ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
+        let exclusive = !toolCallRunsInParallel(call, router: stepContext.toolRouter)
         return try await session.services.parallelAdmission.run(exclusive: exclusive) {
             try await self.dispatchUnlocked(call, cancellationToken: cancellationToken)
         }
@@ -222,7 +233,46 @@ struct ToolCallRuntime: Sendable {
             )
             invocation.cancellationToken = cancellationToken
             invocation.sessionSource = stepContext.turn.sessionSource
+            invocation.isRootThread = !stepContext.turn.sessionSource.isNonRootAgent()
+            invocation.turnEnvironments = stepContext.environments.isEmpty
+                ? [stepContext.turn.environment]
+                : stepContext.environments
+            let userInputTurn = stepContext.turn
+            let userInputCallId = call.callId
+            invocation.onRequestUserInput = { [session] args in
+                let accepted = await session.requestUserInput(
+                    turnContext: userInputTurn,
+                    callId: userInputCallId,
+                    args: args
+                )
+                return accepted?.response
+            }
+            let permissionsTurn = stepContext.turn
+            let permissionsCallId = call.callId
+            let permissionsToken = cancellationToken
+            invocation.onRequestPermissions = { [session] args, policyContext in
+                await session.requestPermissions(
+                    turnContext: permissionsTurn,
+                    callId: permissionsCallId,
+                    args: args,
+                    policyContext: policyContext,
+                    cancellationToken: permissionsToken
+                )
+            }
+            let dynamicTurn = stepContext.turn
+            let dynamicCallId = call.callId
+            invocation.onDynamicTool = { [session] toolName, args in
+                await session.requestDynamicTool(
+                    turnContext: dynamicTurn,
+                    callId: dynamicCallId,
+                    namespace: toolName.namespace,
+                    tool: toolName.name,
+                    arguments: args
+                )
+            }
             invocation.onMcpCall = session.services.onMcpCall
+            invocation.mcpToolTransport = session.services.mcpToolTransport
+            invocation.mcpInputModalities = stepContext.turn.modelInfoValue().inputModalities
             invocation.onSageToolCall = session.services.onSageToolCall
             invocation.hookProjectRoot = session.services.hookProjectRoot
             invocation.hookModel = stepContext.turn.model

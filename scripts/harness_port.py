@@ -501,6 +501,26 @@ def load_existing_notes() -> dict[str, tuple[str, str]]:
     return out
 
 
+def load_existing_addition_notes() -> dict[str, str]:
+    """Sage 新增节的手工备注。重新生成时保留。"""
+    out: dict[str, str] = {}
+    if not PORTING.exists():
+        return out
+    in_additions = False
+    for line in PORTING.read_text().splitlines():
+        if line.startswith("## Sage 新增"):
+            in_additions = True
+            continue
+        if in_additions and line.startswith("## "):
+            break
+        if not in_additions:
+            continue
+        m = re.match(r"\| `([^`]+\.swift)` \| ([^|]*) \|", line)
+        if m:
+            out[m.group(1)] = m.group(2).strip()
+    return out
+
+
 def pinned_revision() -> str:
     try:
         return subprocess.run(["git", "-C", str(CODEX.parent), "rev-parse", "HEAD"],
@@ -512,14 +532,23 @@ def pinned_revision() -> str:
 def generate() -> None:
     rows = build_rows()
     existing = load_existing_notes()
+    addition_notes = load_existing_addition_notes()
     for r in rows:
-        if r.codex in existing and r.status in ("not-started", "excluded", "deferred"):
-            prev_status, prev_note = existing[r.codex]
+        if r.status == "sage-addition":
+            if note := addition_notes.get(r.swift):
+                r.note = note
+            continue
+        if r.codex not in existing:
+            continue
+        prev_status, prev_note = existing[r.codex]
+        if r.status in ("not-started", "excluded", "deferred"):
             # 手工改过状态/备注的未移植行保留（Swift 文件存在时以文件头为准）
             if r.swift == "-" and prev_status and prev_status != "⬜ 未开始":
                 r.status = prev_status
             if prev_note:
                 r.note = prev_note
+        elif prev_note and not r.note:
+            r.note = prev_note
 
     rev = pinned_revision()
     by_phase: dict[int | None, list[Row]] = {}
@@ -531,7 +560,7 @@ def generate() -> None:
     lines.append("")
     lines.append(f"> 由 `scripts/harness_port.py generate` 生成（{rev[:8]} 基线）。")
     lines.append("> 状态随 PR 手工更新；`check` 模式校验文件头与本表一致。")
-    lines.append("> 重新生成会保留未移植行的手工状态与备注；已移植行以 Swift 文件头为准。")
+    lines.append("> 重新生成会保留手工备注；已移植行的状态以 Swift 文件头为准。")
     lines.append("")
     lines.append("状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred")
     lines.append("")

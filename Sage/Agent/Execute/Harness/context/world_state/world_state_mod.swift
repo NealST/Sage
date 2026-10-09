@@ -8,6 +8,7 @@
 //
 //  Section trait objects and SHA-1 snapshot hashing are collapsed to a
 //  dictionary of Codable snapshots. Diff rendering still emits fragments.
+//  Reconstructed baselines also keep the rollout JSON so patches can merge.
 //
 
 import CodexProtocol
@@ -15,10 +16,58 @@ import Foundation
 
 public struct WorldStateSnapshot: Equatable, Sendable {
     public var sections: [String: String]
+    /// Rollout sections, kept as JSON so reconstruction can merge patches.
+    public var jsonSections: [String: JSONValue]
 
-    public init(sections: [String: String] = [:]) {
+    public init(
+        sections: [String: String] = [:],
+        jsonSections: [String: JSONValue] = [:]
+    ) {
         self.sections = sections
+        self.jsonSections = jsonSections
     }
+
+    /// rust `WorldStateSnapshot::apply_merge_patch`. A null section is removed.
+    public mutating func applyMergePatch(_ patch: [String: JSONValue]) {
+        for (key, value) in patch {
+            if value == .null {
+                jsonSections.removeValue(forKey: key)
+            } else if var current = jsonSections[key] {
+                applyMergePatchValue(&current, value)
+                jsonSections[key] = current
+            } else {
+                var current: JSONValue = .null
+                applyMergePatchValue(&current, value)
+                jsonSections[key] = current
+            }
+        }
+    }
+}
+
+private func applyMergePatchValue(_ target: inout JSONValue, _ patch: JSONValue) {
+    guard case .object(let patchObject) = patch else {
+        target = patch
+        return
+    }
+    var targetObject: [String: JSONValue]
+    if case .object(let existing) = target {
+        targetObject = existing
+    } else {
+        targetObject = [:]
+    }
+    for (key, value) in patchObject {
+        if value == .null {
+            targetObject.removeValue(forKey: key)
+        } else if var current = targetObject[key] {
+            applyMergePatchValue(&current, value)
+            targetObject[key] = current
+        } else {
+            var current: JSONValue = .null
+            applyMergePatchValue(&current, value)
+            targetObject[key] = current
+        }
+    }
+    target = .object(targetObject)
 }
 
 public final class WorldState: @unchecked Sendable {

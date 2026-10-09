@@ -415,6 +415,34 @@ public struct ThreadSettingsOverrides: Equatable, Sendable {
     }
 }
 
+/// Sparse changes to one live task. Absent fields stay as they are.
+/// Clearing effort or service tier (`Some(None)` upstream) waits until this
+/// type can tell “leave it” from “clear it”.
+public struct TurnSettingsUpdate: Equatable, Sendable {
+    public var model: String?
+    public var reasoningEffort: ReasoningEffort?
+    public var reasoningSummary: ReasoningSummary?
+    public var serviceTier: String?
+
+    public init(
+        model: String? = nil,
+        reasoningEffort: ReasoningEffort? = nil,
+        reasoningSummary: ReasoningSummary? = nil,
+        serviceTier: String? = nil
+    ) {
+        self.model = model
+        self.reasoningEffort = reasoningEffort
+        self.reasoningSummary = reasoningSummary
+        self.serviceTier = serviceTier
+    }
+}
+
+public enum TurnSettingsUpdateOutcome: Equatable, Sendable {
+    case applied
+    case targetUnavailable
+    case rejected(reason: String)
+}
+
 // MARK: - AdditionalContextKind
 
 public enum AdditionalContextKind: String, Codable, Equatable, Sendable {
@@ -1087,10 +1115,12 @@ public struct TurnContextItem: Codable, Equatable, Sendable {
     public var sandboxPolicy: SandboxPolicy
     public var permissionProfile: PermissionProfile?
     public var model: String
+    public var compHash: String?
     public var personality: Personality?
     public var collaborationMode: CollaborationMode?
     public var multiAgentVersion: MultiAgentVersion?
     public var realtimeActive: Bool?
+    public var cyberAccessProgram: CyberAccessProgram?
     public var effort: ReasoningEffort?
 
     enum CodingKeys: String, CodingKey {
@@ -1106,10 +1136,12 @@ public struct TurnContextItem: Codable, Equatable, Sendable {
         case sandboxPolicy = "sandbox_policy"
         case permissionProfile = "permission_profile"
         case model
+        case compHash = "comp_hash"
         case personality
         case collaborationMode = "collaboration_mode"
         case multiAgentVersion = "multi_agent_version"
         case realtimeActive = "realtime_active"
+        case cyberAccessProgram = "cyber_access_program"
         case effort
     }
 
@@ -1126,10 +1158,12 @@ public struct TurnContextItem: Codable, Equatable, Sendable {
         sandboxPolicy: SandboxPolicy = .readOnly(networkAccess: false),
         permissionProfile: PermissionProfile? = nil,
         model: String,
+        compHash: String? = nil,
         personality: Personality? = nil,
         collaborationMode: CollaborationMode? = nil,
         multiAgentVersion: MultiAgentVersion? = nil,
         realtimeActive: Bool? = nil,
+        cyberAccessProgram: CyberAccessProgram? = nil,
         effort: ReasoningEffort? = nil
     ) {
         self.turnId = turnId
@@ -1144,10 +1178,12 @@ public struct TurnContextItem: Codable, Equatable, Sendable {
         self.sandboxPolicy = sandboxPolicy
         self.permissionProfile = permissionProfile
         self.model = model
+        self.compHash = compHash
         self.personality = personality
         self.collaborationMode = collaborationMode
         self.multiAgentVersion = multiAgentVersion
         self.realtimeActive = realtimeActive
+        self.cyberAccessProgram = cyberAccessProgram
         self.effort = effort
     }
 
@@ -4402,6 +4438,38 @@ public struct ThreadSettingsSnapshot: Codable, Equatable, Sendable {
     public var personality: Personality?
     public var collaborationMode: CollaborationMode
     public var disabledPluginIds: [String]
+
+    public init(
+        model: String,
+        modelProviderId: String,
+        serviceTier: String? = nil,
+        approvalPolicy: AskForApproval,
+        approvalsReviewer: ApprovalsReviewer,
+        permissionProfile: PermissionProfile,
+        activePermissionProfile: ActivePermissionProfile? = nil,
+        cwd: AbsolutePathBuf,
+        runtimeWorkspaceRoots: [AbsolutePathBuf]? = nil,
+        reasoningEffort: ReasoningEffort? = nil,
+        reasoningSummary: ReasoningSummary? = nil,
+        personality: Personality? = nil,
+        collaborationMode: CollaborationMode,
+        disabledPluginIds: [String] = []
+    ) {
+        self.model = model
+        self.modelProviderId = modelProviderId
+        self.serviceTier = serviceTier
+        self.approvalPolicy = approvalPolicy
+        self.approvalsReviewer = approvalsReviewer
+        self.permissionProfile = permissionProfile
+        self.activePermissionProfile = activePermissionProfile
+        self.cwd = cwd
+        self.runtimeWorkspaceRoots = runtimeWorkspaceRoots
+        self.reasoningEffort = reasoningEffort
+        self.reasoningSummary = reasoningSummary
+        self.personality = personality
+        self.collaborationMode = collaborationMode
+        self.disabledPluginIds = disabledPluginIds
+    }
 
     enum CodingKeys: String, CodingKey {
         case model, cwd, personality

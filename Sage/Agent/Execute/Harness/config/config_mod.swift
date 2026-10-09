@@ -14,6 +14,13 @@ import CodexCore
 import CodexProtocol
 import Foundation
 
+/// Codex `SleepToolMode`. Model-driven sleep follows the clock reminder
+/// or the model's experimental `clock` tool.
+enum SleepToolMode: Equatable, Sendable {
+    case modelDriven
+    case alwaysOn
+}
+
 struct CurrentTimeReminderConfig: Equatable, Sendable {
     var sleepTool: Bool
     var intervalSeconds: UInt64
@@ -158,6 +165,16 @@ struct ConfigOverrides: Equatable, Sendable {
     }
 }
 
+struct ConfiguredMcpServer: Equatable, Sendable {
+    var url: String?
+    var enabled: Bool
+
+    init(url: String? = nil, enabled: Bool = true) {
+        self.url = url
+        self.enabled = enabled
+    }
+}
+
 struct Config: Equatable, Sendable {
     var model: String?
     var reviewModel: String?
@@ -174,11 +191,15 @@ struct Config: Equatable, Sendable {
     var cwd: String
     var approvalPolicy: CodexProtocol.AskForApproval
     var features: Features
+    var updatePlanEnabled: Bool
+    var experimentalRequestUserInputEnabled: Bool
+    var sleepToolMode: SleepToolMode
     var currentTimeReminder: CurrentTimeReminderConfig?
     var agentInterruptMessageEnabled: Bool
     var permissions: Permissions
     var startupWarnings: [String]
     var tokenBudget: TokenBudgetConfig?
+    var mcpServers: [String: ConfiguredMcpServer]
 
     init(
         model: String? = nil,
@@ -196,11 +217,15 @@ struct Config: Equatable, Sendable {
         cwd: String = FileManager.default.currentDirectoryPath,
         approvalPolicy: CodexProtocol.AskForApproval = CodexProtocol.AskForApproval.onRequest,
         features: Features = Features(),
+        updatePlanEnabled: Bool = false,
+        experimentalRequestUserInputEnabled: Bool = true,
+        sleepToolMode: SleepToolMode = .modelDriven,
         currentTimeReminder: CurrentTimeReminderConfig? = nil,
         agentInterruptMessageEnabled: Bool = true,
         permissions: Permissions = Permissions(),
         startupWarnings: [String] = [],
-        tokenBudget: TokenBudgetConfig? = nil
+        tokenBudget: TokenBudgetConfig? = nil,
+        mcpServers: [String: ConfiguredMcpServer] = [:]
     ) {
         self.model = model
         self.reviewModel = reviewModel
@@ -217,11 +242,15 @@ struct Config: Equatable, Sendable {
         self.cwd = cwd
         self.approvalPolicy = approvalPolicy
         self.features = features
+        self.updatePlanEnabled = updatePlanEnabled
+        self.experimentalRequestUserInputEnabled = experimentalRequestUserInputEnabled
+        self.sleepToolMode = sleepToolMode
         self.currentTimeReminder = currentTimeReminder
         self.agentInterruptMessageEnabled = agentInterruptMessageEnabled
         self.permissions = permissions
         self.startupWarnings = startupWarnings
         self.tokenBudget = tokenBudget
+        self.mcpServers = mcpServers
     }
 
     func applying(_ overrides: ConfigOverrides) -> Config {

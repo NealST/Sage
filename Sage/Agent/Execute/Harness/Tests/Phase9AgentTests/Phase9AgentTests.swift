@@ -1967,6 +1967,162 @@ final class Phase9AgentTests: XCTestCase {
             return false
         })
     }
+
+    func testTurnInputHonorsDrainBypassContextAndRecovery() async throws {
+        let spawn = SessionSource.subAgent(
+            .threadSpawn(
+                parentThreadId: ThreadId(),
+                depth: 1,
+                agentPath: nil,
+                agentNickname: nil,
+                agentRole: nil
+            )
+        )
+        let drainingSpawn = ThreadSession.open(threadId: ThreadId(), sessionSource: spawn)
+        drainingSpawn.setAdmitsTurnStart(false)
+        let blocked = try await drainingSpawn.submitTurnInput(
+            .userInput([.text(text: "no", textElements: [])]),
+            mode: .startOrSteer
+        )
+        XCTAssertEqual(blocked, .notSubmitted(reason: .serverDraining))
+
+        let delegated = try await drainingSpawn.submitTurnInput(
+            .userInput([.text(text: "yes", textElements: [])]).onStart(
+                TurnStartOptions(parentTurnId: "parent")
+            ),
+            mode: .startOrSteer
+        )
+        guard case .started = delegated else {
+            return XCTFail("thread-spawn parent input should bypass drain, got \(delegated)")
+        }
+
+        let review = ThreadSession.open(
+            threadId: ThreadId(),
+            sessionSource: .subAgent(.review)
+        )
+        review.setAdmitsTurnStart(false)
+        let reviewStart = try await review.submitTurnInput(
+            .userInput([.text(text: "review", textElements: [])]).onStart(
+                TurnStartOptions(parentTurnId: "parent")
+            ),
+            mode: .startIfIdle
+        )
+        guard case .started = reviewStart else {
+            return XCTFail("review delegate should bypass drain, got \(reviewStart)")
+        }
+
+        let stillDraining = try await drainingSpawn.submitTurnInput(
+            .userInput([.text(text: "later", textElements: [])]).onStart(
+                TurnStartOptions(parentTurnId: "parent")
+            ),
+            mode: .startIfIdle
+        )
+        XCTAssertEqual(stillDraining, .notSubmitted(reason: .serverDraining))
+
+        let idleReviewMiss = ThreadSession.open(threadId: ThreadId(), sessionSource: spawn)
+        idleReviewMiss.setAdmitsTurnStart(false)
+        let spawnIdle = try await idleReviewMiss.submitTurnInput(
+            .userInput([.text(text: "nope", textElements: [])]).onStart(
+                TurnStartOptions(parentTurnId: "parent")
+            ),
+            mode: .startIfIdle
+        )
+        XCTAssertEqual(spawnIdle, .notSubmitted(reason: .serverDraining))
+
+        let idle = ThreadSession.open(threadId: ThreadId(), sessionSource: .cli)
+        let context = AdditionalContextEntry(value: "note", kind: .untrusted)
+        let started = try await idle.submitTurnInput(
+            .userInput([.text(text: "hello", textElements: [])])
+                .withAdditionalContext(["note": context]),
+            mode: .startOrSteer
+        )
+        guard case .started = started else {
+            return XCTFail("expected start, got \(started)")
+        }
+        let pending = idle.pendingInputs()
+        XCTAssertEqual(pending.count, 2)
+        guard case .responseItem = pending[0],
+              case .userInput(let content, _) = pending[1]
+        else {
+            return XCTFail("expected additional context before the user message, got \(pending)")
+        }
+        XCTAssertEqual(content, [.text(text: "hello", textElements: [])])
+
+        let steered = try await idle.submitTurnInput(
+            .userInput([.text(text: "more", textElements: [])])
+                .withAdditionalContext(["note": context]),
+            mode: .startOrSteer
+        )
+        guard case .steered = steered else {
+            return XCTFail("expected steer, got \(steered)")
+        }
+        XCTAssertEqual(idle.pendingInputs().count, 3)
+
+        let turnId = try XCTUnwrap(idle.activeTurnId())
+        do {
+            _ = try await idle.submitTurnInput(
+                .new(
+                    .responseItem(
+                        .message(
+                            id: nil,
+                            role: "assistant",
+                            content: [.outputText(text: "nope")],
+                            phase: nil,
+                            internalChatMessageMetadataPassthrough: nil
+                        )
+                    )
+                ),
+                mode: .steer(expectedTurnId: turnId)
+            )
+            XCTFail("expected steer to reject a response item")
+        } catch let error as CodexErr {
+            XCTAssertEqual(error, .invalidRequest("only user input can steer a turn"))
+        }
+
+        await idle.interrupt()
+        let continued = try await idle.submitTurnInput(
+            .new(
+                .responseItem(
+                    .message(
+                        id: nil,
+                        role: "assistant",
+                        content: [.outputText(text: "keep going")],
+                        phase: nil,
+                        internalChatMessageMetadataPassthrough: nil
+                    )
+                )
+            ),
+            mode: .continueIfIdle(expectedPreviousTurnId: turnId)
+        )
+        guard case .started = continued else {
+            return XCTFail("expected recovery start, got \(continued)")
+        }
+        let responseItems = idle.pendingInputs().filter { item in
+            if case .responseItem = item { return true }
+            return false
+        }
+        XCTAssertEqual(responseItems.count, 2)
+    }
+
+    func testAutomaticTurnDoesNotEnterPlanMode() async throws {
+        let session = ThreadSession.open(threadId: ThreadId(), sessionSource: .cli)
+        let rejected = try await session.submitTurnInput(
+            .userInput([]).withThreadSettings(ThreadSettingsOverrides(mode: .plan)),
+            mode: .startIfIdle
+        )
+        XCTAssertEqual(rejected, .notSubmitted(reason: .planMode))
+        XCTAssertEqual(session.collaborationMode(), .default)
+
+        let entered = try await session.submitTurnInput(
+            .userInput([.text(text: "plan", textElements: [])])
+                .withThreadSettings(ThreadSettingsOverrides(mode: .plan)),
+            mode: .startOrSteer
+        )
+        guard case .started = entered else {
+            return XCTFail("explicit user input can enter plan mode, got \(entered)")
+        }
+        XCTAssertEqual(session.collaborationMode(), .plan)
+    }
 }
 
 private final class HoldTurnSampler: TurnSampler, @unchecked Sendable {

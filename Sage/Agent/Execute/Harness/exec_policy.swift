@@ -410,7 +410,7 @@ public final class ExecPolicyManager: @unchecked Sendable {
         }
     }
 
-    func appendAmendmentAndUpdate(codexHome: String, amendment: ExecPolicyAmendment) async throws {
+    public func appendAmendmentAndUpdate(codexHome: String, amendment: ExecPolicyAmendment) async throws {
         updateLock.lock()
         defer { updateLock.unlock() }
         let policyPath = defaultPolicyPath(codexHome)

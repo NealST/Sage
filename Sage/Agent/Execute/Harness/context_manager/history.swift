@@ -6,9 +6,12 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Guardian review transcripts and retained-context SHA wait. Item
-//  recording, replacement, token-info, and model-visible-byte estimates
-//  are ported. Original-detail images use PNG/JPEG/GIF headers.
+//  Verified `request_user_input` answers are recorded on this snapshot.
+//  Guardian review transcripts and retained-context SHA wait. The session
+//  persists a newly recorded answer. Rolling back drops the newest user
+//  turns and the verified answers recorded on those turns. Item recording, replacement,
+//  token-info, and model-visible-byte estimates are ported.
+//  Original-detail images use PNG/JPEG/GIF headers.
 //
 
 import CodexProtocol
@@ -30,6 +33,47 @@ public enum HistoryReplacement: Equatable, Sendable {
     case reset
 }
 
+public struct RetainedVerifiedQuestion: Equatable, Sendable, Codable {
+    public var question: String
+    public var answer: String
+
+    public init(question: String, answer: String) {
+        self.question = question
+        self.answer = answer
+    }
+}
+
+public struct RetainedVerifiedAnswer: Equatable, Sendable {
+    public var turnId: String
+    public var callId: String
+    public var questions: [RetainedVerifiedQuestion]
+    public var acceptanceOrder: UInt64
+
+    public init(
+        turnId: String,
+        callId: String,
+        questions: [RetainedVerifiedQuestion],
+        acceptanceOrder: UInt64
+    ) {
+        self.turnId = turnId
+        self.callId = callId
+        self.questions = questions
+        self.acceptanceOrder = acceptanceOrder
+    }
+}
+
+public struct ReconstructedTurnSettings: Equatable, Sendable {
+    public var model: String
+    public var compHash: String?
+    public var realtimeActive: Bool?
+
+    public init(model: String, compHash: String? = nil, realtimeActive: Bool? = nil) {
+        self.model = model
+        self.compHash = compHash
+        self.realtimeActive = realtimeActive
+    }
+}
+
 public final class ContextManager: @unchecked Sendable {
     public var items: [ResponseItemEnvelope] = []
     public var guardianReviewMode: GuardianContextMode = .threadOwned
@@ -37,9 +81,12 @@ public final class ContextManager: @unchecked Sendable {
     public var historyVersion: UInt64 = 0
     public var resetVersion: UInt64 = 0
     public var userMessageRevision: UInt64 = 0
+    public private(set) var verifiedAnswers: [RetainedVerifiedAnswer] = []
+    public private(set) var verifiedAnswersIncomplete = false
     public var worldStateBaseline: WorldStateSnapshot?
     var tokenInfoValue: TokenUsageInfo?
     var referenceContextItem: TurnContextItem?
+    public private(set) var reconstructedTurnSettings: ReconstructedTurnSettings?
 
     public init() {
         tokenInfoValue = TokenUsageInfo.newOrAppend(info: nil, last: nil, modelContextWindow: nil)
@@ -73,6 +120,78 @@ public final class ContextManager: @unchecked Sendable {
         tokenInfoValue = info
     }
 
+    public func verifiedAnswersComplete() -> Bool {
+        !verifiedAnswersIncomplete && verifiedAnswers.allSatisfy { !$0.questions.isEmpty }
+    }
+
+    /// rust `ContextManager::record_retained_context` for a verified answer.
+    /// The same turn and call with the same questions is left in place.
+    /// The returned value is the bounded record that was stored.
+    @discardableResult
+    public func recordVerifiedAnswer(_ answer: RetainedVerifiedAnswer) -> RetainedVerifiedAnswer? {
+        let bounded = boundVerifiedAnswer(answer)
+        if let index = verifiedAnswers.firstIndex(where: {
+            $0.turnId == bounded.turnId && $0.callId == bounded.callId
+        }) {
+            if verifiedAnswers[index].questions == bounded.questions {
+                return nil
+            }
+            verifiedAnswers.remove(at: index)
+        }
+        verifiedAnswers.append(bounded)
+        boundVerifiedAnswerFamily()
+        if userMessageRevision < .max {
+            userMessageRevision += 1
+        }
+        return bounded
+    }
+
+    /// rust `RetainedContext::restore` for verified answers. Checkpoint
+    /// answers replace the live set and do not bump `userMessageRevision`.
+    public func installRestoredVerifiedAnswers(
+        _ answers: [RetainedVerifiedAnswer],
+        incomplete: Bool
+    ) {
+        verifiedAnswers = []
+        verifiedAnswersIncomplete = false
+        for answer in answers {
+            let bounded = boundVerifiedAnswer(answer)
+            if let index = verifiedAnswers.firstIndex(where: {
+                $0.turnId == bounded.turnId && $0.callId == bounded.callId
+            }) {
+                if verifiedAnswers[index].questions == bounded.questions { continue }
+                verifiedAnswers.remove(at: index)
+            }
+            verifiedAnswers.append(bounded)
+        }
+        boundVerifiedAnswerFamily()
+        if incomplete {
+            verifiedAnswersIncomplete = true
+        }
+    }
+
+    /// rust `ContextManager::drop_last_n_user_turns`. Zero turns and a
+    /// history with no user turn leave the snapshot unchanged. A count
+    /// past the first user turn keeps only the prefix before that turn.
+    /// Verified answers whose turn id was removed go with it.
+    public func dropLastUserTurns(_ numTurns: UInt32) {
+        if numTurns == 0 { return }
+        let positions = items.indices.filter { isUserTurnBoundary(items[$0].item) }
+        guard let firstTurn = positions.first else { return }
+        let count = Int(exactly: numTurns) ?? Int.max
+        var cut = count >= positions.count ? firstTurn : positions[positions.count - count]
+        while cut > firstTurn && isGuardianContextMessage(items[cut - 1].item) {
+            cut -= 1
+        }
+        let removedTurnIds = Set(items[cut...].compactMap { $0.item.turnId() })
+        let keptAnswers = verifiedAnswers.filter { !removedTurnIds.contains($0.turnId) }
+        replaceAnnotated(Array(items.prefix(cut)))
+        if userMessageRevision < .max {
+            userMessageRevision += 1
+        }
+        verifiedAnswers = keptAnswers
+    }
+
     public func tokenInfo() -> TokenUsageInfo? {
         tokenInfoValue
     }
@@ -98,6 +217,10 @@ public final class ContextManager: @unchecked Sendable {
         referenceContextItem = item
     }
 
+    public func setReconstructedTurnSettings(_ settings: ReconstructedTurnSettings?) {
+        reconstructedTurnSettings = settings
+    }
+
     public func referenceContextItemValue() -> TurnContextItem? {
         referenceContextItem
     }
@@ -117,6 +240,7 @@ public final class ContextManager: @unchecked Sendable {
         copy.userMessageRevision = userMessageRevision
         copy.tokenInfoValue = tokenInfoValue
         copy.referenceContextItem = referenceContextItem
+        copy.reconstructedTurnSettings = reconstructedTurnSettings
         copy.worldStateBaseline = worldStateBaseline
         return copy
     }
@@ -275,6 +399,60 @@ func imageReferenceBytes(in item: ResponseItem) -> Int64 {
 
 func estimateAudioBytes(_ audioURL: String) -> Int64 {
     Int64(clamping: approxBytesForTokens(estimateAudioTokenCount(audioURL)))
+}
+
+private struct RetainedVerifiedAnswerPayload: Codable {
+    var turnId: String
+    var callId: String
+    var questions: [RetainedVerifiedQuestion]
+}
+
+private let maxRetainedFamilyRecords = 8
+private let maxRetainedRecordBytes = 16_384
+private let maxRetainedFamilyBytes = 65_536
+
+private func boundVerifiedAnswer(_ answer: RetainedVerifiedAnswer) -> RetainedVerifiedAnswer {
+    let payload = RetainedVerifiedAnswerPayload(
+        turnId: answer.turnId,
+        callId: answer.callId,
+        questions: answer.questions
+    )
+    let bytes = (try? JSONEncoder().encode(payload).count) ?? Int.max
+    guard bytes > maxRetainedRecordBytes else { return answer }
+    return RetainedVerifiedAnswer(
+        turnId: truncateRetainedIdentifier(answer.turnId),
+        callId: truncateRetainedIdentifier(answer.callId),
+        questions: [],
+        acceptanceOrder: answer.acceptanceOrder
+    )
+}
+
+private extension ContextManager {
+    func boundVerifiedAnswerFamily() {
+        while verifiedAnswers.count > maxRetainedFamilyRecords
+            || retainedAnswerFamilyBytes(verifiedAnswers) > maxRetainedFamilyBytes
+        {
+            guard !verifiedAnswers.isEmpty else { return }
+            verifiedAnswers.removeFirst()
+            verifiedAnswersIncomplete = true
+        }
+        if verifiedAnswers.contains(where: { $0.questions.isEmpty }) {
+            verifiedAnswersIncomplete = true
+        }
+    }
+}
+
+private func retainedAnswerFamilyBytes(_ answers: [RetainedVerifiedAnswer]) -> Int {
+    let payloads = answers.map {
+        RetainedVerifiedAnswerPayload(turnId: $0.turnId, callId: $0.callId, questions: $0.questions)
+    }
+    return (try? JSONEncoder().encode(payloads).count) ?? Int.max
+}
+
+private func truncateRetainedIdentifier(_ value: String) -> String {
+    let bytes = Array(value.utf8)
+    guard bytes.count > 1_024 else { return value }
+    return String(decoding: bytes.prefix(1_024), as: UTF8.self)
 }
 
 func estimateReasoningLength(_ encodedLen: Int) -> Int {

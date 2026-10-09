@@ -22,6 +22,15 @@ enum Feature: String, Equatable, Hashable, Sendable {
     case tokenBudget = "token_budget"
     case deferMailboxPreemption = "defer_mailbox_preemption"
     case applyPatchStreamingEvents = "apply_patch_streaming_events"
+    case shellTool = "shell_tool"
+    case viewImage = "view_image"
+    case sleepTool = "sleep_tool"
+    case deferredExecutor = "deferred_executor"
+    case requestPermissionsTool = "request_permissions_tool"
+    case sendMessageToUserAsync = "send_message_to_user_async"
+    case goals = "goals"
+    case stepModelSwitching = "step_model_switching"
+    case guardianApproval = "guardian_approval"
 }
 
 struct Features: Equatable, Sendable {
@@ -37,6 +46,10 @@ struct Features: Equatable, Sendable {
 
     mutating func enable(_ feature: Feature) {
         enabledFeatures.insert(feature)
+    }
+
+    mutating func disable(_ feature: Feature) {
+        enabledFeatures.remove(feature)
     }
 }
 
