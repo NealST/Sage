@@ -2174,6 +2174,256 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(sess.previousTurnSettingsValue()?.realtimeActive, true)
     }
 
+    func testRolloutReconstructionRestoresLastStartedTurnId() throws {
+        let newest = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "older"))),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "newer"))),
+            ],
+            into: newest
+        )
+        XCTAssertEqual(newest.reconstructedLastStartedTurnId, "newer")
+
+        var bounded = CompactedItem(message: "summary")
+        bounded.replacementHistory = []
+        bounded.windowNumber = 1
+        bounded.resumeMetadata = .object([
+            "last_started_turn_id": .string("from-metadata"),
+        ])
+        let fromMetadata = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "before"))),
+                .compacted(bounded),
+            ],
+            into: fromMetadata
+        )
+        XCTAssertEqual(fromMetadata.reconstructedLastStartedTurnId, "from-metadata")
+
+        let afterCheckpoint = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "before"))),
+                .compacted(bounded),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "after"))),
+                .eventMsg(.threadRolledBack(ThreadRolledBackEvent(numTurns: 1))),
+            ],
+            into: afterCheckpoint
+        )
+        XCTAssertEqual(afterCheckpoint.reconstructedLastStartedTurnId, "after")
+
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-last-turn-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let recorder = try RolloutRecorder.create(
+            config: RolloutConfig(codexHome: home.path),
+            params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
+        )
+        try recorder.recordItems([
+            .eventMsg(.turnStarted(TurnStartedEvent(turnId: "file-turn"))),
+        ])
+        try recorder.flush()
+        let sess = Session()
+        sess.lastStartedTurnId = "stale"
+        sess.restoreVerifiedAnswers(fromRolloutPath: recorder.rolloutPath)
+        XCTAssertEqual(sess.lastStartedTurnId, "file-turn")
+        XCTAssertEqual(sess.state.lastStartedTurnId, "file-turn")
+    }
+
+    func testRolloutReconstructionRestoresContextWindowFromSessionMeta() {
+        let windowId = contextWindowUUID("000000000001")
+        var meta = SessionMeta()
+        meta.contextWindow = SessionContextWindow(windowId: windowId.uuidString)
+        let history = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [.sessionMeta(SessionMetaLine(meta: meta))],
+            into: history
+        )
+        XCTAssertEqual(history.reconstructedContextWindow?.number, 0)
+        XCTAssertEqual(history.reconstructedContextWindow?.firstWindowId, windowId)
+        XCTAssertNil(history.reconstructedContextWindow?.previousWindowId)
+        XCTAssertEqual(history.reconstructedContextWindow?.windowId, windowId)
+
+        let ignored = ContextManager()
+        meta.contextWindow = SessionContextWindow(
+            windowId: "0199e6c0-0000-4000-8000-000000000004")
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [.sessionMeta(SessionMetaLine(meta: meta))],
+            into: ignored
+        )
+        XCTAssertEqual(ignored.reconstructedContextWindow?.number, 0)
+        XCTAssertNil(ignored.reconstructedContextWindow?.windowId)
+    }
+
+    func testRolloutReconstructionPrefersCompactionWindow() {
+        let initial = contextWindowUUID("000000000001")
+        let first = contextWindowUUID("000000000002")
+        let previous = contextWindowUUID("000000000003")
+        let current = contextWindowUUID("000000000004")
+        var meta = SessionMeta()
+        meta.contextWindow = SessionContextWindow(windowId: initial.uuidString)
+        var compacted = CompactedItem(message: "summary")
+        compacted.windowNumber = 2
+        compacted.firstWindowId = first.uuidString
+        compacted.previousWindowId = previous.uuidString
+        compacted.windowId = current.uuidString
+        let history = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .sessionMeta(SessionMetaLine(meta: meta)),
+                .compacted(compacted),
+            ],
+            into: history
+        )
+        XCTAssertEqual(history.reconstructedContextWindow?.number, 2)
+        XCTAssertEqual(history.reconstructedContextWindow?.firstWindowId, first)
+        XCTAssertEqual(history.reconstructedContextWindow?.previousWindowId, previous)
+        XCTAssertEqual(history.reconstructedContextWindow?.windowId, current)
+
+        compacted.firstWindowId = "0199e6c0-0000-4000-8000-000000000004"
+        compacted.previousWindowId = "not-a-uuid"
+        let partial = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [.compacted(compacted)],
+            into: partial
+        )
+        XCTAssertEqual(partial.reconstructedContextWindow?.number, 2)
+        XCTAssertNil(partial.reconstructedContextWindow?.firstWindowId)
+        XCTAssertNil(partial.reconstructedContextWindow?.previousWindowId)
+        XCTAssertEqual(partial.reconstructedContextWindow?.windowId, current)
+    }
+
+    func testRolloutReconstructionKeepsBoundingCompactionWindow() {
+        let kept = contextWindowUUID("00000000000a")
+        let dropped = contextWindowUUID("00000000000b")
+        var older = CompactedItem(message: "older")
+        older.windowNumber = 1
+        older.windowId = dropped.uuidString
+        var bounded = CompactedItem(message: "summary")
+        bounded.replacementHistory = []
+        bounded.windowNumber = 4
+        bounded.windowId = kept.uuidString
+        bounded.resumeMetadata = .object([:])
+        let history = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .compacted(older),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "old"))),
+                .eventMsg(.userMessage(UserMessageEvent(message: "old"))),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "new"))),
+                .compacted(bounded),
+                .eventMsg(.userMessage(UserMessageEvent(message: "after"))),
+                .eventMsg(.threadRolledBack(ThreadRolledBackEvent(numTurns: 1))),
+            ],
+            into: history
+        )
+        XCTAssertEqual(history.reconstructedContextWindow?.number, 4)
+        XCTAssertEqual(history.reconstructedContextWindow?.windowId, kept)
+    }
+
+    func testRolloutReconstructionUsesLegacyCompactionCount() {
+        let windowId = contextWindowUUID("000000000001")
+        var meta = SessionMeta()
+        meta.contextWindow = SessionContextWindow(windowId: windowId.uuidString)
+        let history = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .sessionMeta(SessionMetaLine(meta: meta)),
+                .compacted(CompactedItem(message: "legacy")),
+                .compacted(CompactedItem(message: "again")),
+            ],
+            into: history
+        )
+        XCTAssertEqual(history.reconstructedContextWindow?.number, 2)
+        XCTAssertNil(history.reconstructedContextWindow?.firstWindowId)
+        XCTAssertNil(history.reconstructedContextWindow?.previousWindowId)
+        XCTAssertNil(history.reconstructedContextWindow?.windowId)
+
+        var rolledBack = CompactedItem(message: "newer")
+        rolledBack.windowNumber = 9
+        rolledBack.windowId = contextWindowUUID("000000000009").uuidString
+        var kept = CompactedItem(message: "older")
+        kept.windowNumber = 1
+        kept.windowId = windowId.uuidString
+        let surviving = ContextManager()
+        RolloutReconstruction.restoreVerifiedAnswers(
+            from: [
+                .compacted(kept),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "old"))),
+                .eventMsg(.userMessage(UserMessageEvent(message: "old"))),
+                .eventMsg(.turnStarted(TurnStartedEvent(turnId: "new"))),
+                .eventMsg(.userMessage(UserMessageEvent(message: "new"))),
+                .compacted(rolledBack),
+                .eventMsg(.threadRolledBack(ThreadRolledBackEvent(numTurns: 1))),
+            ],
+            into: surviving
+        )
+        XCTAssertEqual(surviving.reconstructedContextWindow?.number, 1)
+        XCTAssertEqual(surviving.reconstructedContextWindow?.windowId, windowId)
+    }
+
+    func testRolloutReconstructionAppliesContextWindow() throws {
+        let first = contextWindowUUID("000000000002")
+        let previous = contextWindowUUID("000000000003")
+        let current = contextWindowUUID("000000000004")
+        var compacted = CompactedItem(message: "summary")
+        compacted.replacementHistory = []
+        compacted.windowNumber = 2
+        compacted.firstWindowId = first.uuidString
+        compacted.previousWindowId = previous.uuidString
+        compacted.windowId = current.uuidString
+        compacted.resumeMetadata = .object([:])
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-window-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let recorder = try RolloutRecorder.create(
+            config: RolloutConfig(codexHome: home.path),
+            params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
+        )
+        try recorder.recordItems([.compacted(compacted)])
+        try recorder.flush()
+        let sess = Session()
+        sess.restoreVerifiedAnswers(fromRolloutPath: recorder.rolloutPath)
+        XCTAssertEqual(sess.state.autoCompactWindowNumber(), 2)
+        XCTAssertEqual(sess.state.autoCompactWindowIds().firstWindowId, first)
+        XCTAssertEqual(sess.state.autoCompactWindowIds().previousWindowId, previous)
+        XCTAssertEqual(sess.state.autoCompactWindowIds().windowId, current)
+    }
+
+    func testRolloutReconstructionAppliesLegacyWindowFallback() throws {
+        let legacyHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-legacy-window-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacyHome, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: legacyHome) }
+        let legacy = try RolloutRecorder.create(
+            config: RolloutConfig(codexHome: legacyHome.path),
+            params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
+        )
+        try legacy.recordItems([.compacted(CompactedItem(message: "legacy"))])
+        try legacy.flush()
+        let legacySession = Session()
+        let original = legacySession.state.autoCompactWindowIds()
+        legacySession.state.restoreAutoCompactWindow(windowNumber: 7, ids: original)
+        legacySession.restoreVerifiedAnswers(fromRolloutPath: legacy.rolloutPath)
+        XCTAssertEqual(legacySession.state.autoCompactWindowNumber(), 1)
+        XCTAssertEqual(legacySession.state.autoCompactWindowIds().windowId, original.windowId)
+        XCTAssertEqual(
+            legacySession.state.autoCompactWindowIds().firstWindowId, original.windowId)
+        XCTAssertNil(legacySession.state.autoCompactWindowIds().previousWindowId)
+    }
+
+    private func contextWindowUUID(_ suffix: String) -> UUID {
+        let raw = "0199e6c0-0000-7000-8000-\(suffix)"
+        guard let uuid = UUID(uuidString: raw) else {
+            XCTFail("expected UUID \(raw)")
+            return UUID()
+        }
+        return uuid
+    }
+
     func testRequestUserInputToolRejectsNonRootThread() async throws {
         let sess = Session()
         let turn = TurnContext(sessionSource: .internal(.guardian))
@@ -3237,6 +3487,201 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             if case .turnStarted = event { return true }
             return false
         })
+    }
+
+    func testResolveElicitationResumesTheWaitingRequest() async throws {
+        let sess = Session()
+        let turn = TurnContext(subId: "turn-elicit")
+        sess.activeTurn = ActiveTurn(task: RunningTask(kind: .regular, turnContext: turn))
+        let request = ElicitationRequest.url(
+            meta: nil,
+            message: "Connect this app to continue.",
+            url: "https://example.com/connect",
+            elicitationId: "connect-1"
+        )
+        let pending = Task {
+            await sess.requestMcpServerElicitation(
+                turnContext: turn,
+                serverName: "codex_apps",
+                requestId: .string("request-1"),
+                request: request
+            )
+        }
+        try await waitUntil { elicitationRequests(in: sess).count == 1 }
+        let event = try XCTUnwrap(elicitationRequests(in: sess).first)
+        XCTAssertEqual(event.turnId, "turn-elicit")
+        XCTAssertEqual(event.serverName, "codex_apps")
+        XCTAssertEqual(event.id, .string("request-1"))
+        XCTAssertEqual(event.request, request)
+        let paused = await elicitationIsPaused(sess)
+        XCTAssertTrue(paused)
+        let response = ElicitationResponse(action: .accept, content: .object(["ok": .bool(true)]))
+        await sess.resolveElicitation(
+            serverName: "codex_apps", id: .string("request-1"), response: response)
+        let outcome = await pending.value
+        XCTAssertEqual(outcome.response, response)
+        XCTAssertTrue(outcome.sent)
+        let stillPaused = await elicitationIsPaused(sess)
+        XCTAssertFalse(stillPaused)
+        XCTAssertNil(sess.lastStartedTurnId)
+    }
+
+    func testResolveElicitationFillsAcceptContentAndDropsDeclineContent() async throws {
+        let sess = Session()
+        let turn = TurnContext(subId: "turn-elicit")
+        sess.activeTurn = ActiveTurn(task: RunningTask(kind: .regular, turnContext: turn))
+        let request = ElicitationRequest.form(
+            meta: nil, message: "Allow?", requestedSchema: .object([:]))
+        let pending = Task {
+            await sess.requestMcpServerElicitation(
+                turnContext: turn,
+                serverName: "codex_apps",
+                requestId: .integer(7),
+                request: request
+            )
+        }
+        try await waitUntil { elicitationRequests(in: sess).count == 1 }
+        _ = try await sess.submit(
+            .resolveElicitation(
+                serverName: "codex_apps",
+                requestId: .integer(7),
+                decision: .accept,
+                content: nil,
+                meta: .object(["source": .string("hud")])
+            )
+        )
+        let accepted = await pending.value
+        XCTAssertEqual(accepted.response?.action, .accept)
+        XCTAssertEqual(accepted.response?.content, .object([:]))
+        XCTAssertEqual(accepted.response?.meta, .object(["source": .string("hud")]))
+        XCTAssertNil(sess.lastStartedTurnId)
+        XCTAssertFalse(sess.emittedEvents.contains { event in
+            if case .turnStarted = event { return true }
+            return false
+        })
+
+        let declined = Task {
+            await sess.requestMcpServerElicitation(
+                turnContext: turn,
+                serverName: "codex_apps",
+                requestId: .string("decline"),
+                request: request
+            )
+        }
+        try await waitUntil { elicitationRequests(in: sess).count == 2 }
+        _ = try await sess.submit(
+            .resolveElicitation(
+                serverName: "codex_apps",
+                requestId: .string("decline"),
+                decision: .decline,
+                content: .object(["reason": .string("no")]),
+                meta: nil
+            )
+        )
+        let outcome = await declined.value
+        XCTAssertEqual(outcome.response?.action, .decline)
+        XCTAssertNil(outcome.response?.content)
+    }
+
+    func testResolveElicitationAutoDenySkipsTheRequest() async {
+        let sess = Session()
+        sess.services.mcpRuntime.elicitationsAutoDeny = true
+        let turn = TurnContext(subId: "turn-elicit")
+        sess.activeTurn = ActiveTurn(task: RunningTask(kind: .regular, turnContext: turn))
+        let outcome = await sess.requestMcpServerElicitation(
+            turnContext: turn,
+            serverName: "codex_apps",
+            requestId: .string("request-1"),
+            request: ElicitationRequest.form(
+                meta: nil, message: "Allow?", requestedSchema: .object([:]))
+        )
+        XCTAssertEqual(
+            outcome.response,
+            ElicitationResponse(action: .accept, content: .object([:]))
+        )
+        XCTAssertFalse(outcome.sent)
+        XCTAssertTrue(elicitationRequests(in: sess).isEmpty)
+        let paused = await elicitationIsPaused(sess)
+        XCTAssertFalse(paused)
+    }
+
+    func testResolveElicitationWithoutATurnStillEmitsTheRequest() async {
+        let sess = Session()
+        let turn = TurnContext(subId: "turn-idle")
+        let outcome = await sess.requestMcpServerElicitation(
+            turnContext: turn,
+            serverName: "codex_apps",
+            requestId: .string("request-1"),
+            request: ElicitationRequest.url(
+                meta: nil, message: "Connect", url: "https://example.com", elicitationId: "c1")
+        )
+        XCTAssertNil(outcome.response)
+        XCTAssertTrue(outcome.sent)
+        XCTAssertEqual(elicitationRequests(in: sess).count, 1)
+        XCTAssertNil(sess.activeTurn)
+        let paused = await elicitationIsPaused(sess)
+        XCTAssertFalse(paused)
+    }
+
+    func testResolveElicitationReplacesThePreviousWaiter() async throws {
+        let sess = Session()
+        let turn = TurnContext(subId: "turn-elicit")
+        sess.activeTurn = ActiveTurn(task: RunningTask(kind: .regular, turnContext: turn))
+        let request = ElicitationRequest.form(
+            meta: nil, message: "Allow?", requestedSchema: .object([:]))
+        let first = Task {
+            await sess.requestMcpServerElicitation(
+                turnContext: turn,
+                serverName: "codex_apps",
+                requestId: .string("request-1"),
+                request: request
+            )
+        }
+        try await waitUntil { elicitationRequests(in: sess).count == 1 }
+        let second = Task {
+            await sess.requestMcpServerElicitation(
+                turnContext: turn,
+                serverName: "codex_apps",
+                requestId: .string("request-1"),
+                request: request
+            )
+        }
+        let replaced = await first.value
+        XCTAssertNil(replaced.response)
+        XCTAssertTrue(replaced.sent)
+        try await waitUntil { elicitationRequests(in: sess).count == 2 }
+        await sess.resolveElicitation(
+            serverName: "codex_apps",
+            id: .string("request-1"),
+            response: ElicitationResponse(action: .cancel)
+        )
+        let outcome = await second.value
+        XCTAssertEqual(outcome.response?.action, .cancel)
+        XCTAssertNil(outcome.response?.content)
+    }
+
+    func testResolveElicitationFallsBackWhenNobodyIsWaiting() async throws {
+        let sess = Session()
+        let seen = expectation(description: "fallback")
+        sess.services.mcpRuntime.resolveElicitationFallback = { server, id, response in
+            XCTAssertEqual(server, "codex_apps")
+            XCTAssertEqual(id, .string("missing"))
+            XCTAssertEqual(response.action, .cancel)
+            XCTAssertNil(response.content)
+            seen.fulfill()
+        }
+        _ = try await sess.submit(
+            .resolveElicitation(
+                serverName: "codex_apps",
+                requestId: .string("missing"),
+                decision: .cancel,
+                content: .object(["ignored": .bool(true)]),
+                meta: nil
+            )
+        )
+        await fulfillment(of: [seen], timeout: 1)
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertNil(sess.lastStartedTurnId)
     }
 
     func testDynamicToolHandlerWaitsForDynamicToolResponse() async throws {
@@ -5133,6 +5578,57 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(probe.lastAssistant, "done-2")
     }
 
+    func testApproveGuardianDeniedActionInjectsTheApprovedAction() async throws {
+        let sess = Session()
+        _ = try await sess.submit(.approveGuardianDeniedAction(deniedGuardianAssessment()))
+        XCTAssertNil(sess.lastStartedTurnId)
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertFalse(sess.emittedEvents.contains { event in
+            if case .turnStarted = event { return true }
+            return false
+        })
+        guard case .message(_, let role, let content, _, let passthrough) =
+            sess.cloneHistory().forPrompt().last,
+            case .inputText(let text) = content.first
+        else {
+            return XCTFail("expected approved action")
+        }
+        XCTAssertEqual(role, "developer")
+        XCTAssertEqual(
+            passthrough?.contentItemKinds,
+            [ContentItemKind("guardian.approved_action")]
+        )
+        XCTAssertEqual(text, expectedApprovedGuardianActionText())
+    }
+
+    func testApproveGuardianDeniedActionQueuesOnTheActiveTurn() async throws {
+        let sess = Session()
+        sess.activeTurn = ActiveTurn(
+            task: RunningTask(kind: .regular, turnContext: TurnContext(subId: "turn-1"))
+        )
+        _ = try await sess.submit(.approveGuardianDeniedAction(deniedGuardianAssessment()))
+        XCTAssertTrue(sess.cloneHistory().forPrompt().isEmpty)
+        XCTAssertNil(sess.lastStartedTurnId)
+        guard case .responseItem(let item) = sess.activeTurn?.turnState.pendingInput.items.first,
+              case .message(_, let role, let content, _, _) = item,
+              case .inputText(let text) = content.first
+        else {
+            return XCTFail("expected queued approved action")
+        }
+        XCTAssertEqual(role, "developer")
+        XCTAssertEqual(text, expectedApprovedGuardianActionText())
+    }
+
+    func testApproveGuardianDeniedActionIgnoresOtherStatuses() async throws {
+        let sess = Session()
+        _ = try await sess.submit(
+            .approveGuardianDeniedAction(deniedGuardianAssessment(status: .approved))
+        )
+        XCTAssertTrue(sess.cloneHistory().forPrompt().isEmpty)
+        XCTAssertNil(sess.activeTurn)
+        XCTAssertNil(sess.lastStartedTurnId)
+    }
+
     func testInjectHookContextIfRunningRequiresLiveTask() {
         let sess = Session()
         let item = HookAdditionalContext(text: "hint").asResponseItem()
@@ -6478,6 +6974,48 @@ private func rolloutMessageTexts(_ history: ContextManager) -> [String] {
         }
         return nil
     }
+}
+
+private func deniedGuardianAssessment(
+    status: GuardianAssessmentStatus = .denied
+) -> GuardianAssessmentEvent {
+    GuardianAssessmentEvent(
+        id: "review-1",
+        status: status,
+        action: .command(source: .shell, command: "ls", cwd: .fromString("/tmp"))
+    )
+}
+
+private func expectedApprovedGuardianActionText() -> String {
+    """
+    The user has manually approved a specific action that was previously `Rejected`.
+
+    Treat this as approval to perform that exact action in the same context in which it was originally requested.
+    Do not assume this also authorizes similar operations with different payloads.
+
+    Approved action:
+    {
+      "action": {
+        "command": "ls",
+        "cwd": "/tmp",
+        "source": "shell",
+        "type": "command"
+      },
+      "outcome": "allowed"
+    }
+    """
+}
+
+private func elicitationRequests(in session: Session) -> [ElicitationRequestEvent] {
+    session.emittedEvents.compactMap { event in
+        if case .elicitationRequest(let request) = event { return request }
+        return nil
+    }
+}
+
+private func elicitationIsPaused(_ session: Session) async -> Bool {
+    var iterator = session.services.elicitations.subscribe().makeAsyncIterator()
+    return await iterator.next() ?? false
 }
 
 private func waitUntil(

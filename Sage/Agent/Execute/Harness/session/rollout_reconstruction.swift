@@ -26,6 +26,11 @@
 //  compaction cleared it or a legacy compaction rebuilt the suffix.
 //  That same turn restores previous turn settings. An unfinished suffix
 //  after resume metadata leaves those settings to the metadata.
+//  The last started turn id is the newest `TurnStarted` after the bounding
+//  compaction, or the id stored on that compaction's resume metadata.
+//  The context window comes from that same compaction. Otherwise it is the
+//  newest surviving compaction that recorded a window number. Session meta
+//  supplies window 0 only when no compaction omitted its window number.
 //
 
 import CodexCore
@@ -73,6 +78,12 @@ enum RolloutReconstruction {
         history.worldStateBaseline = replayedWorldStateBaseline(scan.worldState)
         history.setReferenceContextItem(sawLegacyCompaction ? nil : scan.referenceContext)
         history.setReconstructedTurnSettings(scan.previousTurnSettings)
+        history.setReconstructedLastStartedTurnId(
+            reconstructedLastStartedTurnId(items, historyMode: historyMode)
+        )
+        history.setReconstructedContextWindow(
+            reconstructedContextWindow(items, historyMode: historyMode)
+        )
     }
 
     private static func recordRestoredSuffix(
@@ -315,16 +326,216 @@ private func compactionBoundsReplay(
 }
 
 /// Resume metadata of the newest compaction, when that compaction can bound replay.
+private func inputCheckpointIndex(
+    _ items: [RolloutItem],
+    historyMode: ThreadHistoryMode
+) -> Int? {
+    for index in items.indices.reversed() {
+        guard case .compacted(let compacted) = items[index] else { continue }
+        guard compactionBoundsReplay(compacted, historyMode: historyMode) else { return nil }
+        return index
+    }
+    return nil
+}
+
 private func inputCheckpointResumeMetadata(
     _ items: [RolloutItem],
     historyMode: ThreadHistoryMode
 ) -> CodexProtocol.JSONValue? {
-    for item in items.reversed() {
-        guard case .compacted(let compacted) = item else { continue }
-        guard compactionBoundsReplay(compacted, historyMode: historyMode) else { return nil }
-        return compacted.resumeMetadata
+    guard let index = inputCheckpointIndex(items, historyMode: historyMode),
+          case .compacted(let compacted) = items[index]
+    else { return nil }
+    return compacted.resumeMetadata
+}
+
+/// rust newest `TurnStarted` in the suffix after the input checkpoint.
+private func reconstructedLastStartedTurnId(
+    _ items: [RolloutItem],
+    historyMode: ThreadHistoryMode
+) -> String? {
+    let suffix: ArraySlice<RolloutItem>
+    if let index = inputCheckpointIndex(items, historyMode: historyMode) {
+        suffix = items[(index + 1)...]
+    } else {
+        suffix = items[...]
+    }
+    for item in suffix.reversed() {
+        if case .eventMsg(.turnStarted(let event)) = item {
+            return event.turnId
+        }
+    }
+    return inputCheckpointResumeMetadata(items, historyMode: historyMode)?
+        .objectValue?["last_started_turn_id"]?.stringValue
+}
+
+/// rust `window.or(initial_window).unwrap_or(fallback)`.
+/// A bounding compaction wins before the suffix is scanned. A rolled-back
+/// segment does not contribute its window. The fallback number is the count
+/// of every compaction in the rollout.
+private func reconstructedContextWindow(
+    _ items: [RolloutItem],
+    historyMode: ThreadHistoryMode
+) -> ReconstructedContextWindow {
+    var window: ReconstructedContextWindow?
+    let replay: ArraySlice<RolloutItem>
+    if let index = inputCheckpointIndex(items, historyMode: historyMode),
+       case .compacted(let compacted) = items[index] {
+        window = windowFromCompaction(compacted)
+        replay = items[(index + 1)...]
+    } else {
+        replay = items[...]
+    }
+    if window == nil {
+        var scan = WindowReplayScan()
+        window = scan.scan(replay)
+    }
+    if let window {
+        return window
+    }
+    if let initial = initialContextWindow(items) {
+        return initial
+    }
+    let compactedCount = items.reduce(0) { partial, item in
+        partial + (isCompaction(item) ? 1 : 0)
+    }
+    return ReconstructedContextWindow(number: UInt64(exactly: compactedCount) ?? .max)
+}
+
+private func isCompaction(_ item: RolloutItem) -> Bool {
+    if case .compacted = item { return true }
+    return false
+}
+
+private func initialContextWindow(_ items: [RolloutItem]) -> ReconstructedContextWindow? {
+    guard !items.contains(where: isLegacyCompactionWithoutWindowNumber) else { return nil }
+    for item in items {
+        guard case .sessionMeta(let line) = item,
+              let raw = line.meta.contextWindow?.windowId,
+              let windowId = parseUuidV7(raw)
+        else { continue }
+        return ReconstructedContextWindow(
+            number: 0, firstWindowId: windowId, previousWindowId: nil, windowId: windowId)
     }
     return nil
+}
+
+private func isLegacyCompactionWithoutWindowNumber(_ item: RolloutItem) -> Bool {
+    guard case .compacted(let compacted) = item else { return false }
+    return compacted.windowNumber == nil
+}
+
+private func windowFromCompaction(_ compacted: CompactedItem) -> ReconstructedContextWindow? {
+    guard let number = compacted.windowNumber else { return nil }
+    return ReconstructedContextWindow(
+        number: number,
+        firstWindowId: compacted.firstWindowId.flatMap(parseUuidV7),
+        previousWindowId: compacted.previousWindowId.flatMap(parseUuidV7),
+        windowId: compacted.windowId.flatMap(parseUuidV7)
+    )
+}
+
+/// UUID version 7. Other versions and unparsable strings are ignored.
+private func parseUuidV7(_ value: String) -> UUID? {
+    guard let uuid = UUID(uuidString: value) else { return nil }
+    guard uuid.uuid.6 >> 4 == 7 else { return nil }
+    return uuid
+}
+
+private struct WindowReplaySegment {
+    var turnId: String?
+    var countsAsUserTurn = false
+    var isOpen = false
+    var window: ReconstructedContextWindow?
+}
+
+/// Reverse scan of one replay span. The newest surviving segment that
+/// recorded a window number supplies it.
+private struct WindowReplayScan {
+    var pendingRollbackTurns = 0
+    var segment = WindowReplaySegment()
+    var window: ReconstructedContextWindow?
+
+    mutating func scan(_ items: ArraySlice<RolloutItem>) -> ReconstructedContextWindow? {
+        for item in items.reversed() {
+            absorb(item)
+        }
+        closeSegment()
+        return window
+    }
+
+    mutating func absorb(_ item: RolloutItem) {
+        switch item {
+        case .eventMsg(.threadRolledBack(let rollback)):
+            pendingRollbackTurns = saturatingAdd(
+                pendingRollbackTurns, Int(exactly: rollback.numTurns) ?? Int.max)
+        case .eventMsg(.userMessage):
+            open()
+            segment.countsAsUserTurn = true
+        case .eventMsg(.turnComplete(let event)):
+            open()
+            if segment.turnId == nil {
+                segment.turnId = event.turnId
+            }
+        case .eventMsg(.turnAborted(let event)):
+            noteTurnAborted(event.turnId)
+        case .eventMsg(.turnStarted(let event)):
+            if segment.isOpen && turnIdsCompatible(segment.turnId, event.turnId) {
+                closeSegment()
+            }
+        case .responseItem(let envelope):
+            open()
+            if isUserTurnBoundary(envelope.item) {
+                segment.countsAsUserTurn = true
+            }
+        case .compacted(let compacted):
+            open()
+            if segment.window == nil {
+                segment.window = windowFromCompaction(compacted)
+            }
+        case .worldState:
+            open()
+        case .turnContext(let context):
+            open()
+            if segment.turnId == nil {
+                segment.turnId = context.turnId
+            }
+        case .interAgentCommunication:
+            open()
+            segment.countsAsUserTurn = true
+        default:
+            break
+        }
+    }
+
+    mutating func noteTurnAborted(_ turnId: String?) {
+        if segment.isOpen {
+            if segment.turnId == nil {
+                segment.turnId = turnId
+            }
+        } else if turnId != nil {
+            open()
+            segment.turnId = turnId
+        }
+    }
+
+    mutating func open() {
+        segment.isOpen = true
+    }
+
+    mutating func closeSegment() {
+        let closing = segment
+        segment = WindowReplaySegment()
+        guard closing.isOpen else { return }
+        if pendingRollbackTurns > 0 {
+            if closing.countsAsUserTurn {
+                pendingRollbackTurns -= 1
+            }
+            return
+        }
+        if window == nil {
+            window = closing.window
+        }
+    }
 }
 
 private func reconstructedTurnSettings(from metadata: CodexProtocol.JSONValue?) -> ReconstructedTurnSettings? {

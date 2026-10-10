@@ -396,7 +396,7 @@
 | `core/src/context/developer_instructions.rs` | 37 | `context/developer_instructions.swift` | ✅ faithful |  |
 | `core/src/context/environment_context.rs` | 243 | `context/environment_context.swift` | 🟡 adapted |  |
 | `core/src/context/environments_instructions.rs` | 38 | `context/environments_instructions.swift` | ✅ faithful |  |
-| `core/src/context/guardian_approved_action.rs` | 48 | `context/guardian_approved_action.swift` | 🟡 adapted |  |
+| `core/src/context/guardian_approved_action.rs` | 48 | `context/guardian_approved_action.swift` | 🟡 adapted | empty markers; body is the manual-approval prefix plus the approved action JSON |
 | `core/src/context/guardian_budget_omission.rs` | 32 | `context/guardian_budget_omission.swift` | ✅ faithful |  |
 | `core/src/context/guardian_context_mode.rs` | 48 | `context/guardian_context_mode.swift` | 🟡 adapted |  |
 | `core/src/context/guardian_followup_review_reminder.rs` | 34 | `context/guardian_followup_review_reminder.swift` | ✅ faithful |  |
@@ -468,10 +468,10 @@
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
 | `core/src/session/extension_metrics.rs` | 35 | `session/extension_metrics.swift` | 🟡 adapted |  |
 | `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
-| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | single-agent ops through background-terminal cleanup; execpolicy amendments append to rules/default.rules; elicitation stays on ThreadSession; realtime stays out |
+| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | single-agent ops through denied-action approval; execpolicy amendments append to rules/default.rules; realtime stays out |
 | `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
 | `core/src/session/input_queue.rs` | 669 | `session/input_queue.swift` | 🟡 adapted | mailbox/steer activity watch; gauges omitted |
-| `core/src/session/mcp.rs` | 1,206 | `session/session_mcp.swift` | 🟡 adapted |  |
+| `core/src/session/mcp.rs` | 1,206 | `session/session_mcp.swift` | 🟡 adapted | elicitation waits on the active turn; a missing waiter uses the runtime fallback; review and plugin telemetry stay out |
 | `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted | worker publishes a binding from the current config; an auth generation change marks dirty and publishes again; disabled or removed servers are disconnected |
 | `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted | dirty bit plus one in-flight permit |
 | `core/src/session/mcp_runtime.rs` | 381 | `session/mcp_runtime.swift` | 🟡 adapted | publish reuses a live connection when the url is unchanged; reconnect opens a fresh client; disabled or removed servers are closed |
@@ -481,13 +481,13 @@
 | `core/src/session/retained_context.rs` | 35 | `session/retained_context.swift` | 🟡 adapted | records a verified answer; a new record is appended to the rollout when persistence is enabled |
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
 | `core/src/session/rollout_budget.rs` | 34 | `session/rollout_budget.swift` | 🟡 adapted |  |
-| `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted | suffix replay restores history, world state, reference context, and previous turn settings |
+| `core/src/session/rollout_reconstruction.rs` | 575 | `session/rollout_reconstruction.swift` | 🟡 adapted | suffix replay restores history, world state, reference context, turn settings, last started turn id, and the context window |
 | `core/src/session/session.rs` | 1,915 | `session/session.swift` | 🟡 adapted | submit / nextEvent / mutex-free inbox; session dynamicTools is the protocol spec list; admitted turns copy config.approvalPolicy, runtime workspace roots, and local temporary directories; HUD cards stay out |
 | `core/src/session/startup.rs` | 37 | `session/startup.swift` | 🟡 adapted |  |
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
 | `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted | a step keeps the MCP binding it captured |
 | `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
-| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | single-agent ops through cleanBackgroundTerminals; ResolveElicitation stays on ThreadSession |
+| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | single-agent ops through ApproveGuardianDeniedAction |
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted | ThreadSettings writes later-turn StepSettings and clears lastStartedTurnId; persistence and MCP prewarm stay out |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |

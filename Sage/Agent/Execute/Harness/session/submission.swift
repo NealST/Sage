@@ -21,7 +21,9 @@
 //  `refreshMcpServers` asks the next MCP refresh to reconnect, without starting a turn.
 //  `reloadUserConfig` reloads the user config layer without starting a turn.
 //  `cleanBackgroundTerminals` stops this thread's background terminals without starting a turn.
-//  Elicitation replies stay on ThreadSession.
+//  `resolveElicitation` resumes a waiting MCP elicitation without starting a turn.
+//  `approveGuardianDeniedAction` records one approved retry of a denied action
+//  without starting a turn.
 //
 
 import CodexProtocol
@@ -63,6 +65,18 @@ enum SessionOp: Equatable, Sendable {
     case reloadUserConfig
     /// `Op::CleanBackgroundTerminals`. Stops this thread's background terminals.
     case cleanBackgroundTerminals
+    /// `Op::ResolveElicitation`. Resumes a waiting MCP elicitation.
+    /// Accept with no content sends an empty object. Decline and cancel drop content.
+    case resolveElicitation(
+        serverName: String,
+        requestId: RequestId,
+        decision: ElicitationAction,
+        content: CodexProtocol.JSONValue?,
+        meta: CodexProtocol.JSONValue?
+    )
+    /// `Op::ApproveGuardianDeniedAction`. Injects the approved action when
+    /// the assessment was denied. Other statuses are ignored.
+    case approveGuardianDeniedAction(GuardianAssessmentEvent)
 }
 
 final class SubmissionAck: @unchecked Sendable {

@@ -661,6 +661,23 @@ public enum ElicitationAction: String, Codable, Equatable, Sendable {
     case cancel
 }
 
+public struct ElicitationResponse: Codable, Equatable, Sendable {
+    public var action: ElicitationAction
+    public var content: JSONValue?
+    public var meta: JSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case action, content
+        case meta = "_meta"
+    }
+
+    public init(action: ElicitationAction, content: JSONValue? = nil, meta: JSONValue? = nil) {
+        self.action = action
+        self.content = content
+        self.meta = meta
+    }
+}
+
 public struct ApplyPatchApprovalRequestEvent: Codable, Equatable, Sendable {
     public var callId: String
     public var turnId: String

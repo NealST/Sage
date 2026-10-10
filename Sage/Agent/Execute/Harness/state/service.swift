@@ -25,6 +25,8 @@ import Foundation
 
 final class SessionServices: @unchecked Sendable {
     var mcpRuntime: SessionMcpRuntime
+    /// rust `SessionServices.elicitations`. Counts in-flight MCP elicitations.
+    var elicitations = ElicitationService()
     var execPolicy: Policy?
     var showRawAgentReasoning: Bool
     var selectedCapabilityRoots: [String]

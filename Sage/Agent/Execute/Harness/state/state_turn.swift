@@ -56,6 +56,30 @@ final class ApprovalDecision: @unchecked Sendable {
     }
 }
 
+/// Resumes an MCP elicitation waiter at most once. A replacement request
+/// cancels the previous waiter immediately. Clearing the turn does too.
+final class ElicitationDecision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<ElicitationResponse?, Never>?
+
+    init(_ continuation: CheckedContinuation<ElicitationResponse?, Never>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: ElicitationResponse?) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: value)
+    }
+}
+
+struct PendingElicitationKey: Hashable, Sendable {
+    var serverName: String
+    var requestId: RequestId
+}
+
 /// Resumes a dynamic-tool waiter at most once. A replacement request holds
 /// the previous waiter until the new call finishes, and clearing the turn
 /// can resume it as well.
@@ -152,6 +176,7 @@ final class TurnState: @unchecked Sendable {
     var pendingRequestPermissions: [String: PendingRequestPermissions] = [:]
     var pendingUserInput: [String: CheckedContinuation<AcceptedUserInputResponse?, Never>] = [:]
     var pendingDynamicTools: [String: DynamicToolDecision] = [:]
+    var pendingElicitations: [PendingElicitationKey: ElicitationDecision] = [:]
     var pendingInput = SessionTurnInputQueue()
     var mailboxDeliveryPhase: MailboxDeliveryPhase = .currentTurn
     var grantedPermissionsByEnvironmentId: [String: AdditionalPermissionProfile] = [:]
@@ -198,6 +223,11 @@ final class TurnState: @unchecked Sendable {
         for decision in dynamicTools.values {
             decision.resume(nil)
         }
+        let elicitations = pendingElicitations
+        pendingElicitations.removeAll()
+        for decision in elicitations.values {
+            decision.resume(nil)
+        }
     }
 
     func insertPendingRequestPermissions(
@@ -237,6 +267,25 @@ final class TurnState: @unchecked Sendable {
 
     func removePendingDynamicTool(key: String) -> DynamicToolDecision? {
         pendingDynamicTools.removeValue(forKey: key)
+    }
+
+    func insertPendingElicitation(
+        serverName: String,
+        requestId: RequestId,
+        decision: ElicitationDecision
+    ) -> ElicitationDecision? {
+        let key = PendingElicitationKey(serverName: serverName, requestId: requestId)
+        let previous = pendingElicitations[key]
+        pendingElicitations[key] = decision
+        return previous
+    }
+
+    func removePendingElicitation(
+        serverName: String,
+        requestId: RequestId
+    ) -> ElicitationDecision? {
+        pendingElicitations.removeValue(
+            forKey: PendingElicitationKey(serverName: serverName, requestId: requestId))
     }
 
     func acceptMailboxDeliveryForCurrentTurn() {

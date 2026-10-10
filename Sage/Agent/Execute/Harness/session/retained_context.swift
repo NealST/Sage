@@ -86,6 +86,20 @@ extension Session {
         } else {
             state.setPreviousTurnSettings(nil)
         }
+        lastStartedTurnId = state.history.reconstructedLastStartedTurnId
+        state.lastStartedTurnId = lastStartedTurnId
+        if let window = state.history.reconstructedContextWindow {
+            let fallback = state.autoCompactWindowIds()
+            let windowId = window.windowId ?? fallback.windowId
+            state.restoreAutoCompactWindow(
+                windowNumber: window.number,
+                ids: AutoCompactWindowIds(
+                    firstWindowId: window.firstWindowId ?? windowId,
+                    previousWindowId: window.previousWindowId,
+                    windowId: windowId
+                )
+            )
+        }
     }
 
     /// Keep appending to a rollout that already exists.

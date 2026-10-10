@@ -76,6 +76,13 @@ final class SessionMcpRuntime: @unchecked Sendable {
     var publishHook: (@Sendable () async -> Void)?
     /// Opens clients for `plan.opened`. A fresh plan replaces the previous set.
     var openConnections: (@Sendable (McpConnectionPlan) async -> Void)?
+    /// rust `elicitation_router.auto_deny`. Requests accept an empty form
+    /// without asking the user.
+    var elicitationsAutoDeny = false
+    /// rust `McpRuntime::resolve_elicitation` when the active turn has no waiter.
+    var resolveElicitationFallback: (
+        @Sendable (String, RequestId, ElicitationResponse) async throws -> Void
+    )?
     /// Latest published binding. Nil until the first dirty refresh.
     private(set) var currentBinding: PublishedMcpBinding?
     private var liveConnections: [String: McpServerConnection] = [:]

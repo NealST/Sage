@@ -10,16 +10,18 @@
 //  review, thread settings, turn settings, conditional interrupt, recovery,
 //  suspend-and-shutdown, user-input answers, permission answers, dynamic-tool
 //  answers, exec approvals, patch approvals, MCP refresh, user-config reload,
-//  background-terminal cleanup, shutdown. An idle user submission starts `RegularSessionTask` with
+//  background-terminal cleanup, elicitation replies, and denied-action
+//  approvals, shutdown. An idle user submission starts `RegularSessionTask` with
 //  that submission's start options. Mailbox mail starts a turn when it
 //  sets `triggerTurn`, or when the thread has an outstanding durable
 //  sleep; queue-only mail inherits the reference context's cyber
-//  program. Realtime / elicitation replies stay on
+//  program. Realtime replies stay on
 //  ThreadSession. A started regular turn is spawned so the loop can
 //  keep receiving steer and interrupt.
 //
 
 import CodexAsyncUtils
+import CodexCore
 import CodexProtocol
 import Foundation
 
@@ -232,6 +234,17 @@ extension Session {
         case .cleanBackgroundTerminals:
             await closeUnifiedExecProcesses()
             return false
+        case .resolveElicitation(let serverName, let requestId, let decision, let content, let meta):
+            await resolveElicitation(
+                serverName: serverName,
+                id: requestId,
+                response: submittedElicitationResponse(
+                    decision: decision, content: content, meta: meta)
+            )
+            return false
+        case .approveGuardianDeniedAction(let event):
+            approveGuardianDeniedAction(event)
+            return false
         }
     }
 
@@ -251,9 +264,57 @@ extension Session {
         case .userInput, .interAgent, .compact, .review, .threadSettings, .turnSettings,
              .recoverTurn, .userInputAnswer, .requestPermissionsResponse, .dynamicToolResponse,
              .execApproval, .patchApproval, .refreshMcpServers, .reloadUserConfig,
-             .cleanBackgroundTerminals, .interrupt,
+             .cleanBackgroundTerminals, .resolveElicitation, .approveGuardianDeniedAction,
+             .interrupt,
              .interruptIfNoPendingInput, .suspendTurnAndShutdown, .shutdown:
             break
         }
     }
+
+    /// rust `approve_guardian_denied_action`. A denied assessment becomes one
+    /// developer fragment. An active turn queues it; otherwise it is history.
+    /// Any other status is ignored. A serialization failure drops the approval.
+    func approveGuardianDeniedAction(_ event: GuardianAssessmentEvent) {
+        guard event.status == .denied else { return }
+        guard let approved = prettyApprovedGuardianAction(event.action) else { return }
+        injectNoNewTurn([GuardianApprovedAction(text: approved).asResponseItem()])
+    }
+}
+
+func prettyApprovedGuardianAction(_ action: GuardianAssessmentAction) -> String? {
+    guard let data = try? JSONEncoder().encode(action),
+          let actionValue = try? JSONDecoder().decode(CodexProtocol.JSONValue.self, from: data)
+    else { return nil }
+    return prettyJSONValue(
+        .object([
+            "action": actionValue,
+            "outcome": .string("allowed"),
+        ])
+    )
+}
+
+func prettyJSONValue(_ value: CodexProtocol.JSONValue, indent: Int = 0) -> String {
+    switch value {
+    case .array(let values):
+        let rendered = values.map { prettyJSONValue($0, indent: indent + 2) }
+        return prettyJSONCollection(rendered, indent: indent, brackets: ("[", "]"))
+
+    case .object(let object):
+        let lines = object.keys.sorted().map { key in
+            let rendered = prettyJSONValue(object[key] ?? .null, indent: indent + 2)
+            return "\(CodexProtocol.JSONValue.string(key).encodedString()): \(rendered)"
+        }
+        return prettyJSONCollection(lines, indent: indent, brackets: ("{", "}"))
+
+    default:
+        return value.encodedString()
+    }
+}
+
+private func prettyJSONCollection(_ lines: [String], indent: Int, brackets: (String, String)) -> String {
+    if lines.isEmpty { return brackets.0 + brackets.1 }
+    let pad = String(repeating: " ", count: indent + 2)
+    let close = String(repeating: " ", count: indent)
+    let body = lines.map { "\(pad)\($0)" }.joined(separator: ",\n")
+    return "\(brackets.0)\n\(body)\n\(close)\(brackets.1)"
 }

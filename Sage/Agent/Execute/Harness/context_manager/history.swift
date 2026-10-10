@@ -74,6 +74,25 @@ public struct ReconstructedTurnSettings: Equatable, Sendable {
     }
 }
 
+public struct ReconstructedContextWindow: Equatable, Sendable {
+    public var number: UInt64
+    public var firstWindowId: UUID?
+    public var previousWindowId: UUID?
+    public var windowId: UUID?
+
+    public init(
+        number: UInt64,
+        firstWindowId: UUID? = nil,
+        previousWindowId: UUID? = nil,
+        windowId: UUID? = nil
+    ) {
+        self.number = number
+        self.firstWindowId = firstWindowId
+        self.previousWindowId = previousWindowId
+        self.windowId = windowId
+    }
+}
+
 public final class ContextManager: @unchecked Sendable {
     public var items: [ResponseItemEnvelope] = []
     public var guardianReviewMode: GuardianContextMode = .threadOwned
@@ -87,6 +106,8 @@ public final class ContextManager: @unchecked Sendable {
     var tokenInfoValue: TokenUsageInfo?
     var referenceContextItem: TurnContextItem?
     public private(set) var reconstructedTurnSettings: ReconstructedTurnSettings?
+    public private(set) var reconstructedLastStartedTurnId: String?
+    public private(set) var reconstructedContextWindow: ReconstructedContextWindow?
 
     public init() {
         tokenInfoValue = TokenUsageInfo.newOrAppend(info: nil, last: nil, modelContextWindow: nil)
@@ -221,6 +242,14 @@ public final class ContextManager: @unchecked Sendable {
         reconstructedTurnSettings = settings
     }
 
+    public func setReconstructedLastStartedTurnId(_ turnId: String?) {
+        reconstructedLastStartedTurnId = turnId
+    }
+
+    public func setReconstructedContextWindow(_ window: ReconstructedContextWindow?) {
+        reconstructedContextWindow = window
+    }
+
     public func referenceContextItemValue() -> TurnContextItem? {
         referenceContextItem
     }
@@ -241,6 +270,8 @@ public final class ContextManager: @unchecked Sendable {
         copy.tokenInfoValue = tokenInfoValue
         copy.referenceContextItem = referenceContextItem
         copy.reconstructedTurnSettings = reconstructedTurnSettings
+        copy.reconstructedLastStartedTurnId = reconstructedLastStartedTurnId
+        copy.reconstructedContextWindow = reconstructedContextWindow
         copy.worldStateBaseline = worldStateBaseline
         return copy
     }
