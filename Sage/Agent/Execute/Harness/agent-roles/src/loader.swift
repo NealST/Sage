@@ -1,6 +1,6 @@
 //
 //  loader.swift
-//  CodexAgentRoles
+//  SageAgentRoles
 //
 //  Port of codex-rs/agent-roles/src/loader.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  declared-role loading take explicit role maps and `agents/` directories.
 //
 
-import CodexUtils
+import SageUtils
 import FileSystem
 import Foundation
 

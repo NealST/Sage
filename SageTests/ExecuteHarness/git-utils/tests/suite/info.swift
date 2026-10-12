@@ -9,7 +9,7 @@
 //  Exercises `getGitRepoRoot` on a temporary git repository.
 //
 
-import CodexGitUtils
+import SageGitUtils
 import Foundation
 import XCTest
 

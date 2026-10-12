@@ -1,6 +1,6 @@
 //
 //  tagged_line_parser.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/stream-parser/src/tagged_line_parser.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

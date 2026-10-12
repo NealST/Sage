@@ -8,9 +8,9 @@
 //  Port status: adapted
 //
 
-@testable import CodexHooks
-import CodexProtocol
-import CodexUtils
+@testable import SageHooks
+import SageProtocol
+import SageUtils
 import XCTest
 
 final class HooksCommandRunnerTests: XCTestCase {
@@ -19,23 +19,23 @@ final class HooksCommandRunnerTests: XCTestCase {
             shell: CommandShell(program: "configured-shell", args: ["-c"]),
             commandLine: "echo hook-ran",
             environment: [
-                ("CODEX_HOOK_SNAPSHOT", "captured"),
-                ("CODEX_HOOK_OVERRIDE", "captured"),
-                (codexExecServerNoiseAuthTokenEnvVar, "captured-noise-token"),
+                ("SAGE_HOOK_SNAPSHOT", "captured"),
+                ("SAGE_HOOK_OVERRIDE", "captured"),
+                (sageExecServerNoiseAuthTokenEnvVar, "captured-noise-token"),
             ],
             env: [
-                "CODEX_HOOK_OVERRIDE": "configured",
-                "CODEX_HOOK_SAFE_ENV": "visible",
-                codexExecServerNoiseAuthTokenEnvVar: "configured-noise-token",
+                "SAGE_HOOK_OVERRIDE": "configured",
+                "SAGE_HOOK_SAFE_ENV": "visible",
+                sageExecServerNoiseAuthTokenEnvVar: "configured-noise-token",
             ]
         )
         XCTAssertEqual(spec.program, "configured-shell")
         XCTAssertEqual(spec.arguments, ["-c", "echo hook-ran"])
-        XCTAssertEqual(spec.environment["CODEX_HOOK_SNAPSHOT"], "captured")
-        XCTAssertEqual(spec.environment["CODEX_HOOK_OVERRIDE"], "configured")
-        XCTAssertEqual(spec.environment["CODEX_HOOK_SAFE_ENV"], "visible")
-        XCTAssertNil(spec.environment[codexExecServerNoiseAuthTokenEnvVar])
-        XCTAssertNil(spec.environment[codexExecServerNoiseAuthTokenEnvVar.lowercased()])
+        XCTAssertEqual(spec.environment["SAGE_HOOK_SNAPSHOT"], "captured")
+        XCTAssertEqual(spec.environment["SAGE_HOOK_OVERRIDE"], "configured")
+        XCTAssertEqual(spec.environment["SAGE_HOOK_SAFE_ENV"], "visible")
+        XCTAssertNil(spec.environment[sageExecServerNoiseAuthTokenEnvVar])
+        XCTAssertNil(spec.environment[sageExecServerNoiseAuthTokenEnvVar.lowercased()])
     }
 
     func testFallbackShellUsesSnapshot() {
@@ -83,8 +83,8 @@ final class HooksCommandRunnerTests: XCTestCase {
             environment: ProcessInfo.processInfo.environment.map { ($0.key, $0.value) }
         )
         let env = [
-            codexExecServerNoiseAuthTokenEnvVar.lowercased(): "configured-noise-token",
-            "CODEX_HOOK_SAFE_ENV": "visible",
+            sageExecServerNoiseAuthTokenEnvVar.lowercased(): "configured-noise-token",
+            "SAGE_HOOK_SAFE_ENV": "visible",
         ]
         let result = await runCommand(
             runtime: runtime,
@@ -95,10 +95,10 @@ final class HooksCommandRunnerTests: XCTestCase {
             cwd: temp.path
         )
         XCTAssertEqual(result.exitCode, 0, result.stderr)
-        XCTAssertTrue(result.stdout.contains("CODEX_HOOK_SAFE_ENV=visible"), result.stdout)
+        XCTAssertTrue(result.stdout.contains("SAGE_HOOK_SAFE_ENV=visible"), result.stdout)
         XCTAssertFalse(result.stdout.split(separator: "\n").contains { line in
             line.split(separator: "=").first.map {
-                $0.caseInsensitiveCompare(codexExecServerNoiseAuthTokenEnvVar) == .orderedSame
+                $0.caseInsensitiveCompare(sageExecServerNoiseAuthTokenEnvVar) == .orderedSame
             } ?? false
         })
     }
@@ -167,7 +167,7 @@ final class HooksCommandRunnerTests: XCTestCase {
 
 private struct RejectingHookMcpExecutor: HookMcpExecutor {
     func execute(_ call: HookMcpCall) async throws -> String {
-        throw CodexErr.unsupportedOperation("unused mcp executor")
+        throw SageErr.unsupportedOperation("unused mcp executor")
     }
 }
 

@@ -5,15 +5,15 @@
 //  Sage addition (no codex counterpart).
 //
 //  Maps AgentSessionState events onto a harness Session so RegularTask
-//  can attach rust RegularTask → runTurn. Live Execute opts in through
-//  `useHarnessRunTurn` (Settings / ModelSettings). The Responses client
-//  is leased onto that Session and reused for later samples.
+//  can attach rust RegularTask → runTurn. Live Execute always samples
+//  through that loop. The Responses client is leased onto that Session
+//  and reused for later samples.
 //
 
-import CodexAPI
-import CodexCore
-import CodexModelProviderInfo
-import CodexProtocol
+import SageAPI
+import SageCore
+import SageModelProviderInfo
+import SageProtocol
 import Foundation
 
 enum ExecuteHarnessAttach {
@@ -95,7 +95,7 @@ enum ExecuteHarnessAttach {
     /// client (and its thread id). A key or URL change builds a new client
     /// on that same thread id. Empty credentials return nil.
     struct ResponsesClientLease: Sendable {
-        var client: CodexCore.ModelClient
+        var client: SageCore.ModelClient
         var baseURL: String
         var apiKey: String
     }
@@ -104,9 +104,9 @@ enum ExecuteHarnessAttach {
         baseURL: String,
         apiKey: String,
         threadId: ThreadId
-    ) -> CodexCore.ModelClient {
+    ) -> SageCore.ModelClient {
         let provider = ModelProviderInfo(name: "sage", baseUrl: baseURL, wireApi: .responses)
-        return CodexCore.ModelClient(
+        return SageCore.ModelClient(
             threadId: threadId,
             providerInfo: provider,
             auth: BearerAuthProvider(apiKey: apiKey),
@@ -131,8 +131,8 @@ enum ExecuteHarnessAttach {
         )
     }
 
-    static func responsesMetadata(session: Session, turn: TurnContext?) -> CodexResponsesMetadata {
-        var metadata = CodexResponsesMetadata(
+    static func responsesMetadata(session: Session, turn: TurnContext?) -> SageResponsesMetadata {
+        var metadata = SageResponsesMetadata(
             installationId: session.installationId,
             sessionId: turn?.sessionId.description ?? session.threadId.description,
             threadId: session.threadId.description,
@@ -166,14 +166,14 @@ enum ExecuteHarnessAttach {
 
     static func samplingResult(from turn: ModelTurn) throws -> SamplingRequestResult {
         if !turn.toolCalls.isEmpty {
-            throw CodexErr.fatal("use responseStream(from:) so runTurn can dispatch tools")
+            throw SageErr.fatal("use responseStream(from:) so runTurn can dispatch tools")
         }
         let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines)
         return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: text)
     }
 
-    static func responseStream(from turn: ModelTurn, endTurn: Bool = true) -> CodexCore.ResponseStream {
-        var events: [CodexResult<ResponseEvent>] = []
+    static func responseStream(from turn: ModelTurn, endTurn: Bool = true) -> SageCore.ResponseStream {
+        var events: [SageResult<ResponseEvent>] = []
         let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !text.isEmpty {
             events.append(
@@ -354,7 +354,7 @@ enum ExecuteHarnessAttach {
     }
 
     /// Responses function schemas for the prompt `buildPrompt` already assembled.
-    static func responsesTools(_ tools: [ToolDefinition]) -> [CodexProtocol.JSONValue] {
+    static func responsesTools(_ tools: [ToolDefinition]) -> [SageProtocol.JSONValue] {
         tools.map(responsesTool)
     }
 
@@ -363,7 +363,7 @@ enum ExecuteHarnessAttach {
     /// and hold function calls until HUD admission.
     struct ResponsesSample: Sendable {
         var turn: ModelTurn
-        var events: [CodexResult<ResponseEvent>]
+        var events: [SageResult<ResponseEvent>]
     }
 
     /// What to do with function calls once the provider response has completed.
@@ -382,7 +382,7 @@ enum ExecuteHarnessAttach {
         prompt: Prompt,
         clientSession: ModelClientSession,
         modelInfo: ModelInfo,
-        metadata: CodexResponsesMetadata
+        metadata: SageResponsesMetadata
     ) async throws -> ResponsesSample {
         let stream = try await clientSession.stream(
             prompt: prompt,
@@ -392,8 +392,8 @@ enum ExecuteHarnessAttach {
         return try await collectResponses(from: stream)
     }
 
-    static func collectResponses(from stream: CodexCore.ResponseStream) async throws -> ResponsesSample {
-        var events: [CodexResult<ResponseEvent>] = []
+    static func collectResponses(from stream: SageCore.ResponseStream) async throws -> ResponsesSample {
+        var events: [SageResult<ResponseEvent>] = []
         var builder = ResponseAccumulator()
         for await event in stream.events {
             let value: ResponseEvent
@@ -409,7 +409,7 @@ enum ExecuteHarnessAttach {
                 return ResponsesSample(turn: builder.turn, events: events)
             }
         }
-        throw CodexErr.stream("stream closed before response.completed")
+        throw SageErr.stream("stream closed before response.completed")
     }
 
     /// Forwards provider events as they arrive. Function calls and `completed`
@@ -417,11 +417,11 @@ enum ExecuteHarnessAttach {
     /// dispatches them. The first event is inspected here: a 404 still throws
     /// so the caller can fall back to chat completions.
     static func liveResponses(
-        _ upstream: CodexCore.ResponseStream,
+        _ upstream: SageCore.ResponseStream,
         decide: @escaping (ModelTurn) async -> ResponsesToolGate
-    ) async throws -> CodexCore.ResponseStream {
+    ) async throws -> SageCore.ResponseStream {
         let prefix = ResponsePrefix()
-        let (bridged, continuation) = AsyncStream<CodexResult<ResponseEvent>>.makeStream()
+        let (bridged, continuation) = AsyncStream<SageResult<ResponseEvent>>.makeStream()
         let finish = OnceFinish(continuation)
         let reader = Task {
             var sawFirst = false
@@ -446,29 +446,29 @@ enum ExecuteHarnessAttach {
         guard let first = await prefix.first() else {
             reader.cancel()
             finish.finish()
-            throw CodexErr.stream("stream closed before response.completed")
+            throw SageErr.stream("stream closed before response.completed")
         }
         if case .failure(let error) = first, responsesEndpointMissing(error) {
             reader.cancel()
             finish.finish()
             throw error
         }
-        return gateToolEvents(CodexCore.ResponseStream(events: bridged), decide: decide)
+        return gateToolEvents(SageCore.ResponseStream(events: bridged), decide: decide)
     }
 
     /// Drops function-call events whose id is not allowed. Other provider
     /// events, including `completed` usage, stay in order.
     static func replay(
-        _ events: [CodexResult<ResponseEvent>],
+        _ events: [SageResult<ResponseEvent>],
         allowing callIDs: Set<String>?
-    ) -> CodexCore.ResponseStream {
+    ) -> SageCore.ResponseStream {
         makeResponseStream(filteredEvents(events, allowing: callIDs))
     }
 
     static func filteredEvents(
-        _ events: [CodexResult<ResponseEvent>],
+        _ events: [SageResult<ResponseEvent>],
         allowing callIDs: Set<String>?
-    ) -> [CodexResult<ResponseEvent>] {
+    ) -> [SageResult<ResponseEvent>] {
         guard let callIDs else { return events }
         return events.filter { event in
             guard case .success(let value) = event else { return true }
@@ -497,13 +497,13 @@ enum ExecuteHarnessAttach {
     }
 
     private static func gateToolEvents(
-        _ stream: CodexCore.ResponseStream,
+        _ stream: SageCore.ResponseStream,
         decide: @escaping (ModelTurn) async -> ResponsesToolGate
-    ) -> CodexCore.ResponseStream {
-        let (events, continuation) = AsyncStream<CodexResult<ResponseEvent>>.makeStream()
+    ) -> SageCore.ResponseStream {
+        let (events, continuation) = AsyncStream<SageResult<ResponseEvent>>.makeStream()
         let task = Task {
             var builder = ResponseAccumulator()
-            var held: [CodexResult<ResponseEvent>] = []
+            var held: [SageResult<ResponseEvent>] = []
             var holding = false
             for await event in stream.events {
                 if Task.isCancelled { break }
@@ -537,7 +537,7 @@ enum ExecuteHarnessAttach {
                 }
             }
             if !Task.isCancelled {
-                continuation.yield(.failure(CodexErr.stream("stream closed before response.completed")))
+                continuation.yield(.failure(SageErr.stream("stream closed before response.completed")))
                 continuation.finish()
             }
         }
@@ -546,15 +546,15 @@ enum ExecuteHarnessAttach {
                 task.cancel()
             }
         }
-        return CodexCore.ResponseStream(events: events)
+        return SageCore.ResponseStream(events: events)
     }
 
     private static func emitGatedCompletion(
         _ completed: ResponseEvent,
         turn: ModelTurn,
-        held: [CodexResult<ResponseEvent>],
+        held: [SageResult<ResponseEvent>],
         decide: (ModelTurn) async -> ResponsesToolGate,
-        continuation: AsyncStream<CodexResult<ResponseEvent>>.Continuation
+        continuation: AsyncStream<SageResult<ResponseEvent>>.Continuation
     ) async {
         if turn.toolCalls.isEmpty {
             for event in held {
@@ -644,16 +644,16 @@ enum ExecuteHarnessAttach {
         }
     }
 
-    static func responsesEndpointMissing(_ error: CodexErr) -> Bool {
+    static func responsesEndpointMissing(_ error: SageErr) -> Bool {
         guard case .unexpectedStatus(let status) = error.details else { return false }
         return status.status == 404
     }
 
-    static func modelTurn(from stream: CodexCore.ResponseStream) async throws -> ModelTurn {
+    static func modelTurn(from stream: SageCore.ResponseStream) async throws -> ModelTurn {
         try await collectResponses(from: stream).turn
     }
 
-    private static func responsesTool(_ tool: ToolDefinition) -> CodexProtocol.JSONValue {
+    private static func responsesTool(_ tool: ToolDefinition) -> SageProtocol.JSONValue {
         .object([
             "type": .string("function"),
             "name": .string(tool.name),
@@ -662,7 +662,7 @@ enum ExecuteHarnessAttach {
         ])
     }
 
-    private static func protocolJSON(_ value: Sage.JSONValue) -> CodexProtocol.JSONValue {
+    private static func protocolJSON(_ value: Sage.JSONValue) -> SageProtocol.JSONValue {
         switch value {
         case .null:
             return .null
@@ -710,11 +710,11 @@ enum ExecuteHarnessAttach {
 
 /// First event of a Responses stream, published from the reader task.
 private actor ResponsePrefix {
-    private var value: CodexResult<ResponseEvent>?
+    private var value: SageResult<ResponseEvent>?
     private var ended = false
-    private var waiters: [CheckedContinuation<CodexResult<ResponseEvent>?, Never>] = []
+    private var waiters: [CheckedContinuation<SageResult<ResponseEvent>?, Never>] = []
 
-    func publish(_ event: CodexResult<ResponseEvent>?) {
+    func publish(_ event: SageResult<ResponseEvent>?) {
         if let event, value == nil {
             value = event
         }
@@ -730,7 +730,7 @@ private actor ResponsePrefix {
         }
     }
 
-    func first() async -> CodexResult<ResponseEvent>? {
+    func first() async -> SageResult<ResponseEvent>? {
         if let value { return value }
         if ended { return nil }
         return await withCheckedContinuation { continuation in
@@ -750,10 +750,10 @@ private actor ResponsePrefix {
 /// `AsyncStream.Continuation.finish` is single-shot.
 private final class OnceFinish: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: AsyncStream<CodexResult<ResponseEvent>>.Continuation?
+    private var continuation: AsyncStream<SageResult<ResponseEvent>>.Continuation?
     private var finished = false
 
-    init(_ continuation: AsyncStream<CodexResult<ResponseEvent>>.Continuation) {
+    init(_ continuation: AsyncStream<SageResult<ResponseEvent>>.Continuation) {
         self.continuation = continuation
     }
 

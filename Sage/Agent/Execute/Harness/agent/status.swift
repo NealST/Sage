@@ -1,6 +1,6 @@
 //
 //  status.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/status.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  `EventMsg` yet.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Derive the next agent status from a single emitted event.

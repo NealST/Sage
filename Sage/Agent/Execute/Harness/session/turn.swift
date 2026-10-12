@@ -15,9 +15,9 @@
 //  Apps visibility/policy/agent-plugin budgets come from mcp_tool_exposure.
 //  Sage execute tools register through sage_execute / onSageToolCall.
 //  Dynamic tools on the admitted turn register through appendDynamicToolRuntimes.
-//  Live Execute calls `runTurn` when `useHarnessRunTurn`. Tool calls stay
-//  in the sampling stream and dispatch here. HUD admission happens before
-//  the stream is built, so a card pauses the turn instead of waiting inside it.
+//  Live Execute always calls `runTurn`. Tool calls stay in the sampling
+//  stream and dispatch here. HUD admission happens before the stream is
+//  built, so a card pauses the turn instead of waiting inside it.
 //  apply_patch deltas feed TurnDiffTracker; the sample emits TurnDiff.
 //  SessionStart drains pending sources, injects continue contexts, and
 //  can stop the turn. Compact queues `compact`; reset queues `clear`.
@@ -31,13 +31,13 @@
 //  After sampling, pending hook context injects into the turn queue.
 //
 
-import CodexAPI
-import CodexAsyncUtils
-import CodexCore
-import CodexModelProviderInfo
-import CodexProtocol
-import CodexThreadStore
-import CodexUtils
+import SageAPI
+import SageAsyncUtils
+import SageCore
+import SageModelProviderInfo
+import SageProtocol
+import SageThreadStore
+import SageUtils
 import Foundation
 
 /// Shared sample → tools → sample loop. `RegularTask` and `ExploreTask` both use it.
@@ -149,7 +149,7 @@ func runTurn(
             cancellationToken: cancellationToken
         )
     } catch {
-        let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+        let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
         _ = await runHooksAndRecordInputs(
             sess: sess,
             turnContext: turnContext,
@@ -179,7 +179,7 @@ func runTurn(
             input: input,
             persistContext: .standard
         )
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
 
     let (inputRequiredServers, mentionedPlugins) = requiredMcpServersForInput(
@@ -200,7 +200,7 @@ func runTurn(
             requiredPlugins: mcpStartupRequirements.requiredPlugins
         )
     } catch {
-        let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+        let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
         if err.details == .turnAborted {
             _ = await runHooksAndRecordInputs(
                 sess: sess,
@@ -276,7 +276,7 @@ func runTurn(
 
     while true {
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
 
         let pendingInput: [SessionTurnInput]
@@ -349,7 +349,7 @@ func runTurn(
                 cancellationToken: cancellationToken.childToken()
             )
         } catch {
-            let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+            let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
             if err.details == .turnAborted || err.details == .contextWindowExceeded {
                 throw err
             }
@@ -422,7 +422,7 @@ func runTurn(
                         injection: .doNotInject
                     )
                 } catch {
-                    let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+                    let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
                     if err.details == .turnAborted {
                         throw err
                     }
@@ -435,7 +435,7 @@ func runTurn(
     }
 
     if cancellationToken.isCancelled {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     return lastAgentMessage
 }
@@ -560,7 +560,10 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     if let existing = stepContext.toolRouter {
         return existing
     }
-    let options = toolRouterPlanOptions(sess: sess, turnContext: stepContext.turn)
+    var options = toolRouterPlanOptions(sess: sess, turnContext: stepContext.turn)
+    if sess?.services.localAgentControl != nil {
+        options.includeCollaborationTools = true
+    }
     var router = finalizeToolRouter(options)
     let mcpTools = stepContext.mcp?.tools ?? mcpVisibleTools(from: sess)
     let bindingID = stepContext.mcp?.id ?? sess?.services.mcpBindingID ?? 1
@@ -590,7 +593,7 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     return router
 }
 
-func builtTools(stepContext: StepContext) -> [CodexProtocol.JSONValue] {
+func builtTools(stepContext: StepContext) -> [SageProtocol.JSONValue] {
     builtTools(sess: nil, stepContext: stepContext)
 }
 
@@ -651,14 +654,52 @@ func mcpVisibleTools(from sess: Session?) -> [McpVisibleTool] {
     return sess.services.modelVisibleMcpToolNames.map { McpVisibleTool(name: $0) }
 }
 
-func builtTools(sess: Session?, stepContext: StepContext) -> [CodexProtocol.JSONValue] {
+func builtTools(sess: Session?, stepContext: StepContext) -> [SageProtocol.JSONValue] {
     let router = assembleToolRouter(sess: sess, stepContext: stepContext)
-    if let tools = sess?.services.sageResponsesTools {
+    if var tools = sess?.services.sageResponsesTools {
+        if router.canManageChildren {
+            let existing = Set(tools.compactMap(responsesToolName))
+            for name in collaborationFunctionNames(router.modelVisibleSpecs) where !existing.contains(name) {
+                tools.append(
+                    .object([
+                        "type": .string("function"),
+                        "name": .string(name),
+                    ])
+                )
+            }
+        }
         return tools
     }
     return router.modelVisibleSpecs.map { spec in
         .object(["name": .string(spec.name())])
     }
+}
+
+private func responsesToolName(_ value: SageProtocol.JSONValue) -> String? {
+    guard case .object(let fields) = value, case .string(let name) = fields["name"] else {
+        return nil
+    }
+    return name
+}
+
+func collaborationFunctionNames(_ specs: [ToolSpec]) -> [String] {
+    var names: [String] = []
+    var seen = Set<String>()
+    for spec in specs {
+        let extracted: [String]
+        switch spec {
+        case .function(let tool):
+            extracted = [tool.name]
+        case .namespace(let namespace):
+            extracted = namespace.tools.map(\.function.name)
+        default:
+            extracted = []
+        }
+        for name in extracted where seen.insert(name).inserted {
+            names.append(name)
+        }
+    }
+    return names
 }
 
 func turnDiffDisplayRoots(_ stepContext: StepContext) -> [(String, String)] {
@@ -783,7 +824,7 @@ func maybeRunPreviousModelInlineCompact(
         return
     }
     if cancellationToken.isCancelled {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     if shouldCompactForCompHashChange {
         let stepContext = try await sess.captureStepContext(turnContext, cancellationToken: cancellationToken)
@@ -849,7 +890,7 @@ func runAutoCompact(
         model: stepContext.turn.model
     )
     if preCompact.shouldStop {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     recordAdditionalContexts(
         sess: sess,
@@ -912,7 +953,7 @@ func runAutoCompact(
         model: stepContext.turn.model
     )
     if postCompact.shouldStop {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     recordAdditionalContexts(
         sess: sess,
@@ -969,7 +1010,7 @@ func runRemoteCompactV2(
         do {
             return try await streamOnce(stepContext)
         } catch {
-            let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+            let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
             if let fallback = sess.fallbackStepContext,
                fallback.turn.model != stepContext.turn.model,
                shouldRetryWithCurrentModel(err) {
@@ -985,7 +1026,7 @@ func runRemoteCompactV2(
                     sess.lastCompactModelFallback = recordModelFallback(
                         previousModel: stepContext.turn.model,
                         currentModel: fallback.turn.model,
-                        fallbackError: (error as? CodexErr) ?? err
+                        fallbackError: (error as? SageErr) ?? err
                     )
                     throw err
                 }
@@ -1012,7 +1053,7 @@ func runSamplingRequest(
     cancellationToken: CancellationToken
 ) async throws -> SamplingRequestResult {
     if cancellationToken.isCancelled {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     if let override = sess.runSamplingOverride {
         return try await override(input, stepContext)
@@ -1030,7 +1071,7 @@ func runSamplingRequest(
 
     while true {
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         var promptInput: [ResponseItem]
         if let input = initialInput {
@@ -1063,7 +1104,7 @@ func runSamplingRequest(
                 cancellationToken: cancellationToken.childToken()
             )
         } catch {
-            let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+            let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
             switch err.details {
             case .contextWindowExceeded:
                 sess.setTotalTokensFull(stepContext.turn)
@@ -1073,7 +1114,7 @@ func runSamplingRequest(
                     sess.updateRateLimits(stepContext.turn, snapshot)
                 }
                 throw err
-            case .retryLimit, .refreshTokenFailed:
+            case .retryLimit, .refreshTokenFailed, .turnAborted:
                 throw err
             default:
                 break
@@ -1135,7 +1176,7 @@ func handleOutputItemDone(
     } catch let error as FunctionCallError {
         switch error {
         case .fatal(let message):
-            throw CodexErr.fatal(message)
+            throw SageErr.fatal(message)
         case .respondToModel(let message):
             sess.services.executedToolCalls.observeNonDispatchedCall(item)
             sess.recordConversationItems(stepContext.turn, items: [item])
@@ -1201,9 +1242,9 @@ func tryRunSamplingRequest(
     cancellationToken: CancellationToken
 ) async throws -> SamplingRequestResult {
     if cancellationToken.isCancelled {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
-    let stream: CodexCore.ResponseStream
+    let stream: SageCore.ResponseStream
     if let override = sess.runSamplingStreamOverride {
         sess.samplingClientSession = clientSession
         sess.samplingStepContext = stepContext
@@ -1234,7 +1275,7 @@ func tryRunSamplingRequest(
 
     for await event in stream.events {
         if cancellationToken.isCancelled || stream.consumerDropped.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         let value: ResponseEvent
         switch event {
@@ -1435,13 +1476,13 @@ func tryRunSamplingRequest(
     }
 
     if cancellationToken.isCancelled {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
-    throw CodexErr.stream("stream closed before response.completed")
+    throw SageErr.stream("stream closed before response.completed")
 }
 
-func makeResponseStream(_ events: [CodexResult<ResponseEvent>]) -> CodexCore.ResponseStream {
-    CodexCore.ResponseStream(events: AsyncStream { continuation in
+func makeResponseStream(_ events: [SageResult<ResponseEvent>]) -> SageCore.ResponseStream {
+    SageCore.ResponseStream(events: AsyncStream { continuation in
         for event in events {
             continuation.yield(event)
         }
@@ -1473,7 +1514,7 @@ struct SessionRetrySink: ResponsesStreamRetrySink {
 
     var turnId: String { turnContext.subId }
 
-    func notifyStreamError(_ message: String, error: CodexErr) async {
+    func notifyStreamError(_ message: String, error: SageErr) async {
         session.sendEvent(turnContext, .error(ErrorEvent(message: "\(message): \(error)")))
     }
 
@@ -1888,7 +1929,7 @@ func uniquedPreservingOrder(_ values: [String]) -> [String] {
     return values.filter { seen.insert($0).inserted }
 }
 
-func isToolCollision(_ error: CodexErr) -> Bool {
+func isToolCollision(_ error: SageErr) -> Bool {
     if case .toolCollision = error.details { return true }
     return false
 }

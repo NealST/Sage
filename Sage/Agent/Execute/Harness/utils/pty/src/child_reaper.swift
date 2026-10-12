@@ -1,6 +1,6 @@
 //
 //  child_reaper.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Sage addition (no codex counterpart).
 //
@@ -16,7 +16,7 @@ enum ChildToReap {
 }
 
 enum ChildReaper {
-    private static let queue = DispatchQueue(label: "codex.pty.reaper")
+    private static let queue = DispatchQueue(label: "sage.pty.reaper")
 
     static func reap(_ pid: pid_t) {
         queue.async {

@@ -12,5 +12,5 @@
 import Foundation
 
 enum AuthKeyring {
-    static let serviceName = "com.sage.codex-auth"
+    static let serviceName = "com.sage.auth"
 }

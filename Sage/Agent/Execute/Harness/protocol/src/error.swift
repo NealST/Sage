@@ -1,6 +1,6 @@
 //
 //  error.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/error.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,10 +11,10 @@
 //  are omitted. Display strings match upstream.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
-public typealias CodexResult<T> = Result<T, CodexErr>
+public typealias SageResult<T> = Result<T, SageErr>
 
 let errorMessageUiMaxBytes = 2 * 1024
 let unexpectedResponseBodyMaxBytes = 1000
@@ -67,22 +67,22 @@ public enum SandboxErr: Error, Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-public struct CodexErr: Error, Equatable, Sendable {
-    public var details: CodexErrorDetails
+public struct SageErr: Error, Equatable, Sendable {
+    public var details: SageErrorDetails
     public var retryAfter: RetryAfter?
 
-    public init(details: CodexErrorDetails, retryAfter: RetryAfter? = nil) {
+    public init(details: SageErrorDetails, retryAfter: RetryAfter? = nil) {
         self.details = details
         self.retryAfter = retryAfter
     }
 
-    public static func new(_ details: CodexErrorDetails) -> CodexErr {
-        CodexErr(details: details)
+    public static func new(_ details: SageErrorDetails) -> SageErr {
+        SageErr(details: details)
     }
 
-    public func detailsValue() -> CodexErrorDetails { details }
+    public func detailsValue() -> SageErrorDetails { details }
 
-    public func withRetryAfter(_ retryAfter: RetryAfter) -> CodexErr {
+    public func withRetryAfter(_ retryAfter: RetryAfter) -> SageErr {
         var copy = self
         copy.retryAfter = retryAfter
         return copy
@@ -111,7 +111,7 @@ public struct CodexErr: Error, Equatable, Sendable {
         }
     }
 
-    public func toCodexProtocolError() -> CodexErrorInfo {
+    public func toSageProtocolError() -> SageErrorInfo {
         switch details {
         case .contextWindowExceeded: return .contextWindowExceeded
         case .sessionBudgetExceeded: return .sessionBudgetExceeded
@@ -150,7 +150,7 @@ public struct CodexErr: Error, Equatable, Sendable {
         }
         return ErrorEvent(
             message: message,
-            errorInfo: toCodexProtocolError(),
+            errorInfo: toSageProtocolError(),
             misalignment: misalignment)
     }
 
@@ -165,71 +165,71 @@ public struct CodexErr: Error, Equatable, Sendable {
         }
     }
 
-    public static let turnAborted = CodexErr(details: .turnAborted)
-    public static let sessionBudgetExceeded = CodexErr(details: .sessionBudgetExceeded)
-    public static let contextWindowExceeded = CodexErr(details: .contextWindowExceeded)
-    public static let sessionConfiguredNotFirstEvent = CodexErr(details: .sessionConfiguredNotFirstEvent)
-    public static let timeout = CodexErr(details: .timeout)
-    public static let requestTimeout = CodexErr(details: .requestTimeout)
-    public static let spawn = CodexErr(details: .spawn)
-    public static let interrupted = CodexErr(details: .interrupted)
-    public static let serverOverloaded = CodexErr(details: .serverOverloaded)
-    public static let quotaExceeded = CodexErr(details: .quotaExceeded)
-    public static let usageNotIncluded = CodexErr(details: .usageNotIncluded)
-    public static let internalServerError = CodexErr(details: .internalServerError)
-    public static let internalAgentDied = CodexErr(details: .internalAgentDied)
+    public static let turnAborted = SageErr(details: .turnAborted)
+    public static let sessionBudgetExceeded = SageErr(details: .sessionBudgetExceeded)
+    public static let contextWindowExceeded = SageErr(details: .contextWindowExceeded)
+    public static let sessionConfiguredNotFirstEvent = SageErr(details: .sessionConfiguredNotFirstEvent)
+    public static let timeout = SageErr(details: .timeout)
+    public static let requestTimeout = SageErr(details: .requestTimeout)
+    public static let spawn = SageErr(details: .spawn)
+    public static let interrupted = SageErr(details: .interrupted)
+    public static let serverOverloaded = SageErr(details: .serverOverloaded)
+    public static let quotaExceeded = SageErr(details: .quotaExceeded)
+    public static let usageNotIncluded = SageErr(details: .usageNotIncluded)
+    public static let internalServerError = SageErr(details: .internalServerError)
+    public static let internalAgentDied = SageErr(details: .internalAgentDied)
     public static let landlockSandboxExecutableNotProvided =
-        CodexErr(details: .landlockSandboxExecutableNotProvided)
+        SageErr(details: .landlockSandboxExecutableNotProvided)
 
-    public static func stream(_ message: String) -> CodexErr { CodexErr(details: .stream(message)) }
-    public static func threadNotFound(_ threadId: ThreadId) -> CodexErr {
-        CodexErr(details: .threadNotFound(threadId))
+    public static func stream(_ message: String) -> SageErr { SageErr(details: .stream(message)) }
+    public static func threadNotFound(_ threadId: ThreadId) -> SageErr {
+        SageErr(details: .threadNotFound(threadId))
     }
-    public static func unexpectedStatus(_ error: UnexpectedResponseError) -> CodexErr {
-        CodexErr(details: .unexpectedStatus(error))
+    public static func unexpectedStatus(_ error: UnexpectedResponseError) -> SageErr {
+        SageErr(details: .unexpectedStatus(error))
     }
-    public static func invalidRequest(_ message: String) -> CodexErr {
-        CodexErr(details: .invalidRequest(message))
+    public static func invalidRequest(_ message: String) -> SageErr {
+        SageErr(details: .invalidRequest(message))
     }
-    public static func io(_ message: String) -> CodexErr {
-        CodexErr(details: .io(message))
+    public static func io(_ message: String) -> SageErr {
+        SageErr(details: .io(message))
     }
-    public static func usageLimitReached(_ error: UsageLimitReachedError) -> CodexErr {
-        CodexErr(details: .usageLimitReached(error))
+    public static func usageLimitReached(_ error: UsageLimitReachedError) -> SageErr {
+        SageErr(details: .usageLimitReached(error))
     }
-    public static func responseStreamFailed(_ error: ResponseStreamFailed) -> CodexErr {
-        CodexErr(details: .responseStreamFailed(error))
+    public static func responseStreamFailed(_ error: ResponseStreamFailed) -> SageErr {
+        SageErr(details: .responseStreamFailed(error))
     }
-    public static func connectionFailed(_ error: ConnectionFailedError) -> CodexErr {
-        CodexErr(details: .connectionFailed(error))
+    public static func connectionFailed(_ error: ConnectionFailedError) -> SageErr {
+        SageErr(details: .connectionFailed(error))
     }
-    public static func retryLimit(_ error: RetryLimitReachedError) -> CodexErr {
-        CodexErr(details: .retryLimit(error))
+    public static func retryLimit(_ error: RetryLimitReachedError) -> SageErr {
+        SageErr(details: .retryLimit(error))
     }
-    public static func sandbox(_ error: SandboxErr) -> CodexErr {
-        CodexErr(details: .sandbox(error))
+    public static func sandbox(_ error: SandboxErr) -> SageErr {
+        SageErr(details: .sandbox(error))
     }
-    public static func unsupportedOperation(_ message: String) -> CodexErr {
-        CodexErr(details: .unsupportedOperation(message))
+    public static func unsupportedOperation(_ message: String) -> SageErr {
+        SageErr(details: .unsupportedOperation(message))
     }
-    public static func refreshTokenFailed(_ error: RefreshTokenFailedError) -> CodexErr {
-        CodexErr(details: .refreshTokenFailed(error))
+    public static func refreshTokenFailed(_ error: RefreshTokenFailedError) -> SageErr {
+        SageErr(details: .refreshTokenFailed(error))
     }
-    public static func fatal(_ message: String) -> CodexErr {
-        CodexErr(details: .fatal(message))
+    public static func fatal(_ message: String) -> SageErr {
+        SageErr(details: .fatal(message))
     }
-    public static func envVar(_ error: EnvVarError) -> CodexErr {
-        CodexErr(details: .envVar(error))
+    public static func envVar(_ error: EnvVarError) -> SageErr {
+        SageErr(details: .envVar(error))
     }
-    public static func invalidImageRequest() -> CodexErr {
-        CodexErr(details: .invalidImageRequest)
+    public static func invalidImageRequest() -> SageErr {
+        SageErr(details: .invalidImageRequest)
     }
-    public static func agentLimitReached(maxThreads: Int) -> CodexErr {
-        CodexErr(details: .agentLimitReached(maxThreads: maxThreads))
+    public static func agentLimitReached(maxThreads: Int) -> SageErr {
+        SageErr(details: .agentLimitReached(maxThreads: maxThreads))
     }
 }
 
-public enum CodexErrorDetails: Equatable, Sendable {
+public enum SageErrorDetails: Equatable, Sendable {
     case turnAborted
     case sessionBudgetExceeded
     case stream(String)
@@ -271,7 +271,7 @@ public enum CodexErrorDetails: Equatable, Sendable {
     case envVar(EnvVarError)
 }
 
-extension CodexErrorDetails: CustomStringConvertible {
+extension SageErrorDetails: CustomStringConvertible {
     public var description: String {
         switch self {
         case .turnAborted:
@@ -283,7 +283,7 @@ extension CodexErrorDetails: CustomStringConvertible {
         case .rateLimitExceeded(let message):
             return "rate limit exceeded: \(message)"
         case .contextWindowExceeded:
-            return "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
+            return "Sage ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
         case .threadNotFound(let threadId):
             return "no thread with id: \(threadId)"
         case .agentLimitReached:
@@ -325,7 +325,7 @@ extension CodexErrorDetails: CustomStringConvertible {
         case .quotaExceeded:
             return "Quota exceeded. Check your plan and billing details."
         case .usageNotIncluded:
-            return "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus."
+            return "To keep using Sage, upgrade your plan."
         case .internalServerError:
             return "We’re currently experiencing high demand, which may cause temporary errors."
         case .retryLimit(let error):
@@ -335,7 +335,7 @@ extension CodexErrorDetails: CustomStringConvertible {
         case .sandbox(let error):
             return "sandbox error: \(error)"
         case .landlockSandboxExecutableNotProvided:
-            return "codex-linux-sandbox was required but not provided"
+            return "sage-linux-sandbox was required but not provided"
         case .unsupportedOperation(let message):
             return "unsupported operation: \(message)"
         case .refreshTokenFailed(let error):
@@ -350,11 +350,11 @@ extension CodexErrorDetails: CustomStringConvertible {
     }
 }
 
-extension CodexErr: CustomStringConvertible {
+extension SageErr: CustomStringConvertible {
     public var description: String { details.description }
 }
 
-extension CodexErr: CustomDebugStringConvertible {
+extension SageErr: CustomDebugStringConvertible {
     public var debugDescription: String {
         if case .stream(let message) = details {
             let delay = serverRetryDelay().map { "Some(\($0))" } ?? "None"
@@ -472,7 +472,7 @@ public struct UsageLimitReachedError: Equatable, Sendable, CustomStringConvertib
     public var description: String {
         if let limitName = rateLimits?.limitName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !limitName.isEmpty,
-           limitName.lowercased() != "codex",
+           limitName.lowercased() != "sage",
            limitName.lowercased() != "gpt-reserve"
         {
             return "You’ve hit your usage limit for \(limitName). Switch to another model now,\(retrySuffixAfterOr(resetsAt))"
@@ -496,15 +496,15 @@ public struct UsageLimitReachedError: Equatable, Sendable, CustomStringConvertib
         }
         switch planType {
         case .known(.plus):
-            return "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits\(retrySuffixAfterOr(resetsAt))"
+            return "You’ve hit your usage limit. Upgrade your Sage plan or purchase more credits\(retrySuffixAfterOr(resetsAt))"
         case .known(.team), .known(.selfServeBusinessProLite), .known(.selfServeBusinessUsageBased),
              .known(.business), .known(.ent26), .known(.enterpriseCbpAutomation),
              .known(.enterpriseCbpUsageBased):
             return "You’ve hit your usage limit. To get more access now, send a request to your admin\(retrySuffixAfterOr(resetsAt))"
         case .known(.free), .known(.go):
-            return "You’ve hit your usage limit. Upgrade to Plus to continue using Codex (https://chatgpt.com/explore/plus),\(retrySuffixAfterOr(resetsAt))"
+            return "You’ve hit your usage limit. Upgrade your Sage plan to continue,\(retrySuffixAfterOr(resetsAt))"
         case .known(.pro), .known(.proLite), .known(.proMax):
-            return "You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits\(retrySuffixAfterOr(resetsAt))"
+            return "You’ve hit your usage limit. Purchase more credits\(retrySuffixAfterOr(resetsAt))"
         case .known(.enterprise), .known(.edu), .known(.eduPlus), .known(.eduPro):
             return "You’ve hit your usage limit.\(retrySuffix(resetsAt))"
         case .unknown, .none:
@@ -528,7 +528,7 @@ public struct EnvVarError: Equatable, Sendable, CustomStringConvertible {
     }
 }
 
-public func getErrorMessageUi(_ error: CodexErr) -> String {
+public func getErrorMessageUi(_ error: SageErr) -> String {
     let message: String
     switch error.details {
     case .sandbox(.denied(let output, _)):
@@ -615,7 +615,7 @@ func durationMillis(_ duration: Duration) -> Int64 {
     return seconds * 1000 + attoseconds / 1_000_000_000_000_000
 }
 
-/// Local stand-in for `codex_async_utils::backoff` (CodexProtocol cannot import that module).
+/// Local stand-in for `codex_async_utils::backoff` (SageProtocol cannot import that module).
 func localBackoff(_ attempt: UInt64) -> Duration {
     let initialDelayMs = 200.0
     let backoffFactor = 2.0

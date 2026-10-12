@@ -1,6 +1,6 @@
 //
 //  auth.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/auth.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -32,7 +32,7 @@ public enum AuthMode: String, Codable, Equatable, Sendable, CustomStringConverti
         }
     }
 
-    public var usesCodexBackend: Bool {
+    public var usesSageBackend: Bool {
         switch self {
         case .chatgpt, .chatgptAuthTokens, .headers, .agentIdentity, .personalAccessToken: true
         case .apiKey, .bedrockApiKey, .bedrockAccessKeys: false

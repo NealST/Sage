@@ -1,6 +1,6 @@
 //
 //  seekable_reader.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/seekable_reader.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  for `compression.swift`; a compressed-only file is an error, not a miss.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 private let compressedSuffix = ".zst"

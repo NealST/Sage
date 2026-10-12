@@ -7,7 +7,7 @@
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 
 struct ViewImageToolOptions: Equatable, Sendable {
     var canRequestOriginalImageDetail: Bool

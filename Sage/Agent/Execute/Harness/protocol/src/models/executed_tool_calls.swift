@@ -1,6 +1,6 @@
 //
 //  executed_tool_calls.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/models/executed_tool_calls.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -485,7 +485,7 @@ extension ExecutedToolCallArguments: Codable {
     }
 
     private enum TruncationKey: String, CodingKey {
-        case truncated = "_codex_executed_tool_call_truncated"
+        case truncated = "_sage_executed_tool_call_truncated"
     }
 }
 
@@ -523,9 +523,9 @@ public struct ExecutedToolCall: Codable, Equatable, Sendable {
     public init(name: String, arguments: JSONValue) {
         let wrapped: JSONValue
         if case .object(let object) = arguments,
-           object["_codex_executed_tool_call_truncated"] != nil
+           object["_sage_executed_tool_call_truncated"] != nil
         {
-            wrapped = .object(["_codex_executed_tool_call_raw": arguments])
+            wrapped = .object(["_sage_executed_tool_call_raw": arguments])
         } else {
             wrapped = arguments
         }

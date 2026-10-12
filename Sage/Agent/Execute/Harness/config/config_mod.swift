@@ -7,14 +7,14 @@
 //  Port status: adapted
 //
 //  Config type shape, TokenBudgetConfig, and merge/priority fields.
-//  Loaders read Sage Settings rather than Codex TOML layers (plan §10.4).
+//  Loaders read Sage Settings rather than Sage TOML layers (plan §10.4).
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
-/// Codex `SleepToolMode`. Model-driven sleep follows the clock reminder
+/// Sage `SleepToolMode`. Model-driven sleep follows the clock reminder
 /// or the model's experimental `clock` tool.
 enum SleepToolMode: Equatable, Sendable {
     case modelDriven
@@ -57,7 +57,7 @@ enum TokenBudgetConfigError: Error, Equatable, CustomStringConvertible {
     }
 }
 
-/// Codex `TokenBudgetConfig`. Buffer tokens are reserved only when a
+/// Sage `TokenBudgetConfig`. Buffer tokens are reserved only when a
 /// fallback prompt is present.
 struct TokenBudgetConfig: Equatable, Sendable {
     var useHistoryNotesExtension: Bool
@@ -122,7 +122,7 @@ struct TokenBudgetConfig: Equatable, Sendable {
         return .success(())
     }
 
-    /// Codex `TokenBudgetConfig::fallback_buffer_tokens`.
+    /// Sage `TokenBudgetConfig::fallback_buffer_tokens`.
     func fallbackBufferTokens() -> Int64 {
         autoCompactFallbackPrompt == nil ? 0 : (autoCompactFallbackBufferTokens ?? 0)
     }
@@ -132,7 +132,7 @@ struct ConfigOverrides: Equatable, Sendable {
     var model: String?
     var reviewModel: String?
     var cwd: String?
-    var approvalPolicy: CodexProtocol.AskForApproval?
+    var approvalPolicy: SageProtocol.AskForApproval?
     var sandboxMode: SandboxMode?
     var permissionProfile: PermissionProfile?
     var modelProvider: String?
@@ -144,7 +144,7 @@ struct ConfigOverrides: Equatable, Sendable {
         model: String? = nil,
         reviewModel: String? = nil,
         cwd: String? = nil,
-        approvalPolicy: CodexProtocol.AskForApproval? = nil,
+        approvalPolicy: SageProtocol.AskForApproval? = nil,
         sandboxMode: SandboxMode? = nil,
         permissionProfile: PermissionProfile? = nil,
         modelProvider: String? = nil,
@@ -189,7 +189,7 @@ struct Config: Equatable, Sendable {
     var baseInstructionsProvenance: BaseInstructionsProvenance?
     var developerInstructions: String?
     var cwd: String
-    var approvalPolicy: CodexProtocol.AskForApproval
+    var approvalPolicy: SageProtocol.AskForApproval
     var features: Features
     var updatePlanEnabled: Bool
     var experimentalRequestUserInputEnabled: Bool
@@ -215,7 +215,7 @@ struct Config: Equatable, Sendable {
         baseInstructionsProvenance: BaseInstructionsProvenance? = nil,
         developerInstructions: String? = nil,
         cwd: String = FileManager.default.currentDirectoryPath,
-        approvalPolicy: CodexProtocol.AskForApproval = CodexProtocol.AskForApproval.onRequest,
+        approvalPolicy: SageProtocol.AskForApproval = SageProtocol.AskForApproval.onRequest,
         features: Features = Features(),
         updatePlanEnabled: Bool = false,
         experimentalRequestUserInputEnabled: Bool = true,

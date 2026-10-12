@@ -1,6 +1,6 @@
 //
 //  model_request.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/model_request.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  AsyncStream of ResponseEvent. parent_response_id is reserved.
 //
 
-import CodexAPI
+import SageAPI
 import Foundation
 
 public enum ModelRequestKind: Equatable, Sendable {

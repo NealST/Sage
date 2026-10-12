@@ -1,6 +1,6 @@
 //
 //  types.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/types.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  holds an opaque token instead of a Rust trait object.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Registry identity shared by loaded and unloaded agents.

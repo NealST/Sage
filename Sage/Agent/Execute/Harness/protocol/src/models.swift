@@ -1,6 +1,6 @@
 //
 //  models.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/models.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  `executed_tool_calls`, and `item_metadata` are ported in their own files.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 // MARK: - SandboxPermissions
@@ -2044,8 +2044,8 @@ extension CallToolResult {
 
 // MARK: - MCP content → FunctionCallOutputContentItem
 
-private let codexEncryptedContentMetaKey = "codex/encryptedContent"
-private let codexImageDetailMetaKey = "codex/imageDetail"
+private let sageEncryptedContentMetaKey = "sage/encryptedContent"
+private let sageImageDetailMetaKey = "sage/imageDetail"
 
 private func convertMcpContentToItems(_ contents: [JSONValue]) -> [FunctionCallOutputContentItem] {
     var items: [FunctionCallOutputContentItem] = []
@@ -2064,7 +2064,7 @@ private func convertMcpContentToItems(_ contents: [JSONValue]) -> [FunctionCallO
             if case .string(let text)? = obj["text"] {
                 if let meta = obj["_meta"],
                    case .object(let metaObj) = meta,
-                   case .string(let enc)? = metaObj[codexEncryptedContentMetaKey] {
+                   case .string(let enc)? = metaObj[sageEncryptedContentMetaKey] {
                     item = .encryptedContent(encryptedContent: enc)
                 } else {
                     item = .inputText(text: text)
@@ -2085,7 +2085,7 @@ private func convertMcpContentToItems(_ contents: [JSONValue]) -> [FunctionCallO
                 var detail: ImageDetail? = defaultImageDetail
                 if let meta = obj["_meta"],
                    case .object(let metaObj) = meta,
-                   case .string(let d)? = metaObj[codexImageDetailMetaKey] {
+                   case .string(let d)? = metaObj[sageImageDetailMetaKey] {
                     switch d {
                     case "auto": detail = .auto
                     case "low": detail = .low
@@ -2126,7 +2126,7 @@ private let maxRenderedPrefixes = 100
 private let maxAllowPrefixTextBytes = 5000
 private let truncatedAllowPrefixMarker = "...\n[Some commands were truncated]"
 
-/// Codex `format_allow_prefixes`. Sorted prefix lists for compact / permissions.
+/// Sage `format_allow_prefixes`. Sorted prefix lists for compact / permissions.
 public func formatAllowPrefixes(_ prefixes: [[String]]) -> String? {
     var truncated = prefixes.count > maxRenderedPrefixes
     let sorted = prefixes.sorted { lhs, rhs in

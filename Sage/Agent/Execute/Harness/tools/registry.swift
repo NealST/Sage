@@ -12,8 +12,8 @@
 //  and keeps the first runtime. Rust panics on a trusted duplicate.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 protocol ToolExecutor: Sendable {

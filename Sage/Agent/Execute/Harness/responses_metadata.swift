@@ -1,6 +1,6 @@
 //
 //  responses_metadata.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/responses_metadata.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -8,11 +8,11 @@
 //
 //  Compaction analytics enums are local stand-ins (otel/analytics crate
 //  waits for Phase 10). Header maps are [String: String]. JSON uses
-//  CodexUtils toAsciiJsonString / toJsonStringBounded.
+//  SageUtils toAsciiJsonString / toJsonStringBounded.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public let installationIdKey = "installation_id"
@@ -52,7 +52,7 @@ let reservedMetadataKeys: [String] = [
     "guardian_credits_requested",
     mcpAttributionClientMetadataKey,
     installationIdKey,
-    xCodexInstallationIdHeader,
+    xSageInstallationIdHeader,
     sessionIdKey,
     threadIdKey,
     agentNameKey,
@@ -60,10 +60,10 @@ let reservedMetadataKeys: [String] = [
     windowIdKey,
     windowNumberKey,
     contextWindowIdKey,
-    xCodexWindowIdHeader,
-    xCodexTurnMetadataHeader,
-    xCodexParentThreadIdHeader,
-    xOpenaiSubagentHeader,
+    xSageWindowIdHeader,
+    xSageTurnMetadataHeader,
+    xSageParentThreadIdHeader,
+    xSageSubagentHeader,
     requestKindKey,
     compactionKey,
     legacyCodeModeToolNamesKey,
@@ -143,7 +143,7 @@ public struct CompactionTurnMetadata: Codable, Equatable, Sendable {
     }
 }
 
-public enum CodexResponsesRequestKind: Equatable, Sendable {
+public enum SageResponsesRequestKind: Equatable, Sendable {
     case turn
     case prewarm
     case compaction(CompactionTurnMetadata)
@@ -259,7 +259,7 @@ extension TurnToolSource: Codable {
     }
 }
 
-public struct CodexResponsesMetadata: Sendable {
+public struct SageResponsesMetadata: Sendable {
     public var parentResponseId: String?
     public var installationId: String
     public var sessionId: String
@@ -270,7 +270,7 @@ public struct CodexResponsesMetadata: Sendable {
     public var windowId: String
     public var windowNumber: UInt64?
     public var contextWindowId: UUID?
-    public var requestKind: CodexResponsesRequestKind?
+    public var requestKind: SageResponsesRequestKind?
     public var forkedFromThreadId: ThreadId?
     public var forkedFromOrdinalExclusive: UInt64?
     public var parentThreadId: ThreadId?
@@ -317,19 +317,19 @@ public struct CodexResponsesMetadata: Sendable {
 
     public func clientMetadata(includeInternal: Bool) -> [String: String] {
         var clientMetadata: [String: String] = [
-            xCodexInstallationIdHeader: installationId,
+            xSageInstallationIdHeader: installationId,
             sessionIdKey: sessionId,
             threadIdKey: threadId,
-            xCodexWindowIdHeader: windowId,
+            xSageWindowIdHeader: windowId,
         ]
         if let turnId {
             clientMetadata[turnIdKey] = turnId
         }
         if let subagentHeader {
-            clientMetadata[xOpenaiSubagentHeader] = subagentHeader
+            clientMetadata[xSageSubagentHeader] = subagentHeader
         }
         if let parentThreadId {
-            clientMetadata[xCodexParentThreadIdHeader] = parentThreadId.description
+            clientMetadata[xSageParentThreadIdHeader] = parentThreadId.description
         }
         if let parentTurnId {
             clientMetadata[parentTurnIdKey] = parentTurnId
@@ -338,7 +338,7 @@ public struct CodexResponsesMetadata: Sendable {
             clientMetadata[rootTurnIdKey] = rootTurnId
         }
         if hasTurnMetadata(), let json = turnMetadataJSON() {
-            clientMetadata[xCodexTurnMetadataHeader] = json
+            clientMetadata[xSageTurnMetadataHeader] = json
         }
         if includeInternal, let attribution = mcpAttribution {
             let serialized: String
@@ -356,29 +356,29 @@ public struct CodexResponsesMetadata: Sendable {
 
     public func compatibilityHeaders() -> [String: String] {
         var headers: [String: String] = [:]
-        insertHeader(&headers, xCodexWindowIdHeader, windowId)
+        insertHeader(&headers, xSageWindowIdHeader, windowId)
         if hasTurnMetadata() {
             var payload = turnMetadataPayload()
             payload.toolNamespacesInfo = nil
             if let json = try? toAsciiJsonString(payload) {
-                insertHeader(&headers, xCodexTurnMetadataHeader, json)
+                insertHeader(&headers, xSageTurnMetadataHeader, json)
             }
         }
         if let parentThreadId {
-            insertHeader(&headers, xCodexParentThreadIdHeader, parentThreadId.description)
+            insertHeader(&headers, xSageParentThreadIdHeader, parentThreadId.description)
         }
         if let subagentHeader {
-            insertHeader(&headers, xOpenaiSubagentHeader, subagentHeader)
+            insertHeader(&headers, xSageSubagentHeader, subagentHeader)
         }
         return headers
     }
 
-    func turnMetadataPayload() -> CodexTurnMetadataPayload {
+    func turnMetadataPayload() -> SageTurnMetadataPayload {
         let kind = requestKind
         let (requestKindValue, compaction) = kind.map { $0.metadata() } ?? (nil, nil)
         let hasThreadIdentity = kind?.hasThreadIdentity() ?? true
         let hasRequestIdentity = kind?.hasThreadIdentity() ?? false
-        return CodexTurnMetadataPayload(
+        return SageTurnMetadataPayload(
             installationId: hasRequestIdentity ? installationId : nil,
             sessionId: hasThreadIdentity ? sessionId : nil,
             threadId: hasThreadIdentity ? threadId : nil,
@@ -491,7 +491,7 @@ func validExtraMetadataKey(_ key: String) -> Bool {
     }
 }
 
-struct CodexTurnMetadataPayload: Encodable {
+struct SageTurnMetadataPayload: Encodable {
     var installationId: String?
     var sessionId: String?
     var threadId: String?

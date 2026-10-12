@@ -1,7 +1,7 @@
-@testable import CodexCore
-import CodexProtocol
-import CodexShellCommand
-import CodexUtils
+@testable import SageCore
+import SageProtocol
+import SageShellCommand
+import SageUtils
 @testable import Sage
 import XCTest
 

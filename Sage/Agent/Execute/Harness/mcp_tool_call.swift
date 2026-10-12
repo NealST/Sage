@@ -1,6 +1,6 @@
 //
 //  mcp_tool_call.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/mcp_tool_call.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  on the session. The app transport is MCPStdioClient via CapabilityStore.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct McpToolCallRequest: Equatable, Sendable {
@@ -97,7 +97,7 @@ public func mcpToolResultText(_ result: CallToolResult) -> String {
     }.joined(separator: "\n")
 }
 
-/// Codex `handle_mcp_tool_call` through the approved transport call.
+/// Sage `handle_mcp_tool_call` through the approved transport call.
 /// A missing preparation or a disabled app tool never reaches `transport`.
 public func handleMcpToolCall(
     server: String,

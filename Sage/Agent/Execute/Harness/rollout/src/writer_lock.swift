@@ -1,6 +1,6 @@
 //
 //  writer_lock.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/writer_lock.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  and stale-lock cleanup.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 import os
 
@@ -23,14 +23,14 @@ import Darwin
 private let writerLockDir = "thread-writer-locks"
 private let coordinationLockFile = ".coordination.lock"
 
-/// Coordinates writer ownership within one Codex home.
+/// Coordinates writer ownership within one Sage home.
 public final class WriterLockCoordinator: @unchecked Sendable {
     private let directory: String
     private let cleanupAttempted = OSAllocatedUnfairLock(initialState: false)
 
     /// Uses the same lock namespace as existing local thread-store writers.
-    public init(codexHome: String) {
-        directory = (codexHome as NSString).appendingPathComponent(writerLockDir)
+    public init(sageHome: String) {
+        directory = (sageHome as NSString).appendingPathComponent(writerLockDir)
     }
 
     /// Acquires exclusive writer ownership, returning `WouldBlock` for an active writer.

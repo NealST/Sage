@@ -7,9 +7,9 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import FileSystem
-@testable import CodexCore
+@testable import SageCore
 import XCTest
 
 final class SandboxTagsTests: XCTestCase {

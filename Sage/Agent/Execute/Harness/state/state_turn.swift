@@ -10,9 +10,9 @@
 //  a SessionTask box instead of AbortOnDropHandle / OTel guards.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
 import Foundation
 
 enum MailboxDeliveryPhase: Equatable, Sendable {
@@ -41,13 +41,13 @@ struct AcceptedUserInputResponse: Sendable {
 /// replacement request, and the user's decision can all observe the same id.
 final class ApprovalDecision: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<CodexProtocol.ReviewDecision, Never>?
+    private var continuation: CheckedContinuation<SageProtocol.ReviewDecision, Never>?
 
-    init(_ continuation: CheckedContinuation<CodexProtocol.ReviewDecision, Never>) {
+    init(_ continuation: CheckedContinuation<SageProtocol.ReviewDecision, Never>) {
         self.continuation = continuation
     }
 
-    func resume(_ value: CodexProtocol.ReviewDecision) {
+    func resume(_ value: SageProtocol.ReviewDecision) {
         lock.lock()
         let continuation = self.continuation
         self.continuation = nil
@@ -183,7 +183,7 @@ final class TurnState: @unchecked Sendable {
     var strictAutoReviewEnabled = false
     var toolCalls: UInt64 = 0
     var hasMemoryCitation = false
-    var tokenUsageAtTurnStart = CodexProtocol.TokenUsage()
+    var tokenUsageAtTurnStart = SageProtocol.TokenUsage()
     var tokenUsageByModel = TurnTokenUsage()
     var lastKnownStepContext: StepContext?
 

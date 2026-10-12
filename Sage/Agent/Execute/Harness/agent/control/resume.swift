@@ -1,6 +1,6 @@
 //
 //  resume.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/resume.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  and rollout restore still wait on ThreadManager.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension LocalAgentControl {

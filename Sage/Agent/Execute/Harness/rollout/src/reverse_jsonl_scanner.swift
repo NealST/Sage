@@ -1,6 +1,6 @@
 //
 //  reverse_jsonl_scanner.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/reverse_jsonl_scanner.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,9 +10,9 @@
 //  oversized-record skipping match the Rust scanner.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexUtils
+import SageHistory
+import SageProtocol
+import SageUtils
 import Foundation
 
 private let readChunkSize = 64 * 1024

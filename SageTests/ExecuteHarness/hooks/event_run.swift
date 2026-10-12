@@ -9,9 +9,9 @@
 //  Port status: adapted
 //
 
-@testable import CodexHooks
-import CodexProtocol
-import CodexUtils
+@testable import SageHooks
+import SageProtocol
+import SageUtils
 import XCTest
 
 final class HooksEventRunTests: XCTestCase {
@@ -869,7 +869,7 @@ final class HooksEventRunTests: XCTestCase {
 
 private struct RejectingHookMcpExecutor: HookMcpExecutor {
     func execute(_ call: HookMcpCall) async throws -> String {
-        throw CodexErr.unsupportedOperation("unused mcp executor")
+        throw SageErr.unsupportedOperation("unused mcp executor")
     }
 }
 

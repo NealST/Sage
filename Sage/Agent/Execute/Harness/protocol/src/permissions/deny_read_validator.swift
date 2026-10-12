@@ -1,6 +1,6 @@
 //
 //  deny_read_validator.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/permissions/deny_read_validator.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  sandbox enforcement remain caller-owned.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Prepared mandatory rules reused when a caller replaces its selected profile.

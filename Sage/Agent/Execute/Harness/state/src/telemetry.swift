@@ -1,6 +1,6 @@
 //
 //  telemetry.swift
-//  CodexState
+//  SageState
 //
 //  Port of codex-rs/state/src/telemetry.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -14,31 +14,18 @@ import Foundation
 import os
 
 /// Errors encountered during DB operations. Tags: [stage]
-public let DB_ERROR_METRIC = "codex.db.error"
+public let DB_ERROR_METRIC = "sage.db.error"
 /// Metrics on backfill process. Tags: [status]
-public let DB_METRIC_BACKFILL = "codex.db.backfill"
+public let DB_METRIC_BACKFILL = "sage.db.backfill"
 /// Metrics on backfill duration. Tags: [status]
-public let DB_METRIC_BACKFILL_DURATION_MS = "codex.db.backfill.duration_ms"
+public let DB_METRIC_BACKFILL_DURATION_MS = "sage.db.backfill.duration_ms"
 /// SQLite initialization attempts. Tags: [status, phase, db, error]
-public let DB_INIT_METRIC = "codex.sqlite.init.count"
+public let DB_INIT_METRIC = "sage.sqlite.init.count"
 /// SQLite initialization latency. Tags: [status, phase, db, error]
-public let DB_INIT_DURATION_METRIC = "codex.sqlite.init.duration_ms"
+public let DB_INIT_DURATION_METRIC = "sage.sqlite.init.duration_ms"
 /// Rollout fallback attempts. Tags: [caller, reason]
-public let DB_FALLBACK_METRIC = "codex.sqlite.fallback.count"
-/// SQLite log batch write attempts. Tags: [status, error]
-public let LOG_WRITE_METRIC = "codex.sqlite.logs.write.count"
-/// SQLite log batch write latency. Tags: [status, error]
-public let LOG_WRITE_DURATION_METRIC = "codex.sqlite.logs.write.duration_ms"
-/// Estimated bytes in each SQLite log batch. Tags: [status, error]
-public let LOG_WRITE_BYTES_METRIC = "codex.sqlite.logs.write.bytes"
-/// Number of entries in each SQLite log batch. Tags: [status, error]
-public let LOG_WRITE_ENTRIES_METRIC = "codex.sqlite.logs.write.entries"
-/// Largest estimated entry size in each SQLite log batch. Tags: [status, error]
-public let LOG_WRITE_MAX_ENTRY_BYTES_METRIC = "codex.sqlite.logs.write.max_entry_bytes"
-/// SQLite log entries discarded before they can be queued. Tags: [reason]
-public let LOG_QUEUE_DROPPED_METRIC = "codex.sqlite.logs.queue.dropped"
-
-/// Low-cardinality sink for SQLite startup, fallback, and log-write telemetry.
+public let DB_FALLBACK_METRIC = "sage.sqlite.fallback.count"
+/// Low-cardinality sink for SQLite startup and fallback telemetry.
 ///
 /// Implementations should absorb delivery failures locally. Database behavior
 /// must not depend on whether telemetry export succeeds.
@@ -134,37 +121,6 @@ public func recordFallback(
         name: DB_FALLBACK_METRIC,
         tags: [("caller", caller), ("reason", reason)]
     )
-}
-
-func recordLogWrite(
-    telemetry: (any DbTelemetry)?,
-    duration: Duration,
-    entries: [LogEntry],
-    succeeded: Bool,
-    error: Error? = nil
-) {
-    guard let telemetry = resolveTelemetry(telemetry) else { return }
-
-    let outcome = DbOutcomeTags.from(succeeded: succeeded, error: error)
-    let tags = [("status", outcome.status), ("error", outcome.error)]
-    var batchBytes: Int64 = 0
-    var maxEntryBytes: Int64 = 0
-    for entry in entries {
-        let entryBytes = entry.estimatedBytes()
-        batchBytes &+= entryBytes
-        maxEntryBytes = max(maxEntryBytes, entryBytes)
-    }
-    let entryCount = Int64(clamping: entries.count)
-
-    telemetry.counter(LOG_WRITE_METRIC, inc: 1, tags: tags)
-    telemetry.recordDuration(LOG_WRITE_DURATION_METRIC, duration: duration, tags: tags)
-    telemetry.histogram(LOG_WRITE_BYTES_METRIC, value: batchBytes, tags: tags)
-    telemetry.histogram(LOG_WRITE_ENTRIES_METRIC, value: entryCount, tags: tags)
-    telemetry.histogram(LOG_WRITE_MAX_ENTRY_BYTES_METRIC, value: maxEntryBytes, tags: tags)
-}
-
-func recordLogQueueDrop(reason: String, telemetry: (any DbTelemetry)?) {
-    recordCounter(telemetry, name: LOG_QUEUE_DROPPED_METRIC, tags: [("reason", reason)])
 }
 
 private func recordCounter(

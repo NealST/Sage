@@ -1,6 +1,6 @@
 //
 //  store.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/store.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  types keep the Rust default: `ThreadStoreError.unsupported`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Why thread persistence is being requested.

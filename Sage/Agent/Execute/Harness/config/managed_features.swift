@@ -23,6 +23,7 @@ enum Feature: String, Equatable, Hashable, Sendable {
     case deferMailboxPreemption = "defer_mailbox_preemption"
     case applyPatchStreamingEvents = "apply_patch_streaming_events"
     case shellTool = "shell_tool"
+    case shellSnapshot = "shell_snapshot"
     case viewImage = "view_image"
     case sleepTool = "sleep_tool"
     case deferredExecutor = "deferred_executor"

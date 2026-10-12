@@ -194,7 +194,7 @@ final class CapabilityStore {
     }
 
     /// Start enabled servers that are not already connected. Already-running
-    /// servers stay up; Codex does this before sampling, not on a side path.
+    /// servers stay up; Sage does this before sampling, not on a side path.
     func ensureEnabledServersConnected() async {
         for server in mcpServers where server.enabled && clients[server.id] == nil {
             await connect(serverID: server.id)

@@ -6,14 +6,14 @@
 //  Phase 9 agent types, registry, roles, plugins, and apps tests.
 //
 
-import CodexAPI
-import CodexAgentRoles
-import CodexAsyncUtils
-import CodexCore
-import CodexHistory
-import CodexProtocol
-import CodexSkills
-import CodexUtils
+import SageAPI
+import SageAgentRoles
+import SageAsyncUtils
+import SageCore
+import SageHistory
+import SageProtocol
+import SageSkills
+import SageUtils
 import Foundation
 import XCTest
 
@@ -80,8 +80,8 @@ final class Phase9AgentTests: XCTestCase {
         let held = try? registry.reserveSpawnSlot(maxThreads: 1)
         XCTAssertNotNil(held)
         XCTAssertThrowsError(try registry.reserveSpawnSlot(maxThreads: 1)) { error in
-            guard let err = error as? CodexErr else {
-                return XCTFail("expected CodexErr")
+            guard let err = error as? SageErr else {
+                return XCTFail("expected SageErr")
             }
             if case .agentLimitReached = err.detailsValue() {
                 return
@@ -188,53 +188,6 @@ final class Phase9AgentTests: XCTestCase {
         )
     }
 
-    func testRenderExplicitPluginInstructionsAndBound() {
-        let plugin = PluginCapabilitySummary(
-            configName: "mail@shop",
-            displayName: "Mail",
-            pluginNamespace: "mail",
-            hasSkills: true
-        )
-        let rendered = renderExplicitPluginInstructions(
-            plugin: plugin,
-            availableMcpServers: ["mail-mcp"],
-            availableApps: ["Inbox"]
-        )
-        XCTAssertNotNil(rendered)
-        XCTAssertTrue(rendered?.contains("Capabilities from the `Mail` plugin:") ?? false)
-        XCTAssertTrue(rendered?.contains("prefixed with `mail:`") ?? false)
-        XCTAssertTrue(rendered?.contains("`Inbox`") ?? false)
-        XCTAssertTrue(rendered?.contains("`mail-mcp`") ?? false)
-
-        let empty = renderExplicitPluginInstructions(
-            plugin: PluginCapabilitySummary(configName: "x", displayName: "X"),
-            availableMcpServers: [],
-            availableApps: []
-        )
-        XCTAssertNil(empty)
-    }
-
-    func testRenderAppsSectionRequiresAccessibleAndEnabled() {
-        XCTAssertNil(renderAppsSection([]))
-        XCTAssertNil(
-            renderAppsSection([
-                AppInfo(id: "calendar", name: "Calendar", isAccessible: true, isEnabled: false)
-            ])
-        )
-        XCTAssertNil(
-            renderAppsSection([
-                AppInfo(id: "calendar", name: "Calendar", isAccessible: false, isEnabled: true)
-            ])
-        )
-        let rendered = renderAppsSection([
-            AppInfo(id: "calendar", name: "Calendar", isAccessible: true, isEnabled: true)
-        ])
-        XCTAssertNotNil(rendered)
-        XCTAssertTrue(rendered?.hasPrefix(appsInstructionsOpenTag) ?? false)
-        XCTAssertTrue(rendered?.contains("## Apps (Connectors)") ?? false)
-        XCTAssertTrue(rendered?.hasSuffix(appsInstructionsCloseTag) ?? false)
-    }
-
     func testAgentMessageIntoCommunication() throws {
         let author = AgentPath.root()
         let recipient = try AgentPath.root().join("worker")
@@ -295,12 +248,6 @@ final class Phase9AgentTests: XCTestCase {
         )
     }
 
-    func testCyberAccessProgramRequiresChatgptAuth() {
-        XCTAssertNil(forAuth(isChatgptAuth: false, program: .standard))
-        XCTAssertEqual(forAuth(isChatgptAuth: true, program: .daybreakBlue)?.cyber, "daybreak_blue")
-        XCTAssertNil(forAuth(isChatgptAuth: true, program: nil))
-    }
-
     func testConnectorNameSlug() {
         XCTAssertEqual(connectorNameSlug("Google Calendar"), "google-calendar")
         XCTAssertEqual(connectorNameSlug("!!!"), "app")
@@ -347,8 +294,8 @@ final class Phase9AgentTests: XCTestCase {
         let held = control.admitTurn(version: .v2, source: source)
         XCTAssertNotNil(held)
         XCTAssertThrowsError(try control.checkTurnAdmission(version: .v2, source: source)) { error in
-            guard let err = error as? CodexErr else {
-                return XCTFail("expected CodexErr")
+            guard let err = error as? SageErr else {
+                return XCTFail("expected SageErr")
             }
             if case .agentLimitReached = err.detailsValue() { return }
             XCTFail("expected agentLimitReached, got \(err)")
@@ -452,154 +399,6 @@ final class Phase9AgentTests: XCTestCase {
         let rootId = ThreadId()
         runtime.registerSessionRoot(currentThreadId: rootId, currentParentThreadId: nil)
         XCTAssertEqual(try runtime.ensureAgentKnown(rootId).agentId, rootId)
-    }
-
-    func testCombineSelectedCapabilityRootsRefreshesThreadOwnedMatch() throws {
-        let cwd = try AbsolutePathBuf.currentDir()
-        let cwdUri = PathUri.fromAbsPath(cwd)
-        let persisted = SelectedCapabilityRoot(
-            id: "root-1",
-            location: .environment(environmentId: LOCAL_ENVIRONMENT_ID, path: cwdUri)
-        )
-        let refreshed = SelectedCapabilityRoot(
-            id: "root-1",
-            location: .environment(
-                environmentId: LOCAL_ENVIRONMENT_ID,
-                path: try PathUri.parse("file:///tmp/refreshed")
-            )
-        )
-        let ownerOnly = SelectedCapabilityRoot(
-            id: "root-2",
-            location: .environment(environmentId: "remote", path: cwdUri)
-        )
-        let combined = combineSelectedCapabilityRoots(
-            threadRoots: [persisted],
-            sources: [
-                (.thread, [refreshed]),
-                (.owner, [ownerOnly]),
-            ]
-        )
-        XCTAssertEqual(combined.map(\.id), ["root-1", "root-1", "root-2"])
-        XCTAssertEqual(combined[0], refreshed)
-    }
-
-    func testValidateEnvironmentIdsAndResolveSelectionConfig() throws {
-        let cwd = PathUri.fromAbsPath(try AbsolutePathBuf.currentDir())
-        let local = TurnEnvironmentSelection(
-            environmentId: LOCAL_ENVIRONMENT_ID,
-            cwd: cwd,
-            workspaceRoots: [cwd],
-            config: .fromThread
-        )
-        let remote = TurnEnvironmentSelection(
-            environmentId: "remote",
-            cwd: cwd,
-            workspaceRoots: [cwd],
-            config: .fromThread
-        )
-        try validateEnvironmentIdsAndCwds(
-            knownEnvironmentIds: [LOCAL_ENVIRONMENT_ID, "remote"],
-            environments: [local, remote]
-        )
-        XCTAssertThrowsError(
-            try validateEnvironmentIdsAndCwds(
-                knownEnvironmentIds: [LOCAL_ENVIRONMENT_ID],
-                environments: [local, remote]
-            )
-        )
-        XCTAssertThrowsError(
-            try validateEnvironmentIdsAndCwds(
-                knownEnvironmentIds: [LOCAL_ENVIRONMENT_ID],
-                environments: [local, local]
-            )
-        )
-
-        let defaults = ThreadEnvironmentDefaults(
-            common: threadEnvironmentConfig(),
-            localWindowsSandboxType: .macosSeatbelt
-        )
-        let (resolved, origin) = resolveSelectionConfig(local, defaults: defaults)
-        XCTAssertEqual(origin, .thread)
-        guard case .ready(let config) = resolved.config else {
-            return XCTFail("expected ready config")
-        }
-        XCTAssertEqual(config.windowsSandboxType, .macosSeatbelt)
-        XCTAssertEqual(config.workspaceRoots, [cwd])
-    }
-
-    func testThreadEnvironmentsUpdateSelectionsAndSnapshot() throws {
-        let cwd = PathUri.fromAbsPath(try AbsolutePathBuf.currentDir())
-        let defaults = ThreadEnvironmentDefaults(
-            common: threadEnvironmentConfig(),
-            localWindowsSandboxType: .none
-        )
-        let environments = ThreadEnvironments(
-            knownEnvironmentIds: [LOCAL_ENVIRONMENT_ID, "remote"],
-            threadDefaults: defaults
-        )
-        environments.updateSelections([
-            TurnEnvironmentSelection(
-                environmentId: LOCAL_ENVIRONMENT_ID,
-                cwd: cwd,
-                workspaceRoots: [cwd],
-                config: .fromThread
-            ),
-            TurnEnvironmentSelection(
-                environmentId: "remote",
-                cwd: cwd,
-                workspaceRoots: [cwd],
-                config: .pending
-            ),
-            TurnEnvironmentSelection(
-                environmentId: LOCAL_ENVIRONMENT_ID,
-                cwd: cwd,
-                workspaceRoots: [cwd],
-                config: .fromThread
-            ),
-        ])
-        XCTAssertEqual(environments.selections().map(\.environmentId), [LOCAL_ENVIRONMENT_ID, "remote"])
-        XCTAssertEqual(environments.selections()[0].config, .fromThread)
-        let snapshot = environments.snapshot()
-        XCTAssertEqual(snapshot.turnEnvironments().count, 1)
-        XCTAssertEqual(snapshot.starting().count, 1)
-        XCTAssertEqual(snapshot.primary()?.selection.environmentId, LOCAL_ENVIRONMENT_ID)
-        XCTAssertEqual(snapshot.primaryWorkspaceRootUris(), [cwd])
-        XCTAssertNotNil(snapshot.local())
-        XCTAssertNil(snapshot.singleLocalEnvironment())
-        XCTAssertFalse(
-            snapshot.hasFullAccess(approvalPolicy: .never, threadProfile: .disabled)
-        )
-        XCTAssertTrue(
-            TurnEnvironmentSnapshot().hasFullAccess(
-                approvalPolicy: .never,
-                threadProfile: .disabled
-            )
-        )
-
-        var ownerConfig = threadEnvironmentConfig()
-        ownerConfig.networkPolicy = EnvironmentNetworkPolicy()
-        XCTAssertThrowsError(
-            try validateEnvironmentConfig(
-                TurnEnvironmentSelection(
-                    environmentId: LOCAL_ENVIRONMENT_ID,
-                    cwd: cwd,
-                    workspaceRoots: [cwd],
-                    config: .ready(ownerConfig)
-                ),
-                ownerConfig
-            )
-        )
-        XCTAssertNoThrow(
-            try validateEnvironmentConfig(
-                TurnEnvironmentSelection(
-                    environmentId: "remote",
-                    cwd: cwd,
-                    workspaceRoots: [cwd],
-                    config: .ready(ownerConfig)
-                ),
-                ownerConfig
-            )
-        )
     }
 
     func testRenderInputPreviewAndSessionSourceAccessors() throws {
@@ -707,9 +506,9 @@ final class Phase9AgentTests: XCTestCase {
                 pathPrefix: "Ada"
             )
             XCTFail("expected invalid path prefix to throw")
-        } catch is CodexErr {
+        } catch is SageErr {
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
 
         let inspected = try await control.inspectAgent(childId)
@@ -718,13 +517,13 @@ final class Phase9AgentTests: XCTestCase {
         do {
             _ = try await control.inspectAgent(ThreadId())
             XCTFail("expected unknown agent to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .threadNotFound = err.detailsValue() {
             } else {
                 XCTFail("expected threadNotFound, got \(err)")
             }
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
         let knownStatus = await control.getStatus(childId)
         XCTAssertEqual(knownStatus, .notFound)
@@ -768,7 +567,7 @@ final class Phase9AgentTests: XCTestCase {
         do {
             try await control.ensureChildLoaded(parent: spawned.threadId, child: parent)
             XCTFail("expected parent/child mismatch to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .invalidRequest = err.detailsValue() {
             } else {
                 XCTFail("expected invalidRequest, got \(err)")
@@ -791,7 +590,7 @@ final class Phase9AgentTests: XCTestCase {
                 )
             )
             XCTFail("expected empty send input to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .invalidRequest = err.detailsValue() {
             } else {
                 XCTFail("expected invalidRequest, got \(err)")
@@ -881,91 +680,19 @@ final class Phase9AgentTests: XCTestCase {
         do {
             _ = try await control.interrupt(caller: rootId, target: .id(rootId), version: .v2)
             XCTFail("expected root interrupt to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             XCTAssertTrue(String(describing: err).contains("root is not a spawned agent"))
         }
         do {
             _ = try await control.interrupt(caller: childId, target: .id(childId), version: .v2)
             XCTFail("expected self interrupt to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             XCTAssertTrue(String(describing: err).contains("cannot interrupt itself"))
         }
         let interrupted = try await control.interrupt(caller: rootId, target: .id(childId), version: .v2)
         XCTAssertEqual(interrupted.metadata().agentPath?.asStr, childPath.asStr)
         let status = await control.getStatus(childId)
         XCTAssertEqual(status, .interrupted)
-    }
-
-    func testCollectAccessibleConnectorsAndCache() {
-        let tools = [
-            AccessibleConnectorTool(
-                connectorId: "calendar",
-                connectorName: "Google Calendar",
-                pluginDisplayNames: ["Mail"]
-            ),
-            AccessibleConnectorTool(
-                connectorId: "calendar",
-                connectorDescription: "Calendar access",
-                pluginDisplayNames: ["Notes"]
-            ),
-            AccessibleConnectorTool(connectorId: "drive", connectorName: "Drive"),
-        ]
-        let connectors = collectAccessibleConnectors(tools)
-        XCTAssertEqual(connectors.map(\.id), ["drive", "calendar"])
-        let calendar = connectors.first { $0.id == "calendar" }
-        XCTAssertEqual(calendar?.name, "Google Calendar")
-        XCTAssertEqual(calendar?.description, "Calendar access")
-        XCTAssertEqual(calendar?.pluginDisplayNames, ["Mail", "Notes"])
-        XCTAssertEqual(
-            calendar?.installUrl,
-            "https://chatgpt.com/apps/google-calendar/calendar"
-        )
-        XCTAssertEqual(calendar?.isAccessible, true)
-
-        let key = AccessibleConnectorsCacheKey(chatgptBaseUrl: "https://chatgpt.com", accountId: "a1")
-        writeCachedAccessibleConnectors(key, connectors: connectors)
-        XCTAssertEqual(readCachedAccessibleConnectors(key)?.map(\.id), ["drive", "calendar"])
-        XCTAssertNil(
-            readCachedAccessibleConnectors(
-                AccessibleConnectorsCacheKey(chatgptBaseUrl: "https://chatgpt.com", accountId: "other")
-            )
-        )
-    }
-
-    func testDiscoverableToolFilterAndListResult() {
-        let plugin = DiscoverableTool.plugin(
-            DiscoverablePluginInfo(id: "sample@shop", name: "Sample", hasSkills: true)
-        )
-        let connector = DiscoverableTool.connector(
-            AppInfo(id: "calendar", name: "Calendar", isAccessible: true)
-        )
-        XCTAssertEqual(
-            filterRequestPluginInstallDiscoverableToolsForClient(
-                [plugin, connector],
-                appServerClientName: TUI_CLIENT_NAME
-            ).map { $0.id() },
-            ["calendar"]
-        )
-        XCTAssertEqual(
-            filterRequestPluginInstallDiscoverableToolsForClient(
-                [plugin, connector],
-                appServerClientName: nil
-            ).count,
-            2
-        )
-        let entries = collectRequestPluginInstallEntries([plugin, connector])
-        let listed = listAvailablePluginsToInstallResult(
-            entries + [
-                RequestPluginInstallEntry(
-                    id: "long@shop",
-                    name: "Aaa",
-                    description: String(repeating: "x", count: 241),
-                    toolType: .plugin
-                )
-            ]
-        )
-        XCTAssertEqual(listed.tools.map(\.id), ["long@shop", "calendar", "sample@shop"])
-        XCTAssertEqual(listed.tools[0].description?.count, 240)
     }
 
     func testResolveRequestedSpawnAgentModelOverrides() throws {
@@ -1005,23 +732,6 @@ final class Phase9AgentTests: XCTestCase {
         XCTAssertEqual(resolveSpawnAgentServiceTier(requestedTier: "fast") { $0 == "fast" }, "fast")
     }
 
-    func testWriteCuratedPluginFixture() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sage-plugin-fixture-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-        try writeOpenaiApiCuratedMarketplace(root: root, pluginNames: ["sample"])
-        XCTAssertTrue(
-            FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("plugins/sample/.codex-plugin/plugin.json").path
-            )
-        )
-        let marketplace = try String(
-            contentsOf: root.appendingPathComponent(".agents/plugins/api_marketplace.json"),
-            encoding: .utf8
-        )
-        XCTAssertTrue(marketplace.contains(OPENAI_API_CURATED_MARKETPLACE_NAME))
-    }
-
     func testThreadManagerLiveRegistryHidesInternalAndListsSubtree() async throws {
         let manager = ThreadManager()
         let parent = try await manager.startThread(
@@ -1041,13 +751,13 @@ final class Phase9AgentTests: XCTestCase {
         do {
             _ = try await manager.getThread(internalThread.threadId)
             XCTFail("internal threads are hidden from getThread")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .threadNotFound = err.detailsValue() {
             } else {
                 XCTFail("expected threadNotFound, got \(err)")
             }
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
         let listedAfterInternal = await manager.listThreadIds()
         XCTAssertEqual(listedAfterInternal, [parent.threadId])
@@ -1055,13 +765,13 @@ final class Phase9AgentTests: XCTestCase {
         do {
             _ = try await manager.removeThreadForClient(internalThread.threadId)
             XCTFail("expected owner-only remove for internal threads")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .invalidRequest = err.detailsValue() {
             } else {
                 XCTFail("expected invalidRequest, got \(err)")
             }
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
 
         let control = manager.agentControl()
@@ -1154,26 +864,26 @@ final class Phase9AgentTests: XCTestCase {
                 StartThreadOptions(cwd: "/", reservedThreadId: reserved)
             )
             XCTFail("expected duplicate reserved id to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .invalidRequest = err.detailsValue() {
             } else {
                 XCTFail("expected invalidRequest, got \(err)")
             }
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
 
         let runtime = LocalAgentRuntime()
         do {
             _ = try await runtime.listLiveAgentSubtreeThreadIds(ThreadId())
             XCTFail("expected missing ThreadManager to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .unsupportedOperation = err.detailsValue() {
             } else {
                 XCTFail("expected unsupportedOperation, got \(err)")
             }
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
         let formatted = await runtime.formatLegacyEnvironmentContextSubagents(
             parentThreadId: ThreadId(),
@@ -1393,7 +1103,7 @@ final class Phase9AgentTests: XCTestCase {
                 )
             )
             XCTFail("expected fork without spawn call id to throw")
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .fatal(let message) = err.detailsValue() {
                 XCTAssertTrue(message.contains("parent spawn call id"))
             } else {
@@ -1727,10 +1437,10 @@ final class Phase9AgentTests: XCTestCase {
                 mode: .startOrSteer
             )
             XCTFail("expected a shut down session to reject input")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error, .internalAgentDied)
         } catch {
-            XCTFail("expected CodexErr, got \(error)")
+            XCTFail("expected SageErr, got \(error)")
         }
     }
 
@@ -2075,7 +1785,7 @@ final class Phase9AgentTests: XCTestCase {
                 mode: .steer(expectedTurnId: turnId)
             )
             XCTFail("expected steer to reject a response item")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error, .invalidRequest("only user input can steer a turn"))
         }
 
@@ -2122,6 +1832,136 @@ final class Phase9AgentTests: XCTestCase {
             return XCTFail("explicit user input can enter plan mode, got \(entered)")
         }
         XCTAssertEqual(session.collaborationMode(), .plan)
+    }
+
+    func testWaitForFinalStatusAfterChildTurnCompletes() async throws {
+        let sampler = HoldTurnSampler()
+        let manager = ThreadManager()
+        manager.setTurnSampler(sampler)
+        let parent = try await manager.startThread(
+            StartThreadOptions(model: "gpt-test", cwd: "/", source: .cli)
+        )
+        let control = manager.agentControl()
+        let (spawned, _) = try await control.spawn(
+            SpawnRequest(
+                caller: parent.threadId,
+                input: .userInput([.text(text: "hello", textElements: [])]),
+                source: .subAgent(
+                    .threadSpawn(
+                        parentThreadId: parent.threadId,
+                        depth: 1,
+                        agentPath: try AgentPath.root().join("ada"),
+                        agentNickname: "Ada",
+                        agentRole: "explorer"
+                    )
+                ),
+                options: SpawnAgentOptions(parentThreadId: parent.threadId)
+            )
+        )
+        await sampler.waitUntilEntered()
+        let waitTask = Task {
+            try await control.waitForFinalStatuses(
+                threadIds: [spawned.threadId],
+                timeout: .seconds(2)
+            )
+        }
+        sampler.release()
+        let finished = try await waitTask.value
+        XCTAssertEqual(finished.count, 1)
+        XCTAssertEqual(finished.first?.0, spawned.threadId)
+        XCTAssertEqual(finished.first?.1, .completed("pong"))
+    }
+
+    func testSendOpInterruptAbortsSampling() async throws {
+        let sampler = HoldTurnSampler()
+        let manager = ThreadManager()
+        manager.setTurnSampler(sampler)
+        let parent = try await manager.startThread(
+            StartThreadOptions(model: "gpt-test", cwd: "/", source: .cli)
+        )
+        let (spawned, _) = try await manager.agentControl().spawn(
+            SpawnRequest(
+                caller: parent.threadId,
+                input: .userInput([.text(text: "hello", textElements: [])]),
+                source: .subAgent(
+                    .threadSpawn(
+                        parentThreadId: parent.threadId,
+                        depth: 1,
+                        agentPath: try AgentPath.root().join("ada"),
+                        agentNickname: "Ada",
+                        agentRole: "explorer"
+                    )
+                ),
+                options: SpawnAgentOptions(parentThreadId: parent.threadId)
+            )
+        )
+        let child = try await manager.getThread(spawned.threadId)
+        let session = try XCTUnwrap(child.liveSession())
+        let turnId = try XCTUnwrap(session.activeTurnId())
+        await sampler.waitUntilEntered()
+        _ = try await manager.sendOp(spawned.threadId, op: .interrupt)
+        sampler.release()
+        let text = await session.waitForSamplingResult()
+        XCTAssertNil(text)
+        XCTAssertNil(session.activeTurnId())
+        let messages = child.recordedEvents().map(\.msg)
+        XCTAssertTrue(messages.contains { event in
+            if case .turnComplete(let complete) = event {
+                return complete.turnId == turnId && complete.interrupted
+            }
+            return false
+        })
+        XCTAssertEqual(child.submittedOps().contains(.interrupt), true)
+    }
+
+    func testAdoptRootThreadSpawnInheritsModelCwdAndHistory() async throws {
+        let manager = ThreadManager()
+        let parentId = ThreadId()
+        let prior = ResponseItem.message(
+            id: nil,
+            role: "user",
+            content: [.inputText(text: "keep")],
+            phase: nil,
+            internalChatMessageMetadataPassthrough: nil
+        )
+        try manager.adoptRootThread(
+            threadId: parentId,
+            model: "gpt-parent",
+            cwd: "/",
+            history: [prior]
+        )
+        let parent = try XCTUnwrap(manager.peekThread(parentId))
+        XCTAssertNil(parent.liveSession())
+        XCTAssertEqual(parent.configSnapshot().model, "gpt-parent")
+
+        let (spawned, snapshot) = try await manager.agentControl().spawn(
+            SpawnRequest(
+                caller: parentId,
+                input: .userInput([.text(text: "hello", textElements: [])]),
+                source: .subAgent(
+                    .threadSpawn(
+                        parentThreadId: parentId,
+                        depth: 1,
+                        agentPath: try AgentPath.root().join("ada"),
+                        agentNickname: "Ada",
+                        agentRole: "explorer"
+                    )
+                ),
+                options: SpawnAgentOptions(
+                    forkParentSpawnCallId: "call-1",
+                    forkMode: .fullHistory,
+                    parentThreadId: parentId
+                )
+            )
+        )
+        XCTAssertEqual(snapshot.model, "gpt-parent")
+        let child = try await manager.getThread(spawned.threadId)
+        XCTAssertEqual(child.configSnapshot().model, "gpt-parent")
+        XCTAssertEqual(
+            child.historyItems(),
+            [phase9UserRollout("keep")]
+        )
+        XCTAssertNotNil(child.liveSession())
     }
 }
 

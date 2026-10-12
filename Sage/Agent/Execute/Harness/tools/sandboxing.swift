@@ -81,7 +81,7 @@ enum AskForApproval: Sendable, Equatable {
     case unlessTrusted
 }
 
-/// Codex `ApprovalRequestReasons` — hook / retry text the isolated reviewer sees.
+/// Sage `ApprovalRequestReasons` — hook / retry text the isolated reviewer sees.
 struct ApprovalRequestReasons: Sendable, Equatable {
     var approval: String?
     var retry: String?

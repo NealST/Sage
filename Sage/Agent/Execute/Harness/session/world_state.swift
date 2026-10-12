@@ -10,9 +10,9 @@
 //  plus exec-policy approved prefixes. Plugin contributors stay out.
 //
 
-import CodexCore
-import CodexExecPolicy
-import CodexProtocol
+import SageCore
+import SageExecPolicy
+import SageProtocol
 import Foundation
 
 extension Session {
@@ -31,7 +31,6 @@ extension Session {
             )
         )
         state.collaborationMode = CollaborationModeState(mode: turn.collaborationMode)
-        state.realtime = RealtimeState(active: turn.realtimeActive)
         let developer = turn.config.developerInstructions
             ?? self.state.sessionConfiguration.developerInstructions
         if let developer, !developer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -125,7 +124,7 @@ func renderEnvironmentContext(cwd: String, approvalPolicy: String) -> String {
     """
 }
 
-func approvalPolicyLabel(_ policy: CodexProtocol.AskForApproval) -> String {
+func approvalPolicyLabel(_ policy: SageProtocol.AskForApproval) -> String {
     switch policy {
     case .unlessTrusted:
         return "untrusted"

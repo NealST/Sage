@@ -1,6 +1,6 @@
 //
 //  native_path_bytes.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/path-uri/src/native_path_bytes.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

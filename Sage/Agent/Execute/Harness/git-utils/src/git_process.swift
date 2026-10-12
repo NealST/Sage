@@ -1,6 +1,6 @@
 //
 //  git_process.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/git_process.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  job-object containment is omitted (platform: macOS).
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct GitProcessOutput: Sendable {

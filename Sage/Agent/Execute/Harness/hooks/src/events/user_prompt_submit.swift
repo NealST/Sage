@@ -1,6 +1,6 @@
 //
 //  user_prompt_submit.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/events/user_prompt_submit.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  are ported. Process spawn is Foundation.Process.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public struct UserPromptSubmitRequest: Equatable, Sendable {

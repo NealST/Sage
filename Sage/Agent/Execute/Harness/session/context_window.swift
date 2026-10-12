@@ -10,7 +10,7 @@
 //  reserved only when TokenBudgetConfig has a fallback prompt.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct ContextWindowTokenStatus: Equatable, Sendable {

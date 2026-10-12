@@ -10,10 +10,10 @@
 //  crate is ported. Tokio watch/broadcast/Notify map to locks + continuations.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 let EARLY_EXIT_GRACE_PERIOD = Duration.milliseconds(150)
@@ -84,7 +84,7 @@ final class OutputHandles: @unchecked Sendable {
 
 final class UnifiedExecProcess: @unchecked Sendable {
     private enum Transport {
-        case local(CodexUtils.ProcessHandle)
+        case local(SageUtils.ProcessHandle)
     }
 
     private var processHandle: Transport

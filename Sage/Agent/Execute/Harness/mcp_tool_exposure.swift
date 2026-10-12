@@ -1,6 +1,6 @@
 //
 //  mcp_tool_exposure.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/mcp_tool_exposure.rs (Apache-2.0)
 //  plus tool_is_model_visible from codex-mcp and AppToolPolicy from
@@ -16,6 +16,7 @@
 
 import Foundation
 
+public let SAGE_APPS_MCP_SERVER_NAME = "sage_apps"
 public let maxAgentPluginMcpSpecBytes = 8_000
 public let maxAgentPluginMcpTotalBytes = 64_000
 
@@ -129,6 +130,53 @@ public struct AppToolPolicyEvaluator: Equatable, Sendable {
     }
 }
 
+public struct McpVisibleTool: Equatable, Sendable {
+    public var name: String
+    public var description: String
+    public var serverName: String
+    public var connectorId: String?
+    public var visibility: [String]?
+    public var isAgentPlugin: Bool
+    public var modelSpecBytes: Int?
+    public var parametersJSON: String?
+    public var toolTitle: String?
+    public var destructiveHint: Bool?
+    public var openWorldHint: Bool?
+
+    public init(
+        name: String,
+        description: String = "",
+        serverName: String = "",
+        connectorId: String? = nil,
+        visibility: [String]? = nil,
+        isAgentPlugin: Bool = false,
+        modelSpecBytes: Int? = nil,
+        parametersJSON: String? = nil,
+        toolTitle: String? = nil,
+        destructiveHint: Bool? = nil,
+        openWorldHint: Bool? = nil
+    ) {
+        self.name = name
+        self.description = description
+        self.serverName = serverName
+        self.connectorId = connectorId
+        self.visibility = visibility
+        self.isAgentPlugin = isAgentPlugin
+        self.modelSpecBytes = modelSpecBytes
+        self.parametersJSON = parametersJSON
+        self.toolTitle = toolTitle
+        self.destructiveHint = destructiveHint
+        self.openWorldHint = openWorldHint
+    }
+
+    public var resolvedServerName: String { serverName }
+
+    public var resolvedModelSpecBytes: Int {
+        if let modelSpecBytes { return modelSpecBytes }
+        return name.utf8.count + description.utf8.count + (parametersJSON?.utf8.count ?? 0)
+    }
+}
+
 public struct McpToolRegistration: Equatable, Sendable {
     public var tool: McpVisibleTool
     public var exposure: McpToolExposure
@@ -189,19 +237,19 @@ public func toolIsModelVisible(_ tool: McpVisibleTool) -> Bool {
     return visibility.contains(mcpUIModelVisibility)
 }
 
-public func filterNonCodexAppsMcpToolsOnly(_ tools: [McpVisibleTool]) -> [McpVisibleTool] {
+public func filterNonSageAppsMcpToolsOnly(_ tools: [McpVisibleTool]) -> [McpVisibleTool] {
     tools.filter { tool in
-        tool.resolvedServerName != CODEX_APPS_MCP_SERVER_NAME && toolIsModelVisible(tool)
+        tool.resolvedServerName != SAGE_APPS_MCP_SERVER_NAME && toolIsModelVisible(tool)
     }
 }
 
-public func filterCodexAppsMcpTools(
+public func filterSageAppsMcpTools(
     _ tools: [McpVisibleTool],
     appsConfig: AppsConfig?
 ) -> [McpVisibleTool] {
     let evaluator = AppToolPolicyEvaluator(appsConfig: appsConfig)
     return tools.filter { tool in
-        guard tool.resolvedServerName == CODEX_APPS_MCP_SERVER_NAME else { return false }
+        guard tool.resolvedServerName == SAGE_APPS_MCP_SERVER_NAME else { return false }
         guard toolIsModelVisible(tool) else { return false }
         guard let connectorId = tool.connectorId else { return false }
         return evaluator.policy(
@@ -223,8 +271,8 @@ public func appendMcpTools(
     searchToolEnabled: Bool,
     handlers: inout [String: McpVisibleTool]
 ) -> [McpToolRegistration] {
-    let nonAppTools = filterNonCodexAppsMcpToolsOnly(tools)
-    let appTools = appsEnabled ? filterCodexAppsMcpTools(tools, appsConfig: appsConfig) : []
+    let nonAppTools = filterNonSageAppsMcpToolsOnly(tools)
+    let appTools = appsEnabled ? filterSageAppsMcpTools(tools, appsConfig: appsConfig) : []
     let baseExposure: McpToolExposure = searchToolEnabled ? .deferred : .direct
     var registrations: [McpToolRegistration] = []
     var agentPluginBytes = 0

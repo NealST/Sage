@@ -7,12 +7,12 @@
 //  Port status: adapted
 //
 //  Diagnostic labels only — never used for authorization.
-//  `CodexResponsesMetadata` (Phase 6) is represented by the local
+//  `SageResponsesMetadata` (Phase 6) is represented by the local
 //  `SandboxDiagnosticMetadata` sink until that type is ported.
 //
 
-import CodexProtocol
-import CodexSandboxing
+import SageProtocol
+import SageSandboxing
 import FileSystem
 import Foundation
 

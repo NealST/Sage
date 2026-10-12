@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexAsyncUtils
+//  SageAsyncUtils
 //
 //  Port of codex-rs/async-utils/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -21,7 +21,7 @@
 
 import Foundation
 
-/// Stack budget for threads that poll Codex async work
+/// Stack budget for threads that poll Sage async work
 /// (`THREAD_STACK_SIZE_BYTES`).
 public let threadStackSizeBytes = 16 * 1024 * 1024
 

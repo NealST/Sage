@@ -1,13 +1,13 @@
 //
 //  guardian_budget_omission.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/guardian_budget_omission.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct GuardianBudgetOmission: ContextualUserFragment, Equatable, Sendable {

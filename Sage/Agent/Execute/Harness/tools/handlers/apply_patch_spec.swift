@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 //  Sage exposes apply_patch as a JSON function tool (not a freeform grammar).
-//  The patch body itself stays the Codex apply-patch language.
+//  The patch body itself stays the Sage apply-patch language.
 //
 
 import Foundation

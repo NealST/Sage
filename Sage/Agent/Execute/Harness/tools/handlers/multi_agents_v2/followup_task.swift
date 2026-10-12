@@ -11,8 +11,8 @@
 //  LocalAgentControl is attached.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct FollowupTaskHandler: CoreToolRuntime {
     func toolName() -> ToolName { ToolName(plain: "followup_task") }

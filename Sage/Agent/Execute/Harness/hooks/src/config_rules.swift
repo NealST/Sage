@@ -1,6 +1,6 @@
 //
 //  config_rules.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/config_rules.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

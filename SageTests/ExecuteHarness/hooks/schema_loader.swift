@@ -8,8 +8,8 @@
 //  Port status: adapted
 //
 
-@testable import CodexHooks
-import CodexProtocol
+@testable import SageHooks
+import SageProtocol
 import XCTest
 
 final class HooksSchemaLoaderTests: XCTestCase {

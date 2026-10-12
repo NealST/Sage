@@ -8,8 +8,8 @@
 //  Port status: adapted
 //
 
-@testable import CodexShellCommand
-import CodexProtocol
+@testable import SageShellCommand
+import SageProtocol
 import XCTest
 
 final class ParseCommandTests: XCTestCase {

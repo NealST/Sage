@@ -10,7 +10,7 @@
 //  the command environment and optional zsh-fork launch.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct UnifiedExecRuntimeRequest: Equatable, Sendable {

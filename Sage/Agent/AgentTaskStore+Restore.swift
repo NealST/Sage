@@ -214,7 +214,7 @@ extension AgentTaskStore {
         return true
     }
 
-    /// Codex compact replaces the folded history with one summary event.
+    /// Sage compact replaces the folded history with one summary event.
     @discardableResult
     func replaceFoldedHistory(_ memory: TaskWorkingMemory, to taskID: UUID) async -> Bool {
         guard memory.hasContent, state.activeTaskID == taskID, var task = state.activeTask else {

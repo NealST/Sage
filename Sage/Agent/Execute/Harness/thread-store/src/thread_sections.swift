@@ -1,12 +1,12 @@
 //
 //  thread_sections.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/thread_sections.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  `ThreadSection` / appearance stand in for unported CodexState models.
+//  `ThreadSection` / appearance stand in for unported SageState models.
 //  Pinned-section constants come from codex-rs/state/src/lib.rs.
 //  In-memory catalog + `move_thread_to_section` live on `InMemoryThreadStore`.
 //

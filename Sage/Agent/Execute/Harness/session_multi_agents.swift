@@ -1,6 +1,6 @@
 //
 //  session_multi_agents.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/session/multi_agents.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  on Session.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public let DEFAULT_MULTI_AGENT_V2_MAX_CONCURRENT_THREADS_PER_SESSION = 4

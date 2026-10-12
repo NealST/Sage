@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/path-uri/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -82,7 +82,7 @@ func rustSplit(_ string: String, where isSeparator: (Character) -> Bool) -> [Str
 /// Only the `file:` scheme is currently accepted. Construction validates the
 /// URL, and the URI cannot be mutated after construction. `basename`,
 /// `parent`, and `join` operate on URI path segments without interpreting
-/// them using the operating system running Codex. Fallback URIs created by
+/// them using the operating system running Sage. Fallback URIs created by
 /// `fromAbsPath` are opaque to these lexical operations.
 public struct PathUri {
     /// The wrapped URL (`pub(crate)` upstream; visible to `@testable`).

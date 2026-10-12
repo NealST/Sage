@@ -11,7 +11,7 @@
 //  mailbox vs steer waiters the way rust `watch` does.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct UserInputMetadata: Equatable, Sendable {

@@ -6,7 +6,7 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Codex admits tools through an RWLock: parallel-capable calls take a
+//  Sage admits tools through an RWLock: parallel-capable calls take a
 //  read lock, serial calls take a write lock. `ToolCallRuntime` (runTurn)
 //  wires `request_user_input`, `request_permissions`, and dynamic tools
 //  onto the session waiters and, with `ToolBatchExecutor.runAdmittedBatch`,
@@ -15,9 +15,9 @@
 //  policy used by `ToolBatchWave` and a generic runner for isolated batches.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
+import SageAsyncUtils
+import SageCore
+import SageProtocol
 import Foundation
 
 enum ParallelToolRuntime {
@@ -32,7 +32,7 @@ enum ParallelToolRuntime {
         "run_skill_script",
     ]
 
-    /// Sage observation names. Registered Codex handlers use their runtime flag instead.
+    /// Sage observation names. Registered Sage handlers use their runtime flag instead.
     static func supportsParallel(_ toolName: String) -> Bool {
         if alwaysSerial.contains(toolName) { return false }
         if toolName.hasPrefix("mcp__") { return false }
@@ -105,7 +105,7 @@ enum ParallelToolRuntime {
     }
 }
 
-/// Codex `parallel_execution` RwLock: readers overlap, a writer waits for them
+/// Sage `parallel_execution` RwLock: readers overlap, a writer waits for them
 /// and then excludes everyone else.
 actor ParallelAdmission {
     private var readers = 0
@@ -194,7 +194,7 @@ func toolCallRunsInParallel(_ call: ToolCall, router: ToolRouter?) -> Bool {
     return ParallelToolRuntime.supportsParallel(flatToolName(call.toolName))
 }
 
-/// Codex `ToolCallRuntime` — dispatch one model tool call through the step router.
+/// Sage `ToolCallRuntime` — dispatch one model tool call through the step router.
 struct ToolCallRuntime: Sendable {
     var session: Session
     var stepContext: StepContext
@@ -204,7 +204,7 @@ struct ToolCallRuntime: Sendable {
         cancellationToken: CancellationToken
     ) async throws -> ResponseItem {
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         let exclusive = !toolCallRunsInParallel(call, router: stepContext.toolRouter)
         return try await session.services.parallelAdmission.run(exclusive: exclusive) {
@@ -274,6 +274,9 @@ struct ToolCallRuntime: Sendable {
             invocation.mcpToolTransport = session.services.mcpToolTransport
             invocation.mcpInputModalities = stepContext.turn.modelInfoValue().inputModalities
             invocation.onSageToolCall = session.services.onSageToolCall
+            invocation.localAgentControl = session.services.localAgentControl
+            invocation.parentThreadId = session.state.sessionConfiguration.parentThreadId
+            invocation.inputQueue = session.inputQueue
             invocation.hookProjectRoot = session.services.hookProjectRoot
             invocation.hookModel = stepContext.turn.model
             invocation.hookPermissionMode = hookPermissionMode(stepContext.turn.approvalPolicy)
@@ -293,7 +296,7 @@ struct ToolCallRuntime: Sendable {
             session.services.executedToolCalls.cancel(callId: call.callId)
             switch error {
             case .fatal(let message):
-                throw CodexErr.fatal(message)
+                throw SageErr.fatal(message)
             case .respondToModel(let message):
                 return failureResponse(call, message: message)
             }

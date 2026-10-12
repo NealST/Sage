@@ -14,7 +14,7 @@
 import Foundation
 
 enum GuardianPrompt {
-    /// Codex `GUARDIAN_TRANSCRIPT_START`.
+    /// Sage `GUARDIAN_TRANSCRIPT_START`.
     static let transcriptStart = ">>> TRANSCRIPT START\n"
     static let emptyTranscriptPlaceholder = "<no retained transcript entries>"
     static let maxApprovalReasonTokens = 512
@@ -84,7 +84,7 @@ enum GuardianPrompt {
         return nil
     }
 
-    /// Codex `guardian_truncate_text`: keep a prefix and suffix under the cap.
+    /// Sage `guardian_truncate_text`: keep a prefix and suffix under the cap.
     static func truncate(_ content: String, tokenCap: Int) -> String {
         let tokens = PromptBudget.estimatedTokenCount(in: content)
         guard tokens > tokenCap, tokenCap > 8 else { return content }

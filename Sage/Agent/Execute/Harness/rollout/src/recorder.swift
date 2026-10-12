@@ -1,6 +1,6 @@
 //
 //  recorder.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/recorder.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,9 +11,9 @@
 //  JSONL line format is the canonical flattened `{timestamp,ordinal?,type,payload}`.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexUtils
+import SageHistory
+import SageProtocol
+import SageUtils
 import Foundation
 import os
 
@@ -256,7 +256,7 @@ public struct WriterState: Sendable {
 
 public func appendRolloutItemToPath(_ item: RolloutItem, path: String) throws {
     let recorder = try RolloutRecorder.create(
-        config: RolloutConfig(codexHome: NSTemporaryDirectory()),
+        config: RolloutConfig(sageHome: NSTemporaryDirectory()),
         params: .resume(path: path)
     )
     try recorder.recordItems([item])
@@ -274,7 +274,7 @@ func precomputeNewRolloutPath(
     let year = String(parts.year ?? 0)
     let month = String(format: "%02d", parts.month ?? 0)
     let day = String(format: "%02d", parts.day ?? 0)
-    let dir = ((((config.codexHome as NSString)
+    let dir = ((((config.sageHome as NSString)
         .appendingPathComponent(SESSIONS_SUBDIR) as NSString)
         .appendingPathComponent(year) as NSString)
         .appendingPathComponent(month) as NSString)

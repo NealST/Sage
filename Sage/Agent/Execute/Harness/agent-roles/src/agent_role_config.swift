@@ -1,6 +1,6 @@
 //
 //  agent_role_config.swift
-//  CodexAgentRoles
+//  SageAgentRoles
 //
 //  Port of codex-rs/agent-roles/src/agent_role_config.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,7 +13,7 @@
 //  leftover config resolve the same way as upstream.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 public struct AgentRoleConfig: Equatable, Sendable {

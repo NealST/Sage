@@ -13,8 +13,8 @@
 //  resumes that waiter. A missing waiter falls through to the MCP runtime.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 extension Session {
@@ -123,10 +123,10 @@ struct McpServerElicitationOutcome: Equatable, Sendable {
 
 func submittedElicitationResponse(
     decision: ElicitationAction,
-    content: CodexProtocol.JSONValue?,
-    meta: CodexProtocol.JSONValue?
+    content: SageProtocol.JSONValue?,
+    meta: SageProtocol.JSONValue?
 ) -> ElicitationResponse {
-    let accepted: CodexProtocol.JSONValue?
+    let accepted: SageProtocol.JSONValue?
     switch decision {
     case .accept:
         accepted = content ?? .object([:])

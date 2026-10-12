@@ -12,8 +12,8 @@
 //  Servers that left the set are listed as closed.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 /// One live client for a configured server. Reuse is object identity.
@@ -38,7 +38,7 @@ struct McpConnectionPlan: Sendable {
 final class PublishedMcpBinding: @unchecked Sendable {
     let id: UInt64
     let servers: [String: ConfiguredMcpServer]
-    let approvalPolicy: CodexProtocol.AskForApproval
+    let approvalPolicy: SageProtocol.AskForApproval
     let permissionProfile: PermissionProfile
     let tools: [McpVisibleTool]
     var connections: [String: McpServerConnection] = [:]
@@ -46,7 +46,7 @@ final class PublishedMcpBinding: @unchecked Sendable {
     init(
         id: UInt64,
         servers: [String: ConfiguredMcpServer],
-        approvalPolicy: CodexProtocol.AskForApproval,
+        approvalPolicy: SageProtocol.AskForApproval,
         permissionProfile: PermissionProfile,
         tools: [McpVisibleTool]
     ) {

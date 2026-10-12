@@ -10,7 +10,7 @@
 //
 
 import XCTest
-@testable import CodexUtils
+@testable import SageUtils
 
 final class AbsolutizeTests: XCTestCase {
     func testAbsolutePathWithoutDotsIsUnchanged() {

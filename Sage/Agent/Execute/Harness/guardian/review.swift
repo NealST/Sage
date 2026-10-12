@@ -10,7 +10,7 @@
 //  ALLOW/DENY settle the step, ASK still pauses the card.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum Guardian {
@@ -20,7 +20,7 @@ enum Guardian {
         UUID().uuidString
     }
 
-    /// Codex `is_basic_session_source` — Guardian reviewer turns skip plugin/skill injection.
+    /// Sage `is_basic_session_source` — Guardian reviewer turns skip plugin/skill injection.
     static func isBasicSessionSource(_ sessionSource: SessionSource) -> Bool {
         switch sessionSource {
         case .subAgent(.other(let label)):
@@ -32,7 +32,7 @@ enum Guardian {
         }
     }
 
-    /// Codex `strict_auto_review`. Project mode cannot drop Seatbelt quietly.
+    /// Sage `strict_auto_review`. Project mode cannot drop Seatbelt quietly.
     static func strictAutoReviewEnabled(policy: PathGuard.Policy) -> Bool {
         if case .project = policy { return true }
         return false
@@ -46,7 +46,7 @@ enum Guardian {
 struct GuardianReviewOptions: Sendable {
     var requireGuardian = false
     var requireSynchronousReview = true
-    var approvalPolicy: CodexProtocol.AskForApproval = .onRequest
+    var approvalPolicy: SageProtocol.AskForApproval = .onRequest
     var approvalsReviewer: ApprovalsReviewer = .user
     var reviewMode: GuardianReviewMode?
 }

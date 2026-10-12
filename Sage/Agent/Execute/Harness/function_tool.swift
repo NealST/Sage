@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 //  Upstream re-exports `codex_tools::FunctionCallError`. The tools crate is
-//  not a separate Swift module yet, so the type lives in this CodexCore
+//  not a separate Swift module yet, so the type lives in this SageCore
 //  file (also used by apply_patch.swift).
 //
 

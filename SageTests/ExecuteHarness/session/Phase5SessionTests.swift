@@ -1,5 +1,5 @@
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import XCTest
 @testable import Sage
 
@@ -23,7 +23,7 @@ final class Phase5SessionTests: XCTestCase {
         window.setEstimatedPrefill(150)
         XCTAssertEqual(window.snapshot().prefillInputTokens, 150)
 
-        window.ensureServerObservedPrefillFromUsage(CodexProtocol.TokenUsage(inputTokens: 120, totalTokens: 170))
+        window.ensureServerObservedPrefillFromUsage(SageProtocol.TokenUsage(inputTokens: 120, totalTokens: 170))
         XCTAssertEqual(window.snapshot().prefillInputTokens, 120)
         window.setEstimatedPrefill(90)
         XCTAssertEqual(window.snapshot().prefillInputTokens, 120)
@@ -36,8 +36,8 @@ final class Phase5SessionTests: XCTestCase {
     }
 
     func testTokenUsageAddAssignAndRemainingPercent() {
-        var usage = CodexProtocol.TokenUsage(inputTokens: 10, cachedInputTokens: 4, outputTokens: 3, totalTokens: 13)
-        usage.addAssign(CodexProtocol.TokenUsage(inputTokens: 5, cachedInputTokens: 1, outputTokens: 2, totalTokens: 7))
+        var usage = SageProtocol.TokenUsage(inputTokens: 10, cachedInputTokens: 4, outputTokens: 3, totalTokens: 13)
+        usage.addAssign(SageProtocol.TokenUsage(inputTokens: 5, cachedInputTokens: 1, outputTokens: 2, totalTokens: 7))
         XCTAssertEqual(usage.inputTokens, 15)
         XCTAssertEqual(usage.cachedInput(), 5)
         XCTAssertEqual(usage.nonCachedInput(), 10)
@@ -65,7 +65,7 @@ final class Phase5SessionTests: XCTestCase {
             sessionId: SessionId(),
             rootTurnId: "t1",
             responseId: "r1",
-            usage: CodexProtocol.TokenUsage(inputTokens: 8, outputTokens: 2, totalTokens: 10)
+            usage: SageProtocol.TokenUsage(inputTokens: 8, outputTokens: 2, totalTokens: 10)
         )
         XCTAssertEqual(record.turnTokenUsage.totalTokens, 10)
         let (number, _) = state.startNewContextWindow()

@@ -1,7 +1,7 @@
 @testable import Sage
-import CodexCore
-import CodexExecPolicy
-import CodexProtocol
+import SageCore
+import SageExecPolicy
+import SageProtocol
 import XCTest
 
 final class ExecuteHarnessCompactWindowTests: XCTestCase {

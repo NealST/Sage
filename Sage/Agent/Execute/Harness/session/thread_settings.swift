@@ -15,8 +15,8 @@
 //  profile are the session defaults until those override fields exist.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 struct ThreadSettingsOverrideError: Error {

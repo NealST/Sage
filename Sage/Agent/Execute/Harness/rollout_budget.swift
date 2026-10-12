@@ -1,16 +1,16 @@
 //
 //  rollout_budget.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/rollout_budget.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  `OnceLock<Mutex<>>` maps to `OSAllocatedUnfairLock` of an optional state.
-//  `RolloutBudgetConfig` lives here so CodexCore does not depend on Sage Config.
+//  `RolloutBudgetConfig` lives here so SageCore does not depend on Sage Config.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -75,11 +75,11 @@ public final class RolloutBudget: @unchecked Sendable {
         try lock.withLock { state in
             guard var current = state else { return false }
             let units: Double
-            if let reported = usage.codexRolloutBudgetUnits {
+            if let reported = usage.sageRolloutBudgetUnits {
                 let value = reported.doubleValue ?? .nan
                 guard value.isFinite, value >= 0 else {
-                    throw CodexErr.fatal(
-                        "response.completed usage.codex_rollout_budget_units must be finite and non-negative"
+                    throw SageErr.fatal(
+                        "response.completed usage.sage_rollout_budget_units must be finite and non-negative"
                     )
                 }
                 units = value

@@ -1,6 +1,6 @@
 //
 //  skills.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/skills.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,9 +10,9 @@
 //  Analytics emit paths still throw until Session / TurnContext land here.
 //
 
-import CodexProtocol
-import CodexSkills
-import CodexUtils
+import SageProtocol
+import SageSkills
+import SageUtils
 import Foundation
 import os
 
@@ -206,23 +206,169 @@ public func buildSkillAndPluginInjectionItems(
     )
     var items = loaded.items
     items.append(contentsOf: pluginItems)
-    return (items, collectExplicitAppIds(userInput), loaded.warnings)
+    return (items, Set(collectExplicitAppIds(userInput)), loaded.warnings)
 }
 
 public func skillsLoadInputFromConfig() throws -> Never {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "skills_load_input_from_config waits on Config / PluginSkillRoot"
     )
 }
 
 public func emitExplicitSkillInvocations() async throws {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "emit_explicit_skill_invocations waits on Session / TurnContext / skills crate"
     )
 }
 
 public func maybeEmitImplicitSkillInvocation() async throws {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "maybe_emit_implicit_skill_invocation waits on Session / TurnContext / skills crate"
     )
+}
+
+public struct PluginCapabilitySummary: Equatable, Sendable {
+    public var configName: String
+    public var displayName: String
+    public var pluginNamespace: String?
+    public var description: String?
+    public var hasSkills: Bool
+    public var mcpServerNames: [String]
+
+    public init(
+        configName: String,
+        displayName: String,
+        pluginNamespace: String? = nil,
+        description: String? = nil,
+        hasSkills: Bool = false,
+        mcpServerNames: [String] = []
+    ) {
+        self.configName = configName
+        self.displayName = displayName
+        self.pluginNamespace = pluginNamespace
+        self.description = description
+        self.hasSkills = hasSkills
+        self.mcpServerNames = mcpServerNames
+    }
+}
+
+public struct PluginToolInfo: Equatable, Sendable {
+    public var name: String
+    public var serverName: String
+
+    public init(name: String = "", serverName: String = "") {
+        self.name = name
+        self.serverName = serverName
+    }
+}
+
+public struct AppInfo: Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var isAccessible: Bool
+    public var isEnabled: Bool
+
+    public init(
+        id: String,
+        name: String,
+        isAccessible: Bool = false,
+        isEnabled: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.isAccessible = isAccessible
+        self.isEnabled = isEnabled
+    }
+}
+
+public struct CollectedToolMentions: Equatable, Sendable {
+    public var names: Set<String>
+    public var paths: Set<String>
+    public var plainNames: Set<String>
+}
+
+public func collectToolMentionsFromMessages(_ messages: [String]) -> CollectedToolMentions {
+    var names: Set<String> = []
+    var paths: Set<String> = []
+    var plainNames: Set<String> = []
+    for message in messages {
+        let mentions = extractToolMentions(message)
+        names.formUnion(mentions.names)
+        paths.formUnion(mentions.paths)
+        plainNames.formUnion(mentions.plainNames)
+    }
+    return CollectedToolMentions(names: names, paths: paths, plainNames: plainNames)
+}
+
+public func collectExplicitAppIds(_ input: [UserInput]) -> [String] {
+    Array(mentionedPaths(in: input).compactMap(appIdFromPath)).sorted()
+}
+
+public func collectExplicitPluginIds(_ input: [UserInput]) -> [String] {
+    Array(mentionedPaths(in: input).compactMap(pluginConfigNameFromPath)).sorted()
+}
+
+public func collectExplicitPluginMentions(
+    _ input: [UserInput],
+    plugins: [PluginCapabilitySummary]
+) -> [PluginCapabilitySummary] {
+    let mentioned = Set(collectExplicitPluginIds(input))
+    return plugins.filter { mentioned.contains($0.configName) }
+}
+
+public func buildConnectorSlugCounts(_ connectors: [AppInfo]) -> [String: Int] {
+    var counts: [String: Int] = [:]
+    for connector in connectors {
+        counts[connectorMentionSlug(connector), default: 0] += 1
+    }
+    return counts
+}
+
+public func connectorNameSlug(_ name: String) -> String {
+    let slug = name.lowercased().split { !$0.isLetter && !$0.isNumber }.joined(separator: "-")
+    return slug.isEmpty ? "app" : slug
+}
+
+public func connectorMentionSlug(_ app: AppInfo) -> String {
+    connectorNameSlug(app.name)
+}
+
+public func buildPluginInjections(
+    mentionedPlugins: [PluginCapabilitySummary],
+    mcpTools: [PluginToolInfo],
+    availableConnectors: [AppInfo]
+) -> [ResponseItem] {
+    _ = (mentionedPlugins, mcpTools, availableConnectors)
+    return []
+}
+
+public func renderExplicitPluginInstructions(
+    plugin: PluginCapabilitySummary,
+    availableMcpServers: [String],
+    availableApps: [String]
+) -> String? {
+    _ = (plugin, availableMcpServers, availableApps)
+    return nil
+}
+
+public func renderAppsSection(_ apps: [AppInfo]) -> String? {
+    _ = apps
+    return nil
+}
+
+private func mentionedPaths(in input: [UserInput]) -> Set<String> {
+    var paths: Set<String> = []
+    var messages: [String] = []
+    for item in input {
+        switch item {
+        case .text(let text, _):
+            messages.append(text)
+        case .mention(_, let path):
+            paths.insert(path)
+        default:
+            break
+        }
+    }
+    paths.formUnion(collectToolMentionsFromMessages(messages).paths)
+    return paths
 }

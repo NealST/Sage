@@ -1,17 +1,17 @@
 //
 //  queue_store.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/queue_store.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  `QueuedUserSubmissionRecord` stands in for the unported CodexState model.
+//  `QueuedUserSubmissionRecord` stands in for the unported SageState model.
 //  `LocalQueueStore` is a GRDB stub; `InMemoryQueueStore` owns the behavior.
 //
 
-import CodexProtocol
-import CodexRollout
+import SageProtocol
+import SageRollout
 import Foundation
 import os
 

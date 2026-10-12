@@ -1,6 +1,6 @@
 //
 //  output_spill.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/output_spill.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  existing byte-budget helper via `approxBytesForTokens`.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 let HOOK_OUTPUTS_DIR = "hook_outputs"

@@ -11,8 +11,8 @@
 //  LocalAgentControl is attached to the invocation.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct ListAgentsArgs: Decodable, Equatable, Sendable {
     var pathPrefix: String?

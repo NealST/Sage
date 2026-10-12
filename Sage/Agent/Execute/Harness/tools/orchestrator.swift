@@ -8,8 +8,8 @@
 //
 //  Approval → select sandbox → attempt → one escalate retry on denial.
 //  Already-approved commands are not re-asked. `execute` owns validate,
-//  timeout, and Sage dispatch; `ToolInvocationPipeline` only forwards.
-//  `skipEventHooks` is set when `registry.dispatch` already ran Pre/Post.
+//  timeout, and Sage dispatch. `skipEventHooks` is set when
+//  `registry.dispatch` already ran Pre/Post.
 //
 
 import Foundation
@@ -110,7 +110,7 @@ struct ToolOrchestrator {
             guard tool.wantsNoSandboxApproval(policy: ctx.approvalPolicy) else {
                 throw error
             }
-            // Codex stops when the sandbox cannot be dropped. Project mode is that case.
+            // Sage stops when the sandbox cannot be dropped. Project mode is that case.
             guard unsandboxedAllowed else {
                 throw error
             }

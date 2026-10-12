@@ -1,6 +1,6 @@
 //
 //  original_image_detail.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/original_image_detail.rs and
 //  codex-rs/tools/src/image_detail.rs (Apache-2.0).
@@ -8,7 +8,7 @@
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 
 public func canRequestOriginalImageDetail(_ modelInfo: ModelInfo) -> Bool {
     modelInfo.supportsImageDetailOriginal

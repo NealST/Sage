@@ -1,6 +1,6 @@
 @testable import Sage
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import XCTest
 
 final class ExecuteHarnessRegistryDispatchHooksTests: XCTestCase {

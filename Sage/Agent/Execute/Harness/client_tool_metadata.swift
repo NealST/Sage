@@ -1,6 +1,6 @@
 //
 //  client_tool_metadata.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/client_tool_metadata.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  so this file uses the protocol bound helper plus a local byte count.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 let maxResponseMessageBytes = 15 * 1024 * 1024

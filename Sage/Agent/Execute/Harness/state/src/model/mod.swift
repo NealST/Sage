@@ -1,13 +1,13 @@
 //
 //  mod.swift
-//  CodexState
+//  SageState
 //
 //  Port of codex-rs/state/src/model/mod.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 //  Swift has no crate-level `pub use`; the types listed below are public
-//  in the CodexState module via their defining files.
+//  in the SageState module via their defining files.
 //
 
 import Foundation

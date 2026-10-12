@@ -11,8 +11,8 @@
 //  exists.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 let MIN_WAIT_TIMEOUT_MS = DEFAULT_MULTI_AGENT_V2_MIN_WAIT_TIMEOUT_MS
@@ -57,7 +57,7 @@ func toolOutputCodeModeResult<T: Encodable>(_ value: T, toolName: String) -> Har
     return .string("failed to serialize \(toolName) result")
 }
 
-func collabSpawnError(_ err: CodexErr) -> FunctionCallError {
+func collabSpawnError(_ err: SageErr) -> FunctionCallError {
     switch err.detailsValue() {
     case .unsupportedOperation(let message) where message == "thread manager dropped":
         return .respondToModel("collab manager unavailable")
@@ -69,7 +69,7 @@ func collabSpawnError(_ err: CodexErr) -> FunctionCallError {
 }
 
 func recordCollabSpawnFailure(
-    err: CodexErr,
+    err: SageErr,
     forkMode: SpawnAgentForkMode?,
     multiAgentVersion: MultiAgentVersion
 ) {
@@ -78,7 +78,7 @@ func recordCollabSpawnFailure(
     _ = multiAgentVersion
 }
 
-func collabSpawnFailureReason(_ err: CodexErr) -> String {
+func collabSpawnFailureReason(_ err: SageErr) -> String {
     switch err.detailsValue() {
     case .agentLimitReached: return "limit_reached"
     case .invalidRequest: return "invalid_request"
@@ -88,7 +88,7 @@ func collabSpawnFailureReason(_ err: CodexErr) -> String {
     }
 }
 
-func collabAgentError(agentId: ThreadId, err: CodexErr) -> FunctionCallError {
+func collabAgentError(agentId: ThreadId, err: SageErr) -> FunctionCallError {
     switch err.detailsValue() {
     case .threadNotFound(let id):
         return .respondToModel("agent with id \(id) not found")
@@ -101,7 +101,7 @@ func collabAgentError(agentId: ThreadId, err: CodexErr) -> FunctionCallError {
     }
 }
 
-func collabV2AgentError(agentId: ThreadId, err: CodexErr) -> FunctionCallError {
+func collabV2AgentError(agentId: ThreadId, err: SageErr) -> FunctionCallError {
     switch err.detailsValue() {
     case .unsupportedOperation(let message) where message != "thread manager dropped":
         return .respondToModel(message)

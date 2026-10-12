@@ -1,17 +1,17 @@
 //
 //  current_time.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/current_time.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Host clock boundary. tokio::time::sleep becomes Task.sleep.
-//  CurrentTimeSource lives here so CodexCore does not depend on the
+//  CurrentTimeSource lives here so SageCore does not depend on the
 //  Sage-app Config module.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public enum CurrentTimeSource: String, Equatable, Sendable {
@@ -50,7 +50,7 @@ public func resolveTimeProvider(
         return SystemTimeProvider()
     case .external:
         guard let externalProvider else {
-            throw CodexErr.fatal(
+            throw SageErr.fatal(
                 "features.current_time_reminder.clock_source is external, but no external current-time provider is available"
             )
         }

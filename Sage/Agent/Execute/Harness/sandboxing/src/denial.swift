@@ -1,6 +1,6 @@
 //
 //  denial.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/denial.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,7 +9,7 @@
 //  Side-effect-free sandbox-denial heuristics from exec output.
 //
 
-import CodexProtocol
+import SageProtocol
 
 public func isLikelySandboxDenied(
     sandboxType: SandboxType,

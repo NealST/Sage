@@ -11,9 +11,9 @@
 //  via UnifiedExecRuntime (ToolsRuntimes).
 //
 
-import CodexCore
-import CodexProtocol
-import CodexShellCommand
+import SageCore
+import SageProtocol
+import SageShellCommand
 
 struct ExecCommandArgs: Decodable {
     var cmd: String
@@ -23,7 +23,7 @@ struct ExecCommandArgs: Decodable {
     var yieldTimeMs: UInt64
     var timeoutMs: UInt64?
     var maxOutputTokens: Int?
-    var sandboxPermissions: CodexProtocol.SandboxPermissions?
+    var sandboxPermissions: SageProtocol.SandboxPermissions?
     var additionalPermissions: AdditionalPermissionProfile?
     var justification: String?
     var prefixRule: [String]?
@@ -49,7 +49,7 @@ struct ExecCommandArgs: Decodable {
         timeoutMs = try container.decodeIfPresent(UInt64.self, forKey: .timeoutMs)
         maxOutputTokens = try container.decodeIfPresent(Int.self, forKey: .maxOutputTokens)
         sandboxPermissions = try container.decodeIfPresent(
-            CodexProtocol.SandboxPermissions.self, forKey: .sandboxPermissions
+            SageProtocol.SandboxPermissions.self, forKey: .sandboxPermissions
         )
         additionalPermissions = try container.decodeIfPresent(
             AdditionalPermissionProfile.self, forKey: .additionalPermissions

@@ -9,7 +9,7 @@
 //
 
 import ApplyPatch
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 func createToolArgumentDiffConsumer(for item: ResponseItem) -> (callId: String, consumer: any ToolArgumentDiffConsumer)? {

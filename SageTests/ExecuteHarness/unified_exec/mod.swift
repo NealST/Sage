@@ -7,9 +7,9 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
-import CodexShellCommand
-@testable import CodexCore
+import SageProtocol
+import SageShellCommand
+@testable import SageCore
 import XCTest
 
 final class UnifiedExecTests: XCTestCase {

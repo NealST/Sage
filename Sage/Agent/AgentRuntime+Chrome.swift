@@ -3,7 +3,7 @@
 //  Sage
 //
 
-import CodexCore
+import SageCore
 import Foundation
 
 extension AgentRuntime {

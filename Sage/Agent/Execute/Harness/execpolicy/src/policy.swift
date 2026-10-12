@@ -1,6 +1,6 @@
 //
 //  policy.swift
-//  CodexExecPolicy
+//  SageExecPolicy
 //
 //  Port of codex-rs/execpolicy/src/policy.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `MultiMap` is a dictionary of arrays that preserves insertion order per key.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 public struct MatchOptions: Equatable, Sendable {

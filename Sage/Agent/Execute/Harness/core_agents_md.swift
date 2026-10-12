@@ -1,6 +1,6 @@
 //
 //  core_agents_md.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agents_md.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -14,8 +14,8 @@
 //  matching FileSystem.find_up.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import FileSystem
 import Foundation
 
@@ -258,7 +258,7 @@ public func defaultProjectRootMarkers() -> [String] {
 
 /// Loads project AGENTS.md content and combines it with host-provided user instructions.
 public func loadProjectInstructions() async throws -> LoadedAgentsMd? {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "load_project_instructions waits on Config / TurnEnvironmentSnapshot / ConfigLayerStack"
     )
 }

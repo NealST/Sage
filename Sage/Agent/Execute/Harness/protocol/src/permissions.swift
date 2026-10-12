@@ -1,6 +1,6 @@
 //
 //  permissions.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/permissions.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,18 +13,18 @@
 //  AbsolutePathBuf yet; the helper below is an identity on POSIX/macOS.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 let protectedMetadataGitPathName = ".git"
 let protectedMetadataAgentsPathName = ".agents"
-let protectedMetadataCodexPathName = ".codex"
+let protectedMetadataSagePathName = ".sage"
 
 /// Top-level workspace metadata paths that stay protected under writable roots.
 public let PROTECTED_METADATA_PATH_NAMES: [String] = [
     protectedMetadataGitPathName,
     protectedMetadataAgentsPathName,
-    protectedMetadataCodexPathName,
+    protectedMetadataSagePathName,
 ]
 
 /// Returns true when a path basename is one of the protected workspace metadata names.
@@ -636,7 +636,7 @@ extension RawFileSystemSandboxPolicy {
     }
 }
 
-let projectRootsGlobPatternPrefix = "codex-project-roots://"
+let projectRootsGlobPatternPrefix = "sage-project-roots://"
 
 public func projectRootsGlobPattern(_ subpath: String) -> String {
     "\(projectRootsGlobPatternPrefix)\(subpath)"
@@ -789,11 +789,11 @@ extension FileSystemSandboxPolicy {
         })
         appendDefaultReadOnlyProjectRootSubpathIfNoExplicitRule(&entries, ".git")
         appendDefaultReadOnlyProjectRootSubpathIfNoExplicitRule(&entries, ".agents")
-        appendDefaultReadOnlyProjectRootSubpathIfNoExplicitRule(&entries, ".codex")
+        appendDefaultReadOnlyProjectRootSubpathIfNoExplicitRule(&entries, ".sage")
         for writableRoot in writableRoots {
             for protectedPath in defaultReadOnlySubpathsForWritableRoot(
                 writableRoot,
-                protectMissingDotCodex: false
+                protectMissingDotSage: false
             ) {
                 appendDefaultReadOnlyPathIfNoExplicitRule(&entries, protectedPath)
             }
@@ -810,7 +810,7 @@ extension FileSystemSandboxPolicy {
             if let cwdRoot = try? AbsolutePathBuf.fromAbsolutePath(cwd) {
                 for protectedPath in defaultReadOnlySubpathsForWritableRoot(
                     cwdRoot,
-                    protectMissingDotCodex: true
+                    protectMissingDotSage: true
                 ) {
                     appendDefaultReadOnlyPathIfNoExplicitRule(&fileSystemPolicy.entries, protectedPath)
                 }
@@ -818,7 +818,7 @@ extension FileSystemSandboxPolicy {
             for writableRoot in writableRoots {
                 for protectedPath in defaultReadOnlySubpathsForWritableRoot(
                     writableRoot,
-                    protectMissingDotCodex: false
+                    protectMissingDotSage: false
                 ) {
                     appendDefaultReadOnlyPathIfNoExplicitRule(&fileSystemPolicy.entries, protectedPath)
                 }
@@ -1200,7 +1200,7 @@ extension FileSystemSandboxPolicy {
             }
             for protectedPath in defaultReadOnlySubpathsForWritableRoot(
                 path,
-                protectMissingDotCodex: false
+                protectMissingDotSage: false
             ) {
                 appendDefaultReadOnlyPathIfNoExplicitRule(&copy.entries, protectedPath)
             }
@@ -1325,9 +1325,9 @@ extension FileSystemSandboxPolicy {
                     .map(\.entry.path)
                 let protectedMetadataNames = protectedMetadataNamesForWritableRoot(
                     matching, root: root, rawWritableRoots: rawWritableRoots)
-                let protectMissingDotCodex = effectiveCwd == root
+                let protectMissingDotSage = effectiveCwd == root
                 var readOnlySubpaths = defaultReadOnlySubpathsForWritableRoot(
-                    root, protectMissingDotCodex: protectMissingDotCodex
+                    root, protectMissingDotSage: protectMissingDotSage
                 ).filter { !hasExplicitResolvedPathEntry(resolvedEntries, $0) }
                 for prepared in preparedEntries where !prepared.entry.access.canWrite() {
                     let entry = prepared.entry
@@ -1767,7 +1767,7 @@ func normalizeEffectiveAbsolutePath(_ path: AbsolutePathBuf) -> AbsolutePathBuf 
 
 func defaultReadOnlySubpathsForWritableRoot(
     _ writableRoot: AbsolutePathBuf,
-    protectMissingDotCodex: Bool
+    protectMissingDotSage: Bool
 ) -> [AbsolutePathBuf] {
     var subpaths: [AbsolutePathBuf] = []
     let topLevelGit = writableRoot.join(protectedMetadataGitPathName)
@@ -1783,9 +1783,9 @@ func defaultReadOnlySubpathsForWritableRoot(
     if isDirectory(topLevelAgents.asPath) {
         subpaths.append(topLevelAgents)
     }
-    let topLevelCodex = writableRoot.join(protectedMetadataCodexPathName)
-    if protectMissingDotCodex || isDirectory(topLevelCodex.asPath) {
-        subpaths.append(topLevelCodex)
+    let topLevelSage = writableRoot.join(protectedMetadataSagePathName)
+    if protectMissingDotSage || isDirectory(topLevelSage.asPath) {
+        subpaths.append(topLevelSage)
     }
     return dedupAbsolutePaths(subpaths, normalizeEffectivePaths: false)
 }
@@ -1811,14 +1811,14 @@ func legacyRuntimeFileSystemPolicyForCwd(
         FileSystemSandboxEntry.new(FileSystemPath($0), .write)
     })
     if let cwdRoot = try? AbsolutePathBuf.fromAbsolutePath(cwd) {
-        for protectedPath in defaultReadOnlySubpathsForWritableRoot(cwdRoot, protectMissingDotCodex: true) {
+        for protectedPath in defaultReadOnlySubpathsForWritableRoot(cwdRoot, protectMissingDotSage: true) {
             appendDefaultReadOnlyPathIfNoExplicitRule(&entries, protectedPath)
         }
     }
     for writableRoot in writableRoots {
         for protectedPath in defaultReadOnlySubpathsForWritableRoot(
             writableRoot,
-            protectMissingDotCodex: false
+            protectMissingDotSage: false
         ) {
             appendDefaultReadOnlyPathIfNoExplicitRule(&entries, protectedPath)
         }
@@ -1925,7 +1925,7 @@ func sandboxPolicyWritableRootsWithCwd(_ policy: SandboxPolicy, cwd: String) -> 
                 root: writableRoot,
                 readOnlySubpaths: defaultReadOnlySubpathsForWritableRoot(
                     writableRoot,
-                    protectMissingDotCodex: cwdRoot == writableRoot
+                    protectMissingDotSage: cwdRoot == writableRoot
                 ),
                 protectedMetadataNames: []
             )
@@ -1986,7 +1986,7 @@ extension String {
     }
 }
 
-// `normalizeSystemAliases` lives on AbsolutePathBuf in CodexUtils
+// `normalizeSystemAliases` lives on AbsolutePathBuf in SageUtils
 // (`utils/absolute-path/src/system_aliases.swift`).
 
 // MARK: - POSIX glob matcher (globset stand-in)

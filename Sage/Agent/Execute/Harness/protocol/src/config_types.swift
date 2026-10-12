@@ -1,6 +1,6 @@
 //
 //  config_types.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/config_types.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -66,7 +66,7 @@ public enum SandboxMode: String, Codable, Equatable, Sendable {
 
 // MARK: - ProfileV2Name
 
-/// Validated plain profile-v2 name used to select `$CODEX_HOME/<name>.config.toml`.
+/// Validated plain profile-v2 name used to select `$SAGE_HOME/<name>.config.toml`.
 public struct ProfileV2Name: Equatable, Hashable, CustomStringConvertible, Sendable {
     private let value: String
 

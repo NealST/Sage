@@ -1,6 +1,6 @@
 //
 //  policy.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/policy.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,8 +12,8 @@
 //  protocol grows those cases. `ExtensionItem` is a kind-string placeholder.
 //
 
-import CodexHistory
-import CodexProtocol
+import SageHistory
+import SageProtocol
 import Foundation
 
 /// Whether a rollout `item` should be persisted in rollout files.

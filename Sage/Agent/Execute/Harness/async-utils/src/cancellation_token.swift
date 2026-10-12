@@ -1,6 +1,6 @@
 //
 //  cancellation_token.swift
-//  CodexAsyncUtils
+//  SageAsyncUtils
 //
 //  Sage addition (no codex counterpart).
 //

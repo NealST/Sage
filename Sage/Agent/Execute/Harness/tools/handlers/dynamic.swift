@@ -11,8 +11,8 @@
 //  appendDynamicToolRuntimes registers the admitted turn's tools.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 func defaultNamespaceDescription(_ name: String) -> String {
@@ -69,7 +69,7 @@ struct DynamicToolHandler: CoreToolRuntime {
             keywords: [flatToolName(name)],
             source: ToolSearchSourceInfo(
                 name: "Dynamic tools",
-                description: "Tools provided by the current Codex thread."
+                description: "Tools provided by the current Sage thread."
             )
         )
     }

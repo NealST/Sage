@@ -1,13 +1,13 @@
 //
 //  name_counts.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/name_counts.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Counts how often each skill name appears (exact and ASCII-lowercase), excluding disabled paths.

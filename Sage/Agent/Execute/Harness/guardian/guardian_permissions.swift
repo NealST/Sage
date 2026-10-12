@@ -11,7 +11,7 @@
 //  expansion wait on Session, so `for_tool` and `for_environment` throw.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Evidence collected for one Guardian review. Upstream type lives in
@@ -23,7 +23,7 @@ struct GuardianPermissionContext: Equatable, Sendable {
 }
 
 func toolPermissionContext() async throws -> GuardianPermissionContext {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "guardian/permissions.for_tool waits on ToolInvocation / TurnContext"
     )
 }
@@ -34,7 +34,7 @@ func forEnvironment(
 ) throws -> GuardianPermissionContext {
     _ = context
     _ = environmentId
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "guardian/permissions.for_environment waits on TurnEnvironmentSnapshot"
     )
 }

@@ -1,6 +1,6 @@
 //
 //  protocol.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/protocol.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,10 +9,10 @@
 //  Wire types for turns, events, approvals, and session metadata.
 //  Realtime conversation variants stay omitted (Sage has no voice
 //  realtime; Phase 10 deferred). `Op` oneshot reply channels stay on
-//  SessionOp in the session layer. Skill metadata lives in CodexSkills.
+//  SessionOp in the session layer. Skill metadata lives in SageSkills.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 // MARK: - AskForApproval
@@ -217,7 +217,7 @@ public enum SandboxPolicy: Codable, Equatable, Sendable {
 
 // MARK: - WritableRoot
 
-/// A writable root plus subpaths that stay read-only (e.g. `.git` / `.codex`).
+/// A writable root plus subpaths that stay read-only (e.g. `.git` / `.sage`).
 public struct WritableRoot: Equatable, Sendable {
     public var root: AbsolutePathBuf
     public var readOnlySubpaths: [AbsolutePathBuf]
@@ -256,13 +256,13 @@ public enum NonSteerableTurnKind: String, Codable, Equatable, Sendable {
     case compact
 }
 
-// MARK: - CodexErrorInfo
+// MARK: - SageErrorInfo
 
-/// Codex errors that we expose to clients. The `Codable` conformance lives in
-/// `codex_error_info.swift`, mirroring upstream where the serde impls live in
-/// `codex_error_info.rs` (external tagging, unknown classifications decode as
+/// Sage errors that we expose to clients. The `Codable` conformance lives in
+/// `sage_error_info.swift`, mirroring upstream where the serde impls live in
+/// `sage_error_info.rs` (external tagging, unknown classifications decode as
 /// `other`).
-public enum CodexErrorInfo: Equatable, Sendable {
+public enum SageErrorInfo: Equatable, Sendable {
     case contextWindowExceeded
     case sessionBudgetExceeded
     case usageLimitExceeded
@@ -864,7 +864,7 @@ public struct ReviewFinding: Codable, Equatable, Sendable {
 /// Location of the code related to a review finding.
 ///
 /// `absolute_file_path` is a `PathBuf` upstream; ported as a String path
-/// (CodexProtocol path-type adaptation).
+/// (SageProtocol path-type adaptation).
 public struct ReviewCodeLocation: Codable, Equatable, Sendable {
     public var absoluteFilePath: String
     public var lineRange: ReviewLineRange
@@ -902,7 +902,7 @@ public struct TokenUsage: Codable, Equatable, Sendable {
     public var outputTokenDetails: JSONValue?
     /// Provider-reported units consumed from the shared rollout budget.
     /// Rust `skip_serializing`; not encoded on the wire.
-    public var codexRolloutBudgetUnits: JSONValue?
+    public var sageRolloutBudgetUnits: JSONValue?
 
     public static let baselineTokens: Int64 = 12_000
 
@@ -915,7 +915,7 @@ public struct TokenUsage: Codable, Equatable, Sendable {
         case totalTokens = "total_tokens"
         case inputTokenDetails = "input_token_details"
         case outputTokenDetails = "output_token_details"
-        case codexRolloutBudgetUnits = "codex_rollout_budget_units"
+        case sageRolloutBudgetUnits = "sage_rollout_budget_units"
     }
 
     public init(
@@ -927,7 +927,7 @@ public struct TokenUsage: Codable, Equatable, Sendable {
         totalTokens: Int64 = 0,
         inputTokenDetails: JSONValue? = nil,
         outputTokenDetails: JSONValue? = nil,
-        codexRolloutBudgetUnits: JSONValue? = nil
+        sageRolloutBudgetUnits: JSONValue? = nil
     ) {
         self.inputTokens = inputTokens
         self.cachedInputTokens = cachedInputTokens
@@ -937,7 +937,7 @@ public struct TokenUsage: Codable, Equatable, Sendable {
         self.totalTokens = totalTokens
         self.inputTokenDetails = inputTokenDetails
         self.outputTokenDetails = outputTokenDetails
-        self.codexRolloutBudgetUnits = codexRolloutBudgetUnits
+        self.sageRolloutBudgetUnits = sageRolloutBudgetUnits
     }
 
     public init(from decoder: any Decoder) throws {
@@ -950,10 +950,10 @@ public struct TokenUsage: Codable, Equatable, Sendable {
         totalTokens = try container.decodeIfPresent(Int64.self, forKey: .totalTokens) ?? 0
         inputTokenDetails = try container.decodeIfPresent(JSONValue.self, forKey: .inputTokenDetails)
         outputTokenDetails = try container.decodeIfPresent(JSONValue.self, forKey: .outputTokenDetails)
-        // Rust `TokenUsage.codex_rollout_budget_units` is skip-serialized; keep
+        // Sage `TokenUsage.sage_rollout_budget_units` is skip-serialized; keep
         // it locally so Responses `usage` mapping can preserve the field.
-        codexRolloutBudgetUnits = try container.decodeIfPresent(
-            JSONValue.self, forKey: .codexRolloutBudgetUnits)
+        sageRolloutBudgetUnits = try container.decodeIfPresent(
+            JSONValue.self, forKey: .sageRolloutBudgetUnits)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -966,7 +966,7 @@ public struct TokenUsage: Codable, Equatable, Sendable {
         try container.encode(totalTokens, forKey: .totalTokens)
         try container.encodeIfPresent(inputTokenDetails, forKey: .inputTokenDetails)
         try container.encodeIfPresent(outputTokenDetails, forKey: .outputTokenDetails)
-        // `codex_rollout_budget_units` is skip_serializing upstream.
+        // `sage_rollout_budget_units` is skip_serializing upstream.
     }
 
     public var isZero: Bool { totalTokens == 0 }
@@ -1196,19 +1196,19 @@ public struct TurnContextItem: Codable, Equatable, Sendable {
 
 public struct ErrorEvent: Codable, Equatable, Sendable {
     public var message: String
-    public var errorInfo: CodexErrorInfo?
+    public var errorInfo: SageErrorInfo?
     /// Live-only; never enters rollout storage (`#[serde(skip)]`).
     public var misalignment: MisalignmentErrorDetails?
 
     enum CodingKeys: String, CodingKey {
         case message
-        case errorInfo = "codex_error_info"
+        case errorInfo = "sage_error_info"
         case errorInfoLegacy = "error_info"
     }
 
     public init(
         message: String,
-        errorInfo: CodexErrorInfo? = nil,
+        errorInfo: SageErrorInfo? = nil,
         misalignment: MisalignmentErrorDetails? = nil
     ) {
         self.message = message
@@ -1219,8 +1219,8 @@ public struct ErrorEvent: Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         message = try container.decode(String.self, forKey: .message)
-        errorInfo = try container.decodeIfPresent(CodexErrorInfo.self, forKey: .errorInfo)
-            ?? container.decodeIfPresent(CodexErrorInfo.self, forKey: .errorInfoLegacy)
+        errorInfo = try container.decodeIfPresent(SageErrorInfo.self, forKey: .errorInfo)
+            ?? container.decodeIfPresent(SageErrorInfo.self, forKey: .errorInfoLegacy)
         misalignment = nil
     }
 
@@ -4318,7 +4318,7 @@ public struct CollabResumeEndEvent: Codable, Equatable, Sendable {
 
 public enum Product: String, Codable, Equatable, Hashable, Sendable {
     case chatgpt
-    case codex
+    case sage
     case atlas
 
     public init(from decoder: any Decoder) throws {
@@ -4326,7 +4326,7 @@ public enum Product: String, Codable, Equatable, Hashable, Sendable {
         let raw = try container.decode(String.self)
         switch raw.lowercased() {
         case "chatgpt": self = .chatgpt
-        case "codex": self = .codex
+        case "sage": self = .sage
         case "atlas": self = .atlas
         default:
             throw DecodingError.dataCorruptedError(
@@ -4337,7 +4337,7 @@ public enum Product: String, Codable, Equatable, Hashable, Sendable {
     public func toAppPlatform() -> String {
         switch self {
         case .chatgpt: "chat"
-        case .codex: "codex"
+        case .sage: "sage"
         case .atlas: "atlas"
         }
     }
@@ -4345,7 +4345,7 @@ public enum Product: String, Codable, Equatable, Hashable, Sendable {
     public static func fromSessionSourceName(_ value: String) -> Product? {
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "chatgpt": .chatgpt
-        case "codex": .codex
+        case "sage": .sage
         case "atlas": .atlas
         default: nil
         }
@@ -4547,20 +4547,20 @@ public struct DeprecationNoticeEvent: Codable, Equatable, Sendable {
 
 public struct StreamErrorEvent: Codable, Equatable, Sendable {
     public var message: String
-    public var codexErrorInfo: CodexErrorInfo?
+    public var sageErrorInfo: SageErrorInfo?
     public var additionalDetails: String?
 
     enum CodingKeys: String, CodingKey {
         case message
-        case codexErrorInfo = "codex_error_info"
+        case sageErrorInfo = "sage_error_info"
         case additionalDetails = "additional_details"
     }
 
     public init(
-        message: String, codexErrorInfo: CodexErrorInfo? = nil, additionalDetails: String? = nil
+        message: String, sageErrorInfo: SageErrorInfo? = nil, additionalDetails: String? = nil
     ) {
         self.message = message
-        self.codexErrorInfo = codexErrorInfo
+        self.sageErrorInfo = sageErrorInfo
         self.additionalDetails = additionalDetails
     }
 }

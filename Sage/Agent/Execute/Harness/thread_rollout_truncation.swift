@@ -1,6 +1,6 @@
 //
 //  thread_rollout_truncation.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/thread_rollout_truncation.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,8 +12,8 @@
 //  `InterAgentCommunication::from_message_content` is not ported.
 //
 
-import CodexHistory
-import CodexProtocol
+import SageHistory
+import SageProtocol
 import Foundation
 
 public func initialHistoryHasPriorUserTurns(_ conversationHistory: InitialHistory) -> Bool {
@@ -123,7 +123,7 @@ public func truncateRolloutAfterTurnId(
         if case .eventMsg(.turnStarted(let event)) = $0 { return event.turnId == lastTurnId }
         return false
     }) else {
-        throw CodexErr.invalidRequest(
+        throw SageErr.invalidRequest(
             "lastTurnId '\(lastTurnId)' was not found in the source thread")
     }
     let cutIndex = items[(targetStartIndex + 1)...].firstIndex(where: {
@@ -141,7 +141,7 @@ public func truncateRolloutBeforeTurnId(
         if case .eventMsg(.turnStarted(let event)) = $0 { return event.turnId == beforeTurnId }
         return false
     }) else {
-        throw CodexErr.invalidRequest(
+        throw SageErr.invalidRequest(
             "beforeTurnId '\(beforeTurnId)' was not found in the source thread")
     }
     return Array(items.prefix(cutIndex))

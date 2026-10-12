@@ -1,6 +1,6 @@
 //
 //  contextual_user_message.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/contextual_user_message.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,7 +9,7 @@
 //  Skill-prompt matchers from the skills crate are omitted until Phase 9.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func isGuardianContextMessage(_ item: ResponseItem) -> Bool {

@@ -1,14 +1,14 @@
 //
 //  model.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/model.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 /// Metadata for one skill materialized on the host filesystem.

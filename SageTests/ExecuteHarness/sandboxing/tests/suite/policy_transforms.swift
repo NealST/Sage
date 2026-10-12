@@ -8,9 +8,9 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
-@testable import CodexSandboxing
-import CodexUtils
+import SageProtocol
+@testable import SageSandboxing
+import SageUtils
 import XCTest
 
 final class PolicyTransformsTests: XCTestCase {

@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `HookEventName`. Event run paths go through ClaudeHooksEngine.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Hook event names as they appear in hooks JSON and config files.

@@ -1,6 +1,6 @@
 //
 //  path_utils_lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/path-utils/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -56,7 +56,7 @@ public func normalizeForPathComparison(_ path: String) throws -> String {
     return normalizeForWsl(canonical)
 }
 
-/// Compare paths after applying Codex's filesystem normalization.
+/// Compare paths after applying Sage's filesystem normalization.
 ///
 /// If either path cannot be normalized, this falls back to direct path
 /// equality.
@@ -177,8 +177,8 @@ public func writeAtomically(writePath: String, contents: String) throws {
         )
     }
     let tempPath = parent.isEmpty
-        ? ".codex-atomic-" + UUID().uuidString
-        : parent + "/.codex-atomic-" + UUID().uuidString
+        ? ".sage-atomic-" + UUID().uuidString
+        : parent + "/.sage-atomic-" + UUID().uuidString
     do {
         try contents.write(toFile: tempPath, atomically: false, encoding: .utf8)
     } catch {

@@ -7,16 +7,16 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct Permissions: Equatable, Sendable {
-    var approvalPolicy: CodexProtocol.AskForApproval
+    var approvalPolicy: SageProtocol.AskForApproval
     var permissionProfile: PermissionProfile
     var sandboxMode: SandboxMode
 
     init(
-        approvalPolicy: CodexProtocol.AskForApproval = CodexProtocol.AskForApproval.onRequest,
+        approvalPolicy: SageProtocol.AskForApproval = SageProtocol.AskForApproval.onRequest,
         permissionProfile: PermissionProfile = .readOnly(),
         sandboxMode: SandboxMode = .readOnly
     ) {

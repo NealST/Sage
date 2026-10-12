@@ -7,52 +7,50 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		30927A5A3069E947009A038C /* CodexOtel in Frameworks */ = {isa = PBXBuildFile; productRef = A10OTELPROD000000000001 /* CodexOtel */; };
-		30927A5B3069E947009A038C /* CodexTerminalDetection in Frameworks */ = {isa = PBXBuildFile; productRef = A10TERMDETPROD0000000001 /* CodexTerminalDetection */; };
-		30927A5C3069E947009A038C /* CodexOtel in Frameworks */ = {isa = PBXBuildFile; productRef = A10OTELPROD000000000001 /* CodexOtel */; };
-		30927A5D3069E947009A038C /* CodexTerminalDetection in Frameworks */ = {isa = PBXBuildFile; productRef = A10TERMDETPROD0000000001 /* CodexTerminalDetection */; };
-		A10APIFRM00000000000001 /* CodexAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A10APIPROD0000000000001 /* CodexAPI */; };
-		A10APIFRMT0000000000001 /* CodexAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A10APIPROD0000000000001 /* CodexAPI */; };
+		30927A5B3069E947009A038C /* SageTerminalDetection in Frameworks */ = {isa = PBXBuildFile; productRef = A10TERMDETPROD0000000001 /* SageTerminalDetection */; };
+		30927A5D3069E947009A038C /* SageTerminalDetection in Frameworks */ = {isa = PBXBuildFile; productRef = A10TERMDETPROD0000000001 /* SageTerminalDetection */; };
+		A10APIFRM00000000000001 /* SageAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A10APIPROD0000000000001 /* SageAPI */; };
+		A10APIFRMT0000000000001 /* SageAPI in Frameworks */ = {isa = PBXBuildFile; productRef = A10APIPROD0000000000001 /* SageAPI */; };
 		A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
 		A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */ = {isa = PBXBuildFile; productRef = A10APPLYPROD0000000000001 /* ApplyPatch */; };
-		A10ASYNCFRM000000000001 /* CodexAsyncUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10ASYNCPROD00000000001 /* CodexAsyncUtils */; };
-		A10ASYNCFRMT00000000001 /* CodexAsyncUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10ASYNCPROD00000000001 /* CodexAsyncUtils */; };
-		A10COREFRM0000000000001 /* CodexCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10COREPROD000000000001 /* CodexCore */; };
-		A10COREFRMT000000000001 /* CodexCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10COREPROD000000000001 /* CodexCore */; };
-		A10EXECPFRM000000000001 /* CodexExecPolicy in Frameworks */ = {isa = PBXBuildFile; productRef = A10EXECPPROD00000000001 /* CodexExecPolicy */; };
-		A10EXECPFRMT00000000001 /* CodexExecPolicy in Frameworks */ = {isa = PBXBuildFile; productRef = A10EXECPPROD00000000001 /* CodexExecPolicy */; };
-		A10FRAGFRM0000000000001 /* CodexContextFragments in Frameworks */ = {isa = PBXBuildFile; productRef = A10FRAGPROD000000000001 /* CodexContextFragments */; };
-		A10FRAGFRMT000000000001 /* CodexContextFragments in Frameworks */ = {isa = PBXBuildFile; productRef = A10FRAGPROD000000000001 /* CodexContextFragments */; };
+		A10ASYNCFRM000000000001 /* SageAsyncUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10ASYNCPROD00000000001 /* SageAsyncUtils */; };
+		A10ASYNCFRMT00000000001 /* SageAsyncUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10ASYNCPROD00000000001 /* SageAsyncUtils */; };
+		A10COREFRM0000000000001 /* SageCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10COREPROD000000000001 /* SageCore */; };
+		A10COREFRMT000000000001 /* SageCore in Frameworks */ = {isa = PBXBuildFile; productRef = A10COREPROD000000000001 /* SageCore */; };
+		A10EXECPFRM000000000001 /* SageExecPolicy in Frameworks */ = {isa = PBXBuildFile; productRef = A10EXECPPROD00000000001 /* SageExecPolicy */; };
+		A10EXECPFRMT00000000001 /* SageExecPolicy in Frameworks */ = {isa = PBXBuildFile; productRef = A10EXECPPROD00000000001 /* SageExecPolicy */; };
+		A10FRAGFRM0000000000001 /* SageContextFragments in Frameworks */ = {isa = PBXBuildFile; productRef = A10FRAGPROD000000000001 /* SageContextFragments */; };
+		A10FRAGFRMT000000000001 /* SageContextFragments in Frameworks */ = {isa = PBXBuildFile; productRef = A10FRAGPROD000000000001 /* SageContextFragments */; };
 		A10FSFRM0000000000000001 /* FileSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A10FSPROD00000000000001 /* FileSystem */; };
 		A10FSFRMT000000000000001 /* FileSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A10FSPROD00000000000001 /* FileSystem */; };
-		A10GITFRM00000000000001 /* CodexGitUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10GITPROD0000000000001 /* CodexGitUtils */; };
-		A10GITFRMT0000000000001 /* CodexGitUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10GITPROD0000000000001 /* CodexGitUtils */; };
+		A10GITFRM00000000000001 /* SageGitUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10GITPROD0000000000001 /* SageGitUtils */; };
+		A10GITFRMT0000000000001 /* SageGitUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10GITPROD0000000000001 /* SageGitUtils */; };
 		A10GRDB000000000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A10GRDB000000000000000002 /* GRDB */; };
-		A10HISTFRM0000000000001 /* CodexHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* CodexHistory */; };
-		A10HISTFRMT000000000001 /* CodexHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* CodexHistory */; };
+		A10HISTFRM0000000000001 /* SageHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* SageHistory */; };
+		A10HISTFRMT000000000001 /* SageHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* SageHistory */; };
 		A10HOOKBLD0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10HOOKREF0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift */; };
-		A10HOOKFRM0000000000001 /* CodexHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* CodexHooks */; };
-		A10HOOKFRMT000000000001 /* CodexHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* CodexHooks */; };
+		A10HOOKFRM0000000000001 /* SageHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* SageHooks */; };
+		A10HOOKFRMT000000000001 /* SageHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* SageHooks */; };
 		A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10MARKDOWN00000000000002 /* MarkdownUI */; };
 		A10MDENGINE0000000000001 /* MarkdownEngine in Frameworks */ = {isa = PBXBuildFile; productRef = A10MDENGINE0000000000002 /* MarkdownEngine */; };
-		A10MPIFRM00000000000001 /* CodexModelProviderInfo in Frameworks */ = {isa = PBXBuildFile; productRef = A10MPIPROD0000000000001 /* CodexModelProviderInfo */; };
-		A10MPIFRMT0000000000001 /* CodexModelProviderInfo in Frameworks */ = {isa = PBXBuildFile; productRef = A10MPIPROD0000000000001 /* CodexModelProviderInfo */; };
-		A10PROTOFRM0000000000001 /* CodexProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* CodexProtocol */; };
-		A10PROTOFRMT000000000001 /* CodexProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* CodexProtocol */; };
-		A10ROLEFRM0000000000001 /* CodexAgentRoles in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLEPROD000000000001 /* CodexAgentRoles */; };
-		A10ROLEFRMT000000000001 /* CodexAgentRoles in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLEPROD000000000001 /* CodexAgentRoles */; };
-		A10ROLLFRM0000000000001 /* CodexRollout in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLLPROD000000000001 /* CodexRollout */; };
-		A10ROLLFRMT000000000001 /* CodexRollout in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLLPROD000000000001 /* CodexRollout */; };
+		A10MPIFRM00000000000001 /* SageModelProviderInfo in Frameworks */ = {isa = PBXBuildFile; productRef = A10MPIPROD0000000000001 /* SageModelProviderInfo */; };
+		A10MPIFRMT0000000000001 /* SageModelProviderInfo in Frameworks */ = {isa = PBXBuildFile; productRef = A10MPIPROD0000000000001 /* SageModelProviderInfo */; };
+		A10PROTOFRM0000000000001 /* SageProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* SageProtocol */; };
+		A10PROTOFRMT000000000001 /* SageProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = A10PROTOPROD000000000001 /* SageProtocol */; };
+		A10ROLEFRM0000000000001 /* SageAgentRoles in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLEPROD000000000001 /* SageAgentRoles */; };
+		A10ROLEFRMT000000000001 /* SageAgentRoles in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLEPROD000000000001 /* SageAgentRoles */; };
+		A10ROLLFRM0000000000001 /* SageRollout in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLLPROD000000000001 /* SageRollout */; };
+		A10ROLLFRMT000000000001 /* SageRollout in Frameworks */ = {isa = PBXBuildFile; productRef = A10ROLLPROD000000000001 /* SageRollout */; };
 		A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */ = {isa = PBXBuildFile; productRef = A10RUNTIMPROD000000000001 /* ToolsRuntimes */; };
-		A10SBOXFRM0000000000001 /* CodexSandboxing in Frameworks */ = {isa = PBXBuildFile; productRef = A10SBOXPROD000000000001 /* CodexSandboxing */; };
-		A10SBOXFRMT000000000001 /* CodexSandboxing in Frameworks */ = {isa = PBXBuildFile; productRef = A10SBOXPROD000000000001 /* CodexSandboxing */; };
-		A10SHELLFRM000000000001 /* CodexShellCommand in Frameworks */ = {isa = PBXBuildFile; productRef = A10SHELLPROD00000000001 /* CodexShellCommand */; };
-		A10SHELLFRMT00000000001 /* CodexShellCommand in Frameworks */ = {isa = PBXBuildFile; productRef = A10SHELLPROD00000000001 /* CodexShellCommand */; };
-		A10STATFRM0000000000001 /* CodexState in Frameworks */ = {isa = PBXBuildFile; productRef = A10STATPROD000000000001 /* CodexState */; };
-		A10STATFRMT000000000001 /* CodexState in Frameworks */ = {isa = PBXBuildFile; productRef = A10STATPROD000000000001 /* CodexState */; };
+		A10SBOXFRM0000000000001 /* SageSandboxing in Frameworks */ = {isa = PBXBuildFile; productRef = A10SBOXPROD000000000001 /* SageSandboxing */; };
+		A10SBOXFRMT000000000001 /* SageSandboxing in Frameworks */ = {isa = PBXBuildFile; productRef = A10SBOXPROD000000000001 /* SageSandboxing */; };
+		A10SHELLFRM000000000001 /* SageShellCommand in Frameworks */ = {isa = PBXBuildFile; productRef = A10SHELLPROD00000000001 /* SageShellCommand */; };
+		A10SHELLFRMT00000000001 /* SageShellCommand in Frameworks */ = {isa = PBXBuildFile; productRef = A10SHELLPROD00000000001 /* SageShellCommand */; };
+		A10STATFRM0000000000001 /* SageState in Frameworks */ = {isa = PBXBuildFile; productRef = A10STATPROD000000000001 /* SageState */; };
+		A10STATFRMT000000000001 /* SageState in Frameworks */ = {isa = PBXBuildFile; productRef = A10STATPROD000000000001 /* SageState */; };
 		A10STSF00000000000000000 /* SwiftTreeSitter in Frameworks */ = {isa = PBXBuildFile; productRef = A10STSP00000000000000000 /* SwiftTreeSitter */; };
-		A10THSTFRM0000000000001 /* CodexThreadStore in Frameworks */ = {isa = PBXBuildFile; productRef = A10THSTPROD000000000001 /* CodexThreadStore */; };
-		A10THSTFRMT000000000001 /* CodexThreadStore in Frameworks */ = {isa = PBXBuildFile; productRef = A10THSTPROD000000000001 /* CodexThreadStore */; };
+		A10THSTFRM0000000000001 /* SageThreadStore in Frameworks */ = {isa = PBXBuildFile; productRef = A10THSTPROD000000000001 /* SageThreadStore */; };
+		A10THSTFRMT000000000001 /* SageThreadStore in Frameworks */ = {isa = PBXBuildFile; productRef = A10THSTPROD000000000001 /* SageThreadStore */; };
 		A10TSBASHF00000000000000 /* TreeSitterBash in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSBASHP00000000000000 /* TreeSitterBash */; };
 		A10TSCF00000000000000000 /* TreeSitterC in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSCP00000000000000000 /* TreeSitterC */; };
 		A10TSCPPF000000000000000 /* TreeSitterCPP in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSCPPP000000000000000 /* TreeSitterCPP */; };
@@ -68,8 +66,8 @@
 		A10TSRSF0000000000000000 /* TreeSitterRust in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSRSP0000000000000000 /* TreeSitterRust */; };
 		A10TSSWIFTF0000000000000 /* TreeSitterSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSSWIFTP0000000000000 /* TreeSitterSwift */; };
 		A10TSTSF0000000000000000 /* TreeSitterTypeScript in Frameworks */ = {isa = PBXBuildFile; productRef = A10TSTSP0000000000000000 /* TreeSitterTypeScript */; };
-		A10UTILSFRM0000000000001 /* CodexUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* CodexUtils */; };
-		A10UTILSFRMT000000000001 /* CodexUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* CodexUtils */; };
+		A10UTILSFRM0000000000001 /* SageUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* SageUtils */; };
+		A10UTILSFRMT000000000001 /* SageUtils in Frameworks */ = {isa = PBXBuildFile; productRef = A10UTILSPROD000000000001 /* SageUtils */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -381,8 +379,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				30927A5B3069E947009A038C /* CodexTerminalDetection in Frameworks */,
-				30927A5A3069E947009A038C /* CodexOtel in Frameworks */,
+				30927A5B3069E947009A038C /* SageTerminalDetection in Frameworks */,
 				A10MDENGINE0000000000001 /* MarkdownEngine in Frameworks */,
 				A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */,
 				A10GRDB000000000000000001 /* GRDB in Frameworks */,
@@ -405,23 +402,23 @@
 				A10APPLYFRM000000000000001 /* ApplyPatch in Frameworks */,
 				A10FSFRM0000000000000001 /* FileSystem in Frameworks */,
 				A10RUNTIMFRM00000000000001 /* ToolsRuntimes in Frameworks */,
-				A10PROTOFRM0000000000001 /* CodexProtocol in Frameworks */,
-				A10UTILSFRM0000000000001 /* CodexUtils in Frameworks */,
-				A10GITFRM00000000000001 /* CodexGitUtils in Frameworks */,
-				A10ASYNCFRM000000000001 /* CodexAsyncUtils in Frameworks */,
-				A10SBOXFRM0000000000001 /* CodexSandboxing in Frameworks */,
-				A10SHELLFRM000000000001 /* CodexShellCommand in Frameworks */,
-				A10EXECPFRM000000000001 /* CodexExecPolicy in Frameworks */,
-				A10COREFRM0000000000001 /* CodexCore in Frameworks */,
-				A10APIFRM00000000000001 /* CodexAPI in Frameworks */,
-				A10MPIFRM00000000000001 /* CodexModelProviderInfo in Frameworks */,
-				A10HISTFRM0000000000001 /* CodexHistory in Frameworks */,
-				A10ROLLFRM0000000000001 /* CodexRollout in Frameworks */,
-				A10STATFRM0000000000001 /* CodexState in Frameworks */,
-				A10THSTFRM0000000000001 /* CodexThreadStore in Frameworks */,
-				A10FRAGFRM0000000000001 /* CodexContextFragments in Frameworks */,
-				A10ROLEFRM0000000000001 /* CodexAgentRoles in Frameworks */,
-				A10HOOKFRM0000000000001 /* CodexHooks in Frameworks */,
+				A10PROTOFRM0000000000001 /* SageProtocol in Frameworks */,
+				A10UTILSFRM0000000000001 /* SageUtils in Frameworks */,
+				A10GITFRM00000000000001 /* SageGitUtils in Frameworks */,
+				A10ASYNCFRM000000000001 /* SageAsyncUtils in Frameworks */,
+				A10SBOXFRM0000000000001 /* SageSandboxing in Frameworks */,
+				A10SHELLFRM000000000001 /* SageShellCommand in Frameworks */,
+				A10EXECPFRM000000000001 /* SageExecPolicy in Frameworks */,
+				A10COREFRM0000000000001 /* SageCore in Frameworks */,
+				A10APIFRM00000000000001 /* SageAPI in Frameworks */,
+				A10MPIFRM00000000000001 /* SageModelProviderInfo in Frameworks */,
+				A10HISTFRM0000000000001 /* SageHistory in Frameworks */,
+				A10ROLLFRM0000000000001 /* SageRollout in Frameworks */,
+				A10STATFRM0000000000001 /* SageState in Frameworks */,
+				A10THSTFRM0000000000001 /* SageThreadStore in Frameworks */,
+				A10FRAGFRM0000000000001 /* SageContextFragments in Frameworks */,
+				A10ROLEFRM0000000000001 /* SageAgentRoles in Frameworks */,
+				A10HOOKFRM0000000000001 /* SageHooks in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -431,25 +428,24 @@
 			files = (
 				A10APPLYFRMT00000000000001 /* ApplyPatch in Frameworks */,
 				A10FSFRMT000000000000001 /* FileSystem in Frameworks */,
-				A10PROTOFRMT000000000001 /* CodexProtocol in Frameworks */,
-				A10UTILSFRMT000000000001 /* CodexUtils in Frameworks */,
-				A10GITFRMT0000000000001 /* CodexGitUtils in Frameworks */,
-				A10ASYNCFRMT00000000001 /* CodexAsyncUtils in Frameworks */,
-				30927A5D3069E947009A038C /* CodexTerminalDetection in Frameworks */,
-				A10SBOXFRMT000000000001 /* CodexSandboxing in Frameworks */,
-				A10SHELLFRMT00000000001 /* CodexShellCommand in Frameworks */,
-				30927A5C3069E947009A038C /* CodexOtel in Frameworks */,
-				A10EXECPFRMT00000000001 /* CodexExecPolicy in Frameworks */,
-				A10COREFRMT000000000001 /* CodexCore in Frameworks */,
-				A10APIFRMT0000000000001 /* CodexAPI in Frameworks */,
-				A10MPIFRMT0000000000001 /* CodexModelProviderInfo in Frameworks */,
-				A10HISTFRMT000000000001 /* CodexHistory in Frameworks */,
-				A10ROLLFRMT000000000001 /* CodexRollout in Frameworks */,
-				A10STATFRMT000000000001 /* CodexState in Frameworks */,
-				A10THSTFRMT000000000001 /* CodexThreadStore in Frameworks */,
-				A10FRAGFRMT000000000001 /* CodexContextFragments in Frameworks */,
-				A10ROLEFRMT000000000001 /* CodexAgentRoles in Frameworks */,
-				A10HOOKFRMT000000000001 /* CodexHooks in Frameworks */,
+				A10PROTOFRMT000000000001 /* SageProtocol in Frameworks */,
+				A10UTILSFRMT000000000001 /* SageUtils in Frameworks */,
+				A10GITFRMT0000000000001 /* SageGitUtils in Frameworks */,
+				A10ASYNCFRMT00000000001 /* SageAsyncUtils in Frameworks */,
+				30927A5D3069E947009A038C /* SageTerminalDetection in Frameworks */,
+				A10SBOXFRMT000000000001 /* SageSandboxing in Frameworks */,
+				A10SHELLFRMT00000000001 /* SageShellCommand in Frameworks */,
+				A10EXECPFRMT00000000001 /* SageExecPolicy in Frameworks */,
+				A10COREFRMT000000000001 /* SageCore in Frameworks */,
+				A10APIFRMT0000000000001 /* SageAPI in Frameworks */,
+				A10MPIFRMT0000000000001 /* SageModelProviderInfo in Frameworks */,
+				A10HISTFRMT000000000001 /* SageHistory in Frameworks */,
+				A10ROLLFRMT000000000001 /* SageRollout in Frameworks */,
+				A10STATFRMT000000000001 /* SageState in Frameworks */,
+				A10THSTFRMT000000000001 /* SageThreadStore in Frameworks */,
+				A10FRAGFRMT000000000001 /* SageContextFragments in Frameworks */,
+				A10ROLEFRMT000000000001 /* SageAgentRoles in Frameworks */,
+				A10HOOKFRMT000000000001 /* SageHooks in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -529,25 +525,24 @@
 				A10APPLYPROD0000000000001 /* ApplyPatch */,
 				A10FSPROD00000000000001 /* FileSystem */,
 				A10RUNTIMPROD000000000001 /* ToolsRuntimes */,
-				A10PROTOPROD000000000001 /* CodexProtocol */,
-				A10UTILSPROD000000000001 /* CodexUtils */,
-				A10GITPROD0000000000001 /* CodexGitUtils */,
-				A10ASYNCPROD00000000001 /* CodexAsyncUtils */,
-				A10SBOXPROD000000000001 /* CodexSandboxing */,
-				A10SHELLPROD00000000001 /* CodexShellCommand */,
-				A10EXECPPROD00000000001 /* CodexExecPolicy */,
-				A10COREPROD000000000001 /* CodexCore */,
-				A10APIPROD0000000000001 /* CodexAPI */,
-				A10MPIPROD0000000000001 /* CodexModelProviderInfo */,
-				A10HISTPROD000000000001 /* CodexHistory */,
-				A10ROLLPROD000000000001 /* CodexRollout */,
-				A10STATPROD000000000001 /* CodexState */,
-				A10THSTPROD000000000001 /* CodexThreadStore */,
-				A10FRAGPROD000000000001 /* CodexContextFragments */,
-				A10ROLEPROD000000000001 /* CodexAgentRoles */,
-				A10HOOKPROD000000000001 /* CodexHooks */,
-				A10OTELPROD000000000001 /* CodexOtel */,
-				A10TERMDETPROD0000000001 /* CodexTerminalDetection */,
+				A10PROTOPROD000000000001 /* SageProtocol */,
+				A10UTILSPROD000000000001 /* SageUtils */,
+				A10GITPROD0000000000001 /* SageGitUtils */,
+				A10ASYNCPROD00000000001 /* SageAsyncUtils */,
+				A10SBOXPROD000000000001 /* SageSandboxing */,
+				A10SHELLPROD00000000001 /* SageShellCommand */,
+				A10EXECPPROD00000000001 /* SageExecPolicy */,
+				A10COREPROD000000000001 /* SageCore */,
+				A10APIPROD0000000000001 /* SageAPI */,
+				A10MPIPROD0000000000001 /* SageModelProviderInfo */,
+				A10HISTPROD000000000001 /* SageHistory */,
+				A10ROLLPROD000000000001 /* SageRollout */,
+				A10STATPROD000000000001 /* SageState */,
+				A10THSTPROD000000000001 /* SageThreadStore */,
+				A10FRAGPROD000000000001 /* SageContextFragments */,
+				A10ROLEPROD000000000001 /* SageAgentRoles */,
+				A10HOOKPROD000000000001 /* SageHooks */,
+				A10TERMDETPROD0000000001 /* SageTerminalDetection */,
 			);
 			productName = Sage;
 			productReference = 30ACE9D53001EBF5006F8C54 /* Sage.app */;
@@ -573,25 +568,24 @@
 			packageProductDependencies = (
 				A10APPLYPROD0000000000001 /* ApplyPatch */,
 				A10FSPROD00000000000001 /* FileSystem */,
-				A10PROTOPROD000000000001 /* CodexProtocol */,
-				A10UTILSPROD000000000001 /* CodexUtils */,
-				A10GITPROD0000000000001 /* CodexGitUtils */,
-				A10ASYNCPROD00000000001 /* CodexAsyncUtils */,
-				A10SBOXPROD000000000001 /* CodexSandboxing */,
-				A10SHELLPROD00000000001 /* CodexShellCommand */,
-				A10EXECPPROD00000000001 /* CodexExecPolicy */,
-				A10COREPROD000000000001 /* CodexCore */,
-				A10APIPROD0000000000001 /* CodexAPI */,
-				A10MPIPROD0000000000001 /* CodexModelProviderInfo */,
-				A10HISTPROD000000000001 /* CodexHistory */,
-				A10ROLLPROD000000000001 /* CodexRollout */,
-				A10STATPROD000000000001 /* CodexState */,
-				A10THSTPROD000000000001 /* CodexThreadStore */,
-				A10FRAGPROD000000000001 /* CodexContextFragments */,
-				A10ROLEPROD000000000001 /* CodexAgentRoles */,
-				A10HOOKPROD000000000001 /* CodexHooks */,
-				A10OTELPROD000000000001 /* CodexOtel */,
-				A10TERMDETPROD0000000001 /* CodexTerminalDetection */,
+				A10PROTOPROD000000000001 /* SageProtocol */,
+				A10UTILSPROD000000000001 /* SageUtils */,
+				A10GITPROD0000000000001 /* SageGitUtils */,
+				A10ASYNCPROD00000000001 /* SageAsyncUtils */,
+				A10SBOXPROD000000000001 /* SageSandboxing */,
+				A10SHELLPROD00000000001 /* SageShellCommand */,
+				A10EXECPPROD00000000001 /* SageExecPolicy */,
+				A10COREPROD000000000001 /* SageCore */,
+				A10APIPROD0000000000001 /* SageAPI */,
+				A10MPIPROD0000000000001 /* SageModelProviderInfo */,
+				A10HISTPROD000000000001 /* SageHistory */,
+				A10ROLLPROD000000000001 /* SageRollout */,
+				A10STATPROD000000000001 /* SageState */,
+				A10THSTPROD000000000001 /* SageThreadStore */,
+				A10FRAGPROD000000000001 /* SageContextFragments */,
+				A10ROLEPROD000000000001 /* SageAgentRoles */,
+				A10HOOKPROD000000000001 /* SageHooks */,
+				A10TERMDETPROD0000000001 /* SageTerminalDetection */,
 			);
 			productName = SageTests;
 			productReference = A10TESTPROD000000000001 /* SageTests.xctest */;
@@ -1113,60 +1107,60 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A10APIPROD0000000000001 /* CodexAPI */ = {
+		A10APIPROD0000000000001 /* SageAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexAPI;
+			productName = SageAPI;
 		};
 		A10APPLYPROD0000000000001 /* ApplyPatch */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = ApplyPatch;
 		};
-		A10ASYNCPROD00000000001 /* CodexAsyncUtils */ = {
+		A10ASYNCPROD00000000001 /* SageAsyncUtils */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexAsyncUtils;
+			productName = SageAsyncUtils;
 		};
-		A10COREPROD000000000001 /* CodexCore */ = {
+		A10COREPROD000000000001 /* SageCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexCore;
+			productName = SageCore;
 		};
-		A10EXECPPROD00000000001 /* CodexExecPolicy */ = {
+		A10EXECPPROD00000000001 /* SageExecPolicy */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexExecPolicy;
+			productName = SageExecPolicy;
 		};
-		A10FRAGPROD000000000001 /* CodexContextFragments */ = {
+		A10FRAGPROD000000000001 /* SageContextFragments */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexContextFragments;
+			productName = SageContextFragments;
 		};
 		A10FSPROD00000000000001 /* FileSystem */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = FileSystem;
 		};
-		A10GITPROD0000000000001 /* CodexGitUtils */ = {
+		A10GITPROD0000000000001 /* SageGitUtils */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexGitUtils;
+			productName = SageGitUtils;
 		};
 		A10GRDB000000000000000002 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10GRDB000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		A10HISTPROD000000000001 /* CodexHistory */ = {
+		A10HISTPROD000000000001 /* SageHistory */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexHistory;
+			productName = SageHistory;
 		};
-		A10HOOKPROD000000000001 /* CodexHooks */ = {
+		A10HOOKPROD000000000001 /* SageHooks */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexHooks;
+			productName = SageHooks;
 		};
 		A10MARKDOWN00000000000002 /* MarkdownUI */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1178,65 +1172,63 @@
 			package = A10MDENGINE0000000000003 /* XCLocalSwiftPackageReference "ThirdParty/swift-markdown-engine" */;
 			productName = MarkdownEngine;
 		};
-		A10MPIPROD0000000000001 /* CodexModelProviderInfo */ = {
+		A10MPIPROD0000000000001 /* SageModelProviderInfo */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexModelProviderInfo;
+			productName = SageModelProviderInfo;
 		};
-		A10OTELPROD000000000001 /* CodexOtel */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexOtel;
 		};
-		A10PROTOPROD000000000001 /* CodexProtocol */ = {
+		A10PROTOPROD000000000001 /* SageProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexProtocol;
+			productName = SageProtocol;
 		};
-		A10ROLEPROD000000000001 /* CodexAgentRoles */ = {
+		A10ROLEPROD000000000001 /* SageAgentRoles */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexAgentRoles;
+			productName = SageAgentRoles;
 		};
-		A10ROLLPROD000000000001 /* CodexRollout */ = {
+		A10ROLLPROD000000000001 /* SageRollout */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexRollout;
+			productName = SageRollout;
 		};
 		A10RUNTIMPROD000000000001 /* ToolsRuntimes */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = ToolsRuntimes;
 		};
-		A10SBOXPROD000000000001 /* CodexSandboxing */ = {
+		A10SBOXPROD000000000001 /* SageSandboxing */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexSandboxing;
+			productName = SageSandboxing;
 		};
-		A10SHELLPROD00000000001 /* CodexShellCommand */ = {
+		A10SHELLPROD00000000001 /* SageShellCommand */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexShellCommand;
+			productName = SageShellCommand;
 		};
-		A10STATPROD000000000001 /* CodexState */ = {
+		A10STATPROD000000000001 /* SageState */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexState;
+			productName = SageState;
 		};
 		A10STSP00000000000000000 /* SwiftTreeSitter */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10STSPKG000000000000000 /* XCRemoteSwiftPackageReference "swift-tree-sitter" */;
 			productName = SwiftTreeSitter;
 		};
-		A10TERMDETPROD0000000001 /* CodexTerminalDetection */ = {
+		A10TERMDETPROD0000000001 /* SageTerminalDetection */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexTerminalDetection;
+			productName = SageTerminalDetection;
 		};
-		A10THSTPROD000000000001 /* CodexThreadStore */ = {
+		A10THSTPROD000000000001 /* SageThreadStore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexThreadStore;
+			productName = SageThreadStore;
 		};
 		A10TSBASHP00000000000000 /* TreeSitterBash */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1313,10 +1305,10 @@
 			package = A10TSTSPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-typescript" */;
 			productName = TreeSitterTypeScript;
 		};
-		A10UTILSPROD000000000001 /* CodexUtils */ = {
+		A10UTILSPROD000000000001 /* SageUtils */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-			productName = CodexUtils;
+			productName = SageUtils;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

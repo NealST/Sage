@@ -6,16 +6,15 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  StateDb, session telemetry, exec-server Environment, and credential-
-//  broker restore wait for Phase 4–5. Capture writes a login-shell
-//  `export -p` snapshot through ShellSnapshotSandbox when provided, or a
-//  local Process otherwise.
+//  Capture writes a login-shell `export -p` snapshot through
+//  ShellSnapshotSandbox when provided, or a local Process otherwise.
+//  `captureLoginShellSnapshot` is the non-brokered entry used by `/shell`.
 //
 
-import CodexProtocol
-import CodexSandboxing
-import CodexShellCommand
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageShellCommand
+import SageUtils
 import Foundation
 
 let SNAPSHOT_TIMEOUT: Duration = .seconds(10)
@@ -53,7 +52,7 @@ final class SnapshotCredentialBrokerChannel: @unchecked Sendable {
 }
 
 struct ShellSnapshotConfig {
-    var codexHome: AbsolutePathBuf
+    var sageHome: AbsolutePathBuf
     var sessionId: ThreadId
     var preferExecutorSnapshots: Bool
 }
@@ -63,13 +62,13 @@ struct ShellSnapshot {
     var credentialBroker: SnapshotCredentialBrokerChannel?
 
     init(
-        codexHome: AbsolutePathBuf,
+        sageHome: AbsolutePathBuf,
         sessionId: ThreadId,
         credentialBroker: SnapshotCredentialBrokerChannel? = nil,
         preferExecutorSnapshots: Bool = false
     ) {
         self.config = ShellSnapshotConfig(
-            codexHome: codexHome,
+            sageHome: sageHome,
             sessionId: sessionId,
             preferExecutorSnapshots: preferExecutorSnapshots
         )
@@ -119,7 +118,7 @@ struct ShellSnapshot {
         }
         _ = allowLoginShell
         return await Self.tryCreate(
-            codexHome: config.codexHome,
+            sageHome: config.sageHome,
             sessionId: config.sessionId,
             sessionCwd: cwd,
             shell: shell,
@@ -128,7 +127,7 @@ struct ShellSnapshot {
     }
 
     private static func tryCreate(
-        codexHome: AbsolutePathBuf,
+        sageHome: AbsolutePathBuf,
         sessionId: ThreadId,
         sessionCwd: AbsolutePathBuf,
         shell: Shell,
@@ -144,14 +143,14 @@ struct ShellSnapshot {
             extensionName = "sh"
         }
         let nonce = UInt64(Date().timeIntervalSince1970 * 1_000_000_000)
-        let path = codexHome
+        let path = sageHome
             .join(SNAPSHOT_DIR)
             .join("\(sessionId).\(nonce).\(extensionName)")
-        let tempPath = codexHome
+        let tempPath = sageHome
             .join(SNAPSHOT_DIR)
             .join("\(sessionId).tmp-\(nonce)")
         Task {
-            cleanupStaleSnapshots(codexHome: codexHome, sessionId: sessionId)
+            cleanupStaleSnapshots(sageHome: sageHome, sessionId: sessionId)
         }
         do {
             try await writeShellSnapshot(
@@ -171,6 +170,21 @@ struct ShellSnapshot {
 
 struct ShellSnapshotFile: Equatable, Sendable {
     var path: AbsolutePathBuf
+}
+
+public func captureLoginShellSnapshot(
+    sageHome: AbsolutePathBuf,
+    sessionId: ThreadId,
+    cwd: AbsolutePathBuf,
+    shell: Shell
+) async -> String? {
+    let built = await ShellSnapshot(sageHome: sageHome, sessionId: sessionId).build(
+        cwd: PathUri.fromAbsPath(cwd),
+        shell: shell,
+        allowLoginShell: true,
+        sandbox: nil
+    )
+    return built?.path.asPath
 }
 
 private func writeShellSnapshot(
@@ -210,7 +224,7 @@ private func captureSnapshot(
 
 private func runLocalSnapshot(args: [String], cwd: AbsolutePathBuf) async throws -> String {
     guard let program = args.first else {
-        throw CodexErr.fatal("shell snapshot command is empty")
+        throw SageErr.fatal("shell snapshot command is empty")
     }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: program)
@@ -226,17 +240,17 @@ private func runLocalSnapshot(args: [String], cwd: AbsolutePathBuf) async throws
     }
     if process.isRunning {
         process.terminate()
-        throw CodexErr.fatal("Snapshot command timed out")
+        throw SageErr.fatal("Snapshot command timed out")
     }
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
     guard process.terminationStatus == 0 else {
-        throw CodexErr.fatal("Snapshot command exited with status \(process.terminationStatus)")
+        throw SageErr.fatal("Snapshot command exited with status \(process.terminationStatus)")
     }
     return String(data: data, encoding: .utf8) ?? ""
 }
 
-private func cleanupStaleSnapshots(codexHome: AbsolutePathBuf, sessionId: ThreadId) {
-    let dir = codexHome.join(SNAPSHOT_DIR).asPath
+private func cleanupStaleSnapshots(sageHome: AbsolutePathBuf, sessionId: ThreadId) {
+    let dir = sageHome.join(SNAPSHOT_DIR).asPath
     let fileManager = FileManager.default
     guard let entries = try? fileManager.contentsOfDirectory(atPath: dir) else { return }
     let prefix = "\(sessionId)."

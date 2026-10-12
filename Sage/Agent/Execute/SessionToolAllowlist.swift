@@ -3,7 +3,7 @@
 //  Sage
 //
 //  Remembers exact shell / MCP invocations the user approved for this task.
-//  Session-scoped grants also land in `ApprovalStore` so Codex escalate
+//  Session-scoped grants also land in `ApprovalStore` so Sage escalate
 //  reuse and HUD allowlist share one cache.
 //
 

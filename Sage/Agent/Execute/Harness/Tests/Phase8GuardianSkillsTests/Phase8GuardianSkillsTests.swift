@@ -6,12 +6,12 @@
 //  Phase 8 context-fragments, agent-roles, hooks, skills, and AGENTS.md tests.
 //
 
-import CodexAgentRoles
-import CodexCore
-import CodexHooks
-import CodexProtocol
-import CodexSkills
-import CodexUtils
+import SageAgentRoles
+import SageCore
+import SageHooks
+import SageProtocol
+import SageSkills
+import SageUtils
 import FileSystem
 import Foundation
 import XCTest
@@ -393,7 +393,7 @@ final class Phase8GuardianSkillsTests: XCTestCase {
                 HookMcpCall(server: "srv", tool: "tool", timeout: 1)
             )
             XCTFail("expected unsupported MCP runtime")
-        } catch is CodexErr {
+        } catch is SageErr {
         } catch {
             XCTFail("unexpected error: \(error)")
         }
@@ -547,13 +547,13 @@ final class Phase8GuardianSkillsTests: XCTestCase {
         let search = parseTurnItem(.webSearchCall(
             id: .fromServer("ws_1"),
             status: nil,
-            action: .search(query: "codex", queries: nil),
+            action: .search(query: "sage", queries: nil),
             internalChatMessageMetadataPassthrough: nil
         ))
         guard case .webSearch(let web) = search else {
             return XCTFail("expected web search")
         }
-        XCTAssertEqual(web.query, "codex")
+        XCTAssertEqual(web.query, "sage")
     }
 
     func testCollectRemoteCompactSummaryUsesLastAssistant() async throws {
@@ -669,7 +669,7 @@ final class Phase8GuardianSkillsTests: XCTestCase {
         do {
             _ = try await collectRemoteCompactionV2Output(from: stream)
             XCTFail("expected fatal for multiple compaction items")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertTrue(String(describing: error).contains("exactly one compaction"))
         } catch {
             XCTFail("unexpected error \(error)")
@@ -706,8 +706,8 @@ final class Phase8GuardianSkillsTests: XCTestCase {
     }
 
     func testShouldRetryWithCurrentModelRejectsAbort() {
-        XCTAssertFalse(shouldRetryWithCurrentModel(CodexErr(details: .turnAborted)))
-        XCTAssertTrue(shouldRetryWithCurrentModel(CodexErr.stream("boom")))
+        XCTAssertFalse(shouldRetryWithCurrentModel(SageErr(details: .turnAborted)))
+        XCTAssertTrue(shouldRetryWithCurrentModel(SageErr.stream("boom")))
     }
 
     func testParseBase64ImageDataURLRequiresImageAndBase64() {

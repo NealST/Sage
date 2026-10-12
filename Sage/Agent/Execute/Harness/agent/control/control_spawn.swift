@@ -1,21 +1,21 @@
 //
 //  control_spawn.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/spawn.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Nickname candidates, forked-history filters, and metadata reservation
-//  are faithful. Spawn copies parent CodexThread history when fork_mode is
+//  are faithful. Spawn copies parent SageThread history when fork_mode is
 //  set and a ThreadManager is attached, then submits the child's initial
 //  user input through ThreadSession. Rollout restore stays deferred.
 //  R4a: basename `spawn.swift` already belongs to core/src/spawn.rs.
 //
 
-import CodexAgentRoles
-import CodexHistory
-import CodexProtocol
+import SageAgentRoles
+import SageHistory
+import SageProtocol
 import Foundation
 
 let AGENT_NAMES = """
@@ -179,10 +179,10 @@ func spawnForkParentThreadId(
 ) throws -> ThreadId? {
     guard request.options.forkMode != nil else { return nil }
     guard request.options.forkParentSpawnCallId != nil else {
-        throw CodexErr.fatal("spawn_agent fork requires a parent spawn call id")
+        throw SageErr.fatal("spawn_agent fork requires a parent spawn call id")
     }
     guard case .subAgent(.threadSpawn(let parentThreadId, _, _, _, _)) = sessionSource else {
-        throw CodexErr.fatal("spawn_agent fork requires a thread-spawn session source")
+        throw SageErr.fatal("spawn_agent fork requires a thread-spawn session source")
     }
     return parentThreadId
 }

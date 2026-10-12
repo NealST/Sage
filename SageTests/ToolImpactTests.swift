@@ -118,10 +118,6 @@ final class ToolImpactTests: XCTestCase {
             ToolOrchestrator.timeoutDuration(for: "run_skill_script"),
             .seconds(130)
         )
-        XCTAssertEqual(
-            ToolInvocationPipeline.timeoutDuration(for: "read_text_file"),
-            ToolOrchestrator.timeoutDuration(for: "read_text_file")
-        )
     }
 
     func testMixedPlanRequiresConfirmation() {

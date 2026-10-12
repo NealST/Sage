@@ -1,6 +1,6 @@
 //
 //  seatbelt.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/seatbelt.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,8 +13,8 @@
 //  `NSRegularExpression.escapedPattern`.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public let MACOS_PATH_TO_SEATBELT_EXECUTABLE = "/usr/bin/sandbox-exec"
@@ -82,7 +82,7 @@ public func createSeatbeltCommandArgs(
     try createSeatbeltCommandArgsWithProfile(
         args,
         profile: .process,
-        allowedSymlinkedCodexHome: nil
+        allowedSymlinkedSageHome: nil
     )
 }
 
@@ -109,7 +109,7 @@ func createSeatbeltCommandArgsForLegacyPolicy(
 func createSeatbeltCommandArgsWithProfile(
     _ args: CreateSeatbeltCommandArgsParams,
     profile: MacosSeatbeltProfile,
-    allowedSymlinkedCodexHome: AbsolutePathBuf?
+    allowedSymlinkedSageHome: AbsolutePathBuf?
 ) throws -> [String] {
     let policy = args.fileSystemSandboxPolicy
     let cwd = args.sandboxPolicyCwd
@@ -161,7 +161,7 @@ func createSeatbeltCommandArgsWithProfile(
                         protectedMetadataNames: []
                     )
                 ],
-                allowedSymlinkedCodexHome: nil
+                allowedSymlinkedSageHome: nil
             )
         }
     } else {
@@ -178,7 +178,7 @@ func createSeatbeltCommandArgsWithProfile(
                     )
                 )
             },
-            allowedSymlinkedCodexHome: allowedSymlinkedCodexHome
+            allowedSymlinkedSageHome: allowedSymlinkedSageHome
         )
     }
 
@@ -197,7 +197,7 @@ func createSeatbeltCommandArgsWithProfile(
                         protectedMetadataNames: []
                     )
                 ],
-                allowedSymlinkedCodexHome: nil
+                allowedSymlinkedSageHome: nil
             )
             fileReadPolicy = "; allow read-only file operations\n\(built.0)"
             fileReadDirParams = built.1
@@ -215,7 +215,7 @@ func createSeatbeltCommandArgsWithProfile(
                     protectedMetadataNames: []
                 )
             } + scratchReads,
-            allowedSymlinkedCodexHome: nil
+            allowedSymlinkedSageHome: nil
         )
         fileReadPolicy = built.0.isEmpty ? "" : "; allow read-only file operations\n\(built.0)"
         fileReadDirParams = built.1
@@ -499,9 +499,9 @@ private func nestedSymlinkComponent(_ path: String) -> String? {
 
 private func normalizeWritableRootForSandbox(
     _ root: AbsolutePathBuf,
-    allowedSymlinkedCodexHome: AbsolutePathBuf?
+    allowedSymlinkedSageHome: AbsolutePathBuf?
 ) throws -> NormalizedWritableRoot {
-    let allowSymlinks = allowedSymlinkedCodexHome.map { home in
+    let allowSymlinks = allowedSymlinkedSageHome.map { home in
         root.asPath.hasPrefix(home.asPath)
             || (normalizePathForSandbox(home.asPath).map { root.asPath.hasPrefix($0.asPath) } ?? false)
     } ?? false
@@ -534,7 +534,7 @@ private func normalizeWritableRootForSandbox(
 private func buildSeatbeltAccessPolicy(
     accessKind: SeatbeltAccessKind,
     roots: [SeatbeltAccessRoot],
-    allowedSymlinkedCodexHome: AbsolutePathBuf?
+    allowedSymlinkedSageHome: AbsolutePathBuf?
 ) throws -> (String, [(String, String)]) {
     var policyComponents: [String] = []
     var rootAnchorDenies: [String] = []
@@ -556,7 +556,7 @@ private func buildSeatbeltAccessPolicy(
         case .write:
             switch try normalizeWritableRootForSandbox(
                 accessRoot.root,
-                allowedSymlinkedCodexHome: allowedSymlinkedCodexHome
+                allowedSymlinkedSageHome: allowedSymlinkedSageHome
             ) {
             case .subpath(let value):
                 root = value

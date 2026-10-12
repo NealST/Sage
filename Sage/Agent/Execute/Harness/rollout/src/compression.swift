@@ -1,6 +1,6 @@
 //
 //  compression.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/compression.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -31,8 +31,8 @@ public enum RolloutCompressionTrigger: Sendable {
 /// Starts a best-effort background job that compresses cold local rollout files.
 ///
 /// Fire-and-forget in Rust. Here the worker is a no-op until zstd lands.
-public func spawnRolloutCompressionWorker(codexHome: String, trigger: RolloutCompressionTrigger) {
-    _ = (codexHome, trigger)
+public func spawnRolloutCompressionWorker(sageHome: String, trigger: RolloutCompressionTrigger) {
+    _ = (sageHome, trigger)
 }
 
 /// A discovered rollout file, represented by exactly one physical path.

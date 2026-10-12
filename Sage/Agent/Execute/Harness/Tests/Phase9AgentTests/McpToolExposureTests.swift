@@ -6,7 +6,7 @@
 //  Port of codex-rs/core/src/mcp_tool_exposure_test.rs behavior.
 //
 
-import CodexCore
+import SageCore
 import XCTest
 
 final class McpToolExposureTests: XCTestCase {
@@ -28,13 +28,13 @@ final class McpToolExposureTests: XCTestCase {
         let hidden = makeTool(server: "rmcp", name: "hidden_tool", visibility: ["app"])
         let emptyVisibility = makeTool(server: "rmcp", name: "empty_visibility_tool", visibility: [])
         let visibleApp = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "calendar_read",
             connectorId: "calendar",
             visibility: ["app", "model"]
         )
         let hiddenApp = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "calendar_open",
             connectorId: "calendar",
             visibility: ["app"]
@@ -48,12 +48,12 @@ final class McpToolExposureTests: XCTestCase {
 
     func testAppToolsAreOmittedWhenAppsDisabled() {
         let app = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "calendar_list_events",
             connectorId: "calendar"
         )
         let missingConnector = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "unknown_tool"
         )
         let regular = makeTool(server: "rmcp", name: "regular_tool")
@@ -75,12 +75,12 @@ final class McpToolExposureTests: XCTestCase {
 
     func testAppliesPerToolAppPolicy() {
         let enabledTool = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "events/create",
             connectorId: "calendar"
         )
         let disabledTool = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "events/list",
             connectorId: "calendar"
         )
@@ -100,7 +100,7 @@ final class McpToolExposureTests: XCTestCase {
 
     func testCachedAppHandlersStillObeyCurrentAppsEnablement() {
         let tool = makeTool(
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: SAGE_APPS_MCP_SERVER_NAME,
             name: "events/create",
             connectorId: "calendar"
         )

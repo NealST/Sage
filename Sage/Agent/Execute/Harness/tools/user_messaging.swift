@@ -10,14 +10,14 @@
 //  payloads still extract the `text` field.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 let USER_MESSAGING_TOOL_NAMES: Set<String> = [
-    "mcp__codex_apps__user_messaging__send_message",
-    "mcp__codex_apps__user_messaging_send_message",
-    "mcp__codex_apps__user_message__send_message",
-    "mcp__codex_apps__user_message_send_message",
+    "mcp__sage_apps__user_messaging__send_message",
+    "mcp__sage_apps__user_messaging_send_message",
+    "mcp__sage_apps__user_message__send_message",
+    "mcp__sage_apps__user_message_send_message",
 ]
 
 extension AnyToolResult {

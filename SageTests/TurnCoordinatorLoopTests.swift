@@ -54,6 +54,7 @@ final class TurnCoordinatorLoopTests: XCTestCase {
         runtime.state.setBusy(true)
         XCTAssertFalse(runtime.state.shouldDisableConfirmationActions)
         runtime.state.setBusy(false)
+        runtime.turns.execute.modelSampler = { _ in throw CancellationError() }
 
         await runtime.confirmWorkPlan()
 
@@ -544,7 +545,6 @@ final class TurnCoordinatorLoopTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        runtime.turns.execute.useHarnessRunTurn = false
         return runtime
     }
 }

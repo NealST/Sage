@@ -18,7 +18,7 @@
 //
 
 import Foundation
-@testable import CodexUtils
+@testable import SageUtils
 import XCTest
 
 private enum ExpectedError {

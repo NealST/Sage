@@ -1,25 +1,25 @@
 //
 //  types.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/types.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Adaptations:
-//  - `PathBuf` / `AbsolutePathBuf` → `String` (CodexUtils is not a
-//    CodexThreadStore dependency).
+//  - `PathBuf` / `AbsolutePathBuf` → `String` (SageUtils is not a
+//    SageThreadStore dependency).
 //  - `DateTime<Utc>` → `Date` encoded as RFC 3339.
-//  - `ThreadMemoryMode` is `CodexProtocol.ThreadMemoryMode`.
-//  - `ThreadSection` is defined in thread_sections.swift (CodexState model)
+//  - `ThreadMemoryMode` is `SageProtocol.ThreadMemoryMode`.
+//  - `ThreadSection` is defined in thread_sections.swift (SageState model)
 //    unported).
 //  - `ThreadTimelineEntry` (app-server crate) is a JSON stub.
 //  - `PreparedFork` drops the backend-owned source reservation.
 //  - `ClearableField<T>` is `T??` with optional_option wire semantics.
 //
 
-import CodexHistory
-import CodexProtocol
+import SageHistory
+import SageProtocol
 import Foundation
 
 /// Optional field patch where omission leaves a value unchanged and `.some(nil)` clears it.
@@ -626,22 +626,22 @@ public enum StoredTurnStatus: String, Codable, Equatable, Sendable {
 /// Store-owned error details for a failed persisted turn.
 public struct StoredTurnError: Codable, Equatable, Sendable {
     public var message: String
-    public var codexErrorInfo: CodexErrorInfo?
+    public var sageErrorInfo: SageErrorInfo?
     public var additionalDetails: String?
 
     enum CodingKeys: String, CodingKey {
         case message
-        case codexErrorInfo
+        case sageErrorInfo
         case additionalDetails
     }
 
     public init(
         message: String,
-        codexErrorInfo: CodexErrorInfo? = nil,
+        sageErrorInfo: SageErrorInfo? = nil,
         additionalDetails: String? = nil
     ) {
         self.message = message
-        self.codexErrorInfo = codexErrorInfo
+        self.sageErrorInfo = sageErrorInfo
         self.additionalDetails = additionalDetails
     }
 }

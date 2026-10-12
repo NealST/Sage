@@ -1,6 +1,6 @@
 //
 //  hook_mcp_executor.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/hook_mcp_executor.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  records the thread id and throws until MCP runtime exists.
 //
 
-import CodexHooks
-import CodexProtocol
+import SageHooks
+import SageProtocol
 import Foundation
 
 public struct CoreHookMcpExecutor: HookMcpExecutor, Sendable {
@@ -23,7 +23,7 @@ public struct CoreHookMcpExecutor: HookMcpExecutor, Sendable {
 
     public func execute(_ call: HookMcpCall) async throws -> String {
         _ = call
-        throw CodexErr.unsupportedOperation(
+        throw SageErr.unsupportedOperation(
             "CoreHookMcpExecutor.execute waits on McpRuntime"
         )
     }

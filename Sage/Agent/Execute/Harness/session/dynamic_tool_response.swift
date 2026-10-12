@@ -16,7 +16,7 @@
 //  ToolCallRuntime installs the handler callback.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension Session {
@@ -26,7 +26,7 @@ extension Session {
         callId: String,
         namespace: String?,
         tool: String,
-        arguments: CodexProtocol.JSONValue
+        arguments: SageProtocol.JSONValue
     ) async -> DynamicToolResponse? {
         let replaced = ReplacedDynamicTool()
         let started = ContinuousClock.now
@@ -77,7 +77,7 @@ private func inProgressDynamicToolCall(
     callId: String,
     namespace: String?,
     tool: String,
-    arguments: CodexProtocol.JSONValue
+    arguments: SageProtocol.JSONValue
 ) -> DynamicToolCallItem {
     DynamicToolCallItem(
         id: callId,
@@ -92,7 +92,7 @@ private func finishedDynamicToolCall(
     callId: String,
     namespace: String?,
     tool: String,
-    arguments: CodexProtocol.JSONValue,
+    arguments: SageProtocol.JSONValue,
     response: DynamicToolResponse?,
     duration: Duration
 ) -> DynamicToolCallItem {

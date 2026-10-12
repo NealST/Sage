@@ -1,6 +1,6 @@
 //
 //  compact_token_budget.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/compact_token_budget.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,7 +13,7 @@
 import Foundation
 
 public struct CompactTokenBudget: Equatable, Sendable {
-    /// Codex's default auto-compact is ~90% of the window.
+    /// Sage's default auto-compact is ~90% of the window.
     public static let autoCompactThreshold = 0.90
 
     public var usableTokens: Int64

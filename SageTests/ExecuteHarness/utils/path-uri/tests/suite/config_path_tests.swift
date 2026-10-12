@@ -12,7 +12,7 @@
 //
 
 import Foundation
-@testable import CodexUtils
+@testable import SageUtils
 import XCTest
 
 final class ConfigPathTests: XCTestCase {

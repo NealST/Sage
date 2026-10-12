@@ -1,17 +1,17 @@
 //
 //  request_permissions.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/request_permissions.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 //  Request-permissions tool wire types. `schemars`/`ts_rs` derives are not
-//  ported. `LegacyAppPathString` comes from CodexUtils (the protocol crate
+//  ported. `LegacyAppPathString` comes from SageUtils (the protocol crate
 //  depends on the utils crates upstream).
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 public enum PermissionGrantScope: String, Codable, Equatable, Sendable {

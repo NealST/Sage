@@ -1,6 +1,6 @@
 //
 //  registry.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/registry.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  counter until Phase 10.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -89,7 +89,7 @@ public final class AgentRegistry: @unchecked Sendable {
         try lock.withLock { state in
             if let maxThreads {
                 if state.totalCount >= maxThreads {
-                    throw CodexErr.agentLimitReached(maxThreads: maxThreads)
+                    throw SageErr.agentLimitReached(maxThreads: maxThreads)
                 }
                 state.totalCount += 1
             } else {
@@ -220,7 +220,7 @@ public final class AgentRegistry: @unchecked Sendable {
     func reserveAgentPath(_ agentPath: AgentPath) throws {
         try lock.withLock { state in
             if state.activeAgents.agentTree[agentPath.asStr] != nil {
-                throw CodexErr.unsupportedOperation(
+                throw SageErr.unsupportedOperation(
                     "agent path `\(agentPath.asStr)` already exists"
                 )
             }
@@ -268,7 +268,7 @@ public final class SpawnReservation {
         preferred: String?
     ) throws -> String {
         guard let agentNickname = state.reserveAgentNickname(names: names, preferred: preferred) else {
-            throw CodexErr.unsupportedOperation("no available agent nicknames")
+            throw SageErr.unsupportedOperation("no available agent nicknames")
         }
         reservedAgentNickname = agentNickname
         return agentNickname

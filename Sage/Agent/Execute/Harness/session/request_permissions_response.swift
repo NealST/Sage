@@ -22,10 +22,10 @@
 //  removes that call's waiter.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 extension Session {
@@ -129,7 +129,7 @@ extension Session {
     }
 
     private func applyGuardianRequestPermissionsDecision(
-        _ decision: CodexProtocol.ReviewDecision,
+        _ decision: SageProtocol.ReviewDecision,
         requested: RequestPermissionProfile,
         environmentId: String,
         policyContext: FileSystemSandboxPolicyContext?
@@ -176,7 +176,7 @@ extension Session {
     }
 }
 
-private func requestPermissionsBlocked(by policy: CodexProtocol.AskForApproval) -> Bool {
+private func requestPermissionsBlocked(by policy: SageProtocol.AskForApproval) -> Bool {
     switch policy {
     case .never:
         return true
@@ -192,7 +192,7 @@ private func requestPermissionsBlocked(by policy: CodexProtocol.AskForApproval) 
 /// for this turn. Approved-for-session keeps it for the session. Every
 /// other decision grants nothing. `strict_auto_review` stays false.
 private func mapGuardianRequestPermissionsDecision(
-    _ decision: CodexProtocol.ReviewDecision,
+    _ decision: SageProtocol.ReviewDecision,
     requested: RequestPermissionProfile
 ) -> RequestPermissionsResponse {
     let permissions: RequestPermissionProfile

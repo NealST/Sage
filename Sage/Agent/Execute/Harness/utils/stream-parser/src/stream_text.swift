@@ -1,6 +1,6 @@
 //
 //  stream_text.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/stream-parser/src/stream_text.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

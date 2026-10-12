@@ -10,8 +10,8 @@
 //  `handleMcpToolCall`. `onMcpCall` remains the string seam.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct McpHandler: CoreToolRuntime {
     var name: ToolName

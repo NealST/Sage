@@ -6,16 +6,16 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Codex TOML document edits become in-memory ConfigOverrides. Sage
+//  Sage TOML document edits become in-memory ConfigOverrides. Sage
 //  Settings is the persisted store.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum ConfigEdit: Equatable, Sendable {
     case setModel(String)
-    case setApprovalPolicy(CodexProtocol.AskForApproval)
+    case setApprovalPolicy(SageProtocol.AskForApproval)
     case enableFeature(Feature)
     case disableFeature(Feature)
 }

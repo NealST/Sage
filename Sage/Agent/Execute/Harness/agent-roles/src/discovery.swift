@@ -1,13 +1,13 @@
 //
 //  discovery.swift
-//  CodexAgentRoles
+//  SageAgentRoles
 //
 //  Port of codex-rs/agent-roles/src/discovery.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexUtils
+import SageUtils
 import FileSystem
 import Foundation
 

@@ -13,7 +13,7 @@
 
 import Foundation
 
-public let ESCALATE_SOCKET_ENV_VAR = "CODEX_ESCALATE_SOCKET"
+public let ESCALATE_SOCKET_ENV_VAR = "SAGE_ESCALATE_SOCKET"
 
 public func prepareUnifiedExecZshFork(
     command: [String],

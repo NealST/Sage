@@ -12,10 +12,10 @@
 //  `RolloutItem::RetainedContext` when rollout persistence is enabled.
 //
 
-import CodexCore
-import CodexHistory
-import CodexProtocol
-import CodexRollout
+import SageCore
+import SageHistory
+import SageProtocol
+import SageRollout
 import Foundation
 
 extension Session {
@@ -23,7 +23,7 @@ extension Session {
         nil
     }
 
-    /// Opens a rollout writer under `codexHome`. Later verified answers append
+    /// Opens a rollout writer under `sageHome`. Later verified answers append
     /// to that file. Sessions that never call this keep the answer in memory.
     func enableRolloutPersistence() {
         services.persistRolloutItems = { [weak self] items in
@@ -107,7 +107,7 @@ extension Session {
         rolloutLock.lock()
         if rolloutRecorder == nil {
             rolloutRecorder = try? RolloutRecorder.create(
-                config: RolloutConfig(codexHome: state.sessionConfiguration.codexHome),
+                config: RolloutConfig(sageHome: state.sessionConfiguration.sageHome),
                 params: .resume(path: path)
             )
         }
@@ -126,7 +126,7 @@ extension Session {
         if rolloutRecorder == nil {
             do {
                 rolloutRecorder = try RolloutRecorder.create(
-                    config: RolloutConfig(codexHome: state.sessionConfiguration.codexHome),
+                    config: RolloutConfig(sageHome: state.sessionConfiguration.sageHome),
                     params: .new(
                         conversationId: threadId,
                         source: state.sessionConfiguration.sessionSource,
@@ -147,7 +147,7 @@ extension Session {
 
 func verifiedAnswerRolloutItem(_ answer: RetainedVerifiedAnswer) -> RolloutItem {
     let questions = answer.questions.map { question in
-        CodexProtocol.JSONValue.object([
+        SageProtocol.JSONValue.object([
             "question": .string(question.question),
             "answer": .string(question.answer),
         ])

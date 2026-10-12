@@ -7,12 +7,12 @@
 //  Port status: adapted
 //
 //  SessionConfiguration lives with Session. History uses ContextManager from
-//  CodexCore. Startup prewarm handles are optional boxes until Phase 6.
+//  SageCore. Startup prewarm handles are optional boxes until Phase 6.
 //
 
-import CodexCore
-import CodexProtocol
-import CodexSandboxing
+import SageCore
+import SageProtocol
+import SageSandboxing
 import Foundation
 
 enum ReasoningEffortPin: Equatable, Sendable {
@@ -157,14 +157,14 @@ final class SessionState: @unchecked Sendable {
         sessionId: SessionId,
         rootTurnId: String,
         responseId: String,
-        usage: CodexProtocol.TokenUsage
+        usage: SageProtocol.TokenUsage
     ) -> TokenUsageRecord {
-        var turnTokenUsage = CodexProtocol.TokenUsage()
+        var turnTokenUsage = SageProtocol.TokenUsage()
         if let latest = latestTokenUsageRecord, latest.turnId == turnId {
             turnTokenUsage = latest.turnTokenUsage
         }
         turnTokenUsage.addAssign(usage)
-        var threadTokenUsage = latestTokenUsageRecord?.threadTokenUsage ?? CodexProtocol.TokenUsage()
+        var threadTokenUsage = latestTokenUsageRecord?.threadTokenUsage ?? SageProtocol.TokenUsage()
         threadTokenUsage.addAssign(usage)
         let record = TokenUsageRecord(
             threadId: threadId,
@@ -180,11 +180,11 @@ final class SessionState: @unchecked Sendable {
         return record
     }
 
-    func updateTokenInfoFromUsage(_ usage: CodexProtocol.TokenUsage, modelContextWindow: Int64?) {
+    func updateTokenInfoFromUsage(_ usage: SageProtocol.TokenUsage, modelContextWindow: Int64?) {
         history.updateTokenInfo(usage, modelContextWindow: modelContextWindow)
     }
 
-    func ensureAutoCompactWindowServerPrefillFromUsage(_ usage: CodexProtocol.TokenUsage) {
+    func ensureAutoCompactWindowServerPrefillFromUsage(_ usage: SageProtocol.TokenUsage) {
         autoCompactWindow.ensureServerObservedPrefillFromUsage(usage)
     }
 
@@ -295,7 +295,7 @@ func mergeRateLimitFields(
 ) -> RateLimitSnapshot {
     var merged = snapshot
     if merged.limitId == nil {
-        merged.limitId = "codex"
+        merged.limitId = "sage"
     }
     if merged.credits == nil {
         merged.credits = previous?.credits

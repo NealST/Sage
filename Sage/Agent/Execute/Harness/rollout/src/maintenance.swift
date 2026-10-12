@@ -1,6 +1,6 @@
 //
 //  maintenance.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/maintenance.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,7 +9,7 @@
 //  `File::try_lock` maps to `flock(2)` `LOCK_EX|LOCK_NB` on Darwin.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 #if canImport(Darwin)
@@ -31,9 +31,9 @@ public final class RolloutMaintenanceGuard {
     }
 }
 
-/// Try to exclude rollout compression and migration for one Codex home.
-public func tryAcquireRolloutMaintenanceLock(codexHome: String) throws -> RolloutMaintenanceGuard? {
-    let directory = (codexHome as NSString).appendingPathComponent(".tmp")
+/// Try to exclude rollout compression and migration for one Sage home.
+public func tryAcquireRolloutMaintenanceLock(sageHome: String) throws -> RolloutMaintenanceGuard? {
+    let directory = (sageHome as NSString).appendingPathComponent(".tmp")
     try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
     let path = (directory as NSString).appendingPathComponent(rolloutMaintenanceLock)
     if !FileManager.default.fileExists(atPath: path) {

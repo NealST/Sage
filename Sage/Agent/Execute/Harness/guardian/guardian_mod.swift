@@ -13,7 +13,7 @@
 //  / from-step constructors throw until session types exist.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 let GUARDIAN_REVIEWER_NAME = "guardian"

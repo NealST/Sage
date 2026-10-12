@@ -1,6 +1,6 @@
 //
 //  completion.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/completion.rs plus
 //  send_inter_agent_communication / emit_sub_agent_activity from
@@ -13,7 +13,7 @@
 //  send_event_raw / residency pin stay later.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension LocalAgentControl {
@@ -136,7 +136,7 @@ extension LocalAgentControl {
     ) async throws -> String {
         do {
             return try await body()
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             if case .internalAgentDied = err.detailsValue() {
                 if let manager = try? runtime.upgradeThreadManager() {
                     _ = await manager.removeThread(agentId)

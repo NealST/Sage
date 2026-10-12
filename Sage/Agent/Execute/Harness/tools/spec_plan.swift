@@ -6,7 +6,7 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  `planCoreToolOptions` applies the Codex feature and config gates for the
+//  `planCoreToolOptions` applies the Sage feature and config gates for the
 //  handlers this builder already knows. `finalizeToolRouter()` keeps its
 //  struct defaults so an unconfigured builder still registers the core set.
 //
@@ -15,15 +15,15 @@
 //    requires `shell_tool`.
 //  - `supports_search_tool` turns on tool search. Provider namespace-tool
 //    capability is not on the model snapshot yet.
-//  - apply_patch, tool suggest, request_user_input_async, and collaboration
-//    tools are not selected here.
-//  - `canManageChildren` stays false until those child tools are planned.
+//  - apply_patch, tool suggest, and request_user_input_async are not selected here.
+//  - Collaboration tools register when `includeCollaborationTools` is set
+//    (Live Execute attaches LocalAgentControl).
 //  - `appendDynamicToolRuntimes` registers the turn's dynamic tools.
 //    Direct tools join the model-visible specs; deferred tools stay registered
 //    for later search. Reserved `exec_command` and `shell_command` names are skipped.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct ToolSpecPlan {
@@ -47,6 +47,7 @@ struct ToolRouterPlanOptions: Equatable, Sendable {
     var includeWriteStdin = false
     var includeMcpResources = false
     var includeWaitForEnvironment = false
+    var includeCollaborationTools = false
     var toolMode: ToolMode = .direct
 }
 
@@ -64,7 +65,7 @@ struct CoreToolPlanInput: Equatable, Sendable {
     var hasMcpServers: Bool
 }
 
-/// Codex `add_core_utility_tools` / `add_shell_tools` / `add_mcp_resource_tools`
+/// Sage `add_core_utility_tools` / `add_shell_tools` / `add_mcp_resource_tools`
 /// for the handlers already registered by `finalizeToolRouter`.
 func planCoreToolOptions(_ input: CoreToolPlanInput) -> ToolRouterPlanOptions {
     let features = input.features
@@ -143,13 +144,49 @@ func finalizeToolRouter(_ options: ToolRouterPlanOptions = ToolRouterPlanOptions
         add(ReadMcpResourceHandler())
     }
     if options.includeWaitForEnvironment { add(WaitForEnvironmentHandler()) }
+    if options.includeCollaborationTools {
+        add(SpawnAgentHandler())
+        add(WaitAgentHandler())
+        add(SendInputHandler())
+        add(CloseAgentHandler())
+        add(ResumeAgentHandler())
+        add(CollabPlainNameHandler(inner: SpawnAgentHandler(), name: "spawn_agent"))
+        add(CollabPlainNameHandler(inner: WaitAgentHandler(), name: "wait_agent"))
+        add(CollabPlainNameHandler(inner: SendInputHandler(), name: "send_input"))
+        add(CollabPlainNameHandler(inner: CloseAgentHandler(), name: "close_agent"))
+        add(InterruptAgentHandler())
+    }
 
     return ToolRouter(
         registry: registry,
         modelVisibleSpecs: specs,
         toolMode: options.toolMode,
-        canManageChildren: false
+        canManageChildren: options.includeCollaborationTools
     )
+}
+
+/// Dispatches namespaced v1 collab tools when the model emits a plain function name.
+private struct CollabPlainNameHandler: CoreToolRuntime {
+    let inner: any CoreToolRuntime
+    let name: String
+
+    func toolName() -> ToolName { ToolName(plain: name) }
+
+    func spec() -> ToolSpec {
+        switch inner.spec() {
+        case .namespace(let namespace):
+            if let tool = namespace.tools.first(where: { $0.function.name == name }) {
+                return .function(tool.function)
+            }
+            return inner.spec()
+        default:
+            return inner.spec()
+        }
+    }
+
+    func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
+        try await inner.handle(invocation)
+    }
 }
 
 /// rust `append_dynamic_tool_runtimes`.

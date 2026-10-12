@@ -1,14 +1,14 @@
 //
 //  output_truncation_lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/output-truncation/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Byte/token text helpers live here. Policy and FunctionCallOutputPayload
-//  APIs live in CodexProtocol (`protocol.swift`) because CodexUtils cannot
-//  import CodexProtocol (SPM cycle: Protocol already depends on Utils).
+//  APIs live in SageProtocol (`protocol.swift`) because SageUtils cannot
+//  import SageProtocol (SPM cycle: Protocol already depends on Utils).
 //
 //  R4a: upstream `lib.rs` → `output_truncation_lib.swift` (basename dedup).
 //

@@ -1,5 +1,5 @@
 @testable import Sage
-@testable import CodexCore
+@testable import SageCore
 import ApplyPatch
 import XCTest
 

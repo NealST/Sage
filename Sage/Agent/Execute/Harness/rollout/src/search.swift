@@ -1,6 +1,6 @@
 //
 //  search.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/search.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  is skipped until zstd lands.
 //
 
-import CodexHistory
-import CodexProtocol
+import SageHistory
+import SageProtocol
 import Foundation
 
 private let matchContextBeforeChars = 48
@@ -23,13 +23,13 @@ public typealias RolloutSearchMatches = [String: String?]
 
 public func searchRolloutPaths(
     rgCommand: String = "rg",
-    codexHome: String,
+    sageHome: String,
     archived: Bool,
     searchTerm: String
 ) throws -> Set<String> {
     Set(try searchRolloutMatches(
         rgCommand: rgCommand,
-        codexHome: codexHome,
+        sageHome: sageHome,
         archived: archived,
         searchTerm: searchTerm
     ).keys)
@@ -37,11 +37,11 @@ public func searchRolloutPaths(
 
 public func searchRolloutMatches(
     rgCommand: String = "rg",
-    codexHome: String,
+    sageHome: String,
     archived: Bool,
     searchTerm: String
 ) throws -> RolloutSearchMatches {
-    let root = (codexHome as NSString).appendingPathComponent(
+    let root = (sageHome as NSString).appendingPathComponent(
         archived ? ARCHIVED_SESSIONS_SUBDIR : SESSIONS_SUBDIR)
     let jsonSearchTerm = jsonEscapedSearchTerm(searchTerm)
     if let plain = try ripgrepRolloutPaths(rgCommand: rgCommand, root: root, searchTerm: jsonSearchTerm),

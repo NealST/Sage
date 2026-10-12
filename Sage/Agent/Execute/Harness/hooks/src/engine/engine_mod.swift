@@ -1,6 +1,6 @@
 //
 //  engine_mod.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/mod.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,8 +13,8 @@
 //  `PluginId` is a string until the plugin crate is ported.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public struct CommandShell: Equatable, Sendable {
@@ -286,62 +286,62 @@ public final class ClaudeHooksEngine: @unchecked Sendable {
     }
 
     public func previewSessionStart(_ request: SessionStartRequest) -> [HookRunSummary] {
-        CodexHooks.previewSessionStart(handlers: handlers, request: request)
+        SageHooks.previewSessionStart(handlers: handlers, request: request)
     }
 
     public func previewPreToolUse(_ request: PreToolUseRequest) -> [HookRunSummary] {
-        CodexHooks.previewPreToolUse(handlers: handlers, request: request)
+        SageHooks.previewPreToolUse(handlers: handlers, request: request)
     }
 
     public func previewPermissionRequest(_ request: PermissionRequestRequest) -> [HookRunSummary] {
-        CodexHooks.previewPermissionRequest(handlers: handlers, request: request)
+        SageHooks.previewPermissionRequest(handlers: handlers, request: request)
     }
 
     public func previewPostToolUse(_ request: PostToolUseRequest) -> [HookRunSummary] {
-        CodexHooks.previewPostToolUse(handlers: handlers, request: request)
+        SageHooks.previewPostToolUse(handlers: handlers, request: request)
     }
 
     public func previewPreCompact(_ request: PreCompactRequest) -> [HookRunSummary] {
-        CodexHooks.previewPreCompact(handlers: handlers, request: request)
+        SageHooks.previewPreCompact(handlers: handlers, request: request)
     }
 
     public func previewPostCompact(_ request: PostCompactRequest) -> [HookRunSummary] {
-        CodexHooks.previewPostCompact(handlers: handlers, request: request)
+        SageHooks.previewPostCompact(handlers: handlers, request: request)
     }
 
     public func previewUserPromptSubmit(_ request: UserPromptSubmitRequest) -> [HookRunSummary] {
-        CodexHooks.previewUserPromptSubmit(handlers: handlers, request: request)
+        SageHooks.previewUserPromptSubmit(handlers: handlers, request: request)
     }
 
     public func previewStop(_ request: StopRequest) -> [HookRunSummary] {
-        CodexHooks.previewStop(handlers: handlers, request: request)
+        SageHooks.previewStop(handlers: handlers, request: request)
     }
 
     public func previewSessionEnd() -> [HookRunSummary] {
-        CodexHooks.previewSessionEnd(handlers: handlers)
+        SageHooks.previewSessionEnd(handlers: handlers)
     }
 
     public func previewInterrupt() -> [HookRunSummary] {
-        CodexHooks.previewInterrupt(handlers: handlers)
+        SageHooks.previewInterrupt(handlers: handlers)
     }
 
     public func runSessionStart(
         _ request: SessionStartRequest,
         turnId: String? = nil
     ) async -> SessionStartOutcome {
-        await CodexHooks.runSessionStart(self, request: request, turnId: turnId)
+        await SageHooks.runSessionStart(self, request: request, turnId: turnId)
     }
 
     public func runPreToolUse(_ request: PreToolUseRequest) async -> PreToolUseOutcome {
-        await CodexHooks.runPreToolUse(self, request: request)
+        await SageHooks.runPreToolUse(self, request: request)
     }
 
     public func runPermissionRequest(_ request: PermissionRequestRequest) async -> PermissionRequestOutcome {
-        await CodexHooks.runPermissionRequest(self, request: request)
+        await SageHooks.runPermissionRequest(self, request: request)
     }
 
     public func runPostToolUse(_ request: PostToolUseRequest) async -> PostToolUseOutcome {
-        var outcome = await CodexHooks.runPostToolUse(self, request: request)
+        var outcome = await SageHooks.runPostToolUse(self, request: request)
         if let feedback = outcome.feedbackMessage {
             outcome.feedbackMessage = await commandRuntime.outputSpiller.maybeSpillText(feedback)
         }
@@ -349,19 +349,19 @@ public final class ClaudeHooksEngine: @unchecked Sendable {
     }
 
     public func runPreCompact(_ request: PreCompactRequest) async -> PreCompactOutcome {
-        await CodexHooks.runPreCompact(self, request: request)
+        await SageHooks.runPreCompact(self, request: request)
     }
 
     public func runPostCompact(_ request: PostCompactRequest) async -> StatelessHookOutcome {
-        await CodexHooks.runPostCompact(self, request: request)
+        await SageHooks.runPostCompact(self, request: request)
     }
 
     public func runUserPromptSubmit(_ request: UserPromptSubmitRequest) async -> UserPromptSubmitOutcome {
-        await CodexHooks.runUserPromptSubmit(self, request: request)
+        await SageHooks.runUserPromptSubmit(self, request: request)
     }
 
     public func runStop(_ request: StopRequest) async -> StopOutcome {
-        var outcome = await CodexHooks.runStop(self, request: request)
+        var outcome = await SageHooks.runStop(self, request: request)
         outcome.continuationFragments = await commandRuntime.outputSpiller.maybeSpillPromptFragments(
             outcome.continuationFragments
         )
@@ -369,10 +369,10 @@ public final class ClaudeHooksEngine: @unchecked Sendable {
     }
 
     public func runSessionEnd(_ request: SessionEndRequest) async -> SessionEndOutcome {
-        await CodexHooks.runSessionEnd(self, request: request)
+        await SageHooks.runSessionEnd(self, request: request)
     }
 
     public func runInterrupt(_ request: InterruptRequest) async -> InterruptOutcome {
-        await CodexHooks.runInterrupt(self, request: request)
+        await SageHooks.runInterrupt(self, request: request)
     }
 }

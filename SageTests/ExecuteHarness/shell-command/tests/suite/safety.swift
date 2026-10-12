@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-@testable import CodexShellCommand
+@testable import SageShellCommand
 import XCTest
 
 final class ShellCommandSafetyTests: XCTestCase {
@@ -56,7 +56,7 @@ final class ShellCommandSafetyTests: XCTestCase {
 
     func testPosixEnvPathExpansionFunction() {
         let helper = posixEnvPathExpansionFunction()
-        XCTAssertTrue(helper.contains("__codex_snapshot_expand_env"))
+        XCTAssertTrue(helper.contains("__sage_snapshot_expand_env"))
         XCTAssertTrue(helper.contains("printenv"))
     }
 
@@ -66,7 +66,7 @@ final class ShellCommandSafetyTests: XCTestCase {
             options: SnapshotCaptureOptions(startup: .nonInteractive, declarations: true, environment: true)
         )
         XCTAssertNotNil(script)
-        XCTAssertTrue(script?.contains("__codex_snapshot_command") == true)
+        XCTAssertTrue(script?.contains("__sage_snapshot_command") == true)
         XCTAssertTrue(script?.contains("compgen -e") == true || script?.contains("typeset +x") == true)
         XCTAssertNil(snapshotCaptureScript(
             .powerShell,

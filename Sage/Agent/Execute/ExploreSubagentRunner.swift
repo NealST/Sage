@@ -4,6 +4,9 @@
 //
 //  Read-only nested agent. The loop lives on ExploreTask / Turn.run;
 //  this file keeps the tool definition, request decode, and invoke helpers.
+//  Live Execute spawn/wait is wired, but Explore stays on this runner so
+//  the child keeps the read-only tool filter (`list_directory` /
+//  `read_text_file` / `search_files`) instead of inheriting full execute tools.
 //
 
 import Foundation

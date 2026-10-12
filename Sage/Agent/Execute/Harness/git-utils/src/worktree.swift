@@ -1,6 +1,6 @@
 //
 //  worktree.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/worktree.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  metadata without executing Git. PathBuf maps to String.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// The stable on-disk identity shared by a repository and its linked worktrees.

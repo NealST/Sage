@@ -9,9 +9,9 @@
 //  Port status: adapted
 //
 
-@testable import CodexHooks
-import CodexProtocol
-import CodexUtils
+@testable import SageHooks
+import SageProtocol
+import SageUtils
 import XCTest
 
 final class HooksRegistryTests: XCTestCase {
@@ -56,14 +56,14 @@ final class HooksRegistryTests: XCTestCase {
         let spec = commandFromArgv(
             ["notify-command"],
             environment: [
-                ("CODEX_LEGACY_NOTIFY_SNAPSHOT", "captured"),
-                (codexExecServerNoiseAuthTokenEnvVar, "restricted-token"),
+                ("SAGE_LEGACY_NOTIFY_SNAPSHOT", "captured"),
+                (sageExecServerNoiseAuthTokenEnvVar, "restricted-token"),
             ]
         )
         XCTAssertEqual(spec?.program, "notify-command")
         XCTAssertEqual(spec?.arguments, [])
-        XCTAssertEqual(spec?.environment["CODEX_LEGACY_NOTIFY_SNAPSHOT"], "captured")
-        XCTAssertNil(spec?.environment[codexExecServerNoiseAuthTokenEnvVar])
+        XCTAssertEqual(spec?.environment["SAGE_LEGACY_NOTIFY_SNAPSHOT"], "captured")
+        XCTAssertNil(spec?.environment[sageExecServerNoiseAuthTokenEnvVar])
     }
 
     func testNotifyHookEmptyArgvSucceeds() async throws {
@@ -111,6 +111,6 @@ final class HooksRegistryTests: XCTestCase {
 
 private struct RejectingHookMcpExecutor: HookMcpExecutor {
     func execute(_ call: HookMcpCall) async throws -> String {
-        throw CodexErr.unsupportedOperation("unused mcp executor")
+        throw SageErr.unsupportedOperation("unused mcp executor")
     }
 }

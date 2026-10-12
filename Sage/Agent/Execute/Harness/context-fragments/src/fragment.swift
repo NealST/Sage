@@ -1,6 +1,6 @@
 //
 //  fragment.swift
-//  CodexContextFragments
+//  SageContextFragments
 //
 //  Port of codex-rs/context-fragments/src/fragment.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,10 +10,10 @@
 //  `into_boxed_response_item()` map to `asResponseItem()`. Type-level
 //  `matches_text` / `type_markers` are static protocol requirements with
 //  defaults. `openMarker` / `closeMarker` expose `markers()` so existing
-//  CodexCore fragments can keep their stored surface.
+//  SageCore fragments can keep their stored surface.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// A rendered contextual fragment and the role that owns its annotated content.
@@ -110,7 +110,7 @@ extension ContextualUserFragment {
         return "\(startMarker)\(body)\(endMarker)"
     }
 
-    /// Compatibility alias for CodexCore callers (`renderedText()`).
+    /// Compatibility alias for SageCore callers (`renderedText()`).
     public func renderedText() -> String {
         render()
     }

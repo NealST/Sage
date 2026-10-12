@@ -1,10 +1,10 @@
 //
 //  json_value.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Sage addition (no codex counterpart).
 //
-//  Stands in for `serde_json::Value`. Codex builds serde_json without the
+//  Stands in for `serde_json::Value`. Sage builds serde_json without the
 //  `preserve_order` feature, so objects are BTreeMaps: keys encode in sorted
 //  order, which `encodedString()` reproduces. (Foundation's `JSONEncoder`
 //  emits keys in unspecified order — a known wire-format gap for `Codable`

@@ -1,6 +1,6 @@
 //
 //  spawn_telemetry.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/spawn_telemetry.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  waits on Phase 10.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct SpawnMeasurements: Equatable, Sendable {

@@ -13,7 +13,7 @@
 //  instead of delivering a decision. A dropped waiter returns abort.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension Session {
@@ -24,9 +24,9 @@ extension Session {
         changes: [String: FileChange],
         reason: String?,
         grantRoot: String?
-    ) async -> CodexProtocol.ReviewDecision {
+    ) async -> SageProtocol.ReviewDecision {
         let replaced = ReplacedApproval()
-        let decision: CodexProtocol.ReviewDecision = await withCheckedContinuation { continuation in
+        let decision: SageProtocol.ReviewDecision = await withCheckedContinuation { continuation in
             let waiter = ApprovalDecision(continuation)
             let event = ApplyPatchApprovalRequestEvent(
                 callId: callId,
@@ -50,7 +50,7 @@ extension Session {
     }
 
     /// rust `patch_approval`.
-    func handlePatchApproval(id: String, decision: CodexProtocol.ReviewDecision) async {
+    func handlePatchApproval(id: String, decision: SageProtocol.ReviewDecision) async {
         if case .abort = decision {
             await interruptTask()
         } else {

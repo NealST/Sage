@@ -1,6 +1,6 @@
 //
 //  thread_metadata_sync.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/thread_metadata_sync.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,14 +12,14 @@
 //  subset yet.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexState
+import SageHistory
+import SageProtocol
+import SageState
 import Foundation
 
 private let threadUpdatedAtTouchInterval: TimeInterval = 5
 private let threadStoreCliVersion = "0.0.0-sage"
-private let userMessageBegin = "## My request for Codex:"
+private let userMessageBegin = "## My request for Sage:"
 
 /// Live-thread helper that derives metadata updates from appended rollout items.
 struct ThreadMetadataSync: Sendable {

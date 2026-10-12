@@ -1,6 +1,6 @@
 //
 //  unix_io.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/pty/src/unix_io.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

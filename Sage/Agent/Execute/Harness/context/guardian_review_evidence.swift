@@ -1,6 +1,6 @@
 //
 //  guardian_review_evidence.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/guardian_review_evidence.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  record/fragment types so session history can store reviewer input.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct GuardianUserInputSnapshot: Equatable, Sendable {

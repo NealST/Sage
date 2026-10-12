@@ -11,10 +11,10 @@
 //  loop starts regular/compact tasks without blocking on them.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
-import CodexThreadStore
+import SageAsyncUtils
+import SageCore
+import SageProtocol
+import SageThreadStore
 import Foundation
 
 let gracefulInterruptionTimeoutMs: UInt64 = 100
@@ -151,7 +151,7 @@ extension Session {
             lastAgentMessage = message
             abortReason = nil
         case .failure(let error):
-            let err = (error as? CodexErr) ?? CodexErr.fatal(String(describing: error))
+            let err = (error as? SageErr) ?? SageErr.fatal(String(describing: error))
             if err.details == .turnAborted {
                 lastAgentMessage = nil
                 abortReason = .interrupted

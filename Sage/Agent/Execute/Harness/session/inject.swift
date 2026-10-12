@@ -11,7 +11,7 @@
 //  miss the turn fall back to history via `injectNoNewTurn`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension Session {

@@ -14,13 +14,12 @@
 //  Compact queues SessionStart `compact`; `/clear` queues `clear`.
 //
 
-import CodexAPI
-import CodexAsyncUtils
-import CodexCore
-import CodexHooks
-import CodexOtel
-import CodexProtocol
-import CodexRollout
+import SageAPI
+import SageAsyncUtils
+import SageCore
+import SageHooks
+import SageProtocol
+import SageRollout
 import Foundation
 
 private let sessionSubmissionCapacity = 512
@@ -154,7 +153,7 @@ final class SessionConfiguration: @unchecked Sendable {
     var shellEnvironmentPolicy: ShellEnvironmentPolicy
     var legacyFallbackCwd: String
     var runtimeWorkspaceRoots: [String]
-    var codexHome: String
+    var sageHome: String
     var threadName: String?
     var disabledPluginIds: [String]
     var originalConfig: Config
@@ -163,7 +162,7 @@ final class SessionConfiguration: @unchecked Sendable {
     var forkedFromThreadId: ThreadId?
     var dynamicTools: [DynamicToolSpec]
     var trustedGuardianReviewer: Bool
-    /// Explicit user-layer files, low to high. Empty means `codexHome/config.toml`.
+    /// Explicit user-layer files, low to high. Empty means `sageHome/config.toml`.
     var userConfigPaths: [String]
     /// Last user layer that reloaded cleanly. A failed reload leaves this in place.
     var userConfigLayer: [String: UserConfigValue]
@@ -177,7 +176,7 @@ final class SessionConfiguration: @unchecked Sendable {
         shellEnvironmentPolicy: ShellEnvironmentPolicy = ShellEnvironmentPolicy(),
         legacyFallbackCwd: String = FileManager.default.currentDirectoryPath,
         runtimeWorkspaceRoots: [String] = [],
-        codexHome: String = NSHomeDirectory() + "/.codex",
+        sageHome: String = NSHomeDirectory() + "/.sage",
         threadName: String? = nil,
         disabledPluginIds: [String] = [],
         originalConfig: Config = Config(),
@@ -197,7 +196,7 @@ final class SessionConfiguration: @unchecked Sendable {
         self.shellEnvironmentPolicy = shellEnvironmentPolicy
         self.legacyFallbackCwd = legacyFallbackCwd
         self.runtimeWorkspaceRoots = runtimeWorkspaceRoots
-        self.codexHome = codexHome
+        self.sageHome = sageHome
         self.threadName = threadName
         self.disabledPluginIds = disabledPluginIds
         self.originalConfig = originalConfig
@@ -270,7 +269,7 @@ final class Session: @unchecked Sendable {
         let ack = submission.ack ?? SubmissionAck()
         submission.ack = ack
         guard inbox.send(submission) else {
-            throw CodexErr.internalAgentDied
+            throw SageErr.internalAgentDied
         }
         await ack.wait()
     }
@@ -279,7 +278,7 @@ final class Session: @unchecked Sendable {
     func nextEvent() async throws -> Event {
         ensureSubmissionLoop()
         guard let event = await eventMailbox.recv() else {
-            throw CodexErr.internalAgentDied
+            throw SageErr.internalAgentDied
         }
         return event
     }
@@ -451,7 +450,7 @@ final class Session: @unchecked Sendable {
     func recordCompletedUsage(
         _ turnContext: TurnContext,
         responseId: String,
-        usage: CodexProtocol.TokenUsage?
+        usage: SageProtocol.TokenUsage?
     ) {
         guard let usage else { return }
         _ = state.recordTokenUsage(
@@ -534,6 +533,8 @@ final class Session: @unchecked Sendable {
     /// it no longer continues that turn. The context itself stays for tests
     /// and the running turn.
     var lastStartedTurnId: String?
+    /// Login-shell snapshot captured for one cwd. Later shells in that cwd reuse it.
+    var capturedShellSnapshot: CapturedShellSnapshot?
     /// Reply for the latest `Op::TurnSettings`. The submission loop is serial,
     /// so the ack is not signaled until this is stored.
     var lastTurnSettingsOutcome: TurnSettingsUpdateOutcome?
@@ -600,7 +601,7 @@ final class Session: @unchecked Sendable {
         cancellationToken: CancellationToken
     ) async throws -> StepContext {
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         await refreshMcpIfDirty()
         // Subsequent steps read the published settings. An earlier `StepContext`
@@ -647,7 +648,7 @@ final class Session: @unchecked Sendable {
         _ = state.mergeConnectorSelection(connectorIds)
     }
 
-    func emitTurnErrorLifecycle(_ turnContext: TurnContext, error: CodexErr) {
+    func emitTurnErrorLifecycle(_ turnContext: TurnContext, error: SageErr) {
         _ = turnContext
         _ = error
     }
@@ -715,9 +716,9 @@ final class Session: @unchecked Sendable {
 
     func responsesMetadata(
         _ stepContext: StepContext,
-        requestKind: CodexResponsesRequestKind
-    ) -> CodexResponsesMetadata {
-        var metadata = CodexResponsesMetadata(
+        requestKind: SageResponsesRequestKind
+    ) -> SageResponsesMetadata {
+        var metadata = SageResponsesMetadata(
             installationId: installationId,
             sessionId: stepContext.turn.sessionId.description,
             threadId: threadId.description,
@@ -736,14 +737,14 @@ final class Session: @unchecked Sendable {
     /// A decision is applied inside `requestPermissions` and does not emit
     /// `RequestPermissions`.
     var requestPermissionsGuardian:
-        (@Sendable (RequestPermissionsArgs) async -> CodexProtocol.ReviewDecision?)?
+        (@Sendable (RequestPermissionsArgs) async -> SageProtocol.ReviewDecision?)?
 
     /// Result-only test seam. Prefer `runSamplingStreamOverride` when exercising SSE.
     var runSamplingOverride:
         (([ResponseItem], StepContext) async throws -> SamplingRequestResult)?
 
     /// Stream-level test seam for `try_run_sampling_request`.
-    var runSamplingStreamOverride: ((Prompt) async throws -> CodexCore.ResponseStream)?
+    var runSamplingStreamOverride: ((Prompt) async throws -> SageCore.ResponseStream)?
 
     /// Set for the duration of `runSamplingStreamOverride`. Live Execute
     /// streams through this session instead of opening another one.

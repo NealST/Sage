@@ -1,18 +1,18 @@
 //
 //  windows_glob.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/permissions/windows_glob.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 //  Windows deny-glob scan bounds shared by policy validation and native ACL
-//  expansion. `PathConvention` comes from CodexUtils (the protocol crate
+//  expansion. `PathConvention` comes from SageUtils (the protocol crate
 //  depends on the utils crates upstream). Slices stay as `Substring`s
 //  borrowing the pattern, mirroring the upstream `&'a str` output.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Literal scan root and maximum traversal depth for a Windows deny glob.

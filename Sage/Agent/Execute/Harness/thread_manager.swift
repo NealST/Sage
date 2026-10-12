@@ -1,14 +1,16 @@
 //
 //  thread_manager.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/thread_manager.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Live CodexThread registry (start/get/list/shutdown/spawn edges/sendOp/
+//  Live SageThread registry (start/get/list/shutdown/spawn edges/sendOp/
 //  forkThreadFromHistory) is wired. startThread opens a ThreadSession
-//  submission loop. setTurnSampler / attachModelClient drives RegularTask
+//  submission loop. adoptRootThread registers the Live Execute parent
+//  without a second sample loop. sendOp interrupt/shutdown/inter-agent
+//  hit that session. setTurnSampler / attachModelClient drives RegularTask
 //  sampling. setTurnToolRunner continues a turn after function calls.
 //  Threads opened after installation pick both up. Config,
 //  AuthManager, MCP, extensions, and ConfigLayerStack stay deferred.
@@ -16,20 +18,20 @@
 //  rust Config.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexUtils
+import SageHistory
+import SageProtocol
+import SageUtils
 import Foundation
 import os
 
-/// Represents a newly created Codex thread, including the first event
+/// Represents a newly created Sage thread, including the first event
 /// (which is `EventMsg.sessionConfigured`).
 public struct NewThread: Sendable {
     public var threadId: ThreadId
-    public var thread: CodexThread
+    public var thread: SageThread
     public var sessionConfigured: SessionConfiguredEvent
 
-    public init(threadId: ThreadId, thread: CodexThread, sessionConfigured: SessionConfiguredEvent) {
+    public init(threadId: ThreadId, thread: SageThread, sessionConfigured: SessionConfiguredEvent) {
         self.threadId = threadId
         self.thread = thread
         self.sessionConfigured = sessionConfigured
@@ -98,7 +100,7 @@ private enum ShutdownOutcome {
 public final class ThreadManager: @unchecked Sendable {
     public let agentRuntime: LocalAgentRuntime
     private struct State {
-        var threads: [ThreadId: CodexThread] = [:]
+        var threads: [ThreadId: SageThread] = [:]
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
@@ -167,10 +169,10 @@ public final class ThreadManager: @unchecked Sendable {
         }
     }
 
-    public func getThread(_ threadId: ThreadId) async throws -> CodexThread {
+    public func getThread(_ threadId: ThreadId) async throws -> SageThread {
         let thread = lock.withLock { $0.threads[threadId] }
         guard let thread, !thread.sessionSource.isInternal() else {
-            throw CodexErr.threadNotFound(threadId)
+            throw SageErr.threadNotFound(threadId)
         }
         return thread
     }
@@ -202,13 +204,13 @@ public final class ThreadManager: @unchecked Sendable {
         return subtreeThreadIds
     }
 
-    public func removeThread(_ threadId: ThreadId) async -> CodexThread? {
+    public func removeThread(_ threadId: ThreadId) async -> SageThread? {
         lock.withLock { $0.threads.removeValue(forKey: threadId) }
     }
 
-    public func removeThreadForClient(_ threadId: ThreadId) async throws -> CodexThread? {
+    public func removeThreadForClient(_ threadId: ThreadId) async throws -> SageThread? {
         enum Outcome {
-            case notInternal(CodexThread?)
+            case notInternal(SageThread?)
             case internalThread
         }
         let outcome = lock.withLock { state -> Outcome in
@@ -219,7 +221,7 @@ public final class ThreadManager: @unchecked Sendable {
         }
         switch outcome {
         case .internalThread:
-            throw CodexErr.invalidRequest(
+            throw SageErr.invalidRequest(
                 "live internal threads can only be removed by their owner"
             )
         case .notInternal(let thread):
@@ -227,7 +229,7 @@ public final class ThreadManager: @unchecked Sendable {
         }
     }
 
-    public func removeThreadIfMatches(_ threadId: ThreadId, expected: CodexThread) async -> CodexThread? {
+    public func removeThreadIfMatches(_ threadId: ThreadId, expected: SageThread) async -> SageThread? {
         lock.withLock { state in
             guard let thread = state.threads[threadId], thread === expected else {
                 return nil
@@ -236,7 +238,7 @@ public final class ThreadManager: @unchecked Sendable {
         }
     }
 
-    public func peekThread(_ threadId: ThreadId) -> CodexThread? {
+    public func peekThread(_ threadId: ThreadId) -> SageThread? {
         lock.withLock { $0.threads[threadId] }
     }
 
@@ -279,10 +281,70 @@ public final class ThreadManager: @unchecked Sendable {
         _ = parentTurnId
         _ = rootTurnId
         let thread = try await getThread(threadId)
-        if case .shutdown = op {
+        switch op {
+        case .interrupt:
+            await thread.liveSession()?.interrupt()
+        case .shutdown:
             try await thread.shutdownAndWait()
+        case .interAgentCommunication(let communication, let startOptions):
+            try await thread.liveSession()?.submitInterAgent(
+                communication,
+                startOptions: startOptions
+            )
         }
         return thread.submit(op)
+    }
+
+    /// Registers the Live Execute parent without opening a second sampling loop.
+    /// Spawn copies this thread's history and inherits cwd/model.
+    public func adoptRootThread(
+        threadId: ThreadId,
+        model: String,
+        cwd: String,
+        history: [ResponseItem] = []
+    ) throws {
+        let cwdPath = try resolveThreadCwd(cwd)
+        let items = history.map { RolloutItem.responseItem(SageHistory.ResponseItemEnvelope(item: $0)) }
+        if let existing = peekThread(threadId) {
+            existing.replaceHistory(items)
+            return
+        }
+        let snapshot = ThreadConfigSnapshot(
+            model: model,
+            sessionSource: .cli,
+            parentThreadId: nil
+        )
+        var event = SessionConfiguredEvent(
+            sessionId: SessionId(threadId),
+            threadId: threadId,
+            model: model,
+            modelProviderId: "",
+            approvalPolicy: snapshot.approvalPolicy,
+            permissionProfile: .readOnly(),
+            cwd: cwdPath
+        )
+        event.parentThreadId = nil
+        let thread = SageThread(
+            threadId: threadId,
+            startup: ThreadStartupMetadata(from: event),
+            sessionSource: .cli,
+            configSnapshot: snapshot
+        )
+        thread.replaceHistory(items)
+        let inserted = lock.withLock { state -> Bool in
+            if state.threads[threadId] != nil {
+                return false
+            }
+            state.threads[threadId] = thread
+            return true
+        }
+        if !inserted {
+            peekThread(threadId)?.replaceHistory(items)
+        }
+        agentRuntime.registerSessionRoot(
+            currentThreadId: threadId,
+            currentParentThreadId: nil
+        )
     }
 
     /// Tries to shut down all tracked threads. Session IO is not wired, so
@@ -346,7 +408,7 @@ public final class ThreadManager: @unchecked Sendable {
         event.threadSource = configSnapshot.threadSource
         event.serviceTier = configSnapshot.serviceTier
         event.forkedFromId = configSnapshot.forkedFromThreadId
-        let thread = CodexThread(
+        let thread = SageThread(
             threadId: threadId,
             startup: ThreadStartupMetadata(from: event),
             sessionSource: sessionSource,
@@ -360,7 +422,7 @@ public final class ThreadManager: @unchecked Sendable {
             return true
         }
         if !inserted {
-            throw CodexErr.invalidRequest("thread \(threadId) is already running")
+            throw SageErr.invalidRequest("thread \(threadId) is already running")
         }
         thread.openLiveSession(sampler: turnSampler, toolRunner: turnToolRunner)
         return NewThread(threadId: threadId, thread: thread, sessionConfigured: event)
@@ -380,7 +442,7 @@ func resolveThreadCwd(_ cwd: String?) throws -> AbsolutePathBuf {
         }
         return try AbsolutePathBuf.currentDir()
     } catch {
-        throw CodexErr.invalidRequest("invalid thread cwd: \(error)")
+        throw SageErr.invalidRequest("invalid thread cwd: \(error)")
     }
 }
 

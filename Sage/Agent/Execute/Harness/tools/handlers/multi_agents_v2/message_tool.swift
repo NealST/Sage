@@ -11,8 +11,8 @@
 //  LocalAgentControl is attached.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct SendMessageArgs: Decodable, Equatable, Sendable {
@@ -42,7 +42,7 @@ func resolveAgentTarget(_ invocation: ToolInvocation, target: String) async thro
             source: invocation.sessionSource,
             target: target
         )
-    } catch let err as CodexErr {
+    } catch let err as SageErr {
         throw collabV2AgentError(agentId: caller, err: err)
     }
 }
@@ -68,7 +68,7 @@ func handleMessageStringTool(
                 )
             )
         )
-    } catch let err as CodexErr {
+    } catch let err as SageErr {
         throw collabV2AgentError(agentId: receiver, err: err)
     }
     guard control.getAgentMetadata(receiver)?.agentPath != nil else {

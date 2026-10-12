@@ -1,6 +1,6 @@
 //
 //  interface.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/interface.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,7 +9,7 @@
 //  `tracing::warn` is omitted; invalid fields still drop to `nil`.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 let INTERFACE_MAX_NAME_LEN = 64

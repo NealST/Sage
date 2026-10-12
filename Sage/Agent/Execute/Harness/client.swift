@@ -1,12 +1,12 @@
 //
 //  client.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/client.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  HTTP/SSE via URLSession + CodexAPI.ResponsesClient. Stream request
+//  HTTP/SSE via URLSession + SageAPI.ResponsesClient. Stream request
 //  prep matches rust: image resize, unprefixed item ids, content-item
 //  kinds, and Responses compatibility headers. Open-path 401 recover
 //  lives here. Connection and mid-stream retries stay in
@@ -16,27 +16,27 @@
 //  fallback warning. ChatGPT token refresh, attestation, otel, and
 //  extension interceptors wait.
 //  Auth is AuthProvider (Bearer API key).
-//  Sage already has Agent/Model/ModelClient; this type lives in CodexCore.
+//  Sage already has Agent/Model/ModelClient; this type lives in SageCore.
 //
 
-import CodexAPI
-import CodexAsyncUtils
-import CodexModelProviderInfo
-import CodexProtocol
+import SageAPI
+import SageAsyncUtils
+import SageModelProviderInfo
+import SageProtocol
 import Foundation
 import os
 
-public let openaiBetaHeader = "OpenAI-Beta"
-public let xCodexInstallationIdHeader = "x-codex-installation-id"
-public let xCodexRoutingHintHeader = "x-codex-routing-hint"
-public let xCodexTurnStateHeader = "x-codex-turn-state"
-public let xCodexTurnMetadataHeader = "x-codex-turn-metadata"
-public let xCodexParentThreadIdHeader = "x-codex-parent-thread-id"
-public let xCodexWindowIdHeader = "x-codex-window-id"
-public let xOpenaiMemgenRequestHeader = "x-openai-memgen-request"
-public let xOpenaiSubagentHeader = "x-openai-subagent"
-public let xResponsesapiIncludeTimingMetricsHeader = "x-responsesapi-include-timing-metrics"
-let xOpenaiInternalCodexResponsesLiteHeader = "x-openai-internal-codex-responses-lite"
+public let sageBetaHeader = "x-sage-beta"
+public let xSageInstallationIdHeader = "x-sage-installation-id"
+public let xSageRoutingHintHeader = "x-sage-routing-hint"
+public let xSageTurnStateHeader = "x-sage-turn-state"
+public let xSageTurnMetadataHeader = "x-sage-turn-metadata"
+public let xSageParentThreadIdHeader = "x-sage-parent-thread-id"
+public let xSageWindowIdHeader = "x-sage-window-id"
+public let xSageMemgenRequestHeader = "x-sage-memgen-request"
+public let xSageSubagentHeader = "x-sage-subagent"
+public let xSageIncludeTimingMetricsHeader = "x-sage-include-timing-metrics"
+let xSageInternalResponsesLiteHeader = "x-sage-internal-responses-lite"
 
 /// Session-scoped client for model-provider API calls.
 public final class ModelClient: @unchecked Sendable {
@@ -51,7 +51,7 @@ public final class ModelClient: @unchecked Sendable {
     public var betaFeaturesHeader: String?
     public var concurrentReasoningSummariesEnabled: Bool
     public var promptCacheKeyOverride: String?
-    public var codexResponsesHeaders: CodexResponsesHeaders?
+    public var sageResponsesHeaders: SageResponsesHeaders?
     public var auth: SharedAuthProvider
     public var authMode: AuthMode?
     public var urlSession: URLSession
@@ -77,7 +77,7 @@ public final class ModelClient: @unchecked Sendable {
         betaFeaturesHeader: String? = nil,
         concurrentReasoningSummariesEnabled: Bool = false,
         promptCacheKeyOverride: String? = nil,
-        codexResponsesHeaders: CodexResponsesHeaders? = nil,
+        sageResponsesHeaders: SageResponsesHeaders? = nil,
         urlSession: URLSession = .shared,
         requestContributors: [any ModelRequestContributor] = [],
         attachmentStore: any AttachmentStore = InlineAttachmentStore(),
@@ -95,7 +95,7 @@ public final class ModelClient: @unchecked Sendable {
         self.betaFeaturesHeader = betaFeaturesHeader
         self.concurrentReasoningSummariesEnabled = concurrentReasoningSummariesEnabled
         self.promptCacheKeyOverride = promptCacheKeyOverride
-        self.codexResponsesHeaders = codexResponsesHeaders
+        self.sageResponsesHeaders = sageResponsesHeaders
         if let auth {
             self.auth = auth
         } else if let key = try? providerInfo.apiKey() {
@@ -116,8 +116,8 @@ public final class ModelClient: @unchecked Sendable {
         return self
     }
 
-    public func withCodexResponsesHeaders(_ headers: CodexResponsesHeaders?) -> ModelClient {
-        codexResponsesHeaders = headers
+    public func withSageResponsesHeaders(_ headers: SageResponsesHeaders?) -> ModelClient {
+        sageResponsesHeaders = headers
         return self
     }
 
@@ -138,7 +138,7 @@ public final class ModelClient: @unchecked Sendable {
         return activated
     }
 
-    func promptCacheKey(_ responsesMetadata: CodexResponsesMetadata) -> String {
+    func promptCacheKey(_ responsesMetadata: SageResponsesMetadata) -> String {
         if let promptCacheKeyOverride { return promptCacheKeyOverride }
         if case .internal = sessionSource, let parent = responsesMetadata.parentThreadId {
             return "\(sessionSourceInternalLabel()):\(parent)"
@@ -146,7 +146,7 @@ public final class ModelClient: @unchecked Sendable {
         return responsesMetadata.sessionId
     }
 
-    func responsesSessionId(_ metadata: CodexResponsesMetadata) -> String {
+    func responsesSessionId(_ metadata: SageResponsesMetadata) -> String {
         if isNonRootAgent(sessionSource) {
             return metadata.sessionId
         }
@@ -165,7 +165,7 @@ public final class ModelClient: @unchecked Sendable {
         effort: ReasoningEffort?,
         summary: ReasoningSummary,
         serviceTier: String?,
-        responsesMetadata: CodexResponsesMetadata,
+        responsesMetadata: SageResponsesMetadata,
         includeInternal: Bool
     ) -> ResponsesApiRequest {
         var input = prompt.getFormattedInputForRequest(modelInfo: modelInfo)
@@ -322,11 +322,11 @@ public final class ModelClient: @unchecked Sendable {
 
     /// rust `ModelClient::build_responses_compatibility_headers`.
     func buildResponsesCompatibilityHeaders(
-        _ responsesMetadata: CodexResponsesMetadata
+        _ responsesMetadata: SageResponsesMetadata
     ) -> [String: String] {
         var headers = responsesMetadata.compatibilityHeaders()
         if case .internal(.memoryConsolidation) = sessionSource {
-            headers[xOpenaiMemgenRequestHeader] = "true"
+            headers[xSageMemgenRequestHeader] = "true"
         }
         return headers
     }
@@ -337,7 +337,7 @@ public final class ModelClientSession: @unchecked Sendable {
     public let client: ModelClient
     public let turnState = TurnStateBox()
     /// Test seam for `ResponsesClient.streamRequest`.
-    var streamRequestOverride: ((ResponsesApiRequest, ResponsesOptions) async throws -> CodexAPI.ResponseStream)?
+    var streamRequestOverride: ((ResponsesApiRequest, ResponsesOptions) async throws -> SageAPI.ResponseStream)?
 
     public init(client: ModelClient) {
         self.client = client
@@ -353,7 +353,7 @@ public final class ModelClientSession: @unchecked Sendable {
         effort: ReasoningEffort? = nil,
         summary: ReasoningSummary = .auto,
         serviceTier: String? = nil,
-        responsesMetadata: CodexResponsesMetadata
+        responsesMetadata: SageResponsesMetadata
     ) async throws -> ResponseStream {
         try await streamResponsesAPI(
             prompt: prompt,
@@ -374,7 +374,7 @@ public final class ModelClientSession: @unchecked Sendable {
         effort: ReasoningEffort?,
         summary: ReasoningSummary,
         serviceTier: String?,
-        responsesMetadata: CodexResponsesMetadata
+        responsesMetadata: SageResponsesMetadata
     ) async throws -> ResponseStream {
         var unauthorizedRecoveryAttempted = false
         while true {
@@ -405,7 +405,7 @@ public final class ModelClientSession: @unchecked Sendable {
         effort: ReasoningEffort?,
         summary: ReasoningSummary,
         serviceTier: String?,
-        responsesMetadata: CodexResponsesMetadata
+        responsesMetadata: SageResponsesMetadata
     ) async throws -> ResponseStream {
         let provider = try client.apiProvider()
         let includeInternal = isInternalMetadataDestination(provider.baseUrl)
@@ -424,13 +424,13 @@ public final class ModelClientSession: @unchecked Sendable {
             responsesMetadata: responsesMetadata,
             useResponsesLite: modelInfo.useResponsesLite
         )
-        if let extra = client.codexResponsesHeaders, extra.model == modelInfo.slug {
+        if let extra = client.sageResponsesHeaders, extra.model == modelInfo.slug {
             for (name, value) in extra.headers {
                 options.extraHeaders[name.lowercased()] = value
             }
         }
         if let hint = responsesMetadata.routingHint, !hint.isEmpty {
-            options.extraHeaders[xCodexRoutingHintHeader] = hint
+            options.extraHeaders[xSageRoutingHintHeader] = hint
         }
         var metadata = request.clientMetadata
         let interceptors = prepareModelRequest(
@@ -441,7 +441,7 @@ public final class ModelClientSession: @unchecked Sendable {
             metadata: &metadata
         )
         request.clientMetadata = metadata
-        let apiStream: CodexAPI.ResponseStream
+        let apiStream: SageAPI.ResponseStream
         if let streamRequestOverride {
             apiStream = try await streamRequestOverride(request, options)
         } else {
@@ -454,7 +454,7 @@ public final class ModelClientSession: @unchecked Sendable {
         }
         let intercepted = interceptStream(apiStream.events, interceptors: interceptors)
         return mapAPIStream(
-            CodexAPI.ResponseStream(
+            SageAPI.ResponseStream(
                 events: intercepted,
                 upstreamRequestId: apiStream.upstreamRequestId
             )
@@ -463,7 +463,7 @@ public final class ModelClientSession: @unchecked Sendable {
 
     /// rust `ModelClientSession::build_responses_options`.
     func buildResponsesOptions(
-        responsesMetadata: CodexResponsesMetadata,
+        responsesMetadata: SageResponsesMetadata,
         useResponsesLite: Bool
     ) -> ResponsesOptions {
         var extraHeaders = buildResponsesHeaders(
@@ -471,10 +471,10 @@ public final class ModelClientSession: @unchecked Sendable {
             turnState: turnState
         )
         if useResponsesLite {
-            extraHeaders[xOpenaiInternalCodexResponsesLiteHeader] = "true"
+            extraHeaders[xSageInternalResponsesLiteHeader] = "true"
         }
         if client.includeTimingMetrics {
-            extraHeaders[xResponsesapiIncludeTimingMetricsHeader] = "true"
+            extraHeaders[xSageIncludeTimingMetricsHeader] = "true"
         }
         for (name, value) in client.buildResponsesCompatibilityHeaders(responsesMetadata) {
             extraHeaders[name] = value
@@ -507,19 +507,20 @@ func isUnauthorizedApiError(_ error: ApiError) -> Bool {
 func buildResponsesHeaders(betaFeaturesHeader: String?, turnState: TurnStateBox) -> [String: String] {
     var headers: [String: String] = [:]
     if let betaFeaturesHeader, !betaFeaturesHeader.isEmpty {
-        headers["x-codex-beta-features"] = betaFeaturesHeader
+        headers["x-sage-beta-features"] = betaFeaturesHeader
     }
     if let state = turnState.get(), !state.isEmpty {
-        headers[xCodexTurnStateHeader] = state
+        headers[xSageTurnStateHeader] = state
     }
     return headers
 }
 
 func isInternalMetadataDestination(_ baseURL: String) -> Bool {
-    guard let url = URL(string: baseURL), url.scheme == "https", let host = url.host else {
+    guard let url = URL(string: baseURL), url.scheme == "https" else {
         return false
     }
-    return host == "api.openai.com" || host.hasSuffix(".chatgpt.com") || host == "chatgpt.com"
+    let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    return path.hasSuffix("backend-api/sage")
 }
 
 func isNonRootAgent(_ source: SessionSource) -> Bool {
@@ -531,9 +532,9 @@ func isNonRootAgent(_ source: SessionSource) -> Bool {
     }
 }
 
-func mapAPIStream(_ apiStream: CodexAPI.ResponseStream) -> ResponseStream {
+func mapAPIStream(_ apiStream: SageAPI.ResponseStream) -> ResponseStream {
     let dropped = CancellationToken()
-    let events = AsyncStream<CodexResult<ResponseEvent>> { continuation in
+    let events = AsyncStream<SageResult<ResponseEvent>> { continuation in
         let task = Task {
             for await event in apiStream.events {
                 if Task.isCancelled || dropped.isCancelled { break }

@@ -1,13 +1,13 @@
 //
 //  legacy_apply_patch_exec_command_warning.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/legacy_apply_patch_exec_command_warning.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct LegacyApplyPatchExecCommandWarning: ContextualUserFragment, Equatable, Sendable {

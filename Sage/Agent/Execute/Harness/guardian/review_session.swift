@@ -6,7 +6,7 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Isolated completion plus Codex attempt budget. Production uses
+//  Isolated completion plus Sage attempt budget. Production uses
 //  `GuardianReviewerConfig` for the review-role model and contract.
 //  Parse failures retry up to `maxReviewAttempts`. Tests can replace
 //  `complete`.
@@ -27,9 +27,9 @@ struct GuardianReviewSessionLimits: Equatable, Sendable {
 @MainActor
 final class GuardianReviewSession {
     static let shared = GuardianReviewSession()
-    /// Codex `MAX_REVIEW_ATTEMPTS`.
+    /// Sage `MAX_REVIEW_ATTEMPTS`.
     static let maxReviewAttempts = 3
-    /// Codex `REVIEW_TIMEOUT`.
+    /// Sage `REVIEW_TIMEOUT`.
     static let reviewTimeout: Duration = .seconds(90)
 
     /// Test seam. Production talks to the review-role model.

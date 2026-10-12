@@ -8,11 +8,11 @@
 //
 //  The router maps model-visible calls onto the registry. Parallel
 //  admission follows the registered runtime. Child-management exposure
-//  stays false until collaboration tools are planned.
+//  follows `includeCollaborationTools` in the plan.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct ToolCall: Equatable, Sendable {
@@ -70,7 +70,7 @@ struct ToolRouter {
         registry.supportsParallelToolCalls(call.toolName) ?? false
     }
 
-    /// Codex `ToolRouter::build_tool_call`.
+    /// Sage `ToolRouter::build_tool_call`.
     static func buildToolCall(_ item: ResponseItem) throws -> ToolCall? {
         switch item {
         case .functionCall(_, let name, let namespace, let arguments, let encrypted, let callId, _):

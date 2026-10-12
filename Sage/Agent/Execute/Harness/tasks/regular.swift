@@ -9,27 +9,28 @@
 //  `RegularSessionTask` is rust `RegularTask`: emit start, consume
 //  prewarm, then `runTurn` until the input queue is idle or a terminal
 //  error is set. Sage `RegularTask` attaches a harness Session from
-//  AgentSessionState on `start()`. When `useHarnessRunTurn`, sampling
-//  and tool dispatch go through `runTurn`. Follow-up samples stream
-//  the prompt `buildPrompt` assembled, through the ModelClientSession
-//  that turn already opened. Sage's system text and tool schemas are
-//  written onto that prompt first. Provider text and usage reach
-//  `runTurn` as they arrive. Function calls stay out until HUD admission.
-//  A host without `/responses` falls back to chat completions.
-//  HUD approval is admitted before dispatch so the card never waits
-//  inside `runTurn`. Attach binds the allowlist ApprovalStore, the
-//  session ParallelAdmission, and HookRuntime project/skills so
-//  `registry.dispatch` owns Pre/PostToolUse.
-//  Resume replays the pending calls through that same dispatch.
+//  AgentSessionState on `start()`. Sampling and tool dispatch go
+//  through `runTurn`. Follow-up samples stream the prompt `buildPrompt`
+//  assembled, through the ModelClientSession that turn already opened.
+//  Sage's system text and tool schemas are written onto that prompt
+//  first. Provider text and usage reach `runTurn` as they arrive.
+//  Function calls stay out until HUD admission. A host without
+//  `/responses` falls back to chat completions. HUD approval is
+//  admitted before dispatch so the card never waits inside `runTurn`.
+//  Attach binds the allowlist ApprovalStore, the session
+//  ParallelAdmission, and HookRuntime project/skills so
+//  `registry.dispatch` owns Pre/PostToolUse. Resume replays the
+//  pending calls through that same dispatch. Explore still uses
+//  `Turn.run` for its read-only nested loop.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
-import CodexThreadStore
+import SageAsyncUtils
+import SageCore
+import SageProtocol
+import SageThreadStore
 import Foundation
 
-/// Codex `RegularTask`.
+/// Sage `RegularTask`.
 final class RegularSessionTask: SessionTask, @unchecked Sendable {
     var kind: TaskKind { .regular }
     /// Test seam: runs after each `runTurn` so pending input can be queued
@@ -82,7 +83,7 @@ final class RegularSessionTask: SessionTask, @unchecked Sendable {
             prewarmed = nil
             afterRunTurn?()
             if cancellationToken.isCancelled {
-                throw CodexErr(details: .turnAborted)
+                throw SageErr(details: .turnAborted)
             }
             if context.terminalError != nil {
                 return lastAgentMessage
@@ -154,7 +155,7 @@ final class RegularTask: ExecuteTurnLoop {
     var runToolBatch: ((Bool) async -> ToolBatchExecutor.WaveOutcome)?
     var onCandidateReply: ((String) async -> Void)?
     var handleStop: ((AgentPlan?) async -> Void)?
-    /// Connect enabled MCP servers that are not already running. Codex starts
+    /// Connect enabled MCP servers that are not already running. Sage starts
     /// them inside `run_turn`, before the model is asked.
     var ensureMCPConnected: (() async -> Void)?
     /// Replace live clients. A published reconnect uses this instead of ensure.
@@ -165,14 +166,11 @@ final class RegularTask: ExecuteTurnLoop {
     var mcpVisibleCatalog: (() -> [McpVisibleTool])?
     /// Test seam for `ModelClientSession::stream`. Production uses `modelGateway`.
     var modelSampler: ((Bool) async throws -> ModelTurn)?
-    /// Prepared rust Session. Live Execute uses `runTurn` when
-    /// `useHarnessRunTurn` is set (from ModelSettings).
+    /// Prepared rust Session. Live Execute samples through `runTurn`.
     var harnessSession: Session?
     var harnessTurnContext: TurnContext?
     var harnessInput: [SessionTurnInput] = []
     var harnessCancellation: CancellationToken?
-    /// Flip when tool dispatch is attached. Until then `start()` keeps `Turn.run`.
-    var useHarnessRunTurn = false
     /// Conversations handed to the model, one entry per harness sample.
     var harnessSampleConversations: [[AgentEvent]] = []
     /// Live Sage tool invoke (ExecuteServices). Tests can stub this.
@@ -190,10 +188,14 @@ final class RegularTask: ExecuteTurnLoop {
     private var responsesTransportUnavailable = false
     /// Responses client for this Execute thread. Reinstalled on each Session.
     private var responsesLease: ExecuteHarnessAttach.ResponsesClientLease?
+    /// Live Execute parent thread registry. Reused across attach so spawn
+    /// children survive a follow-up sample.
+    var harnessThreadManager: ThreadManager?
+    private var harnessThreadId: ThreadId?
     private var harnessIncludeTools = true
 
     private(set) var toolBatchCount = 0
-    /// Codex `stop_hook_active`: a Stop hook continuation is not blocked again.
+    /// Sage `stop_hook_active`: a Stop hook continuation is not blocked again.
     private var stopHookActive = false
     /// SessionStart / UserPromptSubmit fire once per execute loop.
     private var sessionStartConsumed = false
@@ -248,15 +250,11 @@ final class RegularTask: ExecuteTurnLoop {
 
     func extendToolBatchLimit() {}
 
-    /// Codex `RegularTask::run` → `run_turn` when `useHarnessRunTurn`.
+    /// Sage `RegularTask::run` → `run_turn`.
     func start() async {
         state.workspaceChanges.beginIfNeeded(replaying: state.events)
         attachExecuteHarness()
-        if useHarnessRunTurn {
-            await runHarnessTurn()
-            return
-        }
-        await Turn.run(self, includeTools: true)
+        await runHarnessTurn()
     }
 
     func continueWithTools() async {
@@ -266,11 +264,7 @@ final class RegularTask: ExecuteTurnLoop {
             return
         }
         attachExecuteHarness()
-        if useHarnessRunTurn {
-            await runHarnessTurn()
-            return
-        }
-        await Turn.run(self, includeTools: true)
+        await runHarnessTurn()
     }
 
     func attachExecuteHarness() {
@@ -296,9 +290,11 @@ final class RegularTask: ExecuteTurnLoop {
             historyEmpty: snapshot.history.isEmpty
         )
         pendingAttachSessionStartSource = startSource
+        let threadId = harnessThreadId ?? responsesLease?.client.threadId ?? ThreadId()
+        harnessThreadId = threadId
         let session = ExecuteHarnessAttach.makeSession(
             history: snapshot.history,
-            threadId: responsesLease?.client.threadId ?? ThreadId(),
+            threadId: threadId,
             startSource: startSource
         )
         session.services.modelClient = responsesTransportUnavailable ? nil : responsesLease?.client
@@ -306,12 +302,15 @@ final class RegularTask: ExecuteTurnLoop {
         session.services.approvalStore = state.sessionAllowlist.approvalStore
         session.services.hookProjectRoot = projectRoot
         session.services.hookActivatedSkills = hookActivatedSkills?() ?? []
+        attachThreadManager(session, snapshot: snapshot)
         bindHarnessSampling(session)
         let turnContext = ExecuteHarnessAttach.makeTurnContext(
             cwd: snapshot.cwd,
             model: snapshot.model,
             allowsMutation: snapshot.allowsMutation
         )
+        turnContext.threadId = threadId
+        turnContext.sessionId = SessionId(threadId)
         let previousRolloutPath = harnessSession?.persistedRolloutPath() ?? harnessRolloutPath
         if let previousRolloutPath {
             session.restoreVerifiedAnswers(
@@ -329,8 +328,29 @@ final class RegularTask: ExecuteTurnLoop {
         harnessInput = snapshot.input
     }
 
+    private func attachThreadManager(
+        _ session: Session,
+        snapshot: ExecuteHarnessAttach.Snapshot
+    ) {
+        let manager = harnessThreadManager ?? ThreadManager()
+        harnessThreadManager = manager
+        if let client = session.services.modelClient {
+            manager.attachModelClient(client, model: snapshot.model)
+        }
+        manager.setTurnToolRunner(ExecuteChildToolRunner(task: self))
+        try? manager.adoptRootThread(
+            threadId: session.threadId,
+            model: snapshot.model,
+            cwd: snapshot.cwd,
+            history: session.cloneHistory().forPrompt()
+        )
+        session.services.threadManager = manager
+        session.services.localAgentControl = manager.agentControl(
+            sessionId: SessionId(session.threadId)
+        )
+    }
+
     private func bindHarnessSampling(_ session: Session) {
-        guard useHarnessRunTurn else { return }
         installHarnessMcpBridge(on: session)
         session.services.sageToolNames = modelGateway.availableToolDefinitions().map(\.name)
         session.prepareSamplingPrompt = { [weak self] in
@@ -349,7 +369,7 @@ final class RegularTask: ExecuteTurnLoop {
         }
         session.runSamplingStreamOverride = { [weak self] prompt in
             guard let self else {
-                throw CodexErr.fatal("execute harness sampler is gone")
+                throw SageErr.fatal("execute harness sampler is gone")
             }
             if let resume = self.resumeToolTurn {
                 self.resumeToolTurn = nil
@@ -371,12 +391,12 @@ final class RegularTask: ExecuteTurnLoop {
 
     private enum OpenedSample {
         case buffered(LiveSample)
-        case live(CodexCore.ResponseStream)
+        case live(SageCore.ResponseStream)
     }
 
     /// Sampler and chat completions have no provider event list. Screen the
     /// batch, then synthesize the stream `runTurn` dispatches.
-    private func streamBuffered(_ sample: LiveSample) async -> CodexCore.ResponseStream {
+    private func streamBuffered(_ sample: LiveSample) async -> SageCore.ResponseStream {
         if sample.turn.toolCalls.isEmpty {
             return replay(sample)
         }
@@ -402,11 +422,11 @@ final class RegularTask: ExecuteTurnLoop {
     /// or stop so a HUD card can take the turn.
     private func streamAdmittedTools(
         _ turn: ModelTurn,
-        events: [CodexResult<ResponseEvent>]? = nil,
+        events: [SageResult<ResponseEvent>]? = nil,
         recordAssistant: Bool,
         countRound: Bool = true,
         replacePlan: Bool = true
-    ) async -> CodexCore.ResponseStream {
+    ) async -> SageCore.ResponseStream {
         switch await admittedGate(
             turn,
             recordAssistant: recordAssistant,
@@ -467,10 +487,10 @@ final class RegularTask: ExecuteTurnLoop {
 
     private struct LiveSample {
         var turn: ModelTurn
-        var events: [CodexResult<ResponseEvent>]?
+        var events: [SageResult<ResponseEvent>]?
     }
 
-    private func replay(_ sample: LiveSample) -> CodexCore.ResponseStream {
+    private func replay(_ sample: LiveSample) -> SageCore.ResponseStream {
         if let events = sample.events {
             return ExecuteHarnessAttach.replay(
                 events,
@@ -484,7 +504,13 @@ final class RegularTask: ExecuteTurnLoop {
         let conversation = ExecuteHarnessAttach.agentEvents(from: prompt.input)
         harnessSampleConversations.append(conversation)
         if let modelSampler {
-            return .buffered(LiveSample(turn: try await modelSampler(harnessIncludeTools), events: nil))
+            do {
+                return .buffered(
+                    LiveSample(turn: try await modelSampler(harnessIncludeTools), events: nil)
+                )
+            } catch is CancellationError {
+                throw SageErr.turnAborted
+            }
         }
         let snapshot = modelGateway.settings.snapshot(for: .execute)
         if !responsesTransportUnavailable,
@@ -508,7 +534,7 @@ final class RegularTask: ExecuteTurnLoop {
                     return await self.decideResponsesGate(turn)
                 }
                 return .live(live)
-            } catch let error as CodexErr where ExecuteHarnessAttach.responsesEndpointMissing(error) {
+            } catch let error as SageErr where ExecuteHarnessAttach.responsesEndpointMissing(error) {
                 responsesTransportUnavailable = true
                 session.services.modelClient = nil
             }
@@ -638,14 +664,10 @@ final class RegularTask: ExecuteTurnLoop {
         } else {
             guard await taskStore.clearPendingPrompt() else { return }
         }
-        if useHarnessRunTurn {
-            harnessIncludeTools = false
-            attachExecuteHarness()
-            await runHarnessTurn()
-            harnessIncludeTools = true
-            return
-        }
-        await Turn.run(self, includeTools: false)
+        harnessIncludeTools = false
+        attachExecuteHarness()
+        await runHarnessTurn()
+        harnessIncludeTools = true
     }
 
     func handleTurn(_ turn: ModelTurn) async {
@@ -711,35 +733,11 @@ final class RegularTask: ExecuteTurnLoop {
     }
 
     func didCancel() async {
-        if !useHarnessRunTurn {
-            _ = await HookRuntime.interrupt(
-                projectRoot: projectRoot,
-                sessionId: harnessSession?.threadId.description ?? "",
-                turnId: harnessTurnContext?.subId ?? "",
-                cwd: projectRoot?.path,
-                model: harnessTurnContext?.model ?? "",
-                permissionMode: hookPermissionMode(
-                    harnessTurnContext?.approvalPolicy ?? .onRequest
-                )
-            )
-            _ = await HookRuntime.sessionEnd(
-                projectRoot: projectRoot,
-                sessionId: harnessSession?.threadId.description ?? "",
-                cwd: projectRoot?.path
-            )
-        }
         streaming.clear()
         await handleStop?(nil)
     }
 
     func didFail(_ error: Error) async {
-        if !useHarnessRunTurn {
-            _ = await HookRuntime.sessionEnd(
-                projectRoot: projectRoot,
-                sessionId: harnessSession?.threadId.description ?? "",
-                cwd: projectRoot?.path
-            )
-        }
         let partial = streaming.currentVisibleText
         streaming.clear()
         await taskStore.markFailed(error.localizedDescription, partialReply: partial)
@@ -838,13 +836,7 @@ final class RegularTask: ExecuteTurnLoop {
     }
 
     private func runPausedBatch(retryFailedSteps: Bool) async {
-        if useHarnessRunTurn {
-            await resumeHarnessBatch(retryFailedSteps: retryFailedSteps)
-            return
-        }
-        let outcome = await runToolBatch?(retryFailedSteps) ?? .persistFailed
-        guard outcome == .succeeded else { return }
-        await Turn.run(self, includeTools: true)
+        await resumeHarnessBatch(retryFailedSteps: retryFailedSteps)
     }
 
     /// Re-admit the pending plan and let `runTurn` dispatch whatever is left.
@@ -1066,5 +1058,29 @@ final class RegularTask: ExecuteTurnLoop {
         streaming.clear()
         planProgress.replace(batch)
         return true
+    }
+}
+
+/// Child SageThreads run tools through the same Live Execute invoke path.
+private final class ExecuteChildToolRunner: TurnToolRunner, @unchecked Sendable {
+    weak var task: RegularTask?
+
+    init(task: RegularTask) {
+        self.task = task
+    }
+
+    func runTool(
+        turnId: String,
+        call: TurnFunctionCall,
+        cancellation: CancellationToken
+    ) async throws -> String {
+        _ = turnId
+        if cancellation.isCancelled { throw CancellationError() }
+        guard let invoke = task?.invokeHarnessTool else {
+            throw SageErr.unsupportedOperation("child tool invoke is not attached")
+        }
+        return try await invoke(
+            ToolCallProposal(id: call.callId, name: call.name, argumentsJSON: call.arguments)
+        )
     }
 }

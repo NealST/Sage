@@ -11,7 +11,7 @@
 //  of an `AnyObject` executor. Async methods replace boxed futures.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Filesystem operations authorized by the environment that supplied this borrowed accessor.
@@ -102,7 +102,7 @@ public struct FileSystemEnvironmentAccessor: EnvironmentAccess {
     ///
     /// 1. Tests.
     /// 2. Callers pending migration to sandboxed access.
-    /// 3. Codex-internal operations that should never be sandboxed and that the model cannot trigger.
+    /// 3. Sage-internal operations that should never be sandboxed and that the model cannot trigger.
     ///
     /// Model-turn discovery must use the accessor supplied by its selected environment.
     public static func unrestricted(fileSystem: any ExecutorFileSystem) -> FileSystemEnvironmentAccessor {

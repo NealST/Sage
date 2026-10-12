@@ -33,10 +33,10 @@
 //  supplies window 0 only when no compaction omitted its window number.
 //
 
-import CodexCore
-import CodexHistory
-import CodexProtocol
-import CodexUtils
+import SageCore
+import SageHistory
+import SageProtocol
+import SageUtils
 import Foundation
 
 enum RolloutReconstruction {
@@ -58,7 +58,7 @@ enum RolloutReconstruction {
            case .compacted(let compacted) = items[index] {
             if let replacement = compacted.replacementHistory {
                 history.replaceAnnotated(replacement.map {
-                    CodexCore.ResponseItemEnvelope($0.item)
+                    SageCore.ResponseItemEnvelope($0.item)
                 })
                 if history.userMessageRevision < .max {
                     history.userMessageRevision += 1
@@ -341,7 +341,7 @@ private func inputCheckpointIndex(
 private func inputCheckpointResumeMetadata(
     _ items: [RolloutItem],
     historyMode: ThreadHistoryMode
-) -> CodexProtocol.JSONValue? {
+) -> SageProtocol.JSONValue? {
     guard let index = inputCheckpointIndex(items, historyMode: historyMode),
           case .compacted(let compacted) = items[index]
     else { return nil }
@@ -538,7 +538,7 @@ private struct WindowReplayScan {
     }
 }
 
-private func reconstructedTurnSettings(from metadata: CodexProtocol.JSONValue?) -> ReconstructedTurnSettings? {
+private func reconstructedTurnSettings(from metadata: SageProtocol.JSONValue?) -> ReconstructedTurnSettings? {
     guard let settings = metadata?.objectValue?["previous_turn_settings"]?.objectValue,
           let model = settings["model"]?.stringValue
     else { return nil }
@@ -560,7 +560,7 @@ private func saturatingAdd(_ lhs: Int, _ rhs: Int) -> Int {
 }
 
 private func restoredVerifiedAnswers(
-    from checkpoint: CodexProtocol.JSONValue
+    from checkpoint: SageProtocol.JSONValue
 ) -> (answers: [RetainedVerifiedAnswer], incomplete: Bool)? {
     guard let object = checkpoint.objectValue else { return nil }
     var answers: [RetainedVerifiedAnswer] = []
@@ -592,7 +592,7 @@ private func restoredVerifiedAnswers(
 
 /// rust `is_api_message`. System text, unauthored configuration updates,
 /// compaction triggers, and unknown items stay out of the restored history.
-func keepsReconstructedResponseItem(_ envelope: CodexHistory.ResponseItemEnvelope) -> Bool {
+func keepsReconstructedResponseItem(_ envelope: SageHistory.ResponseItemEnvelope) -> Bool {
     switch envelope.item {
     case .message(_, let role, _, _, _):
         return role != "system"
@@ -607,7 +607,7 @@ func keepsReconstructedResponseItem(_ envelope: CodexHistory.ResponseItemEnvelop
 
 /// rust `record_items_with_metadata` for function and custom tool outputs.
 func truncatedRestoredResponseItem(
-    _ envelope: CodexHistory.ResponseItemEnvelope,
+    _ envelope: SageHistory.ResponseItemEnvelope,
     policy: TruncationPolicy
 ) -> ResponseItem {
     let applied: TruncationPolicy

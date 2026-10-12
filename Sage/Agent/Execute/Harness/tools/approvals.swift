@@ -107,7 +107,7 @@ enum ApprovalAction: Sendable, Equatable {
         }
     }
 
-    /// Classify a HUD step the way Codex `ApprovalAction` kinds do.
+    /// Classify a HUD step the way Sage `ApprovalAction` kinds do.
     static func from(step: AgentStep, cwd: URL) -> ApprovalAction {
         switch step.toolName {
         case "apply_patch":
@@ -199,7 +199,7 @@ enum ApprovalAction: Sendable, Equatable {
     }
 }
 
-/// Serialized-key cache matching Codex `ApprovalStore`.
+/// Serialized-key cache matching Sage `ApprovalStore`.
 @MainActor
 final class ApprovalStore {
     private var map: [String: ReviewDecision] = [:]

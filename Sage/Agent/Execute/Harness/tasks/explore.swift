@@ -6,7 +6,7 @@
 //
 //  Read-only Explore subagent on the same `ExecuteTurnLoop` as RegularTask.
 //  Isolated events and ModelClient — nothing is written to the parent
-//  transcript or occupancy. Codex multi-agent v2 is out of scope.
+//  transcript or occupancy. Sage multi-agent v2 is out of scope.
 //
 
 import Foundation

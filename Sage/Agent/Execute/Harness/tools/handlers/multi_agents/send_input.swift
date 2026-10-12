@@ -7,12 +7,12 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, and mailbox send are live when
-//  LocalAgentControl is attached. Session turn start is still pending.
+//  Spec, argument parsing, mailbox send, and live ThreadSession turn
+//  start are wired when LocalAgentControl has a ThreadManager.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct SendInputArgs: Decodable, Equatable, Sendable {
     var target: String
@@ -72,7 +72,7 @@ struct SendInputHandler: CoreToolRuntime {
         if args.interrupt {
             do {
                 _ = try await control.interrupt(caller: caller, target: .id(receiver), version: .v1)
-            } catch let err as CodexErr {
+            } catch let err as SageErr {
                 throw collabAgentError(agentId: receiver, err: err)
             }
         }
@@ -86,7 +86,7 @@ struct SendInputHandler: CoreToolRuntime {
                 )
             )
             return SendInputResult(submissionId: receipt.submissionId)
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             throw collabAgentError(agentId: receiver, err: err)
         }
     }

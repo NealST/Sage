@@ -10,8 +10,8 @@
 //  TokenBudgetConfig defaults. Session / HookRuntime stay app types.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 func hasExplicitSettings(_ settings: StepSettings) -> Bool {
@@ -37,7 +37,7 @@ func runInlineTokenBudgetCompact(
         model: stepContext.turn.model
     )
     if preCompact.shouldStop {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     recordAdditionalContexts(
         sess: sess,
@@ -77,7 +77,7 @@ func runInlineTokenBudgetCompact(
         model: stepContext.turn.model
     )
     if postCompact.shouldStop {
-        throw CodexErr(details: .turnAborted)
+        throw SageErr(details: .turnAborted)
     }
     recordAdditionalContexts(
         sess: sess,
@@ -91,7 +91,7 @@ func resolveTokenBudget(modelContextWindow: Int64?, occupancy: Double) -> Int64?
     return Int64(Double(modelContextWindow) * max(0, 1 - occupancy))
 }
 
-/// Codex `resolve_token_budget`. Model defaults fill reminder / fallback
+/// Sage `resolve_token_budget`. Model defaults fill reminder / fallback
 /// fields; an invalid model-owned config keeps the user setting.
 func resolveTokenBudgetConfig(
     configured: TokenBudgetConfig?,

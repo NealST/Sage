@@ -14,8 +14,8 @@
 //  wait; this session has no live rollout writer.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 
 extension Session {

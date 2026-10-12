@@ -1,6 +1,6 @@
 //
 //  mcp.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/mcp.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,7 +13,7 @@
 import Foundation
 
 public let defaultMcpServerEnvironmentId = "local"
-public let legacyCodexAppsRegistrationId = "legacy_codex_apps"
+public let legacySageAppsRegistrationId = "legacy_sage_apps"
 
 public enum McpEnvironmentAuthority: Equatable, Sendable {
     case unrestricted

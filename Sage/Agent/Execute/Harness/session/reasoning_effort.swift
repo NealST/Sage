@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension Session {

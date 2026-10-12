@@ -16,8 +16,8 @@
 //  `AsyncThrowingStream` stand-in for the Rust `Stream` wrapper.
 //
 
-import CodexProtocol
-@preconcurrency import CodexUtils
+import SageProtocol
+@preconcurrency import SageUtils
 import Foundation
 
 /// Maximum chunk size returned by `ExecutorFileSystem.readFileStream`.

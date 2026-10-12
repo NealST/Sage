@@ -10,7 +10,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
+@testable import SageProtocol
 
 final class ProtocolEventsTests: XCTestCase {
     func testWarningEventRoundTrip() throws {

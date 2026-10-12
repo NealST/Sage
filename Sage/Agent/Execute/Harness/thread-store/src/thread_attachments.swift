@@ -1,17 +1,17 @@
 //
 //  thread_attachments.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/thread_attachments.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Attachment records / outcomes stand in for unported CodexState models.
+//  Attachment records / outcomes stand in for unported SageState models.
 //  Limits come from codex-rs/state/src/lib.rs. In-memory add/list/remove/copy
 //  lives on `InMemoryThreadStore`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Maximum serialized size of one persisted thread-attachment payload.

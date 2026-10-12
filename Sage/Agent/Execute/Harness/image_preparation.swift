@@ -1,6 +1,6 @@
 //
 //  image_preparation.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/image_preparation.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -8,11 +8,11 @@
 //
 //  AttachmentStore is a local protocol (codex_attachment_store waits).
 //  AnnotatedContent from context-fragments is inlined as direct
-//  ResponseItem walks. Image resize uses CodexUtils loadDataURLForPrompt.
+//  ResponseItem walks. Image resize uses SageUtils loadDataURLForPrompt.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public let imageProcessingErrorPlaceholder =

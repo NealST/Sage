@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-import CodexUtils
+import SageUtils
 import XCTest
 
 final class PtySpawnTests: XCTestCase {

@@ -11,7 +11,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
+@testable import SageProtocol
 
 final class SerdeWireFormatTests: XCTestCase {
     // MARK: - ParsedCommand (tagged "type")

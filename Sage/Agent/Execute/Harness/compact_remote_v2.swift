@@ -1,6 +1,6 @@
 //
 //  compact_remote_v2.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/compact_remote_v2.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  Fallback-step retries the current model after a previous-model miss.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public let retainedMessageTokenBudget = 64_000
@@ -97,10 +97,10 @@ public func collectRemoteCompactionV2Output(from stream: ResponseStream) async t
         if completedResponseId != nil { break }
     }
     guard let responseId = completedResponseId else {
-        throw CodexErr.stream("remote compaction v2 stream closed before response.completed")
+        throw SageErr.stream("remote compaction v2 stream closed before response.completed")
     }
     if compactionCount > 1 {
-        throw CodexErr.fatal(
+        throw SageErr.fatal(
             "remote compaction v2 expected exactly one compaction output item, got \(compactionCount) from \(outputItemCount) output items"
         )
     }

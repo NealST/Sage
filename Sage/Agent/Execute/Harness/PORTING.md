@@ -3,8 +3,15 @@
 > 由 `scripts/harness_port.py generate` 生成（0a2eb469 基线）。
 > 状态随 PR 手工更新；`check` 模式校验文件头与本表一致。
 > 重新生成会保留手工备注；已移植行的状态以 Swift 文件头为准。
+>
+> **范围（2026-10-12）**：验收看 agent runtime 行为，不要求范围内每个文件 faithful。分类见 `EXECUTE_HARNESS_PORT_PLAN.md` §2。
+> - **runtime**：回合 / 工具 / 沙盒 / 压缩 / 审批 / MCP 机制 / SSE / rollout 回放 / **多 agent spawn·mailbox·wait**
+> - **host**：Sage Settings / GRDB task / HUD / Skill catalog / Mac 工具
+> - **frozen**：`state`/`thread-store` 产品、plugin 市场、code mode、exec-server、ChatGPT auth、OTEL 全套。文件可留，不再补齐。
+>
+> **命名（计划 §5.3）**：Swift 模块/类型/变量/env/路径含 `codex` 的改成 `sage`。左列仍是上游 `codex-rs` 路径。例外：`codex-api/` → `sage-api/`，`codex_thread.rs` → `sage_thread.swift`，`codex_delegate.rs` → `sage_delegate.swift`，`codex_error_info.rs` → `sage_error_info.swift`。文件头 `Port of codex-rs/…` 保留。
 
-状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred
+状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred ｜ ❄️ frozen（产品层，不再加深）
 
 ## 进度汇总
 
@@ -36,7 +43,7 @@
 | `protocol/src/approvals.rs` | 548 | `protocol/src/approvals.swift` | ✅ faithful |  |
 | `protocol/src/auth.rs` | 249 | `protocol/src/auth.swift` | ✅ faithful |  |
 | `protocol/src/capabilities.rs` | 51 | `protocol/src/capabilities.swift` | ✅ faithful |  |
-| `protocol/src/codex_error_info.rs` | 83 | `protocol/src/codex_error_info.swift` | ✅ faithful |  |
+| `protocol/src/codex_error_info.rs` | 83 | `protocol/src/sage_error_info.swift` | ✅ faithful | R2a |
 | `protocol/src/config_types.rs` | 980 | `protocol/src/config_types.swift` | ✅ faithful |  |
 | `protocol/src/dynamic_tools.rs` | 175 | `protocol/src/dynamic_tools.swift` | ✅ faithful |  |
 | `protocol/src/environment.rs` | 101 | `protocol/src/environment.swift` | 🟡 adapted |  |
@@ -468,7 +475,7 @@
 | `core/src/session/extension_interruption.rs` | 117 | `session/extension_interruption.swift` | 🟡 adapted |  |
 | `core/src/session/extension_metrics.rs` | 35 | `session/extension_metrics.swift` | 🟡 adapted |  |
 | `core/src/session/guardian_checkpoint.rs` | 47 | `session/guardian_checkpoint.swift` | 🟡 adapted |  |
-| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | single-agent ops through denied-action approval; execpolicy amendments append to rules/default.rules; realtime stays out |
+| `core/src/session/handlers.rs` | 681 | `session/handlers.swift` | 🟡 adapted | single-agent ops through user shell; execpolicy amendments append to rules/default.rules; realtime stays out |
 | `core/src/session/inject.rs` | 193 | `session/inject.swift` | 🟡 adapted |  |
 | `core/src/session/input_queue.rs` | 669 | `session/input_queue.swift` | 🟡 adapted | mailbox/steer activity watch; gauges omitted |
 | `core/src/session/mcp.rs` | 1,206 | `session/session_mcp.swift` | 🟡 adapted | elicitation waits on the active turn; a missing waiter uses the runtime fallback; review and plugin telemetry stay out |
@@ -487,12 +494,12 @@
 | `core/src/session/step_activation.rs` | 472 | `session/step_activation.swift` | 🟡 adapted |  |
 | `core/src/session/step_context.rs` | 57 | `session/step_context.swift` | 🟡 adapted | a step keeps the MCP binding it captured |
 | `core/src/session/step_settings.rs` | 347 | `session/step_settings.swift` | 🟡 adapted |  |
-| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | single-agent ops through ApproveGuardianDeniedAction |
+| `core/src/session/submission.rs` | 18 | `session/submission.swift` | 🟡 adapted | single-agent ops through RunUserShellCommand |
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted | ThreadSettings writes later-turn StepSettings and clears lastStartedTurnId; persistence and MCP prewarm stay out |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |
 | `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools + admitted dynamic tools; emit TurnDiff after in-flight tools |
-| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted | newTurnContext copies session dynamicTools onto the admitted turn |
+| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted | newTurnContext copies session dynamicTools onto the admitted turn; TurnEnvironment carries a resolved shell snapshot path |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted | suspend stops the unfinished root turn without a terminal event; rollout flush and writer close wait |
 | `core/src/session/world_state.rs` | 295 | `session/world_state.swift` | 🟡 adapted | step snapshot + compact reinject + exec-policy prefixes; plugin contributors stay out |
@@ -500,7 +507,7 @@
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
 | `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
-| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore; ensure, reconnect, and disconnect MCP hooks; rollout append hook |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore; ensure, reconnect, and disconnect MCP hooks; rollout append hook; live thread |
 | `core/src/state/session.rs` | 475 | `state/state_session.swift` | 🟡 adapted |  |
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
@@ -510,7 +517,7 @@
 | `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks; detached start from Session loop |
 | `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission; attach shares allowlist ApprovalStore + ParallelAdmission |
 | `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
-| `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted |  |
+| `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted | login shell via defaultUserShell; process exit is observed off the main actor; stdout deltas use the turn sub id; an enabled snapshot is captured once per cwd and sourced; packaged codex-path is prepended and replayed after the snapshot; an active managed proxy is stripped before launch |
 | `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted | trackDelta / invalidate / emit TurnDiff after sample; Myers timeout stays a line diff |
 | `core/src/turn_metadata.rs` | 569 | `turn_metadata.swift` | 🟡 adapted |  |
 | `core/src/turn_timing.rs` | 443 | `turn_timing.swift` | 🟡 adapted |  |
@@ -529,13 +536,13 @@
 | `core/src/responses_metadata.rs` | 592 | `responses_metadata.swift` | 🟡 adapted |  |
 | `core/src/responses_retry.rs` | 180 | `responses_retry.swift` | 🟡 adapted |  |
 | `core/src/web_search.rs` | 30 | `web_search.swift` | ✅ faithful |  |
-| `codex-api/src/api_bridge.rs` | 318 | `codex-api/src/api_bridge.swift` | 🟡 adapted |  |
-| `codex-api/src/auth.rs` | 104 | `codex-api/src/auth.swift` | 🟡 adapted |  |
-| `codex-api/src/common.rs` | 406 | `codex-api/src/common.swift` | 🟡 adapted |  |
-| `codex-api/src/endpoint/images.rs` | 403 | `codex-api/src/endpoint/endpoint_images.swift` | 🟡 adapted |  |
-| `codex-api/src/endpoint/memories.rs` | 225 | `codex-api/src/endpoint/memories.swift` | 🟡 adapted |  |
-| `codex-api/src/endpoint/mod.rs` | 34 | `codex-api/src/endpoint/endpoint_mod.swift` | 🟡 adapted |  |
-| `codex-api/src/endpoint/models.rs` | 431 | `codex-api/src/endpoint/models.swift` | 🟡 adapted |  |
+| `codex-api/src/api_bridge.rs` | 318 | `sage-api/src/api_bridge.swift` | 🟡 adapted |  |
+| `codex-api/src/auth.rs` | 104 | `sage-api/src/auth.swift` | 🟡 adapted |  |
+| `codex-api/src/common.rs` | 406 | `sage-api/src/common.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/images.rs` | 403 | `sage-api/src/endpoint/endpoint_images.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/memories.rs` | 225 | `sage-api/src/endpoint/memories.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/mod.rs` | 34 | `sage-api/src/endpoint/endpoint_mod.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/models.rs` | 431 | `sage-api/src/endpoint/models.swift` | 🟡 adapted |  |
 | `codex-api/src/endpoint/realtime_call.rs` | 796 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/methods.rs` | 3,225 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/methods_common.rs` | 179 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
@@ -548,24 +555,24 @@
 | `codex-api/src/endpoint/realtime_websocket/protocol_frameless_bidi.rs` | 99 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/protocol_v1.rs` | 99 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
 | `codex-api/src/endpoint/realtime_websocket/protocol_v2.rs` | 210 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
-| `codex-api/src/endpoint/responses.rs` | 159 | `codex-api/src/endpoint/endpoint_responses.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/responses.rs` | 159 | `sage-api/src/endpoint/endpoint_responses.swift` | 🟡 adapted |  |
 | `codex-api/src/endpoint/responses_websocket.rs` | 1,241 | - | 💤 deferred | 语音/websocket 子集，Phase 10 |
-| `codex-api/src/endpoint/search.rs` | 320 | `codex-api/src/endpoint/endpoint_search.swift` | 🟡 adapted |  |
-| `codex-api/src/endpoint/session.rs` | 156 | `codex-api/src/endpoint/session.swift` | 🟡 adapted |  |
-| `codex-api/src/error.rs` | 55 | `codex-api/src/error.swift` | 🟡 adapted |  |
-| `codex-api/src/files.rs` | 887 | `codex-api/src/files.swift` | 🟡 adapted |  |
-| `codex-api/src/images.rs` | 72 | `codex-api/src/images.swift` | ✅ faithful |  |
-| `codex-api/src/lib.rs` | 121 | `codex-api/src/lib.swift` | 🟡 adapted |  |
-| `codex-api/src/provider.rs` | 166 | `codex-api/src/provider.swift` | 🟡 adapted |  |
-| `codex-api/src/rate_limits.rs` | 382 | `codex-api/src/rate_limits.swift` | 🟡 adapted |  |
-| `codex-api/src/requests/headers.rs` | 40 | `codex-api/src/requests/headers.swift` | 🟡 adapted |  |
-| `codex-api/src/requests/mod.rs` | 4 | `codex-api/src/requests/requests_mod.swift` | 🟡 adapted |  |
-| `codex-api/src/requests/responses.rs` | 6 | `codex-api/src/requests/requests_responses.swift` | 🟡 adapted |  |
-| `codex-api/src/safety_buffering.rs` | 67 | `codex-api/src/safety_buffering.swift` | 🟡 adapted |  |
-| `codex-api/src/search.rs` | 305 | `codex-api/src/search.swift` | ✅ faithful |  |
-| `codex-api/src/sse/mod.rs` | 5 | `codex-api/src/sse/sse_mod.swift` | 🟡 adapted |  |
-| `codex-api/src/sse/responses.rs` | 2,124 | `codex-api/src/sse/responses.swift` | 🟡 adapted |  |
-| `codex-api/src/telemetry.rs` | 98 | `codex-api/src/telemetry.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/search.rs` | 320 | `sage-api/src/endpoint/endpoint_search.swift` | 🟡 adapted |  |
+| `codex-api/src/endpoint/session.rs` | 156 | `sage-api/src/endpoint/session.swift` | 🟡 adapted |  |
+| `codex-api/src/error.rs` | 55 | `sage-api/src/error.swift` | 🟡 adapted |  |
+| `codex-api/src/files.rs` | 887 | `sage-api/src/files.swift` | 🟡 adapted |  |
+| `codex-api/src/images.rs` | 72 | `sage-api/src/images.swift` | ✅ faithful |  |
+| `codex-api/src/lib.rs` | 121 | `sage-api/src/lib.swift` | 🟡 adapted |  |
+| `codex-api/src/provider.rs` | 166 | `sage-api/src/provider.swift` | 🟡 adapted |  |
+| `codex-api/src/rate_limits.rs` | 382 | `sage-api/src/rate_limits.swift` | 🟡 adapted |  |
+| `codex-api/src/requests/headers.rs` | 40 | `sage-api/src/requests/headers.swift` | 🟡 adapted |  |
+| `codex-api/src/requests/mod.rs` | 4 | `sage-api/src/requests/requests_mod.swift` | 🟡 adapted |  |
+| `codex-api/src/requests/responses.rs` | 6 | `sage-api/src/requests/requests_responses.swift` | 🟡 adapted |  |
+| `codex-api/src/safety_buffering.rs` | 67 | `sage-api/src/safety_buffering.swift` | 🟡 adapted |  |
+| `codex-api/src/search.rs` | 305 | `sage-api/src/search.swift` | ✅ faithful |  |
+| `codex-api/src/sse/mod.rs` | 5 | `sage-api/src/sse/sse_mod.swift` | 🟡 adapted |  |
+| `codex-api/src/sse/responses.rs` | 2,124 | `sage-api/src/sse/responses.swift` | 🟡 adapted |  |
+| `codex-api/src/telemetry.rs` | 98 | `sage-api/src/telemetry.swift` | 🟡 adapted |  |
 | `model-provider-info/src/gateway_oauth.rs` | 157 | `model-provider-info/src/gateway_oauth.swift` | 🟡 adapted |  |
 | `model-provider-info/src/lib.rs` | 767 | `model-provider-info/src/lib.swift` | 🟡 adapted |  |
 
@@ -574,8 +581,8 @@
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
 | `core/src/attestation.rs` | 26 | `attestation.swift` | 🟡 adapted |  |
-| `core/src/codex_delegate.rs` | 382 | `codex_delegate.swift` | 🟡 adapted |  |
-| `core/src/codex_thread.rs` | 1,065 | `codex_thread.swift` | 🟡 adapted |  |
+| `core/src/codex_delegate.rs` | 382 | `sage_delegate.swift` | 🟡 adapted | R2a |
+| `core/src/codex_thread.rs` | 1,065 | `sage_thread.swift` | 🟡 adapted | R2a |
 | `core/src/feedback_config.rs` | 81 | `feedback_config.swift` | 🟡 adapted |  |
 | `core/src/installation_id.rs` | 149 | `installation_id.swift` | 🟡 adapted |  |
 | `core/src/memory_usage.rs` | 51 | `memory_usage.swift` | 🟡 adapted |  |
@@ -836,8 +843,8 @@
 | `core/src/tools/handlers/multi_agents/close_agent.rs` | 133 | `tools/handlers/multi_agents/close_agent.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents/resume_agent.rs` | 177 | `tools/handlers/multi_agents/resume_agent.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents/send_input.rs` | 173 | `tools/handlers/multi_agents/send_input.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/multi_agents/spawn.rs` | 239 | - | 🟡 adapted | registry spawn; fork_context copies history; turn items on caller CodexThread |
-| `core/src/tools/handlers/multi_agents/wait.rs` | 334 | - | 🟡 adapted | subscribeStatus wait; turn items on caller CodexThread |
+| `core/src/tools/handlers/multi_agents/spawn.rs` | 239 | - | 🟡 adapted | registry spawn; fork_context copies history; turn items on caller SageThread |
+| `core/src/tools/handlers/multi_agents/wait.rs` | 334 | - | 🟡 adapted | subscribeStatus wait; turn items on caller SageThread |
 | `core/src/tools/handlers/multi_agents.rs` | 99 | `tools/handlers/multi_agents.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_common.rs` | 157 | `tools/handlers/multi_agents_common.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_spec.rs` | 891 | `tools/handlers/multi_agents_spec.swift` | 🟡 adapted |  |
@@ -847,7 +854,7 @@
 | `core/src/tools/handlers/multi_agents_v2/list_agents.rs` | 109 | `tools/handlers/multi_agents_v2/list_agents.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_v2/message_tool.rs` | 100 | `tools/handlers/multi_agents_v2/message_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_v2/send_message.rs` | 57 | `tools/handlers/multi_agents_v2/send_message.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 330 | - | 🟡 adapted | registry spawn; fork_turns copies parent CodexThread history |
+| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 330 | - | 🟡 adapted | registry spawn; fork_turns copies parent SageThread history |
 | `core/src/tools/handlers/multi_agents_v2/wait.rs` | 205 | - | 🟡 adapted | mailbox+steer wait; InputQueue races AgentDeliveryState; pending steer wins |
 | `core/src/tools/handlers/multi_agents_v2.rs` | 66 | `tools/handlers/multi_agents_v2.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/request_plugin_install.rs` | 551 | `tools/handlers/request_plugin_install.swift` | 🟡 adapted |  |

@@ -1,18 +1,18 @@
 //
 //  responses_retry.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/responses_retry.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Session / TurnContext / otel retry macros wait on the Sage app
-//  module. This file takes a ResponsesStreamRetrySink so CodexCore
+//  module. This file takes a ResponsesStreamRetrySink so SageCore
 //  stays Session-free. `trySwitchFallback` is the caller's websocket
 //  switch; HTTP-only clients keep it false.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -53,7 +53,7 @@ public protocol ResponsesStreamRetrySink: Sendable {
     var responsesWebsocketEnabled: Bool { get }
     var turnId: String { get }
 
-    func notifyStreamError(_ message: String, error: CodexErr) async
+    func notifyStreamError(_ message: String, error: SageErr) async
     func sendWarning(_ message: String) async
     func storeExhaustedRetry(_ retry: ExhaustedResponseRetry) async
 }
@@ -61,7 +61,7 @@ public protocol ResponsesStreamRetrySink: Sendable {
 public func handleResponseStreamError(
     retryState: inout ResponsesStreamRetryState,
     maxRetries: UInt64,
-    err: CodexErr,
+    err: SageErr,
     trySwitchFallback: () -> Bool,
     sink: any ResponsesStreamRetrySink,
     request: ResponsesStreamRequest
@@ -114,7 +114,7 @@ public func handleResponseStreamError(
     throw err
 }
 
-func isConnectionFailed(_ err: CodexErr) -> Bool {
+func isConnectionFailed(_ err: SageErr) -> Bool {
     if case .connectionFailed = err.details { return true }
     return false
 }
@@ -122,7 +122,7 @@ func isConnectionFailed(_ err: CodexErr) -> Bool {
 func logRetry(
     request: ResponsesStreamRequest,
     turnId: String,
-    err: CodexErr,
+    err: SageErr,
     retries: UInt64,
     maxRetries: UInt64,
     delay: Duration

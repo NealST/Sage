@@ -1,6 +1,6 @@
 //
 //  session_mod.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/session/mod.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -15,8 +15,8 @@
 //  the app tool runtime stay on the app-target `Session`.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 import os
 
@@ -36,19 +36,19 @@ private struct ActiveLiveTurn: Sendable {
 
 private final class SubmissionReply: @unchecked Sendable {
     private let lock = NSLock()
-    private var value: Result<TurnInputSubmission, CodexErr>?
-    private var waiter: CheckedContinuation<Result<TurnInputSubmission, CodexErr>, Never>?
+    private var value: Result<TurnInputSubmission, SageErr>?
+    private var waiter: CheckedContinuation<Result<TurnInputSubmission, SageErr>, Never>?
 
     func succeed(_ value: TurnInputSubmission) {
         finish(.success(value))
     }
 
-    func fail(_ error: CodexErr) {
+    func fail(_ error: SageErr) {
         finish(.failure(error))
     }
 
     func wait() async throws -> TurnInputSubmission {
-        let result: Result<TurnInputSubmission, CodexErr> = await withCheckedContinuation { continuation in
+        let result: Result<TurnInputSubmission, SageErr> = await withCheckedContinuation { continuation in
             lock.lock()
             if let value {
                 lock.unlock()
@@ -61,7 +61,7 @@ private final class SubmissionReply: @unchecked Sendable {
         return try result.get()
     }
 
-    private func finish(_ result: Result<TurnInputSubmission, CodexErr>) {
+    private func finish(_ result: Result<TurnInputSubmission, SageErr>) {
         lock.lock()
         if let waiter {
             self.waiter = nil
@@ -204,7 +204,7 @@ public struct ModelClientTurnSampler: TurnSampler {
         let stream = try await session.stream(
             prompt: Prompt(input: responseItems(from: input)),
             modelInfo: minimalModelInfo(slug: model),
-            responsesMetadata: CodexResponsesMetadata(
+            responsesMetadata: SageResponsesMetadata(
                 installationId: "sage",
                 sessionId: client.threadId.description,
                 threadId: client.threadId.description,
@@ -400,7 +400,7 @@ public final class ThreadSession: @unchecked Sendable {
             op: .turnInput(request, mode, reply)
         )
         guard await inbox.send(submission) else {
-            throw CodexErr.internalAgentDied
+            throw SageErr.internalAgentDied
         }
         return try await reply.wait()
     }
@@ -414,7 +414,7 @@ public final class ThreadSession: @unchecked Sendable {
             op: .interAgent(communication, startOptions)
         )
         guard await inbox.send(submission) else {
-            throw CodexErr.internalAgentDied
+            throw SageErr.internalAgentDied
         }
     }
 
@@ -451,7 +451,7 @@ public final class ThreadSession: @unchecked Sendable {
         }
         let leftovers = await inbox.closeAndDrain()
         for leftover in leftovers {
-            fail(leftover, CodexErr.internalAgentDied)
+            fail(leftover, SageErr.internalAgentDied)
         }
         if !shutdownReceived {
             finishShutdown(submissionId: "")
@@ -478,10 +478,10 @@ public final class ThreadSession: @unchecked Sendable {
             do {
                 let result = try routeTurnInput(request, mode: mode, submissionId: submission.id)
                 reply.succeed(result)
-            } catch let error as CodexErr {
+            } catch let error as SageErr {
                 reply.fail(error)
             } catch {
-                reply.fail(CodexErr.fatal(String(describing: error)))
+                reply.fail(SageErr.fatal(String(describing: error)))
             }
             return false
         case .interAgent(let communication, let startOptions):
@@ -508,7 +508,7 @@ public final class ThreadSession: @unchecked Sendable {
             )
         case .continueIfIdle(let expectedPreviousTurnId):
             guard case .responseItem = request.input else {
-                throw CodexErr.invalidRequest("continuation requires internal response input")
+                throw SageErr.invalidRequest("continuation requires internal response input")
             }
             return try startIfIdle(
                 request,
@@ -851,7 +851,7 @@ public final class ThreadSession: @unchecked Sendable {
         cancellation: CancellationToken
     ) async throws -> [TurnInput] {
         guard let toolRunner else {
-            throw CodexErr.unsupportedOperation(
+            throw SageErr.unsupportedOperation(
                 "regular turn requested tools without a TurnToolRunner"
             )
         }
@@ -889,7 +889,7 @@ public final class ThreadSession: @unchecked Sendable {
         }
     }
 
-    private func fail(_ submission: LiveSubmission, _ error: CodexErr) {
+    private func fail(_ submission: LiveSubmission, _ error: SageErr) {
         switch submission.op {
         case .turnInput(_, _, let reply):
             reply.fail(error)

@@ -17,7 +17,7 @@ enum ReviewValidation: Equatable, Sendable {
     case denied(ReviewDecision)
 }
 
-/// Codex `ReviewAction`: the prepared request plus its Guardian scope.
+/// Sage `ReviewAction`: the prepared request plus its Guardian scope.
 struct ReviewAction: Equatable, Sendable {
     var request: GuardianApprovalRequest?
     var prepareError: String?
@@ -35,7 +35,7 @@ struct ReviewAction: Equatable, Sendable {
         ReviewAction(request: nil, prepareError: error, scope: scope)
     }
 
-    /// Codex `ReviewAction::validate`. Turn environments stay out; a
+    /// Sage `ReviewAction::validate`. Turn environments stay out; a
     /// `write_stdin` with no process still cannot be reviewed automatically.
     func validate() -> ReviewValidation {
         guard let request else {

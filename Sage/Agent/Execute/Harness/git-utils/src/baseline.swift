@@ -1,6 +1,6 @@
 //
 //  baseline.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/baseline.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -14,7 +14,7 @@
 import Foundation
 
 let BASELINE_COMMIT_MESSAGE =
-    "Initialize Codex git baseline\n\nCo-authored-by: Codex <noreply@openai.com>"
+    "Initialize Sage git baseline\n\nCo-authored-by: Sage <sage@localhost>"
 
 /// File-level change status between a git baseline and the current directory.
 public enum GitBaselineChangeStatus: Equatable, Sendable {
@@ -95,10 +95,10 @@ private func resetGitRepositorySync(_ root: String) throws {
     try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
     try removeGitMetadata(root)
     try runGitForStatus(root, ["init", "-q"])
-    try runGitForStatus(root, ["-c", "user.name=Codex", "-c", "user.email=noreply@openai.com", "add", "-A"])
+    try runGitForStatus(root, ["-c", "user.name=Sage", "-c", "user.email=sage@localhost", "add", "-A"])
     try runGitForStatus(root, [
-        "-c", "user.name=Codex",
-        "-c", "user.email=noreply@openai.com",
+        "-c", "user.name=Sage",
+        "-c", "user.email=sage@localhost",
         "commit",
         "--allow-empty",
         "-q",

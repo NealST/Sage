@@ -1,6 +1,6 @@
 //
 //  live_thread.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/live_thread.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -8,13 +8,13 @@
 //
 //  Tokio Drop spawn is omitted; `discard()` is explicit. Paginated
 //  resume does not downcast into a state DB (`as_any` was not ported).
-//  `RolloutPersistenceTelemetry` is a local no-op until CodexRollout
+//  `RolloutPersistenceTelemetry` is a local no-op until SageRollout
 //  grows the type.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexRollout
+import SageHistory
+import SageProtocol
+import SageRollout
 import Foundation
 import os
 
@@ -246,12 +246,9 @@ public final class LiveThread: @unchecked Sendable {
         return try await readThread(includeArchived: includeArchived, includeHistory: false)
     }
 
-    /// Returns the live local rollout path for legacy local-only callers.
+    /// Local JSONL thread product was not ported. Child sessions stay in memory.
     public func localRolloutPath() async throws -> String? {
-        guard let localStore = threadStore as? LocalThreadStore else {
-            return nil
-        }
-        return try await localStore.liveRolloutPath(threadId)
+        nil
     }
 
     private func flushPendingMetadataUpdate() async throws {

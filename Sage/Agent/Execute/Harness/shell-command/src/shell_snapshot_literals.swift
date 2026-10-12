@@ -1,6 +1,6 @@
 //
 //  shell_snapshot_literals.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/shell_snapshot_literals.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -321,7 +321,7 @@ private func literalWordsWithQuoting(
                             word.append(contentsOf: Array(decoded[0].utf8))
                         case "simple_expansion", "expansion", "command_substitution",
                              "process_substitution", "arithmetic_expansion":
-                            word.append(contentsOf: Array("${__codex_snapshot_dynamic}".utf8))
+                            word.append(contentsOf: Array("${__sage_snapshot_dynamic}".utf8))
                         default:
                             failed = true
                         }
@@ -334,10 +334,10 @@ private func literalWordsWithQuoting(
                     var body = String(assignment[assignment.index(after: eq)...])
                     if mayInitializeArray {
                         var trimmed = body
-                        if let stripped = trimmed.stripPrefix("${__codex_snapshot_dynamic}") {
+                        if let stripped = trimmed.stripPrefix("${__sage_snapshot_dynamic}") {
                             trimmed = stripped
                         }
-                        if let stripped = Optional(trimmed).flatMap({ $0.hasSuffix("${__codex_snapshot_dynamic}") ? String($0.dropLast("${__codex_snapshot_dynamic}".count)) : $0 }) {
+                        if let stripped = Optional(trimmed).flatMap({ $0.hasSuffix("${__sage_snapshot_dynamic}") ? String($0.dropLast("${__sage_snapshot_dynamic}".count)) : $0 }) {
                             trimmed = stripped
                         }
                         if !trimmed.hasPrefix("(") || !trimmed.hasSuffix(")") {

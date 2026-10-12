@@ -1,6 +1,6 @@
 //
 //  shell_environment.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/shell_environment.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -16,16 +16,16 @@ import Foundation
 
 // MARK: - Constants
 
-public let codexSessionIdEnvVar = "CODEX_SESSION_ID"
-public let codexThreadIdEnvVar = "CODEX_THREAD_ID"
-public let codexExecServerNoiseAuthTokenEnvVar = "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"
+public let sageSessionIdEnvVar = "SAGE_SESSION_ID"
+public let sageThreadIdEnvVar = "SAGE_THREAD_ID"
+public let sageExecServerNoiseAuthTokenEnvVar = "SAGE_EXEC_SERVER_NOISE_AUTH_TOKEN"
 public let openaiFederationRuleIdEnvVar = "OPENAI_FEDERATION_RULE_ID"
 public let openaiIdentityTokenFileEnvVar = "OPENAI_IDENTITY_TOKEN_FILE"
 public let openaiWorkloadIdentityContextEnvVar = "OPENAI_WORKLOAD_IDENTITY_CONTEXT"
 
 /// Environment variables that model-reachable child processes must not inherit.
 public let nonInheritableEnvVars: [String] = [
-    codexExecServerNoiseAuthTokenEnvVar,
+    sageExecServerNoiseAuthTokenEnvVar,
     "NODE_REPL_AUTH_TOKEN",
     openaiFederationRuleIdEnvVar,
     openaiIdentityTokenFileEnvVar,
@@ -126,7 +126,7 @@ public func populateEnv(
 
     // Step 6 — thread ID.
     if let threadId {
-        envMap[codexThreadIdEnvVar] = threadId
+        envMap[sageThreadIdEnvVar] = threadId
     }
 
     // Non-inheritable launch context cannot be restored through overrides.

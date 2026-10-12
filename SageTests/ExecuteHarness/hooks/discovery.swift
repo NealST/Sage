@@ -11,9 +11,9 @@
 //  tests are skipped until that stack exists.
 //
 
-@testable import CodexHooks
-import CodexProtocol
-import CodexUtils
+@testable import SageHooks
+import SageProtocol
+import SageUtils
 import XCTest
 
 final class HooksDiscoveryTests: XCTestCase {

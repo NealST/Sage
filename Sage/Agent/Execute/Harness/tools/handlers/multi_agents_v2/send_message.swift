@@ -11,8 +11,8 @@
 //  LocalAgentControl is attached.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct SendMessageHandler: CoreToolRuntime {
     func toolName() -> ToolName { ToolName(plain: "send_message") }

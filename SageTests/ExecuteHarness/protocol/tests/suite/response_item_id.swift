@@ -9,7 +9,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
+@testable import SageProtocol
 
 final class ResponseItemIdTests: XCTestCase {
     func testCreatesPrefixedUuidV7Ids() throws {

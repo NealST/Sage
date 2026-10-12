@@ -1,6 +1,6 @@
 //
 //  agents_md_manager.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agents_md_manager.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  TurnEnvironmentSnapshot; callers can apply a preloaded snapshot.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 /// Subagents inherit applied snapshots, plus thread providers that opt into sharing.
@@ -70,10 +70,10 @@ public actor AgentsMdManager {
     }
 
     /// Resolves and validates one coherent snapshot for startup or a request boundary.
-    public func refresh() async -> (Result<LoadedAgentsMd?, CodexErr>, [String]) {
+    public func refresh() async -> (Result<LoadedAgentsMd?, SageErr>, [String]) {
         (
             .failure(
-                CodexErr.unsupportedOperation(
+                SageErr.unsupportedOperation(
                     "AgentsMdManager.refresh waits on Config / TurnEnvironmentSnapshot"
                 )
             ),
@@ -122,7 +122,7 @@ let MAX_THREAD_INSTRUCTIONS_TOKENS: Int = 10_000
 func validateThreadInstructionSize(_ bytes: Int) throws {
     if bytes > approxBytesForTokens(MAX_THREAD_INSTRUCTIONS_TOKENS) {
         let estimatedTokens = approxTokensFromByteCount(bytes)
-        throw CodexErr.invalidRequest(
+        throw SageErr.invalidRequest(
             "thread instructions exceed the limit of \(MAX_THREAD_INSTRUCTIONS_TOKENS) estimated tokens (\(estimatedTokens) estimated tokens provided)"
         )
     }

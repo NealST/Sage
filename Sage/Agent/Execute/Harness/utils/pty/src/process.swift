@@ -1,6 +1,6 @@
 //
 //  process.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/pty/src/process.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -124,7 +124,7 @@ public final class ProcessHandle: @unchecked Sendable {
         lock.unlock()
         guard let fd else {
             throw NSError(
-                domain: "CodexUtils.PTY",
+                domain: "SageUtils.PTY",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "process is not attached to a PTY"]
             )

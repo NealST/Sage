@@ -6,12 +6,12 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  JSON-tool entry for Execute. Parses the Codex patch language, PathGuards
+//  JSON-tool entry for Execute. Parses the Sage patch language, PathGuards
 //  every path, then hands the hunks to ToolsRuntimes.ApplyPatchRuntime.
 //
 
 import ApplyPatch
-import CodexCore
+import SageCore
 import Foundation
 import ToolsRuntimes
 
@@ -167,7 +167,7 @@ struct ApplyPatchToolRuntime: ToolRuntime {
 
     func escalateOnFailure() -> Bool { true }
 
-    /// Codex apply_patch: OnRequest and UnlessTrusted ask before dropping the sandbox.
+    /// Sage apply_patch: OnRequest and UnlessTrusted ask before dropping the sandbox.
     func wantsNoSandboxApproval(policy: AskForApproval) -> Bool {
         switch policy {
         case .never:

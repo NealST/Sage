@@ -1,6 +1,6 @@
 //
 //  answered_question.swift
-//  CodexContextFragments
+//  SageContextFragments
 //
 //  Port of codex-rs/context-fragments/src/answered_question.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  snapped to a Swift `Character` boundary.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Identifies an answered question without repeating an unbounded model-authored prompt.

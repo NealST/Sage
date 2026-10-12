@@ -8,7 +8,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 
 struct McpAttributionRecord: Equatable, Sendable {
     var toolName: String

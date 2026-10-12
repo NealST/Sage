@@ -1,6 +1,6 @@
 //
 //  environment.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/environment.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  `PermissionProfileSnapshot` come from models + snapshot files (same module).
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Type placeholder for `codex_execpolicy::RequirementsExecPolicy` until Phase 3.

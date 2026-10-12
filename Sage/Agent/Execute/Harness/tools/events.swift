@@ -10,7 +10,7 @@
 //  are kept so handlers can record structured tool-call facts.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct ToolCallEvent: Equatable, Sendable {

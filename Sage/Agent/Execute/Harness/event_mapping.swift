@@ -1,6 +1,6 @@
 //
 //  event_mapping.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/event_mapping.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  Hook-prompt and full user-media parsing still wait.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func isContextualUserMessageContent(_ item: ResponseItem) -> Bool {

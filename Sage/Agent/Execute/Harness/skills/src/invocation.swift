@@ -1,18 +1,18 @@
 //
 //  invocation.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/invocation.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  `shlex::split` is `posixShlexSplit`. Windows PowerShell tokenization is
-//  unused on macOS. `parse_command_impl` is the public CodexShellCommand API.
+//  unused on macOS. `parse_command_impl` is the public SageShellCommand API.
 //
 
-import CodexProtocol
-import CodexShellCommand
-import CodexUtils
+import SageProtocol
+import SageShellCommand
+import SageUtils
 import Foundation
 
 /// A skill document read or script execution identified in a shell command.

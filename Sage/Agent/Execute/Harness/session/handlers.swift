@@ -10,8 +10,8 @@
 //  review, thread settings, turn settings, conditional interrupt, recovery,
 //  suspend-and-shutdown, user-input answers, permission answers, dynamic-tool
 //  answers, exec approvals, patch approvals, MCP refresh, user-config reload,
-//  background-terminal cleanup, elicitation replies, and denied-action
-//  approvals, shutdown. An idle user submission starts `RegularSessionTask` with
+//  background-terminal cleanup, elicitation replies, denied-action
+//  approvals, thread memory mode, and user shell commands, shutdown. An idle user submission starts `RegularSessionTask` with
 //  that submission's start options. Mailbox mail starts a turn when it
 //  sets `triggerTurn`, or when the thread has an outstanding durable
 //  sleep; queue-only mail inherits the reference context's cyber
@@ -20,9 +20,10 @@
 //  keep receiving steer and interrupt.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
+import SageAsyncUtils
+import SageCore
+import SageProtocol
+import SageThreadStore
 import Foundation
 
 func triggersTurn(_ input: SessionTurnInput) -> Bool {
@@ -245,6 +246,13 @@ extension Session {
         case .approveGuardianDeniedAction(let event):
             approveGuardianDeniedAction(event)
             return false
+        case .setThreadMemoryMode(let mode):
+            await setThreadMemoryMode(submissionId: submission.id, mode: mode)
+            return false
+        case .runUserShellCommand(let command, let timeoutMs):
+            await runUserShellCommand(
+                submissionId: submission.id, command: command, timeoutMs: timeoutMs)
+            return false
         }
     }
 
@@ -265,7 +273,7 @@ extension Session {
              .recoverTurn, .userInputAnswer, .requestPermissionsResponse, .dynamicToolResponse,
              .execApproval, .patchApproval, .refreshMcpServers, .reloadUserConfig,
              .cleanBackgroundTerminals, .resolveElicitation, .approveGuardianDeniedAction,
-             .interrupt,
+             .setThreadMemoryMode, .runUserShellCommand, .interrupt,
              .interruptIfNoPendingInput, .suspendTurnAndShutdown, .shutdown:
             break
         }
@@ -279,11 +287,78 @@ extension Session {
         guard let approved = prettyApprovedGuardianAction(event.action) else { return }
         injectNoNewTurn([GuardianApprovedAction(text: approved).asResponseItem()])
     }
+
+    /// rust `set_thread_memory_mode`. Persistence failure emits an error and
+    /// does not start a turn.
+    func setThreadMemoryMode(submissionId: String, mode: ThreadMemoryMode) async {
+        do {
+            try await persistThreadMemoryModeUpdate(mode)
+        } catch {
+            sendEventRaw(Event(
+                id: submissionId,
+                msg: .error(ErrorEvent(message: String(describing: error), errorInfo: .other))
+            ))
+        }
+    }
+
+    /// rust `persist_thread_memory_mode_update`.
+    func persistThreadMemoryModeUpdate(_ mode: ThreadMemoryMode) async throws {
+        let liveThread = try liveThreadForPersistence("update thread memory mode")
+        try await liveThread.persist(.standard)
+        try await liveThread.flush()
+        try await liveThread.updateMemoryMode(mode, includeArchived: false)
+        try await liveThread.flush()
+    }
+
+    /// rust `Session::live_thread_for_persistence`.
+    func liveThreadForPersistence(_ operation: String) throws -> LiveThread {
+        guard let liveThread = services.liveThread else {
+            throw SessionPersistenceDisabled(operation: operation)
+        }
+        return liveThread
+    }
+
+    /// rust `run_user_shell_command`. An active turn runs the command beside
+    /// that turn. An idle session starts a shell turn and does not sample.
+    func runUserShellCommand(submissionId: String, command: String, timeoutMs: UInt64?) async {
+        if let task = activeTurn?.task, let token = task.cancellationToken {
+            let turnContext = task.turnContext
+            Task { [weak self] in
+                guard let self else { return }
+                await executeUserShellCommand(UserShellCommandRequest(
+                    session: self,
+                    turnContext: turnContext,
+                    command: command,
+                    timeoutMs: timeoutMs,
+                    cancellationToken: token,
+                    mode: .activeTurnAuxiliary
+                ))
+            }
+            return
+        }
+        let turnContext = newTurnContext(subId: submissionId)
+        lastStartedTurnContext = turnContext
+        lastStartedTurnId = turnContext.subId
+        state.lastStartedTurnId = turnContext.subId
+        startDetachedTask(
+            UserShellCommandTask(command: command, timeoutMs: timeoutMs),
+            turnContext: turnContext,
+            input: []
+        )
+    }
+}
+
+struct SessionPersistenceDisabled: Error, CustomStringConvertible {
+    var operation: String
+
+    var description: String {
+        "Session persistence is disabled; cannot \(operation)."
+    }
 }
 
 func prettyApprovedGuardianAction(_ action: GuardianAssessmentAction) -> String? {
     guard let data = try? JSONEncoder().encode(action),
-          let actionValue = try? JSONDecoder().decode(CodexProtocol.JSONValue.self, from: data)
+          let actionValue = try? JSONDecoder().decode(SageProtocol.JSONValue.self, from: data)
     else { return nil }
     return prettyJSONValue(
         .object([
@@ -293,7 +368,7 @@ func prettyApprovedGuardianAction(_ action: GuardianAssessmentAction) -> String?
     )
 }
 
-func prettyJSONValue(_ value: CodexProtocol.JSONValue, indent: Int = 0) -> String {
+func prettyJSONValue(_ value: SageProtocol.JSONValue, indent: Int = 0) -> String {
     switch value {
     case .array(let values):
         let rendered = values.map { prettyJSONValue($0, indent: indent + 2) }
@@ -302,7 +377,7 @@ func prettyJSONValue(_ value: CodexProtocol.JSONValue, indent: Int = 0) -> Strin
     case .object(let object):
         let lines = object.keys.sorted().map { key in
             let rendered = prettyJSONValue(object[key] ?? .null, indent: indent + 2)
-            return "\(CodexProtocol.JSONValue.string(key).encodedString()): \(rendered)"
+            return "\(SageProtocol.JSONValue.string(key).encodedString()): \(rendered)"
         }
         return prettyJSONCollection(lines, indent: indent, brackets: ("{", "}"))
 

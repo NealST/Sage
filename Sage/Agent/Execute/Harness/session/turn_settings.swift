@@ -14,8 +14,8 @@
 //  publication check after that lookup wait.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 
 extension Session {

@@ -1,6 +1,6 @@
 //
 //  macos_child.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/pty/src/macos_child.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -32,7 +32,7 @@ final class NativeChild {
     func wait() async throws -> Int32 {
         if let status { return status }
         guard let pid else {
-            throw NSError(domain: "CodexUtils.PTY", code: 4, userInfo: [
+            throw NSError(domain: "SageUtils.PTY", code: 4, userInfo: [
                 NSLocalizedDescriptionKey: "child already transferred to reaper"
             ])
         }

@@ -10,10 +10,10 @@
 //  Request construction is live. Session prewarm / exec-server stay out.
 //
 
-import CodexProtocol
-import CodexSandboxing
-import CodexShellCommand
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageShellCommand
+import SageUtils
 import Foundation
 
 func shellSnapshotRequest(

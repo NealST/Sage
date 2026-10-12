@@ -11,7 +11,7 @@
 //  argument parsing live next to unified_exec.swift.
 //
 
-import CodexCore
+import SageCore
 
 struct ExecCommandSessionRequest: Equatable, Sendable {
     var command: [String]

@@ -11,8 +11,8 @@
 //  LocalAgentControl is attached. Rollout restore waits on ThreadManager.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct ResumeAgentArgs: Decodable, Equatable, Sendable {
     var id: String
@@ -53,7 +53,7 @@ struct ResumeAgentHandler: CoreToolRuntime {
                 source: invocation.sessionSource
             )
             return ResumeAgentResult(status: agent.status)
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             throw collabAgentError(agentId: agentId, err: err)
         }
     }

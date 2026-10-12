@@ -10,9 +10,9 @@
 //  the HookRuntime project/skills `registry.dispatch` needs for Pre/Post.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
+import SageAsyncUtils
+import SageCore
+import SageProtocol
 import Foundation
 
 enum ToolPayload: Equatable, Sendable {

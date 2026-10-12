@@ -10,9 +10,9 @@
 //  sleep early.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
+import SageAsyncUtils
+import SageCore
+import SageProtocol
 import Foundation
 
 let SLEEP_TOOL_NAME = "sleep"

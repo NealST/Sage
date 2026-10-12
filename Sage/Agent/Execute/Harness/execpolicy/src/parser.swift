@@ -1,6 +1,6 @@
 //
 //  parser.swift
-//  CodexExecPolicy
+//  SageExecPolicy
 //
 //  Port of codex-rs/execpolicy/src/parser.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -15,7 +15,7 @@
 //  execpolicy language.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 public final class PolicyParser {

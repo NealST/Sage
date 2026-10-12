@@ -1,6 +1,6 @@
 //
 //  child_config.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/child_config.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  wait on Session / TurnContext / Config.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public let MAX_SPAWN_AGENT_MODEL_OVERRIDES = 5
@@ -52,24 +52,24 @@ public struct SpawnConfigOptions: Equatable, Sendable {
 }
 
 public func prepareAgentSpawnConfig(_ options: SpawnConfigOptions) async throws -> Never {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "prepare_agent_spawn_config waits on Session / StepContext / Config"
     )
 }
 
 public func buildAgentSpawnConfig() throws -> Never {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "build_agent_spawn_config waits on BaseInstructions / StepContext / Config"
     )
 }
 
 public func buildAgentResumeConfig() throws -> Never {
-    throw CodexErr.unsupportedOperation("build_agent_resume_config waits on TurnContext / Config")
+    throw SageErr.unsupportedOperation("build_agent_resume_config waits on TurnContext / Config")
 }
 
 public func rejectFullForkAgentTypeOverride(_ agentType: String?) throws {
     if agentType != nil {
-        throw CodexErr.invalidRequest(
+        throw SageErr.invalidRequest(
             "Full-history forked agents inherit the parent agent type; omit agent_type, or spawn without a full-history fork."
         )
     }
@@ -92,7 +92,7 @@ public func findSpawnAgentModelName(
         .prefix(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
         .map(\.model)
         .joined(separator: ", ")
-    throw CodexErr.invalidRequest(
+    throw SageErr.invalidRequest(
         "Unknown model `\(requestedModel)` for spawn_agent. Available models: \(available)"
     )
 }
@@ -108,7 +108,7 @@ public func validateSpawnAgentReasoningEffort(
     let supported = supportedReasoningLevels
         .map { $0.effort.asStr }
         .joined(separator: ", ")
-    throw CodexErr.invalidRequest(
+    throw SageErr.invalidRequest(
         "Reasoning effort `\(requestedReasoningEffort.asStr)` is not supported for model `\(model)`. Supported reasoning efforts: \(supported)"
     )
 }
@@ -183,7 +183,7 @@ public func resolveSpawnAgentServiceTier(
 }
 
 public func applySpawnAgentServiceTier() async throws {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "apply_spawn_agent_service_tier waits on Session / ModelsManager / Config"
     )
 }

@@ -6,15 +6,15 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Routes like Codex CompactTask: token-budget installs a fresh window,
+//  Routes like Sage CompactTask: token-budget installs a fresh window,
 //  otherwise `runAutoCompact` does remote V2 or a local fold. Occupancy
 //  helpers stay here so Sage fold and the harness window share one
 //  threshold and reset contract.
 //
 
-import CodexAsyncUtils
-import CodexCore
-import CodexProtocol
+import SageAsyncUtils
+import SageCore
+import SageProtocol
 import Foundation
 
 enum CompactTask {
@@ -56,7 +56,7 @@ enum CompactTask {
         return .local
     }
 
-    /// Codex `start_new_context_window`: bump the window id and drop prefill
+    /// Sage `start_new_context_window`: bump the window id and drop prefill
     /// so the next sample is measured against a new token-budget window.
     @discardableResult
     static func resetWindow(_ window: inout AutoCompactWindow) -> (UInt64, AutoCompactWindowIds) {
@@ -131,7 +131,7 @@ enum CompactTask {
     }
 
     /// Tool results first (oldest first) so the compressor sees the evidence
-    /// Codex would summarize; leftover budget keeps other events newest-first.
+    /// Sage would summarize; leftover budget keeps other events newest-first.
     static func selectFoldSlice(
         _ events: [AgentEvent],
         budget: PromptBudget
@@ -212,7 +212,7 @@ final class CompactSessionTask: SessionTask, @unchecked Sendable {
     ) async throws -> String? {
         _ = input
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         _ = session.startNewContextWindow()
         session.sendEvent(context, .contextCompacted(ContextCompactedEvent()))

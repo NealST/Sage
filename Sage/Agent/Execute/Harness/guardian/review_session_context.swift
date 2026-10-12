@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 //  Recent user / tool / assistant lines, truncated to the same per-entry
-//  cap Codex uses for a synchronous review. Checkpoint policy stays out.
+//  cap Sage uses for a synchronous review. Checkpoint policy stays out.
 //
 
 import Foundation

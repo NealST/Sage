@@ -1,41 +1,41 @@
 // swift-tools-version: 6.0
 //
-// Execute harness modules. Source paths match the Codex tree so a Codex file
+// Execute harness modules. Source paths match the Sage tree so a Sage file
 // and its Swift port stay side by side (EXECUTE_HARNESS_PORT_PLAN.md §5):
 //
 //   codex-rs/protocol/src/<file>.rs
-//     → protocol/src/<file>.swift             module CodexProtocol
+//     → protocol/src/<file>.swift             module SageProtocol
 //   codex-rs/file-system/src/lib.rs
 //     → file-system/src/lib.swift             module FileSystem
 //   codex-rs/apply-patch/src/<file>.rs
 //     → apply-patch/src/<file>.swift          module ApplyPatch
 //   codex-rs/git-utils/src/<file>.rs
-//     → git-utils/src/<file>.swift            module CodexGitUtils
+//     → git-utils/src/<file>.swift            module SageGitUtils
 //   codex-rs/core/src/tools/runtimes/<file>.rs
 //     → tools/runtimes/<file>.swift           module ToolsRuntimes
 //   codex-rs/sandboxing/src/<file>.rs
-//     → sandboxing/src/<file>.swift           module CodexSandboxing
+//     → sandboxing/src/<file>.swift           module SageSandboxing
 //   codex-rs/shell-command/src/<file>.rs
-//     → shell-command/src/<file>.swift        module CodexShellCommand
+//     → shell-command/src/<file>.swift        module SageShellCommand
 //   codex-rs/execpolicy/src/<file>.rs
-//     → execpolicy/src/<file>.swift           module CodexExecPolicy
+//     → execpolicy/src/<file>.swift           module SageExecPolicy
 //   codex-rs/context-fragments/src/<file>.rs
-//     → context-fragments/src/<file>.swift    module CodexContextFragments
+//     → context-fragments/src/<file>.swift    module SageContextFragments
 //   codex-rs/agent-roles/src/<file>.rs
-//     → agent-roles/src/<file>.swift          module CodexAgentRoles
+//     → agent-roles/src/<file>.swift          module SageAgentRoles
 //   codex-rs/hooks/src/<file>.rs
-//     → hooks/src/<file>.swift                module CodexHooks
+//     → hooks/src/<file>.swift                module SageHooks
 //   codex-rs/skills/src/<file>.rs
-//     → skills/src/<file>.swift               module CodexSkills
+//     → skills/src/<file>.swift               module SageSkills
 //   codex-rs/otel/src/<file>.rs
-//     → otel/src/<file>.swift                 module CodexOtel
+//     → otel/src/<file>.swift                 module SageOtel
 //   codex-rs/terminal-detection/src/<file>.rs
-//     → terminal-detection/src/<file>.swift   module CodexTerminalDetection
+//     → terminal-detection/src/<file>.swift   module SageTerminalDetection
 //
 // `tools/handlers`, `tools/*.swift`, `session`, and `tasks` stay in the Sage
 // app module. They close over Sage session types (PathGuard, AgentTool,
-// TurnCoordinator). Codex keeps those in one core crate too; Swift splits a
-// module only where a second file must reuse a Codex name (`apply_patch`).
+// TurnCoordinator). Sage keeps those in one core crate too; Swift splits a
+// module only where a second file must reuse a Sage name (`apply_patch`).
 //
 // Per-file port state is tracked in PORTING.md (scripts/harness_port.py).
 
@@ -43,32 +43,31 @@ import PackageDescription
 
 let package = Package(
     name: "ExecuteHarness",
-    // .v15: CodexProtocol uses UInt128 (ThreadId.init(u128:)), available macOS 15+.
+    // .v15: SageProtocol uses UInt128 (ThreadId.init(u128:)), available macOS 15+.
     platforms: [.macOS(.v15)],
     products: [
-        .library(name: "CodexProtocol", targets: ["CodexProtocol"]),
-        .library(name: "CodexUtils", targets: ["CodexUtils"]),
-        .library(name: "CodexAsyncUtils", targets: ["CodexAsyncUtils"]),
+        .library(name: "SageProtocol", targets: ["SageProtocol"]),
+        .library(name: "SageUtils", targets: ["SageUtils"]),
+        .library(name: "SageAsyncUtils", targets: ["SageAsyncUtils"]),
         .library(name: "FileSystem", targets: ["FileSystem"]),
         .library(name: "ApplyPatch", targets: ["ApplyPatch"]),
-        .library(name: "CodexGitUtils", targets: ["CodexGitUtils"]),
-        .library(name: "CodexSandboxing", targets: ["CodexSandboxing"]),
-        .library(name: "CodexShellCommand", targets: ["CodexShellCommand"]),
-        .library(name: "CodexExecPolicy", targets: ["CodexExecPolicy"]),
-        .library(name: "CodexCore", targets: ["CodexCore"]),
-        .library(name: "CodexNetworkProxy", targets: ["CodexNetworkProxy"]),
-        .library(name: "CodexModelProviderInfo", targets: ["CodexModelProviderInfo"]),
-        .library(name: "CodexAPI", targets: ["CodexAPI"]),
-        .library(name: "CodexHistory", targets: ["CodexHistory"]),
-        .library(name: "CodexRollout", targets: ["CodexRollout"]),
-        .library(name: "CodexState", targets: ["CodexState"]),
-        .library(name: "CodexThreadStore", targets: ["CodexThreadStore"]),
-        .library(name: "CodexContextFragments", targets: ["CodexContextFragments"]),
-        .library(name: "CodexAgentRoles", targets: ["CodexAgentRoles"]),
-        .library(name: "CodexHooks", targets: ["CodexHooks"]),
-        .library(name: "CodexSkills", targets: ["CodexSkills"]),
-        .library(name: "CodexOtel", targets: ["CodexOtel"]),
-        .library(name: "CodexTerminalDetection", targets: ["CodexTerminalDetection"]),
+        .library(name: "SageGitUtils", targets: ["SageGitUtils"]),
+        .library(name: "SageSandboxing", targets: ["SageSandboxing"]),
+        .library(name: "SageShellCommand", targets: ["SageShellCommand"]),
+        .library(name: "SageExecPolicy", targets: ["SageExecPolicy"]),
+        .library(name: "SageCore", targets: ["SageCore"]),
+        .library(name: "SageNetworkProxy", targets: ["SageNetworkProxy"]),
+        .library(name: "SageModelProviderInfo", targets: ["SageModelProviderInfo"]),
+        .library(name: "SageAPI", targets: ["SageAPI"]),
+        .library(name: "SageHistory", targets: ["SageHistory"]),
+        .library(name: "SageRollout", targets: ["SageRollout"]),
+        .library(name: "SageState", targets: ["SageState"]),
+        .library(name: "SageThreadStore", targets: ["SageThreadStore"]),
+        .library(name: "SageContextFragments", targets: ["SageContextFragments"]),
+        .library(name: "SageAgentRoles", targets: ["SageAgentRoles"]),
+        .library(name: "SageHooks", targets: ["SageHooks"]),
+        .library(name: "SageSkills", targets: ["SageSkills"]),
+        .library(name: "SageTerminalDetection", targets: ["SageTerminalDetection"]),
         .library(name: "ToolsRuntimes", targets: ["ToolsRuntimes"]),
     ],
     dependencies: [
@@ -77,38 +76,38 @@ let package = Package(
     ],
     targets: [
         // codex-rs/protocol depends on the codex-utils crates (path-uri,
-        // absolute-path, image, ...), so CodexProtocol depends on CodexUtils.
+        // absolute-path, image, ...), so SageProtocol depends on SageUtils.
         // In the Sage app target these sources are also compiled directly
         // (synchronized folder), where same-module shadowing keeps references
         // resolving to the app-module copies.
         .target(
-            name: "CodexProtocol",
-            dependencies: ["CodexUtils"],
+            name: "SageProtocol",
+            dependencies: ["SageUtils"],
             path: "protocol/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // All codex-rs/utils/* crates compile into one module (plan §4.1).
         .target(
-            name: "CodexUtils",
+            name: "SageUtils",
             path: "utils",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/async-utils — separate module because an SPM target has a
         // single path and async-utils/ is not under utils/ (plan §4.1 note).
         .target(
-            name: "CodexAsyncUtils",
+            name: "SageAsyncUtils",
             path: "async-utils/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
             name: "FileSystem",
-            dependencies: ["CodexProtocol", "CodexUtils"],
+            dependencies: ["SageProtocol", "SageUtils"],
             path: "file-system/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
             name: "ApplyPatch",
-            dependencies: ["FileSystem", "CodexUtils"],
+            dependencies: ["FileSystem", "SageUtils"],
             path: "apply-patch/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
@@ -116,66 +115,67 @@ let package = Package(
         // trust.rs uses ExecutorFileSystem, so this target also depends on FileSystem
         // (same as upstream `codex-file-system`).
         .target(
-            name: "CodexGitUtils",
-            dependencies: ["CodexProtocol", "CodexUtils", "FileSystem"],
+            name: "SageGitUtils",
+            dependencies: ["SageProtocol", "SageUtils", "FileSystem"],
             path: "git-utils/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(
             name: "ToolsRuntimes",
-            dependencies: ["ApplyPatch", "CodexProtocol"],
+            dependencies: ["ApplyPatch", "SageProtocol"],
             path: "tools/runtimes",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // network-proxy type layer only (plan §2.3 / Phase 4). The local
         // proxy process stays excluded.
         .target(
-            name: "CodexNetworkProxy",
+            name: "SageNetworkProxy",
             path: "network-proxy/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/model-provider-info — Phase 6 provider catalog.
         .target(
-            name: "CodexModelProviderInfo",
-            dependencies: ["CodexProtocol"],
+            name: "SageModelProviderInfo",
+            dependencies: ["SageProtocol"],
             path: "model-provider-info/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/codex-api — Phase 6 SSE / Responses subset.
         // Realtime/websocket files stay deferred (Phase 10).
         .target(
-            name: "CodexAPI",
-            dependencies: ["CodexProtocol", "CodexUtils", "CodexModelProviderInfo"],
-            path: "codex-api/src",
+            name: "SageAPI",
+            dependencies: ["SageProtocol", "SageUtils", "SageModelProviderInfo"],
+            path: "sage-api/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/history — rollout JSONL item wire types. Not listed as its
         // own crate in PORTING.md; rollout depends on it.
         .target(
-            name: "CodexHistory",
-            dependencies: ["CodexProtocol"],
+            name: "SageHistory",
+            dependencies: ["SageProtocol"],
             path: "history/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/rollout — JSONL recorder / list / compression (Phase 7).
         .target(
-            name: "CodexRollout",
-            dependencies: ["CodexProtocol", "CodexHistory", "CodexState", "CodexUtils"],
+            name: "SageRollout",
+            dependencies: ["SageProtocol", "SageHistory", "SageState", "SageUtils"],
             path: "rollout/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // codex-rs/state — models + GRDB adapter. Path is state/src so it
-        // does not collide with Harness/state/ (Phase 5 session services).
+        // Slim types for rollout / in-memory child sessions. Sage
+        // memories/goals/remote_control runtime was removed.
         .target(
-            name: "CodexState",
-            dependencies: ["CodexProtocol", "CodexHistory"],
+            name: "SageState",
+            dependencies: ["SageProtocol", "SageHistory"],
             path: "state/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // codex-rs/thread-store — types + in-memory / local GRDB store.
+        // In-memory thread store for child-agent sessions. Sage thread
+        // product (local JSONL listing/archive) was removed.
         .target(
-            name: "CodexThreadStore",
-            dependencies: ["CodexProtocol", "CodexHistory", "CodexRollout", "CodexState"],
+            name: "SageThreadStore",
+            dependencies: ["SageProtocol", "SageHistory", "SageRollout", "SageState"],
             path: "thread-store/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
@@ -183,8 +183,8 @@ let package = Package(
         // landlock/bwrap/windows are excluded(platform). Network-proxy types
         // used by seatbelt/violation are inlined (plan §2.3 / Phase 4).
         .target(
-            name: "CodexSandboxing",
-            dependencies: ["CodexProtocol", "CodexUtils"],
+            name: "SageSandboxing",
+            dependencies: ["SageProtocol", "SageUtils"],
             path: "sandboxing/src",
             resources: [
                 .copy("seatbelt_base_policy.sbpl"),
@@ -197,10 +197,10 @@ let package = Package(
         // codex-rs/shell-command — Phase 3. bash/zsh/sh + parse_command are
         // faithful; PowerShell/Windows files are adapted stubs.
         .target(
-            name: "CodexShellCommand",
+            name: "SageShellCommand",
             dependencies: [
-                "CodexProtocol",
-                "CodexUtils",
+                "SageProtocol",
+                "SageUtils",
                 .product(name: "SwiftTreeSitter", package: "swift-tree-sitter"),
                 .product(name: "TreeSitterBash", package: "tree-sitter-bash"),
             ],
@@ -211,30 +211,30 @@ let package = Package(
         // faithful; PolicyParser is a prefix-rule subset evaluator (plan §10.1)
         // because Swift has no Starlark crate.
         .target(
-            name: "CodexExecPolicy",
-            dependencies: ["CodexUtils"],
+            name: "SageExecPolicy",
+            dependencies: ["SageUtils"],
             path: "execpolicy/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/context-fragments — Phase 8 faithful fragment types.
         .target(
-            name: "CodexContextFragments",
-            dependencies: ["CodexProtocol", "CodexUtils"],
+            name: "SageContextFragments",
+            dependencies: ["SageProtocol", "SageUtils"],
             path: "context-fragments/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/agent-roles — types + discovery faithful; loader adapted
         // without ConfigLayerStack (plan §Phase 8).
         .target(
-            name: "CodexAgentRoles",
-            dependencies: ["CodexUtils", "FileSystem"],
+            name: "SageAgentRoles",
+            dependencies: ["SageUtils", "FileSystem"],
             path: "agent-roles/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // codex-rs/hooks — types/events/engine; schema fixtures are bundled.
         .target(
-            name: "CodexHooks",
-            dependencies: ["CodexProtocol", "CodexUtils"],
+            name: "SageHooks",
+            dependencies: ["SageProtocol", "SageUtils"],
             path: "hooks/src",
             resources: [
                 .copy("schema/generated"),
@@ -244,52 +244,44 @@ let package = Package(
         // codex-rs/skills — Phase 8 model/parser/mentions/selection.
         // install_system_skills throws until sample assets are SPM resources.
         .target(
-            name: "CodexSkills",
-            dependencies: ["CodexProtocol", "CodexUtils", "CodexShellCommand"],
+            name: "SageSkills",
+            dependencies: ["SageProtocol", "SageUtils", "SageShellCommand"],
             path: "skills/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // codex-rs/otel — Phase 10 minimal metrics (in-memory, no OTLP SDK).
+        // Terminal detection — environment-only probe.
         .target(
-            name: "CodexOtel",
-            dependencies: ["CodexProtocol", "CodexUtils"],
-            path: "otel/src",
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
-        // codex-rs/terminal-detection — Phase 10 environment-only probe.
-        .target(
-            name: "CodexTerminalDetection",
+            name: "SageTerminalDetection",
             path: "terminal-detection/src",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // Phase 3 core files. They sit at the Harness root so paths stay 1:1
         // with codex-rs/core/src, but Xcode will not compile a nested Swift
-        // package into the app target. CodexCore is the compile home until
+        // package into the app target. SageCore is the compile home until
         // the rest of core moves here in Phase 4–5.
         .target(
-            name: "CodexCore",
+            name: "SageCore",
             dependencies: [
-                "CodexProtocol",
-                "CodexUtils",
-                "CodexAsyncUtils",
+                "SageProtocol",
+                "SageUtils",
+                "SageAsyncUtils",
                 "FileSystem",
                 "ApplyPatch",
-                "CodexSandboxing",
-                "CodexShellCommand",
-                "CodexExecPolicy",
-                "CodexNetworkProxy",
-                "CodexModelProviderInfo",
-                "CodexAPI",
-                "CodexHistory",
-                "CodexRollout",
-                "CodexState",
-                "CodexThreadStore",
-                "CodexContextFragments",
-                "CodexAgentRoles",
-                "CodexHooks",
-                "CodexSkills",
-                "CodexOtel",
-                "CodexTerminalDetection",
+                "SageSandboxing",
+                "SageShellCommand",
+                "SageExecPolicy",
+                "SageNetworkProxy",
+                "SageModelProviderInfo",
+                "SageAPI",
+                "SageHistory",
+                "SageRollout",
+                "SageState",
+                "SageThreadStore",
+                "SageContextFragments",
+                "SageAgentRoles",
+                "SageHooks",
+                "SageSkills",
+                "SageTerminalDetection",
             ],
             path: ".",
             sources: [
@@ -325,7 +317,6 @@ let package = Package(
                 "turn_metadata.swift",
                 "turn_timing.swift",
                 "mcp.swift",
-                "mcp_openai_file.swift",
                 "mcp_skill_dependencies.swift",
                 "mcp_tool_approval_templates.swift",
                 "mcp_tool_call.swift",
@@ -343,24 +334,21 @@ let package = Package(
                 "responses_metadata.swift",
                 "responses_retry.swift",
                 "web_search.swift",
-                "attestation.swift",
-                "installation_id.swift",
                 "session_prefix.swift",
                 "session_startup_prewarm.swift",
                 "rollout_budget.swift",
                 "thread_startup_metadata.swift",
                 "memory_usage.swift",
-                "feedback_config.swift",
                 "session_rollout_init_error.swift",
                 "thread_rollout_truncation.swift",
                 "rollout.swift",
                 "state_db_bridge.swift",
                 "thread_manager.swift",
                 "thread_manager",
-                "codex_thread.swift",
+                "sage_thread.swift",
+                "sage_delegate.swift",
                 "session/session_mod.swift",
                 "session/turn_input.swift",
-                "codex_delegate.swift",
                 "mention_syntax.swift",
                 "elicitation.swift",
                 "hook_mcp_executor.swift",
@@ -370,13 +358,7 @@ let package = Package(
                 "agent",
                 "agent_communication.swift",
                 "agent_message_board.swift",
-                "apps",
-                "connectors.swift",
-                "cyber_access_program.swift",
-                "plugins",
                 "session_multi_agents.swift",
-                "environment_selection.swift",
-                "otel_init.swift",
                 "core_test_support.swift",
                 "lib.swift",
             ],
@@ -385,11 +367,11 @@ let package = Package(
         .testTarget(
             name: "Phase7PersistenceTests",
             dependencies: [
-                "CodexHistory",
-                "CodexProtocol",
-                "CodexRollout",
-                "CodexState",
-                "CodexThreadStore",
+                "SageHistory",
+                "SageProtocol",
+                "SageRollout",
+                "SageState",
+                "SageThreadStore",
             ],
             path: "Tests/Phase7PersistenceTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
@@ -397,13 +379,13 @@ let package = Package(
         .testTarget(
             name: "Phase8GuardianSkillsTests",
             dependencies: [
-                "CodexAgentRoles",
-                "CodexContextFragments",
-                "CodexCore",
-                "CodexHooks",
-                "CodexProtocol",
-                "CodexSkills",
-                "CodexUtils",
+                "SageAgentRoles",
+                "SageContextFragments",
+                "SageCore",
+                "SageHooks",
+                "SageProtocol",
+                "SageSkills",
+                "SageUtils",
                 "FileSystem",
             ],
             path: "Tests/Phase8GuardianSkillsTests",
@@ -412,28 +394,16 @@ let package = Package(
         .testTarget(
             name: "Phase9AgentTests",
             dependencies: [
-                "CodexAgentRoles",
-                "CodexAPI",
-                "CodexAsyncUtils",
-                "CodexCore",
-                "CodexHistory",
-                "CodexProtocol",
-                "CodexSkills",
-                "CodexUtils",
+                "SageAgentRoles",
+                "SageAPI",
+                "SageAsyncUtils",
+                "SageCore",
+                "SageHistory",
+                "SageProtocol",
+                "SageSkills",
+                "SageUtils",
             ],
             path: "Tests/Phase9AgentTests",
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
-        .testTarget(
-            name: "Phase10OtelTests",
-            dependencies: [
-                "CodexCore",
-                "CodexOtel",
-                "CodexProtocol",
-                "CodexTerminalDetection",
-                "CodexUtils",
-            ],
-            path: "Tests/Phase10OtelTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

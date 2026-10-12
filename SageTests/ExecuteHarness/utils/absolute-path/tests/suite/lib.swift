@@ -14,7 +14,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexUtils
+@testable import SageUtils
 
 final class AbsolutePathBufTests: XCTestCase {
     /// `tempfile::tempdir`.

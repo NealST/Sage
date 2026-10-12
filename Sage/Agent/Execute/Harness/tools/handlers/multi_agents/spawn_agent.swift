@@ -8,14 +8,14 @@
 //  Port status: adapted
 //
 //  Spec, argument parsing, registry spawn, fork_context, and
-//  turn-item recording on the caller CodexThread are live. Child thread
+//  turn-item recording on the caller SageThread are live. Child thread
 //  create submits the initial user input through ThreadSession.
 //  Analytics stay deferred. R4a: basename `spawn.swift` belongs to
 //  core/src/spawn.rs.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct SpawnAgentArgs: Decodable, Equatable, Sendable {
     var message: String?
@@ -158,7 +158,7 @@ struct SpawnAgentHandler: CoreToolRuntime {
             )
         )
         if let spawnError {
-            throw (spawnError as? CodexErr).map(collabSpawnError) ?? spawnError
+            throw (spawnError as? SageErr).map(collabSpawnError) ?? spawnError
         }
         guard let spawnedAgent else {
             throw FunctionCallError.respondToModel("collab spawn failed")

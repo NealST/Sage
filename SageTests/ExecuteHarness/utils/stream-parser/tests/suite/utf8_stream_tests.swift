@@ -13,7 +13,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexUtils
+@testable import SageUtils
 
 final class Utf8StreamParserTests: XCTestCase {
 

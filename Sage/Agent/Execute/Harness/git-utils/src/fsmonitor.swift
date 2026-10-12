@@ -1,6 +1,6 @@
 //
 //  fsmonitor.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/fsmonitor.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -36,7 +36,7 @@ public protocol FsmonitorProbeRunner: Sendable {
 /// Returns the safe filesystem monitor override for the target repository.
 ///
 /// This intentionally probes every time. Effective Git configuration is
-/// layered, may use conditional includes, and can change while Codex is
+/// layered, may use conditional includes, and can change while Sage is
 /// running.
 public func detectFsmonitorOverride<Runner: FsmonitorProbeRunner>(
     _ runner: inout Runner

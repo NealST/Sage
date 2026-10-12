@@ -61,7 +61,7 @@ nonisolated enum SeatbeltSandbox {
         )
     }
 
-    /// Codex workspace-write: writable root = focus root; `.git` stays
+    /// Sage workspace-write: writable root = focus root; `.git` stays
     /// read-only unless `protectedMetadataWrites` is set.
     static func workspaceWriteProfile(
         policy: PathGuard.Policy,

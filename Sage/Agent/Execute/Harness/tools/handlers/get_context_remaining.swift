@@ -8,8 +8,8 @@
 //  Port status: adapted
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct GetContextRemainingOutput: ToolOutput {
     var tokensLeft: Int64?

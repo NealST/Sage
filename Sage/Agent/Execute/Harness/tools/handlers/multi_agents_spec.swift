@@ -12,8 +12,8 @@
 //  Output schemas use JSONValue objects instead of serde_json macros.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 let MULTI_AGENT_V1_NAMESPACE = "multi_agent_v1"
 let MULTI_AGENT_V1_NAMESPACE_DESCRIPTION = "Tools for spawning and managing sub-agents."

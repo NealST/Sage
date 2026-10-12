@@ -24,9 +24,13 @@
 //  `resolveElicitation` resumes a waiting MCP elicitation without starting a turn.
 //  `approveGuardianDeniedAction` records one approved retry of a denied action
 //  without starting a turn.
+//  `setThreadMemoryMode` persists whether this thread can generate memories
+//  without starting a turn.
+//  `runUserShellCommand` runs one user shell command. An active turn keeps
+//  it auxiliary; an idle session starts a shell turn.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum SessionOp: Equatable, Sendable {
@@ -56,9 +60,9 @@ enum SessionOp: Equatable, Sendable {
     case dynamicToolResponse(id: String, response: DynamicToolResponse)
     /// `Op::ExecApproval`. `id` is the approval id, or the tool call id when
     /// the request did not set one. Abort interrupts the active turn.
-    case execApproval(id: String, turnId: String?, decision: CodexProtocol.ReviewDecision)
+    case execApproval(id: String, turnId: String?, decision: SageProtocol.ReviewDecision)
     /// `Op::PatchApproval`. `id` is the tool call id. Abort interrupts the active turn.
-    case patchApproval(id: String, decision: CodexProtocol.ReviewDecision)
+    case patchApproval(id: String, decision: SageProtocol.ReviewDecision)
     /// `Op::RefreshMcpServers`. Marks servers to reconnect on the next refresh.
     case refreshMcpServers
     /// `Op::ReloadUserConfig`. Reloads the user config layer for this session.
@@ -71,12 +75,18 @@ enum SessionOp: Equatable, Sendable {
         serverName: String,
         requestId: RequestId,
         decision: ElicitationAction,
-        content: CodexProtocol.JSONValue?,
-        meta: CodexProtocol.JSONValue?
+        content: SageProtocol.JSONValue?,
+        meta: SageProtocol.JSONValue?
     )
     /// `Op::ApproveGuardianDeniedAction`. Injects the approved action when
     /// the assessment was denied. Other statuses are ignored.
     case approveGuardianDeniedAction(GuardianAssessmentEvent)
+    /// `Op::SetThreadMemoryMode`. Persists thread memory eligibility.
+    /// Does not call the model or start a turn.
+    case setThreadMemoryMode(ThreadMemoryMode)
+    /// `Op::RunUserShellCommand`. Runs one unsandboxed user shell command.
+    /// `timeoutMs` nil uses the one-hour default.
+    case runUserShellCommand(command: String, timeoutMs: UInt64?)
 }
 
 final class SubmissionAck: @unchecked Sendable {

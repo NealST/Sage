@@ -7,7 +7,7 @@
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct AutoCompactWindowIds: Equatable, Sendable {
@@ -100,7 +100,7 @@ struct AutoCompactWindow: Equatable, Sendable {
         return requested
     }
 
-    mutating func ensureServerObservedPrefillFromUsage(_ usage: CodexProtocol.TokenUsage) {
+    mutating func ensureServerObservedPrefillFromUsage(_ usage: SageProtocol.TokenUsage) {
         if case .serverObserved = prefillInputTokens { return }
         prefillInputTokens = .serverObserved(max(usage.inputTokens, 0))
     }

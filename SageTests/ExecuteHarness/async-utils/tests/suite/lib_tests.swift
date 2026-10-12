@@ -12,7 +12,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexAsyncUtils
+@testable import SageAsyncUtils
 
 final class OrCancelTests: XCTestCase {
 

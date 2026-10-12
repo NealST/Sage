@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct ResolvedPermissionProfile: Equatable, Sendable {

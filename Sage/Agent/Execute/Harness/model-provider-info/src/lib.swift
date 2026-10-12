@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexModelProviderInfo
+//  SageModelProviderInfo
 //
 //  Port of codex-rs/model-provider-info/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -19,7 +19,7 @@
 //  because Swift `Result.Failure` must be `Error`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -74,7 +74,7 @@ public struct ApiProvider: Equatable, Sendable {
 
 // MARK: - Constants
 
-public let RESIDENCY_HEADER_NAME = "x-openai-internal-codex-residency"
+public let RESIDENCY_HEADER_NAME = "x-sage-internal-residency"
 
 private let defaultStreamIdleTimeoutMs: UInt64 = 300_000
 private let defaultStreamMaxRetries: UInt64 = 5
@@ -86,9 +86,9 @@ private let maxStreamMaxRetries: UInt64 = 100
 private let maxRequestMaxRetries: UInt64 = 100
 
 private let openaiProviderName = "OpenAI"
-private let openaiActorAuthorizationHeader = "x-openai-actor-authorization"
+private let openaiActorAuthorizationHeader = "x-sage-actor-authorization"
 public let OPENAI_PROVIDER_ID = "openai"
-public let CHATGPT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
+public let SAGE_BACKEND_PATH_SUFFIX = "/backend-api/sage"
 private let amazonBedrockProviderName = "Amazon Bedrock"
 public let AMAZON_BEDROCK_PROVIDER_ID = "amazon-bedrock"
 private let amazonBedrockRuntimeProviderName = "Amazon Bedrock Runtime"
@@ -104,12 +104,12 @@ public let AMAZON_BEDROCK_RUNTIME_GLOBAL_GPT_5_6_TERRA_MODEL_ID = "global.openai
 public let AMAZON_BEDROCK_RUNTIME_GLOBAL_GPT_5_6_LUNA_MODEL_ID = "global.openai.gpt-5.6-luna"
 public let AMAZON_BEDROCK_DEFAULT_BASE_URL = "https://bedrock-mantle.us-east-1.api.aws/openai/v1"
 private let amazonBedrockMantleClientAgentHeader = "x-amzn-mantle-client-agent"
-private let amazonBedrockMantleClientAgentValue = "codex"
+private let amazonBedrockMantleClientAgentValue = "sage"
 let chatWireApiRemovedError =
-    "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config.\nMore info: https://github.com/openai/codex/discussions/7782"
+    "`wire_api = \"chat\"` is no longer supported.\nHow to fix: set `wire_api = \"responses\"` in your provider config."
 public let LEGACY_OLLAMA_CHAT_PROVIDER_ID = "ollama-chat"
 public let OLLAMA_CHAT_PROVIDER_REMOVED_ERROR =
-    "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782"
+    "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`."
 
 public let DEFAULT_LMSTUDIO_PORT: UInt16 = 1234
 public let DEFAULT_OLLAMA_PORT: UInt16 = 11434
@@ -628,15 +628,8 @@ extension ModelProviderInfo {
     }
 
     /// Builds an API provider with managed residency taking precedence over configured headers.
-    public func toApiProvider(authMode: AuthMode?) throws -> ApiProvider {
-        let defaultBaseUrl: String
-        switch authMode {
-        case .chatgpt, .chatgptAuthTokens, .headers, .agentIdentity, .personalAccessToken:
-            defaultBaseUrl = CHATGPT_CODEX_BASE_URL
-        case .apiKey, .bedrockApiKey, .bedrockAccessKeys, .none:
-            defaultBaseUrl = "https://api.openai.com/v1"
-        }
-        let resolvedBaseUrl = baseUrl ?? defaultBaseUrl
+    public func toApiProvider(authMode _: AuthMode?) throws -> ApiProvider {
+        let resolvedBaseUrl = baseUrl ?? "https://api.openai.com/v1"
 
         var headers = buildHeaderMap()
         if let requirement = readManagedResidencyRequirement() {
@@ -666,7 +659,7 @@ extension ModelProviderInfo {
 
     /// If `envKey` is set, returns the API key for this provider if present
     /// (and non-empty) in the environment. If `envKey` is required but
-    /// cannot be found, throws `CodexErr.envVar`.
+    /// cannot be found, throws `SageErr.envVar`.
     public func apiKey() throws -> String? {
         guard let envKey else { return nil }
         let apiKey = ProcessInfo.processInfo.environment[envKey]
@@ -674,7 +667,7 @@ extension ModelProviderInfo {
                 value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
             }
         guard let apiKey else {
-            throw CodexErr.envVar(
+            throw SageErr.envVar(
                 EnvVarError(varName: envKey, instructions: envKeyInstructions))
         }
         return apiKey
@@ -739,14 +732,14 @@ extension ModelProviderInfo {
         name == openaiProviderName
     }
 
-    public func supportsCodexBackendRoutes() -> Bool {
+    public func supportsSageBackendRoutes() -> Bool {
         isOpenai()
             && (baseUrl.map { url in
                 var trimmed = url
                 while trimmed.hasSuffix("/") {
                     trimmed.removeLast()
                 }
-                return trimmed.hasSuffix("/backend-api/codex")
+                return trimmed.hasSuffix(SAGE_BACKEND_PATH_SUFFIX)
             } ?? true)
     }
 
@@ -837,9 +830,9 @@ public func createOssProvider(
     _ wireApi: WireApi
 ) -> ModelProviderInfo {
     let environment = ProcessInfo.processInfo.environment
-    let defaultCodexOssBaseUrl: String = {
+    let defaultSageOssBaseUrl: String = {
         let port: UInt16
-        if let raw = environment["CODEX_OSS_PORT"],
+        if let raw = environment["SAGE_OSS_PORT"],
             !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let parsed = UInt16(raw)
         {
@@ -849,15 +842,15 @@ public func createOssProvider(
         }
         return "http://localhost:\(port)/v1"
     }()
-    let codexOssBaseUrl: String = {
-        if let raw = environment["CODEX_OSS_BASE_URL"],
+    let sageOssBaseUrl: String = {
+        if let raw = environment["SAGE_OSS_BASE_URL"],
             !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             return raw
         }
-        return defaultCodexOssBaseUrl
+        return defaultSageOssBaseUrl
     }()
-    return createOssProviderWithBaseUrl(codexOssBaseUrl, wireApi)
+    return createOssProviderWithBaseUrl(sageOssBaseUrl, wireApi)
 }
 
 public func createOssProviderWithBaseUrl(
@@ -892,6 +885,16 @@ func cargoPackageVersion() -> String {
 func httpHeaderName(_ raw: String) -> String? {
     guard isToken(raw) else { return nil }
     return raw.lowercased()
+}
+
+func isToken(_ value: String) -> Bool {
+    !value.isEmpty
+        && value.utf8.allSatisfy { byte in
+            (byte >= 48 && byte <= 57)
+                || (byte >= 65 && byte <= 90)
+                || (byte >= 97 && byte <= 122)
+                || [33, 35, 36, 37, 38, 39, 42, 43, 45, 46, 94, 95, 96, 124, 126].contains(byte)
+        }
 }
 
 func isHttpHeaderValue(_ value: String) -> Bool {
@@ -968,5 +971,15 @@ func rejectUnknownFields(
                 debugDescription: "unknown field `\(key.stringValue)` for \(type), expected \(expected)"
             )
         )
+    }
+}
+
+/// Wire shape only. Sage gateway OAuth login was not ported.
+public struct GatewayOAuthConfig: Equatable, Sendable, Codable {
+    public init() {}
+
+    func validate(_ provider: ModelProviderInfo) -> Result<Void, ModelProviderConfigError> {
+        _ = provider
+        return .failure(ModelProviderConfigError("gateway oauth is not supported"))
     }
 }

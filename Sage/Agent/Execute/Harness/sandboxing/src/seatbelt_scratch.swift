@@ -1,6 +1,6 @@
 //
 //  seatbelt_scratch.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/seatbelt_scratch.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  by unreadable roots and protected metadata.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 func scratchAccessRoots(

@@ -11,8 +11,8 @@
 //
 
 import ApplyPatch
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 struct ApplyPatchRuntimeInvocation: Equatable {

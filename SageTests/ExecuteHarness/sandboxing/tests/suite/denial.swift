@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
-@testable import CodexSandboxing
+import SageProtocol
+@testable import SageSandboxing
 import XCTest
 
 final class SandboxingDenialTests: XCTestCase {

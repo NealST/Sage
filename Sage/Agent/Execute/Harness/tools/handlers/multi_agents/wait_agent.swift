@@ -9,11 +9,11 @@
 //
 //  Spec, argument parsing, and subscribeStatus wait are live when
 //  LocalAgentControl is attached. Turn items record on the caller
-//  CodexThread when a ThreadManager is present.
+//  SageThread when a ThreadManager is present.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct WaitArgs: Decodable, Equatable, Sendable {
@@ -106,7 +106,7 @@ struct WaitAgentHandler: CoreToolRuntime {
                 threadIds: targets,
                 timeout: .milliseconds(timeoutMs)
             )
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             var failed: [ThreadId: AgentStatus] = [:]
             if let threadId = targets.first {
                 failed[threadId] = await control.getStatus(threadId)

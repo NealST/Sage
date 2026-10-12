@@ -1,6 +1,6 @@
 //
 //  target.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/target.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  references against the in-memory registry resolve without Session.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension LocalAgentControl {

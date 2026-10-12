@@ -1,6 +1,6 @@
 //
 //  target.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/permissions/target.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  stay on PathUri facts supplied by the caller.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 private let invalidPath = "managed filesystem denial cannot be materialized safely"

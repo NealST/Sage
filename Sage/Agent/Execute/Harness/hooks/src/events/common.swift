@@ -1,6 +1,6 @@
 //
 //  common.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/events/common.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  live with dispatcher-owned handler types.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Identifies a thread-spawned subagent when a normal hook runs inside it.

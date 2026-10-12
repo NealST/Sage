@@ -192,10 +192,6 @@ final class ExecuteHarnessOrchestratorTests: XCTestCase {
             ToolOrchestrator.timeoutDuration(for: "run_shell_command"),
             .seconds(130)
         )
-        XCTAssertEqual(
-            ToolInvocationPipeline.timeoutDuration(for: "run_shell_command"),
-            ToolOrchestrator.timeoutDuration(for: "run_shell_command")
-        )
     }
 }
 

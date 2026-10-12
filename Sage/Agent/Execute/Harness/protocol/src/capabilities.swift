@@ -1,17 +1,17 @@
 //
 //  capabilities.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/capabilities.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 //  User-selected capability roots. `schemars`/`ts_rs` derives are not ported.
-//  `PathUri`/`LegacyAppPathString` come from CodexUtils (the protocol crate
+//  `PathUri`/`LegacyAppPathString` come from SageUtils (the protocol crate
 //  depends on the utils crates upstream).
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// A user-selected root that can expose one or more runtime capabilities.

@@ -10,7 +10,7 @@
 //  recorder keeps in-memory attempted calls without dispatching tools.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 let MAX_PENDING_EXECUTED_TOOL_CALLS = 256

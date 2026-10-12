@@ -1,9 +1,9 @@
 @testable import Sage
-import CodexAPI
-import CodexAsyncUtils
-import CodexCore
-import CodexModelProviderInfo
-import CodexProtocol
+import SageAPI
+import SageAsyncUtils
+import SageCore
+import SageModelProviderInfo
+import SageProtocol
 import XCTest
 
 @MainActor
@@ -39,6 +39,7 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         var toolRuns = 0
         var reply: String?
         runtime.turns.execute.onCandidateReply = { reply = $0 }
+        runtime.turns.execute.admitHarnessBatch = { .ready }
         runtime.turns.execute.modelSampler = { _ in
             rounds += 1
             if rounds == 1 {
@@ -51,13 +52,13 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             }
             return ModelTurn(content: "读完了", toolCalls: [])
         }
-        runtime.turns.execute.runToolBatch = { _ in
+        runtime.turns.execute.invokeHarnessTool = { _ in
             toolRuns += 1
             _ = await runtime.taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
                 task.pendingPlan = nil
             }
             runtime.planProgress.clear()
-            return .succeeded
+            return "ok"
         }
 
         await runtime.turns.execute.start()
@@ -90,7 +91,8 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             }
             return ModelTurn(content: "九轮之后仍能收尾", toolCalls: [])
         }
-        runtime.turns.execute.runToolBatch = { _ in .succeeded }
+        runtime.turns.execute.admitHarnessBatch = { .ready }
+        runtime.turns.execute.invokeHarnessTool = { _ in "ok" }
 
         await runtime.turns.execute.start()
 
@@ -143,9 +145,10 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             }
             return ModelTurn(content: "只看了目录", toolCalls: [])
         }
-        runtime.turns.execute.runToolBatch = { _ in
+        runtime.turns.execute.admitHarnessBatch = { .ready }
+        runtime.turns.execute.invokeHarnessTool = { _ in
             toolRuns += 1
-            return .succeeded
+            return "ok"
         }
 
         await runtime.turns.execute.start()
@@ -183,11 +186,12 @@ final class ExecuteHarnessTurnTests: XCTestCase {
                 ]
             )
         }
-        runtime.turns.execute.runToolBatch = { _ in
+        runtime.turns.execute.admitHarnessBatch = { .ready }
+        runtime.turns.execute.invokeHarnessTool = { _ in
             toolRuns += 1
             let names = runtime.planProgress.plan?.steps.map(\.toolName) ?? []
             XCTAssertEqual(names, ["read_text_file"])
-            return .succeeded
+            return "ok"
         }
 
         await runtime.turns.execute.start()
@@ -197,7 +201,7 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         XCTAssertTrue(refusal?.content.hasPrefix("ERROR:") == true)
     }
 
-    func testStartAttachesHarnessSessionWithoutLeavingTurnRun() async throws {
+    func testStartAttachesHarnessSessionFromHistory() async throws {
         let runtime = try makeRuntime()
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         _ = await runtime.taskStore.commit(
@@ -211,18 +215,18 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         var reply: String?
         runtime.turns.execute.onCandidateReply = { reply = $0 }
         runtime.turns.execute.modelSampler = { _ in
-            ModelTurn(content: "from-turn-run", toolCalls: [])
+            ModelTurn(content: "from-harness", toolCalls: [])
         }
 
         await runtime.turns.execute.start()
 
-        XCTAssertEqual(reply, "from-turn-run")
-        XCTAssertFalse(runtime.turns.execute.useHarnessRunTurn)
+        XCTAssertEqual(reply, "from-harness")
         XCTAssertEqual(runtime.turns.execute.harnessInput.count, 1)
-        XCTAssertEqual(
-            runtime.turns.execute.harnessSession?.cloneHistory().forPrompt().count,
+        XCTAssertGreaterThanOrEqual(
+            runtime.turns.execute.harnessSession?.cloneHistory().forPrompt().count ?? 0,
             2
         )
+        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager)
     }
 
     func testHarnessRunTurnDispatchesToolsThenFinishes() async throws {
@@ -235,7 +239,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         var samples = 0
         var invoked: [String] = []
         var reply: String?
-        runtime.turns.execute.useHarnessRunTurn = true
         runtime.turns.execute.admitHarnessBatch = { .ready }
         runtime.turns.execute.onCandidateReply = { reply = $0 }
         runtime.turns.execute.modelSampler = { _ in
@@ -273,7 +276,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             deleteEventIDs: []
         ) { _ in }
         var reply: String?
-        runtime.turns.execute.useHarnessRunTurn = true
         runtime.turns.execute.onCandidateReply = { reply = $0 }
         runtime.turns.execute.modelSampler = { _ in
             ModelTurn(content: "from-harness", toolCalls: [])
@@ -287,6 +289,11 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             runtime.turns.execute.harnessSession?.emittedEvents.contains(where: isTurnComplete)
                 == true
         )
+        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager)
+        XCTAssertNotNil(runtime.turns.execute.harnessSession?.services.localAgentControl)
+        let parentId = try XCTUnwrap(runtime.turns.execute.harnessSession?.threadId)
+        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager?.peekThread(parentId))
+        XCTAssertNil(runtime.turns.execute.harnessThreadManager?.peekThread(parentId)?.liveSession())
     }
 
     func testHarnessRunTurnPausesWhenTheBatchNeedsApproval() async throws {
@@ -300,7 +307,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         }
         var samples = 0
         var reply: String?
-        runtime.turns.execute.useHarnessRunTurn = true
         runtime.turns.execute.admitHarnessBatch = { .paused }
         runtime.turns.execute.onCandidateReply = { reply = $0 }
         runtime.turns.execute.modelSampler = { _ in
@@ -341,7 +347,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         var admits = 0
         var invoked: [String] = []
         var reply: String?
-        runtime.turns.execute.useHarnessRunTurn = true
         runtime.turns.execute.admitHarnessBatch = {
             admits += 1
             return admits == 1 ? .paused : .ready
@@ -586,7 +591,7 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             effort: nil,
             summary: .auto,
             serviceTier: nil,
-            responsesMetadata: CodexResponsesMetadata(
+            responsesMetadata: SageResponsesMetadata(
                 installationId: "inst",
                 sessionId: "sess",
                 threadId: "thr",
@@ -686,7 +691,7 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             ]
         }
         var seenSystem = ""
-        var seenTools: [CodexProtocol.JSONValue] = []
+        var seenTools: [SageProtocol.JSONValue] = []
         session.runSamplingStreamOverride = { prompt in
             seenSystem = prompt.baseInstructions.text
             seenTools = prompt.tools
@@ -717,15 +722,15 @@ final class ExecuteHarnessTurnTests: XCTestCase {
     }
 
     func testResponsesEndpointMissingIsOnly404() {
-        let missing = CodexErr.unexpectedStatus(
+        let missing = SageErr.unexpectedStatus(
             UnexpectedResponseError(status: 404, body: "no responses route")
         )
-        let denied = CodexErr.unexpectedStatus(
+        let denied = SageErr.unexpectedStatus(
             UnexpectedResponseError(status: 401, body: "bad key")
         )
         XCTAssertTrue(ExecuteHarnessAttach.responsesEndpointMissing(missing))
         XCTAssertFalse(ExecuteHarnessAttach.responsesEndpointMissing(denied))
-        XCTAssertFalse(ExecuteHarnessAttach.responsesEndpointMissing(CodexErr.stream("closed")))
+        XCTAssertFalse(ExecuteHarnessAttach.responsesEndpointMissing(SageErr.stream("closed")))
     }
 
     private func makeRuntime() throws -> AgentRuntime {
@@ -743,11 +748,10 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        runtime.turns.execute.useHarnessRunTurn = false
         return runtime
     }
 
-    private func providerStreamWithTwoCalls() -> CodexCore.ResponseStream {
+    private func providerStreamWithTwoCalls() -> SageCore.ResponseStream {
         let usage = TokenUsage(inputTokens: 11, outputTokens: 3, totalTokens: 14)
         let message = ResponseItem.message(
             id: nil,

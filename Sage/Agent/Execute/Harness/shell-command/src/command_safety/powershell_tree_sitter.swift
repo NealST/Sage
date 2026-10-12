@@ -1,6 +1,6 @@
 //
 //  powershell_tree_sitter.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/command_safety/powershell_tree_sitter.rs
 //  (Apache-2.0).

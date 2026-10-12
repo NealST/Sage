@@ -1,6 +1,6 @@
 //
 //  registry.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/registry.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  hooks.json folders are discovered without walking a ConfigLayerStack.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public struct HooksConfig: Sendable {
@@ -100,7 +100,7 @@ public final class Hooks: @unchecked Sendable {
         }
         let requiredLoadErrors = hooks.engine.requiredLoadErrors
         if !requiredLoadErrors.isEmpty {
-            throw CodexErr.invalidRequest(
+            throw SageErr.invalidRequest(
                 "failed to load required managed hooks: \(requiredLoadErrors.joined(separator: "; "))"
             )
         }

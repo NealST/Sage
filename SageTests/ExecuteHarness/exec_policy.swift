@@ -7,10 +7,10 @@
 //  Port status: adapted
 //
 
-import CodexExecPolicy
-import CodexProtocol
-import CodexUtils
-@testable import CodexCore
+import SageExecPolicy
+import SageProtocol
+import SageUtils
+@testable import SageCore
 import XCTest
 
 final class CoreExecPolicyTests: XCTestCase {

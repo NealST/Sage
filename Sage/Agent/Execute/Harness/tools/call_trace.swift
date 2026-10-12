@@ -9,7 +9,7 @@
 //  otel is trimmed to NSLog. Events still omit arguments and output.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum ToolCallTraceSource: Equatable, Sendable {
@@ -52,7 +52,7 @@ func toolCallReceived(
         runtimeToolCallId = runtime
     }
     NSLog(
-        "codex.tool_call_received thread=%@ turn=%@ call=%@ tool=%@ ns=%@ source=%@ cell=%@ runtime=%@",
+        "sage.tool_call_received thread=%@ turn=%@ call=%@ tool=%@ ns=%@ source=%@ cell=%@ runtime=%@",
         threadId.description,
         turnId ?? "",
         callId,
@@ -72,7 +72,7 @@ func toolCallResultReady(
     source: ToolCallTraceSource
 ) {
     NSLog(
-        "codex.tool_result_ready thread=%@ turn=%@ call=%@ tool=%@ ns=%@ source=%@",
+        "sage.tool_result_ready thread=%@ turn=%@ call=%@ tool=%@ ns=%@ source=%@",
         threadId.description,
         turnId,
         callId,

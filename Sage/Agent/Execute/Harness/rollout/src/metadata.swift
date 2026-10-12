@@ -1,20 +1,20 @@
 //
 //  metadata.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/metadata.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  `chrono` timestamps map to Foundation `Date`. Item-level
-//  `apply_rollout_item` and otel counters wait for CodexState extract /
+//  `apply_rollout_item` and otel counters wait for SageState extract /
 //  runtime; extract still returns builder + file mtime metadata.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexState
-import CodexUtils
+import SageHistory
+import SageProtocol
+import SageState
+import SageUtils
 import Foundation
 
 private let backfillBatchSize = 200
@@ -33,7 +33,7 @@ public struct BackfillStats: Equatable, Sendable {
     }
 }
 
-/// SQLite backfill operations used by `backfill_sessions`. CodexState runtime
+/// SQLite backfill operations used by `backfill_sessions`. SageState runtime
 /// will conform once `runtime.rs` is ported.
 public protocol RolloutBackfillRuntime: AnyObject {
     func getBackfillState() async throws -> BackfillState
@@ -144,12 +144,12 @@ public func extractMetadataFromRollout(
 
 func backfillSessions(
     runtime: RolloutBackfillRuntime,
-    codexHome: String,
+    sageHome: String,
     defaultProvider: String
 ) async {
     await backfillSessionsWithLease(
         runtime: runtime,
-        codexHome: codexHome,
+        sageHome: sageHome,
         defaultProvider: defaultProvider,
         backfillLeaseSeconds: backfillLeaseSeconds
     )
@@ -157,7 +157,7 @@ func backfillSessions(
 
 func backfillSessionsWithLease(
     runtime: RolloutBackfillRuntime,
-    codexHome: String,
+    sageHome: String,
     defaultProvider: String,
     backfillLeaseSeconds: Int64
 ) async {
@@ -189,8 +189,8 @@ func backfillSessionsWithLease(
         } catch {}
     }
 
-    let sessionsRoot = (codexHome as NSString).appendingPathComponent(SESSIONS_SUBDIR)
-    let archivedRoot = (codexHome as NSString).appendingPathComponent(ARCHIVED_SESSIONS_SUBDIR)
+    let sessionsRoot = (sageHome as NSString).appendingPathComponent(SESSIONS_SUBDIR)
+    let archivedRoot = (sageHome as NSString).appendingPathComponent(ARCHIVED_SESSIONS_SUBDIR)
     var rolloutPaths: [BackfillRolloutPath] = []
     for (root, archived) in [(sessionsRoot, false), (archivedRoot, true)] {
         guard FileManager.default.fileExists(atPath: root) else { continue }
@@ -198,7 +198,7 @@ func backfillSessionsWithLease(
             let paths = try collectRolloutPaths(root)
             rolloutPaths.append(contentsOf: paths.map {
                 BackfillRolloutPath(
-                    watermark: backfillWatermarkForPath(codexHome: codexHome, path: $0),
+                    watermark: backfillWatermarkForPath(sageHome: sageHome, path: $0),
                     path: $0,
                     archived: archived
                 )
@@ -267,8 +267,8 @@ private struct BackfillRolloutPath {
     var archived: Bool
 }
 
-private func backfillWatermarkForPath(codexHome: String, path: String) -> String {
-    let prefix = codexHome.hasSuffix("/") ? codexHome : codexHome + "/"
+private func backfillWatermarkForPath(sageHome: String, path: String) -> String {
+    let prefix = sageHome.hasSuffix("/") ? sageHome : sageHome + "/"
     let relative = path.hasPrefix(prefix) ? String(path.dropFirst(prefix.count)) : path
     return relative.replacingOccurrences(of: "\\", with: "/")
 }

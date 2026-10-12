@@ -16,11 +16,12 @@
 //  `afterAgentHooks` is rust `Hooks.after_agent` (legacy notify).
 //
 
-import CodexCore
-import CodexExecPolicy
-import CodexHistory
-import CodexHooks
-import CodexProtocol
+import SageCore
+import SageExecPolicy
+import SageHistory
+import SageHooks
+import SageProtocol
+import SageThreadStore
 import Foundation
 
 final class SessionServices: @unchecked Sendable {
@@ -31,7 +32,7 @@ final class SessionServices: @unchecked Sendable {
     var showRawAgentReasoning: Bool
     var selectedCapabilityRoots: [String]
     var executedToolCalls: ExecutedToolCalls
-    var modelClient: CodexCore.ModelClient?
+    var modelClient: SageCore.ModelClient?
     /// rust `thread_extension_data` `ExhaustedResponseRetry`. Guardian
     /// reads `retryAt`; the turn loop does not wait on it.
     var exhaustedResponseRetry: ExhaustedResponseRetry?
@@ -64,11 +65,13 @@ final class SessionServices: @unchecked Sendable {
     var disconnectMcp: (@Sendable ([String]) async -> Void)?
     /// Append rollout items. Nil means this session has no live writer.
     var persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)?
+    /// rust `SessionServices.live_thread`. Nil means persistence is disabled.
+    var liveThread: LiveThread?
     /// Sage execute tools (list_directory, apply_patch, …). Wired by RegularTask.
     var sageToolNames: [String]
     /// Full Responses tool schemas for the prompt `runTurn` builds.
     /// Nil keeps the name-only specs from the tool router.
-    var sageResponsesTools: [CodexProtocol.JSONValue]?
+    var sageResponsesTools: [SageProtocol.JSONValue]?
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     /// rust `SessionServices.parallel_execution` RWLock.
     var parallelAdmission: ParallelAdmission
@@ -82,6 +85,10 @@ final class SessionServices: @unchecked Sendable {
     var hookActivatedSkills: [SkillRecord]
     /// rust `Hooks.after_agent` (legacy `notify` argv). No ClaudeHooksEngine.
     var afterAgentHooks: [Hook]
+    /// Live Execute attaches the parent ThreadManager so spawn/wait/interrupt
+    /// can start child SageThreads without opening a second parent sample loop.
+    var threadManager: ThreadManager?
+    var localAgentControl: LocalAgentControl?
     var skillsLookup: SessionSkillsLookup
     var turnInputContributors: [any TurnInputContributor]
 
@@ -90,7 +97,7 @@ final class SessionServices: @unchecked Sendable {
         execPolicy: Policy? = nil,
         showRawAgentReasoning: Bool = false,
         selectedCapabilityRoots: [String] = [],
-        modelClient: CodexCore.ModelClient? = nil,
+        modelClient: SageCore.ModelClient? = nil,
         availablePlugins: [PluginCapabilitySummary] = [],
         availableConnectors: [AppInfo] = [],
         mcpTools: [PluginToolInfo] = [],
@@ -107,7 +114,7 @@ final class SessionServices: @unchecked Sendable {
         disconnectMcp: (@Sendable ([String]) async -> Void)? = nil,
         persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)? = nil,
         sageToolNames: [String] = [],
-        sageResponsesTools: [CodexProtocol.JSONValue]? = nil,
+        sageResponsesTools: [SageProtocol.JSONValue]? = nil,
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         parallelAdmission: ParallelAdmission = ParallelAdmission(),
         turnDiffTracker: TurnDiffTracker = TurnDiffTracker(),
@@ -115,6 +122,8 @@ final class SessionServices: @unchecked Sendable {
         hookProjectRoot: URL? = nil,
         hookActivatedSkills: [SkillRecord] = [],
         afterAgentHooks: [Hook] = [],
+        threadManager: ThreadManager? = nil,
+        localAgentControl: LocalAgentControl? = nil,
         skillsLookup: SessionSkillsLookup = SessionSkillsLookup(),
         turnInputContributors: [any TurnInputContributor] = []
     ) {
@@ -148,6 +157,8 @@ final class SessionServices: @unchecked Sendable {
         self.hookProjectRoot = hookProjectRoot
         self.hookActivatedSkills = hookActivatedSkills
         self.afterAgentHooks = afterAgentHooks
+        self.threadManager = threadManager
+        self.localAgentControl = localAgentControl
         self.skillsLookup = skillsLookup
         self.turnInputContributors = turnInputContributors
     }

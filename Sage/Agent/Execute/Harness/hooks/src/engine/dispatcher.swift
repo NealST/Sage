@@ -1,6 +1,6 @@
 //
 //  dispatcher.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/dispatcher.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  Executor-scoped hooks still schedule after the local batch.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct ParsedHandler<T> {

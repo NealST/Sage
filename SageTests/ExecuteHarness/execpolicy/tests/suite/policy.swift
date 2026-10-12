@@ -9,7 +9,7 @@
 //  Exercises PolicyParser subset language and Decision aggregation.
 //
 
-import CodexExecPolicy
+import SageExecPolicy
 import XCTest
 
 final class ExecPolicyTests: XCTestCase {

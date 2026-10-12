@@ -4,7 +4,7 @@
 //
 //  Shared process sandboxing and environment policy.
 //  The closed-by-default Seatbelt shape follows the architecture used by
-//  OpenAI Codex's macOS sandbox, without copying its policy implementation.
+//  OpenAI Sage's macOS sandbox, without copying its policy implementation.
 //
 
 import Foundation

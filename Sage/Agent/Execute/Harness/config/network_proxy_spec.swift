@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 //  Mac has no local proxy process. This is the same allow / deny / ask
-//  decision Codex makes before a blocked request becomes an approval.
+//  decision Sage makes before a blocked request becomes an approval.
 //
 
 import Foundation
@@ -139,7 +139,7 @@ struct NetworkProxySpec: Sendable, Equatable {
         case ask(host: String?)
     }
 
-    /// Same ceiling Codex applies to a blocked request: deny list, then
+    /// Same ceiling Sage applies to a blocked request: deny list, then
     /// allowlist, then ask when expansion is still allowed.
     func decide(host: String?, networkAlreadyAllowed: Bool) -> Decision {
         if !enabled || networkAlreadyAllowed { return .allow }

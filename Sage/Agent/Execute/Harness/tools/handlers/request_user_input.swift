@@ -13,8 +13,8 @@
 //  is thread-owned.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct RequestUserInputHandler: CoreToolRuntime {

@@ -1,6 +1,6 @@
 //
 //  session_index.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/session_index.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  ReverseJsonlScanner. StateRuntime lookup is omitted (pass nil).
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -37,7 +37,7 @@ public struct SessionIndexEntry: Codable, Equatable, Sendable {
 }
 
 /// Append a thread name update to the session index.
-public func appendThreadName(codexHome: String, threadId: ThreadId, name: String) throws {
+public func appendThreadName(sageHome: String, threadId: ThreadId, name: String) throws {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let entry = SessionIndexEntry(
@@ -45,12 +45,12 @@ public func appendThreadName(codexHome: String, threadId: ThreadId, name: String
         threadName: name,
         updatedAt: formatter.string(from: Date())
     )
-    try appendSessionIndexEntry(codexHome: codexHome, entry: entry)
+    try appendSessionIndexEntry(sageHome: sageHome, entry: entry)
 }
 
-public func appendSessionIndexEntry(codexHome: String, entry: SessionIndexEntry) throws {
+public func appendSessionIndexEntry(sageHome: String, entry: SessionIndexEntry) throws {
     try sessionIndexLock.withLock { _ in
-        let path = sessionIndexPath(codexHome)
+        let path = sessionIndexPath(sageHome)
         if !FileManager.default.fileExists(atPath: path) {
             FileManager.default.createFile(atPath: path, contents: nil)
         }
@@ -65,9 +65,9 @@ public func appendSessionIndexEntry(codexHome: String, entry: SessionIndexEntry)
 }
 
 /// Remove all recorded names for a thread from the session index.
-public func removeThreadNameEntries(codexHome: String, threadId: ThreadId) throws {
+public func removeThreadNameEntries(sageHome: String, threadId: ThreadId) throws {
     try sessionIndexLock.withLock { _ in
-        let path = sessionIndexPath(codexHome)
+        let path = sessionIndexPath(sageHome)
         guard FileManager.default.fileExists(atPath: path) else { return }
         let contents = try String(contentsOfFile: path, encoding: .utf8)
         var remaining = ""
@@ -96,12 +96,12 @@ public func removeThreadNameEntries(codexHome: String, threadId: ThreadId) throw
     }
 }
 
-public func findThreadNameById(codexHome: String, threadId: ThreadId) throws -> String? {
-    try scanIndexFromEnd(codexHome: codexHome) { $0.id == threadId }?.threadName
+public func findThreadNameById(sageHome: String, threadId: ThreadId) throws -> String? {
+    try scanIndexFromEnd(sageHome: sageHome) { $0.id == threadId }?.threadName
 }
 
-public func findThreadNamesByIds(codexHome: String, threadIds: Set<ThreadId>) throws -> [ThreadId: String] {
-    let path = sessionIndexPath(codexHome)
+public func findThreadNamesByIds(sageHome: String, threadIds: Set<ThreadId>) throws -> [ThreadId: String] {
+    let path = sessionIndexPath(sageHome)
     guard !threadIds.isEmpty, FileManager.default.fileExists(atPath: path) else { return [:] }
     let contents = try String(contentsOfFile: path, encoding: .utf8)
     var names: [ThreadId: String] = [:]
@@ -118,19 +118,19 @@ public func findThreadNamesByIds(codexHome: String, threadIds: Set<ThreadId>) th
 }
 
 public func findThreadMetaByNameStr(
-    codexHome: String,
+    sageHome: String,
     name: String,
     stateDbCtx: Any? = nil
 ) throws -> (path: String, meta: SessionMetaLine)? {
     try findThreadMetaCandidatesByNameStr(
-        codexHome: codexHome,
+        sageHome: sageHome,
         name: name,
         stateDbCtx: stateDbCtx
     ).first
 }
 
 public func findThreadMetaCandidatesByNameStr(
-    codexHome: String,
+    sageHome: String,
     name: String,
     stateDbCtx: Any? = nil,
     allowedSources: [SessionSource] = [],
@@ -139,7 +139,7 @@ public func findThreadMetaCandidatesByNameStr(
     if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [] }
     var seen = Set<ThreadId>()
     var ids: [ThreadId] = []
-    try scanIndexFromEndForEach(codexHome: codexHome) { entry in
+    try scanIndexFromEndForEach(sageHome: sageHome) { entry in
         if seen.insert(entry.id).inserted, entry.threadName == name {
             ids.append(entry.id)
         }
@@ -148,7 +148,7 @@ public func findThreadMetaCandidatesByNameStr(
     var candidates: [(Date, String, SessionMetaLine)] = []
     for threadId in ids {
         guard let path = try findThreadPathByIdStr(
-            codexHome: codexHome, idStr: threadId.description, stateDbCtx: stateDbCtx),
+            sageHome: sageHome, idStr: threadId.description, stateDbCtx: stateDbCtx),
               let sessionMeta = try? readSessionMetaLine(path: path)
         else { continue }
         if !allowedSources.isEmpty, !allowedSources.contains(sessionMeta.meta.source) { continue }
@@ -165,25 +165,25 @@ public func findThreadMetaCandidatesByNameStr(
     return candidates.map { ($0.1, $0.2) }
 }
 
-func sessionIndexPath(_ codexHome: String) -> String {
-    (codexHome as NSString).appendingPathComponent(SESSION_INDEX_FILE)
+func sessionIndexPath(_ sageHome: String) -> String {
+    (sageHome as NSString).appendingPathComponent(SESSION_INDEX_FILE)
 }
 
 private func scanIndexFromEnd(
-    codexHome: String,
+    sageHome: String,
     predicate: (SessionIndexEntry) -> Bool
 ) throws -> SessionIndexEntry? {
-    try scanIndexFromEndForEach(codexHome: codexHome) { entry in
+    try scanIndexFromEndForEach(sageHome: sageHome) { entry in
         predicate(entry) ? entry : nil
     }
 }
 
 @discardableResult
 private func scanIndexFromEndForEach(
-    codexHome: String,
+    sageHome: String,
     visit: (SessionIndexEntry) throws -> SessionIndexEntry?
 ) throws -> SessionIndexEntry? {
-    let path = sessionIndexPath(codexHome)
+    let path = sessionIndexPath(sageHome)
     guard FileManager.default.fileExists(atPath: path) else { return nil }
     let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
     defer { try? handle.close() }

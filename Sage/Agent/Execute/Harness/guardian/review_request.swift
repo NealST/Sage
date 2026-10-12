@@ -11,13 +11,13 @@
 //  Whether an action goes to Guardian before the HUD card.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum GuardianReviewRequest {
-    /// Codex `routes_approval_policy_to_guardian`.
+    /// Sage `routes_approval_policy_to_guardian`.
     static func routesApprovalPolicyToGuardian(
-        policy: CodexProtocol.AskForApproval,
+        policy: SageProtocol.AskForApproval,
         reviewer: ApprovalsReviewer
     ) -> Bool {
         switch policy {
@@ -38,7 +38,7 @@ enum GuardianReviewRequest {
         policy: PathGuard.Policy,
         retry: Bool,
         scope: GuardianScope,
-        approvalPolicy: CodexProtocol.AskForApproval = .onRequest,
+        approvalPolicy: SageProtocol.AskForApproval = .onRequest,
         reviewer: ApprovalsReviewer? = nil,
         reviewMode: GuardianReviewMode? = nil
     ) -> Bool {

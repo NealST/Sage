@@ -11,13 +11,13 @@
 //  that crate; Linux `prctl` parent-death is excluded(platform).
 //
 
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
-public let CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR = "CODEX_SANDBOX_NETWORK_DISABLED"
-public let CODEX_SANDBOX_ENV_VAR = "CODEX_SANDBOX"
+public let SAGE_SANDBOX_NETWORK_DISABLED_ENV_VAR = "SAGE_SANDBOX_NETWORK_DISABLED"
+public let SAGE_SANDBOX_ENV_VAR = "SAGE_SANDBOX"
 
 public enum StdioPolicy: Equatable, Sendable {
     case redirectForShellTool
@@ -42,7 +42,7 @@ func spawnChild(_ request: SpawnChildRequest) async throws -> SpawnedProcess {
         try network.applyToEnvForOptionalEnvironment(&env, environmentId: nil)
     }
     if !request.networkSandboxPolicy.isEnabled {
-        env[CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR] = "1"
+        env[SAGE_SANDBOX_NETWORK_DISABLED_ENV_VAR] = "1"
     }
 
     switch request.stdioPolicy {

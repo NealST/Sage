@@ -10,8 +10,8 @@
 //  ToolInvocation.clock.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 let CLOCK_NAMESPACE = "clock"

@@ -1,6 +1,6 @@
 //
 //  core_test_support.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/test_support.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  ThreadManager factory helpers and offline model catalogs wait.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Test-only provider that supplies no user instructions.
@@ -27,7 +27,7 @@ public func setDeterministicProcessIds(_ enabled: Bool) {
     setDeterministicProcessIdsForTests(enabled)
 }
 
-public enum TestCodexResponsesRequestKind: Equatable, Sendable {
+public enum TestSageResponsesRequestKind: Equatable, Sendable {
     case turn
     case prewarm
     case websocketConnection
@@ -41,15 +41,15 @@ public func responsesMetadata(
     windowId: String,
     sessionSource: SessionSource,
     parentThreadId: ThreadId?,
-    requestKind: TestCodexResponsesRequestKind
-) -> CodexResponsesMetadata {
-    let mappedKind: CodexResponsesRequestKind?
+    requestKind: TestSageResponsesRequestKind
+) -> SageResponsesMetadata {
+    let mappedKind: SageResponsesRequestKind?
     switch requestKind {
     case .turn: mappedKind = .turn
     case .prewarm: mappedKind = .prewarm
     case .websocketConnection: mappedKind = nil
     }
-    var metadata = CodexResponsesMetadata(
+    var metadata = SageResponsesMetadata(
         installationId: installationId,
         sessionId: sessionId,
         threadId: threadId,
@@ -81,7 +81,7 @@ public func minimalModelInfo(slug: String = "gpt-5") -> ModelInfo {
     return try! JSONDecoder().decode(ModelInfo.self, from: Data(json.utf8))
 }
 
-public func withParentTurn(_ metadata: CodexResponsesMetadata, id: String) -> CodexResponsesMetadata {
+public func withParentTurn(_ metadata: SageResponsesMetadata, id: String) -> SageResponsesMetadata {
     var copy = metadata
     copy.parentTurnId = id
     return copy

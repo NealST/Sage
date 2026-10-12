@@ -1,6 +1,6 @@
 //
 //  legacy_notify.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/legacy_notify.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  with the JSON payload as the last argument. Stdio is discarded.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct UserNotification: Equatable, Sendable, Codable {
@@ -47,7 +47,7 @@ public func legacyNotifyJSON(_ payload: HookPayload) throws -> String {
         )
         let data = try JSONEncoder().encode(notification)
         guard let json = String(data: data, encoding: .utf8) else {
-            throw CodexErr.invalidRequest("legacy_notify_json produced non-UTF8 JSON")
+            throw SageErr.invalidRequest("legacy_notify_json produced non-UTF8 JSON")
         }
         return json
     }

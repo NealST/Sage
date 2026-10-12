@@ -1,6 +1,6 @@
 //
 //  stream_events_utils.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/stream_events_utils.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  assistant-message extraction used by compact/session.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func getLastAssistantMessage(from items: [ResponseItem]) -> String? {
@@ -27,7 +27,7 @@ public func getLastAssistantMessage(from items: [ResponseItem]) -> String? {
     return nil
 }
 
-/// Codex `response_input_to_response_item`.
+/// Sage `response_input_to_response_item`.
 public func responseInputToResponseItem(_ input: ResponseInputItem) -> ResponseItem? {
     switch input {
     case .functionCallOutput(let callId, let output):

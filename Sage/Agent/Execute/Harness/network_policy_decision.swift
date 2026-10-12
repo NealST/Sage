@@ -7,9 +7,9 @@
 //  Port status: faithful
 //
 
-import CodexExecPolicy
-import CodexProtocol
-import CodexSandboxing
+import SageExecPolicy
+import SageProtocol
+import SageSandboxing
 
 struct ExecPolicyNetworkRuleAmendment: Equatable, Sendable {
     var protocol_: NetworkRuleProtocol

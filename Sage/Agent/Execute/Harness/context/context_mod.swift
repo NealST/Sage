@@ -1,17 +1,17 @@
 //
 //  context_mod.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/mod.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Context fragments injected into model input. `AdditionalContext*` and
-//  the crate-level `ContextualUserFragment` live in CodexContextFragments;
-//  this file keeps the CodexCore protocol used by world-state fragments.
+//  the crate-level `ContextualUserFragment` live in SageContextFragments;
+//  this file keeps the SageCore protocol used by world-state fragments.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public let appsInstructionsOpenTag = "<apps_instructions>"

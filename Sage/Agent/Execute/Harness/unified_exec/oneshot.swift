@@ -10,8 +10,8 @@
 //  Sage waits on the local process handle and cancellation token.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 
 struct Completion {

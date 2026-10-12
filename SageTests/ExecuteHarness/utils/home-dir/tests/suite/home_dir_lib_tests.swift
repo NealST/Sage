@@ -13,9 +13,9 @@
 
 import Foundation
 import XCTest
-@testable import CodexUtils
+@testable import SageUtils
 
-final class FindCodexHomeTests: XCTestCase {
+final class FindSageHomeTests: XCTestCase {
 
     /// `tempfile::tempdir`.
     private func tempdir() throws -> String {
@@ -24,31 +24,31 @@ final class FindCodexHomeTests: XCTestCase {
         return dir
     }
 
-    /// `find_codex_home_env_missing_path_is_fatal`.
-    func testFindCodexHomeEnvMissingPathIsFatal() throws {
+    /// `find_sage_home_env_missing_path_is_fatal`.
+    func testFindSageHomeEnvMissingPathIsFatal() throws {
         let tempHome = try tempdir()
-        let missing = tempHome + "/missing-codex-home"
+        let missing = tempHome + "/missing-sage-home"
 
-        XCTAssertThrowsError(try findCodexHomeFromEnv(missing)) { error in
+        XCTAssertThrowsError(try findSageHomeFromEnv(missing)) { error in
             guard let ioError = error as? IOError else {
                 XCTFail("unexpected error type: \(error)")
                 return
             }
             XCTAssertEqual(ioError.kind, .notFound)
             XCTAssertTrue(
-                ioError.description.contains("CODEX_HOME"),
+                ioError.description.contains("SAGE_HOME"),
                 "unexpected error: \(ioError)"
             )
         }
     }
 
-    /// `find_codex_home_env_file_path_is_fatal`.
-    func testFindCodexHomeEnvFilePathIsFatal() throws {
+    /// `find_sage_home_env_file_path_is_fatal`.
+    func testFindSageHomeEnvFilePathIsFatal() throws {
         let tempHome = try tempdir()
-        let filePath = tempHome + "/codex-home.txt"
+        let filePath = tempHome + "/sage-home.txt"
         try "not a directory".write(toFile: filePath, atomically: false, encoding: .utf8)
 
-        XCTAssertThrowsError(try findCodexHomeFromEnv(filePath)) { error in
+        XCTAssertThrowsError(try findSageHomeFromEnv(filePath)) { error in
             guard let ioError = error as? IOError else {
                 XCTFail("unexpected error type: \(error)")
                 return
@@ -61,20 +61,20 @@ final class FindCodexHomeTests: XCTestCase {
         }
     }
 
-    /// `find_codex_home_env_valid_directory_canonicalizes`.
-    func testFindCodexHomeEnvValidDirectoryCanonicalizes() throws {
+    /// `find_sage_home_env_valid_directory_canonicalizes`.
+    func testFindSageHomeEnvValidDirectoryCanonicalizes() throws {
         let tempHome = try tempdir()
 
-        let resolved = try findCodexHomeFromEnv(tempHome)
+        let resolved = try findSageHomeFromEnv(tempHome)
         let expected = try AbsolutePathBuf.fromAbsolutePath(realpathString(tempHome))
         XCTAssertEqual(resolved, expected)
     }
 
-    /// `find_codex_home_without_env_uses_default_home_dir`.
-    func testFindCodexHomeWithoutEnvUsesDefaultHomeDir() throws {
-        let resolved = try findCodexHomeFromEnv(nil)
+    /// `find_sage_home_without_env_uses_default_home_dir`.
+    func testFindSageHomeWithoutEnvUsesDefaultHomeDir() throws {
+        let resolved = try findSageHomeFromEnv(nil)
         let home = try XCTUnwrap(AbsolutePathBufGuard.homeDirectory(), "home dir")
-        let expected = try AbsolutePathBuf.fromAbsolutePath(home + "/.codex")
+        let expected = try AbsolutePathBuf.fromAbsolutePath(home + "/.sage")
         XCTAssertEqual(resolved, expected)
     }
 }

@@ -10,11 +10,11 @@
 //  Process-store, yield clamps, and local PTY spawn are implemented.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexShellCommand
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageShellCommand
+import SageUtils
 import Foundation
 
 let MIN_YIELD_TIME_MS: UInt64 = 250

@@ -7,7 +7,7 @@
 
 /// Base Seatbelt policy applied to every sandboxed process.
 ///
-/// deny-default with an allowlist ported from OpenAI Codex's sandboxing crate
+/// deny-default with an allowlist ported from OpenAI Sage's sandboxing crate
 /// (codex-rs/sandboxing/src/*.sbpl, Apache-2.0), which itself borrows from
 /// Chrome's macOS sandbox policy. Dynamic per-run rules (readable/writable
 /// roots, home-read denial) are appended by `SeatbeltSandbox`.

@@ -11,10 +11,10 @@
 //  subset handlers and catalog_parameters need.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
-typealias HarnessJSON = CodexProtocol.JSONValue
+typealias HarnessJSON = SageProtocol.JSONValue
 
 enum JsonSchemaPrimitiveType: String, Codable, Equatable, Sendable {
     case string, number, boolean, integer, object, array, null

@@ -1,6 +1,6 @@
 //
 //  discovery.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/discovery.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -16,8 +16,8 @@
 //  prefix and inequality across limits.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import CryptoKit
 import Foundation
 

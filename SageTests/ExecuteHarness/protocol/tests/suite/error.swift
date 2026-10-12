@@ -9,9 +9,9 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
+@testable import SageProtocol
 
-final class CodexErrorTests: XCTestCase {
+final class SageErrorTests: XCTestCase {
     func testUsageLimitReachedFormatsPlusPlan() {
         let error = UsageLimitReachedError(
             planType: .known(.plus),
@@ -21,11 +21,11 @@ final class CodexErrorTests: XCTestCase {
             rateLimitReachedType: nil)
         XCTAssertEqual(
             error.description,
-            "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again later.")
+            "You’ve hit your usage limit. Upgrade your Sage plan or purchase more credits or try again later.")
     }
 
     func testServerOverloadedMapsToProtocol() {
-        XCTAssertEqual(CodexErr.new(.serverOverloaded).toCodexProtocolError(), .serverOverloaded)
+        XCTAssertEqual(SageErr.new(.serverOverloaded).toSageProtocolError(), .serverOverloaded)
     }
 
     func testSandboxDeniedUsesAggregatedOutput() {
@@ -36,7 +36,7 @@ final class CodexErrorTests: XCTestCase {
             aggregatedOutput: .new("aggregate detail"),
             duration: .milliseconds(10),
             timedOut: false)
-        let error = CodexErr.sandbox(.denied(output: output, networkPolicyDecision: nil))
+        let error = SageErr.sandbox(.denied(output: output, networkPolicyDecision: nil))
         XCTAssertEqual(getErrorMessageUi(error), "aggregate detail")
     }
 }

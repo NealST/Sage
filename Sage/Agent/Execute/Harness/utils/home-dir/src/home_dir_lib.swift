@@ -1,6 +1,6 @@
 //
 //  home_dir_lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/home-dir/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -19,18 +19,18 @@
 
 import Foundation
 
-/// Returns the path to the Codex configuration directory, which can be
-/// specified by the `CODEX_HOME` environment variable. If not set, defaults to
-/// `~/.codex`.
+/// Returns the path to the Sage configuration directory, which can be
+/// specified by the `SAGE_HOME` environment variable. If not set, defaults to
+/// `~/.sage`.
 ///
-/// - If `CODEX_HOME` is set, the value must exist and be a directory. The
+/// - If `SAGE_HOME` is set, the value must exist and be a directory. The
 ///   value will be canonicalized and this function will throw otherwise.
-/// - If `CODEX_HOME` is not set, this function does not verify that the
+/// - If `SAGE_HOME` is not set, this function does not verify that the
 ///   directory exists.
-public func findCodexHome() throws -> AbsolutePathBuf {
-    let codexHomeEnv = ProcessInfo.processInfo.environment["CODEX_HOME"]
+public func findSageHome() throws -> AbsolutePathBuf {
+    let sageHomeEnv = ProcessInfo.processInfo.environment["SAGE_HOME"]
         .flatMap { $0.isEmpty ? nil : $0 }
-    return try findCodexHomeFromEnv(codexHomeEnv)
+    return try findSageHomeFromEnv(sageHomeEnv)
 }
 
 /// `{val:?}` — Rust's debug formatting of a string literal.
@@ -50,10 +50,10 @@ private func rustDebugQuoted(_ value: String) -> String {
     return out
 }
 
-func findCodexHomeFromEnv(_ codexHomeEnv: String?) throws -> AbsolutePathBuf {
-    // Honor the `CODEX_HOME` environment variable when it is set to allow
+func findSageHomeFromEnv(_ sageHomeEnv: String?) throws -> AbsolutePathBuf {
+    // Honor the `SAGE_HOME` environment variable when it is set to allow
     // users (and tests) to override the default location.
-    switch codexHomeEnv {
+    switch sageHomeEnv {
     case .some(let val):
         let attributes: [FileAttributeKey: Any]
         do {
@@ -62,7 +62,7 @@ func findCodexHomeFromEnv(_ codexHomeEnv: String?) throws -> AbsolutePathBuf {
             if error.domain == NSCocoaErrorDomain,
                error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError {
                 throw IOError.notFound(
-                    "CODEX_HOME points to \(rustDebugQuoted(val)), but that path does not exist"
+                    "SAGE_HOME points to \(rustDebugQuoted(val)), but that path does not exist"
                 )
             }
             let kind: IOError.Kind =
@@ -70,13 +70,13 @@ func findCodexHomeFromEnv(_ codexHomeEnv: String?) throws -> AbsolutePathBuf {
                 ? .permissionDenied : .other
             throw IOError(
                 kind: kind,
-                "failed to read CODEX_HOME \(rustDebugQuoted(val)): \(error)"
+                "failed to read SAGE_HOME \(rustDebugQuoted(val)): \(error)"
             )
         }
 
         guard let type = attributes[.type] as? FileAttributeType, type == .typeDirectory else {
             throw IOError.invalidInput(
-                "CODEX_HOME points to \(rustDebugQuoted(val)), but that path is not a directory"
+                "SAGE_HOME points to \(rustDebugQuoted(val)), but that path is not a directory"
             )
         }
         do {
@@ -85,13 +85,13 @@ func findCodexHomeFromEnv(_ codexHomeEnv: String?) throws -> AbsolutePathBuf {
         } catch let error as IOError {
             throw IOError(
                 kind: error.kind,
-                "failed to canonicalize CODEX_HOME \(rustDebugQuoted(val)): \(error)"
+                "failed to canonicalize SAGE_HOME \(rustDebugQuoted(val)): \(error)"
             )
         }
     case .none:
         guard let home = AbsolutePathBufGuard.homeDirectory() else {
             throw IOError.notFound("Could not find home directory")
         }
-        return try AbsolutePathBuf.fromAbsolutePath(home + "/.codex")
+        return try AbsolutePathBuf.fromAbsolutePath(home + "/.sage")
     }
 }

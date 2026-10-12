@@ -21,7 +21,7 @@ let EOF_MARKER = "*** End of File"
 let CHANGE_CONTEXT_MARKER = "@@ "
 let EMPTY_CHANGE_CONTEXT_MARKER = "@@"
 
-/// Codex keeps this false so gpt-4.1 heredoc wrappers still parse.
+/// Sage keeps this false so gpt-4.1 heredoc wrappers still parse.
 let PARSE_IN_STRICT_MODE = false
 
 public enum ParseError: Error, Equatable, LocalizedError {

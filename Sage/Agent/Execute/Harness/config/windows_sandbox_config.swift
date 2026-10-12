@@ -9,7 +9,7 @@
 //  Windows sandbox is out of scope on macOS. The type exists for Config.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct WindowsSandboxConfig: Equatable, Sendable {

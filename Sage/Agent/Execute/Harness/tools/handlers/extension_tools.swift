@@ -10,8 +10,8 @@
 //  the registration surface Session-free.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct ExtensionToolAdapter: CoreToolRuntime {
     var name: ToolName

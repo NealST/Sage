@@ -12,10 +12,10 @@
 //  until `EventMsg.execCommandOutputDelta` is added to protocol.swift.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 public let DEFAULT_EXEC_COMMAND_TIMEOUT_MS: UInt64 = 10_000
@@ -198,6 +198,16 @@ public struct StdoutStream: Sendable {
     var emit: @Sendable (ExecCommandOutputDeltaEvent) -> Void
 }
 
+public func makeExecStdoutStream(
+    subId: String,
+    callId: String,
+    emit: @escaping @Sendable (_ callId: String, _ isStderr: Bool, _ chunk: Data) -> Void
+) -> StdoutStream {
+    StdoutStream(subId: subId, callId: callId) { event in
+        emit(event.callId, event.stream == .stderr, event.chunk)
+    }
+}
+
 func selectProcessExecToolSandboxType(
     permissionProfile: PermissionProfile,
     windowsSandboxType: SandboxType,
@@ -211,7 +221,7 @@ func selectProcessExecToolSandboxType(
     )
 }
 
-func networkProxyEnvironmentError(_ networkEnvironmentId: String?, _ err: Error) -> CodexErr {
+func networkProxyEnvironmentError(_ networkEnvironmentId: String?, _ err: Error) -> SageErr {
     let environmentId = networkEnvironmentId ?? "default"
     return .io("failed to prepare network proxy for environment `\(environmentId)`: \(err)")
 }
@@ -221,11 +231,11 @@ public func processExecToolCall(
     permissionProfile: PermissionProfile,
     sandboxCwd: AbsolutePathBuf,
     windowsSandboxWorkspaceRoots: [AbsolutePathBuf] = [],
-    codexLinuxSandboxExe: String? = nil,
-    codexSelfExe: String? = nil,
+    sageLinuxSandboxExe: String? = nil,
+    sageSelfExe: String? = nil,
     useLegacyLandlock: Bool = false,
     stdoutStream: StdoutStream? = nil
-) async -> CodexResult<ExecToolCallOutput> {
+) async -> SageResult<ExecToolCallOutput> {
     let windowsSandboxType: SandboxType = params.windowsSandboxLevel == .disabled
         ? .none
         : .windowsRestrictedToken
@@ -236,13 +246,13 @@ public func processExecToolCall(
             permissionProfile: permissionProfile,
             sandboxCwd: sandboxCwd,
             windowsSandboxWorkspaceRoots: roots,
-            codexLinuxSandboxExe: codexLinuxSandboxExe,
-            codexSelfExe: codexSelfExe,
+            sageLinuxSandboxExe: sageLinuxSandboxExe,
+            sageSelfExe: sageSelfExe,
             windowsSandboxType: windowsSandboxType,
             useLegacyLandlock: useLegacyLandlock
         )
         return await executeEnv(execReq, stdoutStream: stdoutStream)
-    } catch let error as CodexErr {
+    } catch let error as SageErr {
         return .failure(error)
     } catch {
         return .failure(.io(String(describing: error)))
@@ -254,8 +264,8 @@ func buildExecRequest(
     permissionProfile: PermissionProfile,
     sandboxCwd: AbsolutePathBuf,
     windowsSandboxWorkspaceRoots: [PathUri],
-    codexLinuxSandboxExe: String?,
-    codexSelfExe: String?,
+    sageLinuxSandboxExe: String?,
+    sageSelfExe: String?,
     windowsSandboxType: SandboxType,
     useLegacyLandlock: Bool
 ) throws -> ExecRequest {
@@ -277,7 +287,7 @@ func buildExecRequest(
         }
     }
     guard let program = params.command.first else {
-        throw CodexErr.io("command args are empty")
+        throw SageErr.io("command args are empty")
     }
     let args = Array(params.command.dropFirst())
     let cwd = PathUri.fromAbsPath(params.cwd)
@@ -300,13 +310,13 @@ func buildExecRequest(
                 environmentId: params.networkEnvironmentId,
                 network: params.network,
                 sandboxPolicyCwd: sandboxPolicyCwd,
-                sandboxExe: codexLinuxSandboxExe ?? codexSelfExe,
+                sandboxExe: sageLinuxSandboxExe ?? sageSelfExe,
                 useLegacyLandlock: useLegacyLandlock,
                 windowsSandboxLevel: params.windowsSandboxLevel
             )
         )
     } catch let error as SandboxTransformError {
-        throw CodexErr(error)
+        throw SageErr(error)
     }
     let windowsRoots: [AbsolutePathBuf]
     if sandboxType == .windowsRestrictedToken {
@@ -325,11 +335,11 @@ func buildExecRequest(
     )
 }
 
-func executeExecRequest(
+public func executeExecRequest(
     _ execRequest: ExecRequest,
     stdoutStream: StdoutStream?,
     afterSpawn: (() -> Void)?
-) async -> CodexResult<ExecToolCallOutput> {
+) async -> SageResult<ExecToolCallOutput> {
     let cwd: AbsolutePathBuf
     let windowsSandboxPolicyCwd: AbsolutePathBuf
     do {
@@ -370,7 +380,7 @@ private func getRawOutputResult(
     stdoutStream: StdoutStream?,
     afterSpawn: (() -> Void)?,
     sandbox: SandboxType
-) async -> Result<RawExecToolCallOutput, CodexErr> {
+) async -> Result<RawExecToolCallOutput, SageErr> {
     if sandbox == .windowsRestrictedToken {
         return .failure(.unsupportedOperation("Windows sandbox exec is unavailable on this platform"))
     }
@@ -387,11 +397,11 @@ private struct RawExecToolCallOutput {
 }
 
 private func finalizeExecResult(
-    _ rawOutputResult: Result<RawExecToolCallOutput, CodexErr>,
+    _ rawOutputResult: Result<RawExecToolCallOutput, SageErr>,
     sandboxType: SandboxType,
     duration: Duration,
     capturePolicy: ExecCapturePolicy
-) -> CodexResult<ExecToolCallOutput> {
+) -> SageResult<ExecToolCallOutput> {
     switch rawOutputResult {
     case .success(let raw):
         var timedOut = raw.timedOut
@@ -465,7 +475,7 @@ private func exec(
     networkSandboxPolicy: NetworkSandboxPolicy,
     stdoutStream: StdoutStream?,
     afterSpawn: (() -> Void)?
-) async -> Result<RawExecToolCallOutput, CodexErr> {
+) async -> Result<RawExecToolCallOutput, SageErr> {
     var env = params.env
     if let network = params.network {
         do {
@@ -507,12 +517,28 @@ private func exec(
     )
 }
 
+private final class ExecWaitGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var settled = false
+
+    func finish<T>(_ continuation: CheckedContinuation<T, Never>, _ value: T) {
+        lock.lock()
+        if settled {
+            lock.unlock()
+            return
+        }
+        settled = true
+        lock.unlock()
+        continuation.resume(returning: value)
+    }
+}
+
 private func consumeOutput(
     _ spawned: SpawnedProcess,
     expiration: ExecExpiration,
     capturePolicy: ExecCapturePolicy,
     stdoutStream: StdoutStream?
-) async -> Result<RawExecToolCallOutput, CodexErr> {
+) async -> Result<RawExecToolCallOutput, SageErr> {
     let retainedBytesCap = capturePolicy.retainedBytesCap()
     let stdoutTask = Task {
         await readOutput(spawned.stdout, stream: stdoutStream, isStderr: false, maxBytes: retainedBytesCap)
@@ -521,23 +547,27 @@ private func consumeOutput(
         await readOutput(spawned.stderr, stream: stdoutStream, isStderr: true, maxBytes: retainedBytesCap)
     }
 
-    enum WaitKind {
+    enum WaitKind: Sendable {
         case exit(Int32)
         case expiration(ExecExpirationOutcome)
     }
 
     let expirationTask: Task<ExecExpirationOutcome, Never>? = capturePolicy.usesExpiration()
-        ? Task { await expiration.waitWithOutcome() }
+        ? Task.detached(priority: .userInitiated) { await expiration.waitWithOutcome() }
         : nil
 
-    let winner: WaitKind = await withTaskGroup(of: WaitKind.self) { group in
-        group.addTask { .exit(await spawned.exit.value) }
-        if let expirationTask {
-            group.addTask { .expiration(await expirationTask.value) }
+    let winner: WaitKind = await withCheckedContinuation { continuation in
+        let gate = ExecWaitGate()
+        Task.detached(priority: .userInitiated) {
+            let code = await spawned.exit.value
+            gate.finish(continuation, .exit(code))
         }
-        let first = await group.next() ?? .exit(-1)
-        group.cancelAll()
-        return first
+        if let expirationTask {
+            Task.detached(priority: .userInitiated) {
+                let outcome = await expirationTask.value
+                gate.finish(continuation, .expiration(outcome))
+            }
+        }
     }
 
     var exitCode: Int32

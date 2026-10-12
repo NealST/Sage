@@ -11,7 +11,7 @@
 //  R4a: basename collision with tools/mod.swift.
 //
 
-import CodexCore
+import SageCore
 import Foundation
 
 func parseArguments<T: Decodable>(_ arguments: String) throws -> T {

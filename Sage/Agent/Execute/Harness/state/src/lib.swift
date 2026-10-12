@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexState
+//  SageState
 //
 //  Port of codex-rs/state/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  folder from the app target.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Identifies internal review threads whose user messages are synthetic approval prompts.
@@ -50,4 +50,4 @@ public let PINNED_THREAD_SECTION_ID = "01984de2-8f74-7c91-a3b2-5c5e937cf318"
 public let PINNED_THREAD_SECTION_NAME = "Pinned"
 
 /// Environment variable for overriding the SQLite state database home directory.
-public let SQLITE_HOME_ENV = "CODEX_SQLITE_HOME"
+public let SQLITE_HOME_ENV = "SAGE_SQLITE_HOME"

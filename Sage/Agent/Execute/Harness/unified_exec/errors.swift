@@ -9,8 +9,8 @@
 //  `StdinApproval` wraps a string until tools/sandboxing ToolError is ported.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 enum UnifiedExecError: Error, CustomStringConvertible {

@@ -14,7 +14,7 @@
 //  this session has no status watch. A closed reply channel waits.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension Session {

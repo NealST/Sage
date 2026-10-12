@@ -11,8 +11,8 @@
 //  spawn-edge updates wait on ThreadManager.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct CloseAgentArgs: Decodable, Equatable, Sendable {
     var target: String

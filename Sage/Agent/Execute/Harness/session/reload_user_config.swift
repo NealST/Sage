@@ -62,7 +62,7 @@ extension Session {
     func userConfigFilePaths() -> [String] {
         let configured = state.sessionConfiguration.userConfigPaths
         if !configured.isEmpty { return configured }
-        return [(state.sessionConfiguration.codexHome as NSString).appendingPathComponent("config.toml")]
+        return [(state.sessionConfiguration.sageHome as NSString).appendingPathComponent("config.toml")]
     }
 }
 

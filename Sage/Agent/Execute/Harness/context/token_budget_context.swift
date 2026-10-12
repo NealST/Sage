@@ -1,6 +1,6 @@
 //
 //  token_budget_context.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/token_budget_context.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  is represented as a string until the protocol type is ported.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public let contextWindowOpenTag = "<context_window>"

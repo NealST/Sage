@@ -1,6 +1,6 @@
 //
 //  agent_message_board.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent_message_board.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,11 +10,11 @@
 //  Feature flags, and the message-board extension crate.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func installAgentMessageBoard() throws {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "install_agent_message_board waits on ThreadManager / Config / AgentMessageBoard extension"
     )
 }

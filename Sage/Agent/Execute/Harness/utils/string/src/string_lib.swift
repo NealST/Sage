@@ -1,6 +1,6 @@
 //
 //  string_lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/string/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774

@@ -9,7 +9,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
+@testable import SageProtocol
 
 final class TurnInputTests: XCTestCase {
     func testCyberAccessProgramSnakeCase() throws {

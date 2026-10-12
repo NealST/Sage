@@ -1,6 +1,6 @@
 //
 //  powershell_parser.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/command_safety/powershell_parser.rs
 //  (Apache-2.0).

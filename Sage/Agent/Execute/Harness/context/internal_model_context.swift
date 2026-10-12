@@ -1,17 +1,17 @@
 //
 //  internal_model_context.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/internal_model_context.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
-public let contextStartMarker = "<codex_internal_context"
-public let contextEndMarker = "</codex_internal_context>"
+public let contextStartMarker = "<sage_internal_context"
+public let contextEndMarker = "</sage_internal_context>"
 public let legacyGoalContextStartMarker = "<goal_context>"
 public let legacyGoalContextEndMarker = "</goal_context>"
 

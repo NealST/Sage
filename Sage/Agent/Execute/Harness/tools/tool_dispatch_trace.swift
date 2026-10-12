@@ -10,8 +10,8 @@
 //  invocation/result facts in memory.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 enum ToolDispatchRequester: Equatable, Sendable {
     case model(modelVisibleCallId: String)

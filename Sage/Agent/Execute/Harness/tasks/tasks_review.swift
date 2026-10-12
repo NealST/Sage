@@ -13,8 +13,8 @@
 //  `ReviewOutputEvent` when it is JSON.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 
 final class ReviewTask: SessionTask, @unchecked Sendable {
@@ -32,7 +32,7 @@ final class ReviewTask: SessionTask, @unchecked Sendable {
         cancellationToken: CancellationToken
     ) async throws -> String? {
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         if session.activeTurn == nil {
             session.activeTurn = ActiveTurn(
@@ -71,13 +71,13 @@ final class ReviewTask: SessionTask, @unchecked Sendable {
             )
         } catch {
             if cancellationToken.isCancelled {
-                throw CodexErr(details: .turnAborted)
+                throw SageErr(details: .turnAborted)
             }
             emitExitedReviewMode(session: session, context: context, output: nil)
             throw error
         }
         if cancellationToken.isCancelled {
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         let output = message.map(parseReviewOutputEvent)
         emitExitedReviewMode(session: session, context: context, output: output)

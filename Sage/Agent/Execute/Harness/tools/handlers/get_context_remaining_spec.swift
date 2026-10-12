@@ -8,7 +8,7 @@
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 
 let GET_CONTEXT_REMAINING_TOOL_NAME = "get_context_remaining"
 

@@ -1,6 +1,6 @@
 //
 //  is_dangerous_command.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/command_safety/is_dangerous_command.rs
 //  (Apache-2.0).

@@ -10,7 +10,7 @@
 //  still measures bytes shed by a metadata bound.
 //
 
-import CodexProtocol
+import SageProtocol
 
 func metadataBytes(_ items: [ResponseItem]) -> Int {
     items.reduce(0) { $0 + String(describing: $1).utf8.count }

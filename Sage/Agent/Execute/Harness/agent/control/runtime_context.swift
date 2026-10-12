@@ -1,6 +1,6 @@
 //
 //  runtime_context.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of methods on rust `LocalAgentControl` in
 //  codex-rs/core/src/agent/control.rs (Apache-2.0).
@@ -13,7 +13,7 @@
 //  is still skipped.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 let maxEnvironmentSubagents = 8

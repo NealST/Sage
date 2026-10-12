@@ -10,9 +10,9 @@
 //
 
 import ApplyPatch
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 let PATCH_REJECTED_OUTSIDE_PROJECT_REASON =

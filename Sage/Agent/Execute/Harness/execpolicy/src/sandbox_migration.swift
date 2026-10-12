@@ -1,6 +1,6 @@
 //
 //  sandbox_migration.swift
-//  CodexExecPolicy
+//  SageExecPolicy
 //
 //  Port of codex-rs/execpolicy/src/sandbox_migration.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -15,20 +15,20 @@ import Foundation
 let MIGRATION_MARKER_FILENAME = ".sandbox_migration"
 
 public func prefixRuleMigration(
-    codexHome: String,
+    sageHome: String,
     policyPath: String,
     bannedPrefixes: [[String]]
 ) async throws {
-    let markerPath = (codexHome as NSString).appendingPathComponent(MIGRATION_MARKER_FILENAME)
+    let markerPath = (sageHome as NSString).appendingPathComponent(MIGRATION_MARKER_FILENAME)
     if FileManager.default.fileExists(atPath: markerPath) {
         return
     }
     try await cleanRulesFile(policyPath: policyPath, bannedPrefixes: bannedPrefixes)
-    try await writeMigrationMarker(codexHome: codexHome, markerPath: markerPath)
+    try await writeMigrationMarker(sageHome: sageHome, markerPath: markerPath)
 }
 
-private func writeMigrationMarker(codexHome: String, markerPath: String) async throws {
-    try FileManager.default.createDirectory(atPath: codexHome, withIntermediateDirectories: true)
+private func writeMigrationMarker(sageHome: String, markerPath: String) async throws {
+    try FileManager.default.createDirectory(atPath: sageHome, withIntermediateDirectories: true)
     if FileManager.default.fileExists(atPath: markerPath) {
         return
     }

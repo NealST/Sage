@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 let NEW_CONTEXT_WINDOW_MESSAGE =
     "A new context window will start without summarizing conversation history."

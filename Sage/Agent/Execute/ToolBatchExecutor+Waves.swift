@@ -38,7 +38,7 @@ extension ToolBatchExecutor {
         return .ready
     }
 
-    /// Codex starts every call, then admits them through an RWLock.
+    /// Sage starts every call, then admits them through an RWLock.
     /// Approval still happens first so a HUD card is a single pause.
     ///
     /// `SessionOperationGate` is a busy lock: the turn cannot sit inside

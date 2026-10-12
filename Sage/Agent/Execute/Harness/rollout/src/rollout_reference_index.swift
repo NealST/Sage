@@ -1,6 +1,6 @@
 //
 //  rollout_reference_index.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/rollout_reference_index.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `.jsonl` are skipped via `RolloutFile.fromPath`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Direct history-base edges discovered from local rollout metadata.
@@ -29,25 +29,25 @@ public struct RolloutReferenceIndex: Sendable {
         referenceCountsByRollout = [:]
     }
 
-    public static func scan(codexHome: String) throws -> RolloutReferenceIndex {
+    public static func scan(sageHome: String) throws -> RolloutReferenceIndex {
         try scanPaths([
-            (codexHome as NSString).appendingPathComponent(ARCHIVED_SESSIONS_SUBDIR),
-            (codexHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
+            (sageHome as NSString).appendingPathComponent(ARCHIVED_SESSIONS_SUBDIR),
+            (sageHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
         ], threadIds: nil)
     }
 
-    public static func scanUnarchived(codexHome: String) throws -> RolloutReferenceIndex {
+    public static func scanUnarchived(sageHome: String) throws -> RolloutReferenceIndex {
         try scanPaths([
-            (codexHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
+            (sageHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
         ], threadIds: nil)
     }
 
     public static func scanUnarchivedThreads(
-        codexHome: String,
+        sageHome: String,
         threadIds: [ThreadId]
     ) throws -> RolloutReferenceIndex {
         try scanPaths([
-            (codexHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
+            (sageHome as NSString).appendingPathComponent(SESSIONS_SUBDIR),
         ], threadIds: Set(threadIds))
     }
 

@@ -6,10 +6,13 @@
   python3 scripts/harness_port.py check      # lint 文件头 + 覆盖完整性 + 表一致性，有违规退出码 1
   python3 scripts/harness_port.py stats      # 打印分 phase 进度统计
 
-约定（计划 §5）：
+约定（计划 §5 / §5.3）：
   codex-rs/core/src/<path>.rs        → Sage/Agent/Execute/Harness/<path>.swift
   codex-rs/<crate>/src/<path>.rs     → Sage/Agent/Execute/Harness/<crate>/src/<path>.swift
+  含 codex 的 crate/文件名按 R2a 改 sage（codex-api/ → sage-api/，codex_thread.rs → sage_thread.swift）
+  模块名 Sage*（FileSystem / ApplyPatch / ToolsRuntimes 除外）。
   mod.rs → mod.swift；文件名保持 snake_case；一个 Rust 文件对应一个 Swift 文件。
+  文件头 Port of codex-rs/… 保留上游路径。
 """
 
 from __future__ import annotations
@@ -266,12 +269,24 @@ def count_lines(p: Path) -> int:
         return 0
 
 
+# 计划 §5.3 / R2a：上游路径含 codex 的，Swift 文件改成 sage。
+SAGE_FILE_RENAMES = {
+    "core/src/codex_thread.rs": "sage_thread.swift",
+    "core/src/codex_delegate.rs": "sage_delegate.swift",
+    "protocol/src/codex_error_info.rs": "protocol/src/sage_error_info.swift",
+}
+
+
 def swift_path_for(codex_rel: str) -> str:
-    """codex-rs 相对路径 → Harness 相对路径（§5.1 R1/R2/R3/R4，不含 R4a 冲突消解）。"""
+    """codex-rs 相对路径 → Harness 相对路径（§5.1 R1/R2/R2a/R3/R4，不含 R4a 冲突消解）。"""
     assert codex_rel.endswith(".rs")
+    if codex_rel in SAGE_FILE_RENAMES:
+        return SAGE_FILE_RENAMES[codex_rel]
     stem = codex_rel[:-3]
     if stem.startswith("core/src/"):
         return stem[len("core/src/"):] + ".swift"
+    if stem.startswith("codex-api/"):
+        return "sage-api/" + stem[len("codex-api/"):] + ".swift"
     # <crate>/src/<rel> → <crate>/src/<rel>.swift
     return stem + ".swift"
 
@@ -280,41 +295,44 @@ _CRATE_TOPS = {c.split("/")[0] for c in CRATES}
 
 
 def module_of(swift_rel: str) -> str:
-    """Swift 文件所属 module（§4.1）；R4a 冲突只在同 module 内发生。
+    """Swift 文件所属 module（§4.1 / §5.3）；R4a 冲突只在同 module 内发生。
 
     crate 映射路径形如 `<crate>/src/...`（R2）；core 映射路径第二级永不为
-    `src`（R1），借此区分 `core/src/state/mod.rs`（CodexCore）与
-    `state/src/model/mod.rs`（state crate 模块）。
+    `src`（R1），借此区分 `core/src/state/mod.rs`（SageCore）与
+    `state/src/model/mod.rs`（state crate 模块）。`codex-api` 的 Swift 目录是
+    `sage-api/`（R2a）。
     """
     top = swift_rel.split("/", 1)[0]
     if top == "utils":
-        return "CodexUtils"
+        return "SageUtils"
     if top == "async-utils":
         # SPM 一个 target 只能有一个 path，async-utils/ 不在 utils/ 子树内，
-        # 独立成 CodexAsyncUtils 模块（§4.1 注记）。
-        return "CodexAsyncUtils"
+        # 独立成 SageAsyncUtils 模块（§4.1 注记）。
+        return "SageAsyncUtils"
     if top == "protocol":
-        return "CodexProtocol"
+        return "SageProtocol"
     if top == "apply-patch":
         return "ApplyPatch"
     if top == "file-system":
         return "FileSystem"
     if top == "git-utils":
-        return "CodexGitUtils"
+        return "SageGitUtils"
     if top == "sandboxing":
-        return "CodexSandboxing"
+        return "SageSandboxing"
     if top == "shell-command":
-        return "CodexShellCommand"
+        return "SageShellCommand"
     if top == "execpolicy":
-        return "CodexExecPolicy"
+        return "SageExecPolicy"
     if swift_rel.startswith("tools/runtimes/"):
         return "ToolsRuntimes"
     if top == "network-proxy":
-        return "CodexNetworkProxy"
+        return "SageNetworkProxy"
+    if top == "sage-api":
+        return "SageAPI"
     parts = swift_rel.split("/")
     if len(parts) >= 3 and parts[1] == "src" and top in _CRATE_TOPS:
         return f"Crate:{top}"
-    return "CodexCore"
+    return "SageCore"
 
 
 def collision_prefix(codex_rel: str) -> str:

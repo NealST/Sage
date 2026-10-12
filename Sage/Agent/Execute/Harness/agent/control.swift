@@ -1,6 +1,6 @@
 //
 //  control.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -8,13 +8,13 @@
 //
 //  Registry spawn/close/list/inspect and in-memory mailbox send run without
 //  Session. When a ThreadManager is attached, spawn also registers a live
-//  CodexThread and copies parent history for fork_mode. Mailbox and steer
+//  SageThread and copies parent history for fork_mode. Mailbox and steer
 //  activity can be awaited without Session. Session IO still waits on later
 //  wiring. Listed/spawned agents start as `.pendingInit` until a status update.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 import os
 
@@ -235,7 +235,7 @@ public final class LocalAgentRuntime: @unchecked Sendable {
         if let metadata = registry.agentMetadataForThread(agentId) {
             return metadata
         }
-        throw CodexErr.threadNotFound(agentId)
+        throw SageErr.threadNotFound(agentId)
     }
 
     public func control(sessionId: SessionId) -> LocalAgentControl {
@@ -263,12 +263,12 @@ public final class LocalAgentRuntime: @unchecked Sendable {
         do {
             agentPath = try currentAgentPath.resolve(agentReference)
         } catch {
-            throw CodexErr.unsupportedOperation(String(describing: error))
+            throw SageErr.unsupportedOperation(String(describing: error))
         }
         if let threadId = registry.agentIdForPath(agentPath) {
             return threadId
         }
-        throw CodexErr.unsupportedOperation(
+        throw SageErr.unsupportedOperation(
             "live agent path `\(agentPath.asStr)` not found"
         )
     }
@@ -357,22 +357,29 @@ public final class LocalAgentControl: @unchecked Sendable {
         runtime.publishAgentStatus(threadId, .pendingInit)
         _ = runtime.delivery.enqueue(threadId: threadId, input: request.input)
         let live = LiveAgent(threadId: threadId, metadata: committed, status: .pendingInit)
-        let snapshot = ThreadConfigSnapshot(
+        var snapshot = ThreadConfigSnapshot(
             model: "",
             sessionSource: sessionSource,
             forkedFromThreadId: forkParentThreadId,
             parentThreadId: request.options.parentThreadId ?? sessionSource.parentThreadId()
         )
         if let manager = try? runtime.upgradeThreadManager() {
-            let cwd = (try? AbsolutePathBuf.currentDir())
+            let parent = request.options.parentThreadId.flatMap { manager.peekThread($0) }
+            let parentModel = parent?.configSnapshot().model.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) ?? ""
+            let model = parentModel.isEmpty ? snapshot.model : parentModel
+            snapshot.model = model
+            let cwd = parent?.startup.cwd
+                ?? (try? AbsolutePathBuf.currentDir())
                 ?? (try? AbsolutePathBuf.fromAbsolutePathChecked("/"))
             guard let cwd else {
-                throw CodexErr.invalidRequest("invalid thread cwd")
+                throw SageErr.invalidRequest("invalid thread cwd")
             }
             _ = try manager.insertLiveThread(
                 threadId: threadId,
                 sessionSource: sessionSource,
-                model: snapshot.model,
+                model: model,
                 cwd: cwd,
                 configSnapshot: snapshot
             )
@@ -399,9 +406,9 @@ public final class LocalAgentControl: @unchecked Sendable {
         let metadata = try runtime.ensureAgentKnown(target)
         switch request.input {
         case .userInput(let items) where items.isEmpty:
-            throw CodexErr.invalidRequest("Items can't be empty")
+            throw SageErr.invalidRequest("Items can't be empty")
         case .message(let message, _) where message.isEmpty:
-            throw CodexErr.invalidRequest("Empty message can't be sent to an agent")
+            throw SageErr.invalidRequest("Empty message can't be sent to an agent")
         default:
             break
         }
@@ -411,6 +418,11 @@ public final class LocalAgentControl: @unchecked Sendable {
         } else if case .userInput = request.input {
             runtime.publishAgentStatus(target, .running)
         }
+        if let manager = try? runtime.upgradeThreadManager(),
+           let thread = manager.peekThread(target)
+        {
+            try await thread.submitSpawnInput(request.input, options: SpawnAgentOptions())
+        }
         return DeliveryReceipt(threadId: target, metadata: metadata, submissionId: submissionId)
     }
 
@@ -418,13 +430,13 @@ public final class LocalAgentControl: @unchecked Sendable {
         let parentMetadata = try runtime.ensureAgentKnown(parent)
         let childMetadata = try runtime.ensureAgentKnown(child)
         guard let parentPath = parentMetadata.agentPath, let childPath = childMetadata.agentPath else {
-            throw CodexErr.invalidRequest(
+            throw SageErr.invalidRequest(
                 "cannot resume multi-agent v2 child \(child): parent ownership is unavailable; resume the parent first"
             )
         }
         let prefix = "\(parentPath.asStr)/"
         guard childPath.asStr.hasPrefix(prefix) else {
-            throw CodexErr.invalidRequest(
+            throw SageErr.invalidRequest(
                 "cannot resume multi-agent v2 child \(child): recorded parent ownership is inconsistent"
             )
         }
@@ -466,7 +478,7 @@ public final class LocalAgentControl: @unchecked Sendable {
             do {
                 resolvedPrefix = try (source.getAgentPath() ?? .root()).resolve(pathPrefix)
             } catch {
-                throw CodexErr.unsupportedOperation(String(describing: error))
+                throw SageErr.unsupportedOperation(String(describing: error))
             }
         } else {
             resolvedPrefix = nil

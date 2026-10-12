@@ -10,8 +10,8 @@
 //  The notify functions keep the call shape so later wiring can subscribe.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 
 enum ToolCallOutcome: Equatable, Sendable {
     case completed

@@ -1,12 +1,12 @@
 //
 //  mcp.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/mcp.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
-//  MCP (Model Context Protocol) types and helpers used inside the Codex
+//  MCP (Model Context Protocol) types and helpers used inside the Sage
 //  protocol. TS/JSON-schema derives are omitted; Codable conformance
 //  preserves the same wire shapes.
 //
@@ -41,7 +41,7 @@ public func isNodeReplBackedServer(_ server: String) -> Bool {
 
 public func isNodeReplBackedConnector(_ server: String, connectorId: String?) -> Bool {
     isNodeReplBackedServer(server)
-        || (server == "codex_apps" && connectorId == "connector_openai_browser")
+        || (server == "sage_apps" && connectorId == "connector_openai_browser")
 }
 
 public func isNodeReplBackedTool(name: String, namespace: String?) -> Bool {

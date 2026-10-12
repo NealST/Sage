@@ -1,6 +1,6 @@
 //
 //  role.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/role.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,15 +12,15 @@
 //  unless a caller-supplied config file parses a model or effort.
 //
 
-import CodexAgentRoles
-import CodexProtocol
+import SageAgentRoles
+import SageProtocol
 import Foundation
 
 public let DEFAULT_ROLE_NAME = "default"
 let AGENT_TYPE_UNAVAILABLE_ERROR = "agent type is currently not available"
 
 public func applyRoleToConfig(roleName: String?) async throws {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "apply_role_to_config waits on Config / ConfigLayerStack"
     )
 }

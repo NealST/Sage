@@ -1,14 +1,14 @@
 //
 //  selection.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/selection.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 /// Supplies ordered skills, disabled identities, and discovery paths for explicit selection.

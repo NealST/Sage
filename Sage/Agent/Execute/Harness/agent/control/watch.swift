@@ -1,18 +1,18 @@
 //
 //  watch.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/watch.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  When a ThreadManager holds the agent, status updates stream from
-//  CodexThread. Without a manager, known registry identities emit one
+//  SageThread. Without a manager, known registry identities emit one
 //  inspect snapshot so existing mailbox tests stay one-shot. wait_agent
 //  uses the same stream to wait for a final status.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension LocalAgentControl {
@@ -62,13 +62,13 @@ extension LocalAgentControl {
             do {
                 var updates = try await subscribeStatus(agentId: threadId).makeAsyncIterator()
                 guard let initial = await updates.next() else {
-                    throw CodexErr.internalAgentDied
+                    throw SageErr.internalAgentDied
                 }
                 let status = initial.status() ?? .notFound
                 if isFinal(status) {
                     initialFinal.append((threadId, status))
                 }
-            } catch let err as CodexErr {
+            } catch let err as SageErr {
                 if case .threadNotFound = err.detailsValue() {
                     initialFinal.append((threadId, .notFound))
                 } else {

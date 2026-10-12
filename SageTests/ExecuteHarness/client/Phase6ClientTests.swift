@@ -6,10 +6,10 @@
 //  Phase 6 model-client / SSE / provider catalog tests.
 //
 
-import CodexAPI
-import CodexCore
-import CodexModelProviderInfo
-import CodexProtocol
+import SageAPI
+import SageCore
+import SageModelProviderInfo
+import SageProtocol
 import Foundation
 import XCTest
 
@@ -140,7 +140,7 @@ final class Phase6ClientTests: XCTestCase {
             outputSchemaStrict: true
         )
         XCTAssertEqual(text?.verbosity, .low)
-        XCTAssertEqual(text?.format?.name, "codex_output_schema")
+        XCTAssertEqual(text?.format?.name, "sage_output_schema")
 
         let info = try modelInfoFixture()
         let client = ModelClient(
@@ -148,7 +148,7 @@ final class Phase6ClientTests: XCTestCase {
             providerInfo: ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1"),
             auth: BearerAuthProvider(apiKey: "sk-test")
         )
-        var metadata = CodexResponsesMetadata(
+        var metadata = SageResponsesMetadata(
             installationId: "inst",
             sessionId: "sess",
             threadId: "thr",

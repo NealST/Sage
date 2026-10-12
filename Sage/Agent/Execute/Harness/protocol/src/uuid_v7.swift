@@ -1,10 +1,10 @@
 //
 //  uuid_v7.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Sage addition (no codex counterpart).
 //
-//  UUIDv7 generator backing `ThreadId` / `SessionId`. Codex calls the `uuid`
+//  UUIDv7 generator backing `ThreadId` / `SessionId`. Sage calls the `uuid`
 //  crate's `Uuid::now_v7()`; Foundation only offers random (v4) UUIDs, so the
 //  v7 layout is implemented here per RFC 9562 §5.7:
 //  48-bit unix epoch milliseconds, version 7, 12-bit random, variant 0b10,

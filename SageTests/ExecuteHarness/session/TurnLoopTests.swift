@@ -1,15 +1,16 @@
 @testable import Sage
 import ApplyPatch
-import CodexAPI
-import CodexAsyncUtils
-import CodexCore
-import CodexExecPolicy
-import CodexHistory
-import CodexHooks
-import CodexRollout
-import CodexProtocol
-import CodexShellCommand
-import CodexUtils
+import SageAPI
+import SageAsyncUtils
+import SageCore
+import SageExecPolicy
+import SageHistory
+import SageHooks
+import SageRollout
+import SageProtocol
+import SageShellCommand
+import SageThreadStore
+import SageUtils
 import XCTest
 
 final class ExecuteHarnessTurnLoopTests: XCTestCase {
@@ -269,7 +270,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         var samples = 0
         sess.runSamplingOverride = { _, _ in
             samples += 1
-            turn.terminalError = CodexErr.fatal("stop")
+            turn.terminalError = SageErr.fatal("stop")
             return SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "partial")
         }
         let task = RegularSessionTask()
@@ -392,7 +393,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             while !token.isCancelled {
                 try await Task.sleep(for: .milliseconds(10))
             }
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         let running = Task {
             await sess.spawnTask(
@@ -434,7 +435,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
     }
 
     func testNewTurnContextAppliesStartOptionsToPrompt() {
-        let schema = CodexProtocol.JSONValue.object(["type": .string("object")])
+        let schema = SageProtocol.JSONValue.object(["type": .string("object")])
         let sess = Session()
         let turn = sess.newTurnContext(
             subId: "turn-1",
@@ -505,7 +506,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         sess.runSamplingOverride = { _, _ in
             SamplingRequestResult(needsFollowUp: false, lastAgentMessage: "started")
         }
-        let schema = CodexProtocol.JSONValue.object(["type": .string("object")])
+        let schema = SageProtocol.JSONValue.object(["type": .string("object")])
         _ = try await sess.submit(
             .userInput(TurnInputBuilder.user([.text(text: "hello", textElements: [])])),
             startOptions: TurnStartOptions(
@@ -1267,7 +1268,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let toolTurn = TurnContext(subId: live.subId, sessionSource: live.sessionSource)
         toolTurn.collaborationMode = CollaborationMode(
             mode: .plan,
-            settings: CodexProtocol.Settings(model: live.model)
+            settings: SageProtocol.Settings(model: live.model)
         )
         let step = StepContext(turn: toolTurn)
         _ = assembleToolRouter(sess: sess, stepContext: step)
@@ -1379,7 +1380,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         toolTurn.config.features.enable(.guardianApproval)
         toolTurn.collaborationMode = CollaborationMode(
             mode: .plan,
-            settings: CodexProtocol.Settings(model: live.model)
+            settings: SageProtocol.Settings(model: live.model)
         )
         let step = StepContext(turn: toolTurn)
         _ = assembleToolRouter(sess: sess, stepContext: step)
@@ -1449,7 +1450,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let quiet = Session()
-        quiet.state.sessionConfiguration.codexHome = home.path
+        quiet.state.sessionConfiguration.sageHome = home.path
         let turn = TurnContext()
         turn.config.features.enable(.guardianApproval)
         let question = RequestUserInputQuestion(
@@ -1469,7 +1470,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(quiet.state.history.verifiedAnswers.count, 1)
 
         let sess = Session()
-        sess.state.sessionConfiguration.codexHome = home.path
+        sess.state.sessionConfiguration.sageHome = home.path
         sess.enableRolloutPersistence()
         await sess.recordRetainedVerifiedAnswer(
             turnContext: turn,
@@ -1540,7 +1541,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             id: "pick_one", header: "Hdr", question: "Pick one", options: nil
         )
         let first = Session()
-        first.state.sessionConfiguration.codexHome = home.path
+        first.state.sessionConfiguration.sageHome = home.path
         first.enableRolloutPersistence()
         await first.recordRetainedVerifiedAnswer(
             turnContext: turn,
@@ -1557,7 +1558,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(restored.state.history.verifiedAnswers, first.state.history.verifiedAnswers)
         XCTAssertEqual(restored.state.history.userMessageRevision, 1)
         XCTAssertTrue(restored.state.history.verifiedAnswersComplete())
-        restored.state.sessionConfiguration.codexHome = home.path
+        restored.state.sessionConfiguration.sageHome = home.path
         restored.resumeRolloutPersistence(path: path)
         await restored.recordRetainedVerifiedAnswer(
             turnContext: turn,
@@ -1635,13 +1636,13 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let recorder = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: home.path),
+            config: RolloutConfig(sageHome: home.path),
             params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
         )
         try recorder.recordItems([
             rolloutMessage("user", "before"),
             rolloutMessage("system", "hidden"),
-            .responseItem(CodexHistory.ResponseItemEnvelope(item: .compactionTrigger)),
+            .responseItem(SageHistory.ResponseItemEnvelope(item: .compactionTrigger)),
             rolloutMessage("assistant", "after"),
         ])
         try recorder.flush()
@@ -1652,7 +1653,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
         var bounded = CompactedItem(message: "summary")
         bounded.replacementHistory = [
-            CodexHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", "kept-summary"))
+            SageHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", "kept-summary"))
         ]
         bounded.windowNumber = 1
         bounded.resumeMetadata = .object([:])
@@ -1663,7 +1664,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 rolloutMessage("system", "hidden"),
                 .compacted(bounded),
                 rolloutMessage("assistant", "after"),
-                .responseItem(CodexHistory.ResponseItemEnvelope(item: .compactionTrigger)),
+                .responseItem(SageHistory.ResponseItemEnvelope(item: .compactionTrigger)),
             ],
             into: history
         )
@@ -1675,10 +1676,10 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let original = String(repeating: "x", count: 400)
         let policy = TruncationPolicy.bytes(16)
         let output = rolloutFunctionOutput(original)
-        var limited = CodexHarnessMetadata()
+        var limited = SageHarnessMetadata()
         limited.historyTruncationTokenLimit = 4
         let custom = RolloutItem.responseItem(
-            CodexHistory.ResponseItemEnvelope(
+            SageHistory.ResponseItemEnvelope(
                 item: .customToolCallOutput(
                     id: nil,
                     callId: "call-2",
@@ -1703,7 +1704,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
         var bounded = CompactedItem(message: "summary")
         bounded.replacementHistory = [
-            CodexHistory.ResponseItemEnvelope(item: .functionCallOutput(
+            SageHistory.ResponseItemEnvelope(item: .functionCallOutput(
                 id: nil,
                 callId: "kept",
                 name: "shell",
@@ -1728,7 +1729,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
     func testRolloutReconstructionDropsRolledBackUserTurns() {
         func user(_ text: String, turn: String) -> RolloutItem {
-            .responseItem(CodexHistory.ResponseItemEnvelope(item: .message(
+            .responseItem(SageHistory.ResponseItemEnvelope(item: .message(
                 id: nil,
                 role: "user",
                 content: [.inputText(text: text)],
@@ -1793,7 +1794,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
     func testRolloutReconstructionRebuildsLegacyCompaction() {
         let taskId = ResponseItemId.fromServer("msg_task")
         func task(_ text: String) -> RolloutItem {
-            .responseItem(CodexHistory.ResponseItemEnvelope(item: .message(
+            .responseItem(SageHistory.ResponseItemEnvelope(item: .message(
                 id: taskId,
                 role: "user",
                 content: [.inputText(text: text)],
@@ -1868,7 +1869,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         func bounded(_ summary: String, _ window: UInt64) -> RolloutItem {
             var item = CompactedItem(message: summary)
             item.replacementHistory = [
-                CodexHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", summary))
+                SageHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", summary))
             ]
             item.windowNumber = window
             item.resumeMetadata = .object([:])
@@ -1923,7 +1924,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
         var incomplete = CompactedItem(message: "new")
         incomplete.replacementHistory = [
-            CodexHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", "new-summary"))
+            SageHistory.ResponseItemEnvelope(item: rolloutTextMessage("user", "new-summary"))
         ]
         incomplete.windowNumber = 2
         let blocked = ContextManager()
@@ -2162,7 +2163,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let recorder = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: home.path),
+            config: RolloutConfig(sageHome: home.path),
             params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
         )
         try recorder.recordItems(userTurn("keep", "kept-model", "hash-a"))
@@ -2218,7 +2219,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let recorder = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: home.path),
+            config: RolloutConfig(sageHome: home.path),
             params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
         )
         try recorder.recordItems([
@@ -2380,7 +2381,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
         let recorder = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: home.path),
+            config: RolloutConfig(sageHome: home.path),
             params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
         )
         try recorder.recordItems([.compacted(compacted)])
@@ -2399,7 +2400,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try FileManager.default.createDirectory(at: legacyHome, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: legacyHome) }
         let legacy = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: legacyHome.path),
+            config: RolloutConfig(sageHome: legacyHome.path),
             params: .new(conversationId: ThreadId(), source: .cli, originator: "sage-test")
         )
         try legacy.recordItems([.compacted(CompactedItem(message: "legacy"))])
@@ -2429,7 +2430,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let turn = TurnContext(sessionSource: .internal(.guardian))
         turn.collaborationMode = CollaborationMode(
             mode: .plan,
-            settings: CodexProtocol.Settings(model: turn.model)
+            settings: SageProtocol.Settings(model: turn.model)
         )
         let step = StepContext(turn: turn)
         _ = assembleToolRouter(sess: sess, stepContext: step)
@@ -3378,7 +3379,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             if case .turnStarted = event { return true }
             return false
         }.count
-        let arguments = CodexProtocol.JSONValue.object(["q": .string("sage")])
+        let arguments = SageProtocol.JSONValue.object(["q": .string("sage")])
         let found = DynamicToolResponse(
             contentItems: [.inputText(text: "found")], success: true)
         let missing = DynamicToolResponse(
@@ -3454,7 +3455,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             callId: "call-idle",
             namespace: nil,
             tool: "lookup",
-            arguments: CodexProtocol.JSONValue.object([:])
+            arguments: SageProtocol.JSONValue.object([:])
         )
         XCTAssertNil(response)
         XCTAssertNil(sess.activeTurn)
@@ -3502,7 +3503,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let pending = Task {
             await sess.requestMcpServerElicitation(
                 turnContext: turn,
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("request-1"),
                 request: request
             )
@@ -3510,14 +3511,14 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try await waitUntil { elicitationRequests(in: sess).count == 1 }
         let event = try XCTUnwrap(elicitationRequests(in: sess).first)
         XCTAssertEqual(event.turnId, "turn-elicit")
-        XCTAssertEqual(event.serverName, "codex_apps")
+        XCTAssertEqual(event.serverName, "sage_apps")
         XCTAssertEqual(event.id, .string("request-1"))
         XCTAssertEqual(event.request, request)
         let paused = await elicitationIsPaused(sess)
         XCTAssertTrue(paused)
         let response = ElicitationResponse(action: .accept, content: .object(["ok": .bool(true)]))
         await sess.resolveElicitation(
-            serverName: "codex_apps", id: .string("request-1"), response: response)
+            serverName: "sage_apps", id: .string("request-1"), response: response)
         let outcome = await pending.value
         XCTAssertEqual(outcome.response, response)
         XCTAssertTrue(outcome.sent)
@@ -3535,7 +3536,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let pending = Task {
             await sess.requestMcpServerElicitation(
                 turnContext: turn,
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .integer(7),
                 request: request
             )
@@ -3543,7 +3544,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try await waitUntil { elicitationRequests(in: sess).count == 1 }
         _ = try await sess.submit(
             .resolveElicitation(
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .integer(7),
                 decision: .accept,
                 content: nil,
@@ -3563,7 +3564,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let declined = Task {
             await sess.requestMcpServerElicitation(
                 turnContext: turn,
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("decline"),
                 request: request
             )
@@ -3571,7 +3572,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         try await waitUntil { elicitationRequests(in: sess).count == 2 }
         _ = try await sess.submit(
             .resolveElicitation(
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("decline"),
                 decision: .decline,
                 content: .object(["reason": .string("no")]),
@@ -3590,7 +3591,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         sess.activeTurn = ActiveTurn(task: RunningTask(kind: .regular, turnContext: turn))
         let outcome = await sess.requestMcpServerElicitation(
             turnContext: turn,
-            serverName: "codex_apps",
+            serverName: "sage_apps",
             requestId: .string("request-1"),
             request: ElicitationRequest.form(
                 meta: nil, message: "Allow?", requestedSchema: .object([:]))
@@ -3610,7 +3611,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let turn = TurnContext(subId: "turn-idle")
         let outcome = await sess.requestMcpServerElicitation(
             turnContext: turn,
-            serverName: "codex_apps",
+            serverName: "sage_apps",
             requestId: .string("request-1"),
             request: ElicitationRequest.url(
                 meta: nil, message: "Connect", url: "https://example.com", elicitationId: "c1")
@@ -3632,7 +3633,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let first = Task {
             await sess.requestMcpServerElicitation(
                 turnContext: turn,
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("request-1"),
                 request: request
             )
@@ -3641,7 +3642,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let second = Task {
             await sess.requestMcpServerElicitation(
                 turnContext: turn,
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("request-1"),
                 request: request
             )
@@ -3651,7 +3652,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertTrue(replaced.sent)
         try await waitUntil { elicitationRequests(in: sess).count == 2 }
         await sess.resolveElicitation(
-            serverName: "codex_apps",
+            serverName: "sage_apps",
             id: .string("request-1"),
             response: ElicitationResponse(action: .cancel)
         )
@@ -3664,7 +3665,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let sess = Session()
         let seen = expectation(description: "fallback")
         sess.services.mcpRuntime.resolveElicitationFallback = { server, id, response in
-            XCTAssertEqual(server, "codex_apps")
+            XCTAssertEqual(server, "sage_apps")
             XCTAssertEqual(id, .string("missing"))
             XCTAssertEqual(response.action, .cancel)
             XCTAssertNil(response.content)
@@ -3672,7 +3673,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         }
         _ = try await sess.submit(
             .resolveElicitation(
-                serverName: "codex_apps",
+                serverName: "sage_apps",
                 requestId: .string("missing"),
                 decision: .cancel,
                 content: .object(["ignored": .bool(true)]),
@@ -3862,7 +3863,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(requested.parsedCmd, parseCommand(command))
         XCTAssertEqual(
             requested.availableDecisions,
-            [CodexProtocol.ReviewDecision.approved, .abort]
+            [SageProtocol.ReviewDecision.approved, .abort]
         )
         _ = try await sess.submit(
             .execApproval(id: "call-9", turnId: turn.subId, decision: .approved)
@@ -3898,7 +3899,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(replacement, .denied(rejection: "no"))
         XCTAssertEqual(replaced, .abort)
 
-        let amendment = CodexProtocol.ReviewDecision.approvedExecpolicyAmendment(
+        let amendment = SageProtocol.ReviewDecision.approvedExecpolicyAmendment(
             proposedExecpolicyAmendment: ExecPolicyAmendment(["ls"]))
         let unwired = Task {
             await sess.requestCommandApproval(
@@ -3923,7 +3924,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let policyHome = FileManager.default.temporaryDirectory
             .appendingPathComponent("sage-execpolicy-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: policyHome) }
-        sess.state.sessionConfiguration.codexHome = policyHome.path
+        sess.state.sessionConfiguration.sageHome = policyHome.path
         sess.services.execPolicy = Policy()
         let saved = Task {
             await sess.requestCommandApproval(
@@ -4550,7 +4551,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             .appendingPathComponent("sage-config-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
-        sess.state.sessionConfiguration.codexHome = home.path
+        sess.state.sessionConfiguration.sageHome = home.path
         sess.state.sessionConfiguration.stepSettings.model = "session-model"
         sess.features.enable(.goals)
         let configURL = home.appendingPathComponent("config.toml")
@@ -4652,7 +4653,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             .appendingPathComponent("sage-config-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: home) }
-        sess.state.sessionConfiguration.codexHome = home.path
+        sess.state.sessionConfiguration.sageHome = home.path
         sess.features.enable(.goals)
         try "[apps.calendar]\nenabled = false\n".write(
             to: home.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
@@ -4800,7 +4801,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         do {
             _ = try await sess.submit(.interrupt)
             XCTFail("submit after shutdown should fail")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error.details, .internalAgentDied)
         }
     }
@@ -4824,7 +4825,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 cancellationToken: token
             )
             XCTFail("expected turnAborted")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error.details, .turnAborted)
         } catch {
             XCTFail("unexpected \(error)")
@@ -5029,7 +5030,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 cancellationToken: CancellationToken()
             )
             XCTFail("expected stream error")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             if case .stream(let message) = error.details {
                 XCTAssertTrue(message.contains("response.completed"))
             } else {
@@ -5182,8 +5183,8 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         config.modelContextWindow = 100
         let turn = TurnContext(modelContextWindow: 100, config: config)
         XCTAssertThrowsError(try checkPendingGuardianInput(sess: sess, turnContext: turn)) { error in
-            guard let err = error as? CodexErr else {
-                return XCTFail("expected CodexErr")
+            guard let err = error as? SageErr else {
+                return XCTFail("expected SageErr")
             }
             XCTAssertEqual(err.details, .contextWindowExceeded)
             XCTAssertEqual(sess.exhaustedReviewBudget, .detected)
@@ -5228,8 +5229,8 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 model: minimalModelInfo()
             )
         ) { error in
-            guard let err = error as? CodexErr else {
-                return XCTFail("expected CodexErr")
+            guard let err = error as? SageErr else {
+                return XCTFail("expected SageErr")
             }
             XCTAssertEqual(err.details, .contextWindowExceeded)
             XCTAssertEqual(sess.exhaustedReviewBudget, .detected)
@@ -5389,7 +5390,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 injection: .doNotInject
             )
             XCTFail("expected turnAborted")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error.details, .turnAborted)
         } catch {
             XCTFail("unexpected \(error)")
@@ -5505,7 +5506,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         let sess = Session()
         sess.services.afterAgentHooks = [
             Hook(name: "boom") { _ in
-                .failedAbort(CodexErr.fatal("nope"))
+                .failedAbort(SageErr.fatal("nope"))
             },
         ]
         sess.runSamplingOverride = { _, _ in
@@ -5576,6 +5577,221 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertEqual(message, "done-2")
         XCTAssertEqual(probe.callCount, 1)
         XCTAssertEqual(probe.lastAssistant, "done-2")
+    }
+
+    func testRunUserShellCommandRecordsStandaloneOutput() async throws {
+        let sess = Session()
+        _ = try await sess.submit(.runUserShellCommand(command: "printf sage-shell", timeoutMs: 5_000))
+        try await waitUntil(timeout: .seconds(10)) {
+            let finished = sess.emittedEvents.contains { event in
+                if case .turnComplete = event { return true }
+                return false
+            }
+            return finished && userShellStdoutText(sess).contains("sage-shell")
+        }
+        XCTAssertEqual(turnStartedCount(sess), 1)
+        XCTAssertNotNil(sess.lastStartedTurnId)
+        XCTAssertNil(sess.state.history.referenceContextItemValue())
+        XCTAssertEqual(completedUserShellCommands(sess).count, 1)
+        XCTAssertEqual(completedUserShellCommands(sess).first?.source, .userShell)
+        XCTAssertEqual(completedUserShellCommands(sess).first?.exitCode, 0)
+        XCTAssertTrue(completedUserShellCommands(sess).first?.stdout?.contains("sage-shell") == true)
+        XCTAssertEqual(userShellStdoutDeltas(sess).first?.callId, completedUserShellCommands(sess).first?.id)
+        XCTAssertTrue(userShellStdoutText(sess).contains("sage-shell"))
+        XCTAssertTrue(historyText(sess).contains("sage-shell"))
+        XCTAssertTrue(historyText(sess).contains("<user_shell_command>"))
+    }
+
+    func testRunUserShellCommandDuringATurnDoesNotStartAnotherTurn() async throws {
+        let sess = Session()
+        let turn = TurnContext(subId: "turn-shell")
+        sess.activeTurn = ActiveTurn(
+            task: RunningTask(kind: .regular, turnContext: turn, cancellationToken: CancellationToken())
+        )
+        _ = try await sess.submit(.runUserShellCommand(command: "printf sage-shell", timeoutMs: 5_000))
+        try await waitUntil(timeout: .seconds(10)) {
+            pendingText(sess).contains("sage-shell")
+        }
+        XCTAssertEqual(
+            completedUserShellCommands(sess).first?.exitCode,
+            0,
+            "pending=\(pendingText(sess)) events=\(sess.emittedEvents)"
+        )
+        XCTAssertEqual(turnStartedCount(sess), 0)
+        XCTAssertNil(sess.lastStartedTurnId)
+        XCTAssertTrue(sess.cloneHistory().forPrompt().isEmpty)
+        XCTAssertTrue(pendingText(sess).contains("<user_shell_command>"))
+        XCTAssertEqual(completedUserShellCommands(sess).first?.source, .userShell)
+        XCTAssertTrue(completedUserShellCommands(sess).first?.stdout?.contains("sage-shell") == true)
+    }
+
+    func testRunUserShellCommandRejectsANonNativeWorkingDirectory() async {
+        let sess = Session()
+        let turn = TurnContext(cwd: "relative")
+        turn.environment.cwd = "relative"
+        await executeUserShellCommand(UserShellCommandRequest(
+            session: sess,
+            turnContext: turn,
+            command: "printf sage-shell",
+            timeoutMs: 1_000,
+            cancellationToken: CancellationToken(),
+            mode: .standaloneTurn
+        ))
+        XCTAssertEqual(
+            sess.emittedEvents.compactMap { event -> String? in
+                if case .error(let error) = event { return error.message }
+                return nil
+            },
+            ["shell working directory is not native to the Sage host"]
+        )
+        XCTAssertTrue(sess.cloneHistory().forPrompt().isEmpty)
+        XCTAssertTrue(completedUserShellCommands(sess).isEmpty)
+    }
+
+    func testRunUserShellCommandSourcesAnEnabledShellSnapshot() async throws {
+        let directory = FileManager.default.temporaryDirectory
+        let snapshot = directory.appendingPathComponent("sage-snapshot-\(UUID().uuidString).sh")
+        try "export SAGE_SNAPSHOT_MARK=from-snapshot\n".write(to: snapshot, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: snapshot) }
+        let sess = Session()
+        let turn = userShellSnapshotTurn(cwd: directory.path, snapshotPath: snapshot.path, enabled: true)
+        await executeUserShellCommand(userShellSnapshotRequest(sess, turn))
+        let command = completedUserShellCommands(sess).first
+        XCTAssertEqual(command?.exitCode, 0)
+        XCTAssertEqual(command?.command.dropFirst().first, "-lc")
+        XCTAssertFalse(command?.command.contains { $0.contains("if .") } == true)
+        XCTAssertTrue(command?.stdout?.contains("from-snapshot") == true)
+    }
+
+    func testRunUserShellCommandIgnoresASnapshotWhenTheFeatureIsOff() async throws {
+        let directory = FileManager.default.temporaryDirectory
+        let snapshot = directory.appendingPathComponent("sage-snapshot-\(UUID().uuidString).sh")
+        try "export SAGE_SNAPSHOT_MARK=from-snapshot\n".write(to: snapshot, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: snapshot) }
+        let sess = Session()
+        let turn = userShellSnapshotTurn(cwd: directory.path, snapshotPath: snapshot.path, enabled: false)
+        await executeUserShellCommand(userShellSnapshotRequest(sess, turn))
+        XCTAssertEqual(completedUserShellCommands(sess).first?.exitCode, 0)
+        XCTAssertFalse(completedUserShellCommands(sess).first?.stdout?.contains("from-snapshot") == true)
+    }
+
+    func testRunUserShellCommandCapturesAndReusesAShellSnapshot() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-capture-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("home")
+        let cwd = root.appendingPathComponent("cwd")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+        let sess = Session()
+        sess.state.sessionConfiguration.sageHome = home.path
+        let first = userShellSnapshotTurn(cwd: cwd.path, snapshotPath: nil, enabled: true)
+        await executeUserShellCommand(userShellSnapshotRequest(sess, first, command: "printf ready"))
+        let snapshot = try XCTUnwrap(first.environment.shellSnapshotPath)
+        let captured = try String(contentsOfFile: snapshot, encoding: .utf8)
+        try (captured + "\nexport SAGE_SNAPSHOT_MARK=from-capture\n")
+            .write(toFile: snapshot, atomically: true, encoding: .utf8)
+        let second = userShellSnapshotTurn(cwd: cwd.path, snapshotPath: nil, enabled: true)
+        await executeUserShellCommand(
+            userShellSnapshotRequest(sess, second, command: "printf \"$SAGE_SNAPSHOT_MARK\"")
+        )
+        XCTAssertEqual(second.environment.shellSnapshotPath, snapshot)
+        XCTAssertTrue(completedUserShellCommands(sess).last?.stdout?.contains("from-capture") == true)
+        let files = try FileManager.default.contentsOfDirectory(
+            atPath: home.appendingPathComponent("shell_snapshots").path
+        )
+        XCTAssertEqual(files.count, 1)
+    }
+
+    func testSagePackagePathIsPrependedAndReplayedAfterASnapshot() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sage-path-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let pathDir = root.appendingPathComponent("sage-path")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: pathDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = bin.appendingPathComponent("sage")
+        FileManager.default.createFile(atPath: executable.path, contents: Data())
+        try Data().write(to: root.appendingPathComponent("sage-package.json"))
+        let loose = root.appendingPathComponent("sage")
+        FileManager.default.createFile(atPath: loose.path, contents: Data())
+        XCTAssertEqual(sagePackagePathDir(executablePath: executable.path), pathDir.path)
+        XCTAssertNil(sagePackagePathDir(executablePath: loose.path))
+        let snapshot = root.appendingPathComponent("snapshot.sh")
+        try "export PATH='/snapshot/bin'\n".write(to: snapshot, atomically: true, encoding: .utf8)
+        let plan = userShellExecPlan(UserShellExecRequest(
+            displayCommand: ["/bin/bash", "-lc", "printf '%s' \"$PATH\""],
+            sessionShellPath: "/bin/bash",
+            snapshotPath: snapshot.path,
+            featureEnabled: true,
+            packagePathDir: pathDir.path,
+            baseEnv: ["PATH": "/worktree/bin"]
+        ))
+        XCTAssertEqual(plan.env["PATH"], "\(pathDir.path):/worktree/bin")
+        XCTAssertEqual(try runUserShellPlan(plan), "\(pathDir.path):/snapshot/bin")
+    }
+
+    func testUserShellStripsManagedProxyEnvWhenProxyIsActive() {
+        let active = userShellProxyEnv(
+            proxyActive: true,
+            gitSSH: "SAGE_PROXY_GIT_SSH_COMMAND=1 ssh",
+            apiKey: "stand-in"
+        )
+        XCTAssertNil(active["HTTP_PROXY"])
+        XCTAssertNil(active["HTTPS_PROXY"])
+        XCTAssertNil(active["SAGE_NETWORK_PROXY_ACTIVE"])
+        XCTAssertNil(active["OPENAI_API_KEY"])
+        XCTAssertNil(active["GIT_SSH_COMMAND"])
+        XCTAssertEqual(active["HOME"], "/Users/sage")
+        XCTAssertEqual(active["USER_PROXY"], "keep-me")
+        XCTAssertEqual(active["PATH"], "/usr/bin")
+        let ownProxy = userShellProxyEnv(proxyActive: false, gitSSH: "ssh -T", apiKey: "real")
+        XCTAssertEqual(ownProxy["HTTP_PROXY"], "http://127.0.0.1:9")
+        XCTAssertEqual(ownProxy["GIT_SSH_COMMAND"], "ssh -T")
+        XCTAssertEqual(ownProxy["OPENAI_API_KEY"], "real")
+    }
+
+    func testSetThreadMemoryModeReportsDisabledPersistence() async throws {
+        let sess = Session()
+        _ = try await sess.submit(.setThreadMemoryMode(.disabled))
+        XCTAssertEqual(
+            sess.emittedEvents,
+            [
+                .error(ErrorEvent(
+                    message: "Session persistence is disabled; cannot update thread memory mode.",
+                    errorInfo: .other
+                )),
+            ]
+        )
+        XCTAssertNil(sess.lastStartedTurnId)
+        XCTAssertNil(sess.activeTurn)
+    }
+
+    func testSetThreadMemoryModePersistsThroughTheLiveThread() async throws {
+        let sess = Session()
+        let store = InMemoryThreadStore()
+        let threadId = ThreadId()
+        sess.services.liveThread = try await LiveThread.create(
+            threadStore: store,
+            params: CreateThreadParams(
+                sessionId: SessionId(threadId),
+                threadId: threadId,
+                source: .cli,
+                originator: "memory-mode",
+                initialWindowId: "w0",
+                metadata: ThreadPersistenceMetadata(modelProvider: "openai", memoryMode: .enabled)
+            )
+        )
+        _ = try await sess.submit(.setThreadMemoryMode(.disabled))
+        XCTAssertTrue(sess.emittedEvents.isEmpty)
+        XCTAssertNil(sess.lastStartedTurnId)
+        XCTAssertNil(sess.activeTurn)
+        let calls = store.calls()
+        XCTAssertEqual(calls.persistThread, 1)
+        XCTAssertEqual(calls.flushThread, 2)
+        XCTAssertEqual(calls.updateThreadMetadata, 2)
     }
 
     func testApproveGuardianDeniedActionInjectsTheApprovedAction() async throws {
@@ -5711,7 +5927,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             while !token.isCancelled {
                 try await Task.sleep(for: .milliseconds(10))
             }
-            throw CodexErr(details: .turnAborted)
+            throw SageErr(details: .turnAborted)
         }
         let running = Task {
             await sess.spawnTask(
@@ -6304,7 +6520,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
             McpVisibleTool(name: "linear.search", serverName: "linear"),
             McpVisibleTool(
                 name: "calendar_list_events",
-                serverName: CODEX_APPS_MCP_SERVER_NAME,
+                serverName: SAGE_APPS_MCP_SERVER_NAME,
                 connectorId: "calendar"
             ),
             McpVisibleTool(
@@ -6939,7 +7155,7 @@ private func rolloutTextMessage(_ role: String, _ text: String) -> ResponseItem 
 }
 
 private func rolloutFunctionOutput(_ text: String) -> RolloutItem {
-    .responseItem(CodexHistory.ResponseItemEnvelope(item: .functionCallOutput(
+    .responseItem(SageHistory.ResponseItemEnvelope(item: .functionCallOutput(
         id: nil,
         callId: "call-1",
         name: "shell",
@@ -6963,7 +7179,7 @@ private func restoredOutputTexts(_ history: ContextManager) -> [String] {
 }
 
 private func rolloutMessage(_ role: String, _ text: String) -> RolloutItem {
-    .responseItem(CodexHistory.ResponseItemEnvelope(item: rolloutTextMessage(role, text)))
+    .responseItem(SageHistory.ResponseItemEnvelope(item: rolloutTextMessage(role, text)))
 }
 
 private func rolloutMessageTexts(_ history: ContextManager) -> [String] {
@@ -6974,6 +7190,107 @@ private func rolloutMessageTexts(_ history: ContextManager) -> [String] {
         }
         return nil
     }
+}
+
+private func turnStartedCount(_ session: Session) -> Int {
+    session.emittedEvents.filter { event in
+        if case .turnStarted = event { return true }
+        return false
+    }.count
+}
+
+private func userShellProxyEnv(proxyActive: Bool, gitSSH: String, apiKey: String) -> [String: String] {
+    var env = [
+        "PATH": "/usr/bin",
+        "HOME": "/Users/sage",
+        "HTTP_PROXY": "http://127.0.0.1:9",
+        "HTTPS_PROXY": "http://127.0.0.1:9",
+        "USER_PROXY": "keep-me",
+        "GIT_SSH_COMMAND": gitSSH,
+        "OPENAI_API_KEY": apiKey,
+        "SAGE_NETWORK_PROXY_BROKERED_CREDENTIALS": #"[["OPENAI_API_KEY","stand-in"]]"#,
+    ]
+    if proxyActive {
+        env["SAGE_NETWORK_PROXY_ACTIVE"] = "1"
+    }
+    return userShellExecPlan(UserShellExecRequest(
+        displayCommand: ["/bin/bash", "-lc", "printf ok"],
+        sessionShellPath: "/bin/bash",
+        snapshotPath: nil,
+        featureEnabled: false,
+        packagePathDir: nil,
+        baseEnv: env
+    )).env
+}
+
+private func runUserShellPlan(_ plan: UserShellExecPlan) throws -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: plan.command[0])
+    process.arguments = Array(plan.command.dropFirst())
+    process.environment = plan.env
+    let stdout = Pipe()
+    process.standardOutput = stdout
+    process.standardError = Pipe()
+    try process.run()
+    process.waitUntilExit()
+    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+    return String(data: data, encoding: .utf8) ?? ""
+}
+
+private func userShellSnapshotTurn(cwd: String, snapshotPath: String?, enabled: Bool) -> TurnContext {
+    let turn = TurnContext(cwd: cwd)
+    turn.environment.cwd = cwd
+    turn.environment.shellSnapshotPath = snapshotPath
+    if enabled {
+        turn.config.features.enable(.shellSnapshot)
+    }
+    return turn
+}
+
+private func userShellSnapshotRequest(
+    _ session: Session,
+    _ turn: TurnContext,
+    command: String = "printf \"$SAGE_SNAPSHOT_MARK\""
+) -> UserShellCommandRequest {
+    UserShellCommandRequest(
+        session: session,
+        turnContext: turn,
+        command: command,
+        timeoutMs: 5_000,
+        cancellationToken: CancellationToken(),
+        mode: .standaloneTurn
+    )
+}
+
+private func userShellStdoutDeltas(_ session: Session) -> [SageProtocol.ExecCommandOutputDeltaEvent] {
+    session.emittedEvents.compactMap { event in
+        guard case .execCommandOutputDelta(let delta) = event, delta.stream == .stdout else { return nil }
+        return delta
+    }
+}
+
+private func userShellStdoutText(_ session: Session) -> String {
+    userShellStdoutDeltas(session)
+        .compactMap { String(data: $0.chunk, encoding: .utf8) }
+        .joined()
+}
+
+private func completedUserShellCommands(_ session: Session) -> [CommandExecutionItem] {
+    session.emittedEvents.compactMap { event in
+        guard case .itemCompleted(let completed) = event,
+              case .commandExecution(let command) = completed.item
+        else { return nil }
+        return command
+    }
+}
+
+private func historyText(_ session: Session) -> String {
+    session.cloneHistory().forPrompt().map { String(describing: $0) }.joined(separator: "\n")
+}
+
+private func pendingText(_ session: Session) -> String {
+    let items = session.activeTurn?.turnState.pendingInput.items ?? []
+    return items.map { String(describing: $0) }.joined(separator: "\n")
 }
 
 private func deniedGuardianAssessment(

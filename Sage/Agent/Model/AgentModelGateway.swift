@@ -168,7 +168,7 @@ final class AgentModelGateway {
         )
     }
 
-    /// Codex compacts before the next sample, inside the turn. Fold when the
+    /// Sage compacts before the next sample, inside the turn. Fold when the
     /// window is already over budget so the following `prepareRequest` sees it.
     func compactBeforeSampling(includeTools: Bool) async {
         let tools = includeTools

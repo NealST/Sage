@@ -1,6 +1,6 @@
 //
 //  serde_helpers.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Sage addition (no codex counterpart).
 //

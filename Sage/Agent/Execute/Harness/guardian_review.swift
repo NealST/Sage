@@ -12,14 +12,14 @@
 //  wait on Session / TurnContext / ThreadManager.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Opaque conversation progress retained while ThreadManager starts a reviewer.
 struct GuardianReviewState: Sendable {}
 
 func prepareReviewPrewarm() async throws -> PreparedGuardianContext {
-    throw CodexErr.unsupportedOperation(
-        "prepare_review_prewarm waits on CodexThread / Session / TurnContext"
+    throw SageErr.unsupportedOperation(
+        "prepare_review_prewarm waits on SageThread / Session / TurnContext"
     )
 }

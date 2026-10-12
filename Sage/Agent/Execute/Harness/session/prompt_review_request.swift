@@ -12,8 +12,8 @@
 //  avoids the app target's `guardian/review_request.swift` product.
 //
 
-import CodexGitUtils
-import CodexProtocol
+import SageGitUtils
+import SageProtocol
 import Foundation
 
 struct ResolvedReviewRequest: Equatable, Sendable {

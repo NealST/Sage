@@ -1,13 +1,13 @@
 //
 //  web_search.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/web_search.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
 
-import CodexProtocol
+import SageProtocol
 
 func searchActionDetail(query: String?, queries: [String]?) -> String {
     if let query, !query.isEmpty {

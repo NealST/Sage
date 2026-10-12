@@ -8,11 +8,12 @@
 //  Port status: adapted
 //
 //  Spec, argument parsing, V2 validation, and mailbox interrupt are live
-//  when LocalAgentControl is attached. ThreadManager stop is still pending.
+//  when LocalAgentControl is attached. ThreadManager sendOp interrupts
+//  the child's ThreadSession.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 struct InterruptAgentArgs: Decodable, Equatable, Sendable {
     var target: String

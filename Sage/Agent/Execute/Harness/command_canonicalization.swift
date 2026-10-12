@@ -9,10 +9,10 @@
 //  Canonicalizes argv for approval-cache matching across wrapper paths.
 //
 
-import CodexShellCommand
+import SageShellCommand
 
-let CANONICAL_BASH_SCRIPT_PREFIX = "__codex_shell_script__"
-let CANONICAL_POWERSHELL_SCRIPT_PREFIX = "__codex_powershell_script__"
+let CANONICAL_BASH_SCRIPT_PREFIX = "__sage_shell_script__"
+let CANONICAL_POWERSHELL_SCRIPT_PREFIX = "__sage_powershell_script__"
 
 func canonicalizeCommandForApproval(_ command: [String]) -> [String] {
     if let commands = parseShellLcPlainCommands(command), commands.count == 1 {

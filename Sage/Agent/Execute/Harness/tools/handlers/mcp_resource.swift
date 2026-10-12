@@ -10,8 +10,8 @@
 //  onMcpCall.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct ListMcpResourcesArgs: Decodable {

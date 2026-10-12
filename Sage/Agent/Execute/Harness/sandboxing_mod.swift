@@ -11,13 +11,13 @@
 //  env/snapshot fields are placeholders until that crate is ported.
 //
 
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import FileSystem
 import Foundation
 
-public typealias SandboxPermissions = CodexProtocol.SandboxPermissions
+public typealias SandboxPermissions = SageProtocol.SandboxPermissions
 
 struct ExecOptions {
     var expiration: ExecExpiration
@@ -105,16 +105,16 @@ public struct ExecRequest: Sendable {
     ) throws -> ExecRequest {
         var env = request.env
         if request.sandbox == .windowsRestrictedToken {
-            throw CodexErr.unsupportedOperation(
+            throw SageErr.unsupportedOperation(
                 "Windows restricted-token filesystem overrides are unavailable on this platform"
             )
         }
         let networkSandboxPolicy = request.permissionProfile.networkSandboxPolicy()
         if !networkSandboxPolicy.isEnabled {
-            env[CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR] = "1"
+            env[SAGE_SANDBOX_NETWORK_DISABLED_ENV_VAR] = "1"
         }
         if request.sandbox == .macosSeatbelt {
-            env[CODEX_SANDBOX_ENV_VAR] = "seatbelt"
+            env[SAGE_SANDBOX_ENV_VAR] = "seatbelt"
         }
         var execRequest = ExecRequest(
             command: request.command,
@@ -139,7 +139,7 @@ public struct ExecRequest: Sendable {
 func executeEnv(
     _ execRequest: ExecRequest,
     stdoutStream: StdoutStream?
-) async -> CodexResult<ExecToolCallOutput> {
+) async -> SageResult<ExecToolCallOutput> {
     await executeExecRequest(execRequest, stdoutStream: stdoutStream, afterSpawn: nil)
 }
 
@@ -147,6 +147,6 @@ func executeExecRequestWithAfterSpawn(
     _ execRequest: ExecRequest,
     stdoutStream: StdoutStream?,
     afterSpawn: (() -> Void)?
-) async -> CodexResult<ExecToolCallOutput> {
+) async -> SageResult<ExecToolCallOutput> {
     await executeExecRequest(execRequest, stdoutStream: stdoutStream, afterSpawn: afterSpawn)
 }

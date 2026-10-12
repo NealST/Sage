@@ -1,6 +1,6 @@
-import CodexCore
-import CodexProtocol
-import CodexShellCommand
+import SageCore
+import SageProtocol
+import SageShellCommand
 import XCTest
 @testable import Sage
 
@@ -13,6 +13,23 @@ final class Phase4ToolsTests: XCTestCase {
         XCTAssertTrue(names.contains("new_context"))
         XCTAssertTrue(names.contains("get_context_remaining"))
         XCTAssertTrue(names.contains("request_permissions"))
+        XCTAssertFalse(router.canManageChildren)
+        XCTAssertNil(router.registry.entry(for: ToolName(plain: "spawn_agent")))
+    }
+
+    func testFinalizeToolRouterRegistersCollaborationTools() {
+        var options = ToolRouterPlanOptions()
+        options.includeCollaborationTools = true
+        let router = finalizeToolRouter(options)
+        XCTAssertTrue(router.canManageChildren)
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "spawn_agent")))
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "wait_agent")))
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "send_input")))
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "close_agent")))
+        XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "interrupt_agent")))
+        let names = Set(collaborationFunctionNames(router.modelVisibleSpecs))
+        XCTAssertTrue(names.contains("spawn_agent"))
+        XCTAssertTrue(names.contains("wait_agent"))
     }
 
     func testCurrentTimeHandlerReturnsUTC() async throws {
@@ -297,10 +314,10 @@ final class Phase4ToolsTests: XCTestCase {
         )
 
         let blocked = await handleMcpToolCall(
-            server: "codex_apps",
+            server: "sage_apps",
             toolName: "list",
             arguments: "",
-            prepared: PreparedMcpToolCall(serverName: "codex_apps", toolName: "list", enabled: false),
+            prepared: PreparedMcpToolCall(serverName: "sage_apps", toolName: "list", enabled: false),
             transport: { _ in mcpTextResult("unused") }
         )
         XCTAssertEqual(mcpToolResultText(blocked.result), "MCP tool call blocked by app configuration")

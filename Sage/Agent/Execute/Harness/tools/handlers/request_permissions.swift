@@ -17,10 +17,10 @@
 //  When the step list is empty it uses the admitted turn environment.
 //
 
-import CodexCore
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageCore
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 struct RequestPermissionsHandler: CoreToolRuntime {
@@ -33,7 +33,7 @@ struct RequestPermissionsHandler: CoreToolRuntime {
                 "request_permissions handler received unsupported payload"
             )
         }
-        var parsed: CodexProtocol.JSONValue = try parseArguments(arguments)
+        var parsed: SageProtocol.JSONValue = try parseArguments(arguments)
         let environment = try resolveRequestPermissionsEnvironment(
             invocation.turnEnvironments,
             environmentId: requestPermissionsEnvironmentId(parsed)
@@ -81,7 +81,7 @@ struct RequestPermissionsHandler: CoreToolRuntime {
     }
 }
 
-func requestPermissionsEnvironmentId(_ arguments: CodexProtocol.JSONValue) -> String? {
+func requestPermissionsEnvironmentId(_ arguments: SageProtocol.JSONValue) -> String? {
     guard case .object(let object) = arguments else { return nil }
     if case .string(let id)? = object["environment_id"] { return id }
     if case .string(let id)? = object["environmentId"] { return id }
@@ -138,13 +138,13 @@ func permissionPathUri(_ path: String) throws -> PathUri {
     }
 }
 
-func jsonObject(_ value: CodexProtocol.JSONValue?) -> [String: CodexProtocol.JSONValue]? {
+func jsonObject(_ value: SageProtocol.JSONValue?) -> [String: SageProtocol.JSONValue]? {
     guard let value, case .object(let object) = value else { return nil }
     return object
 }
 
 func resolvePermissionPathStrings(
-    _ arguments: inout CodexProtocol.JSONValue,
+    _ arguments: inout SageProtocol.JSONValue,
     context: FileSystemSandboxPolicyContext
 ) throws {
     guard var root = jsonObject(arguments),
@@ -152,7 +152,7 @@ func resolvePermissionPathStrings(
           var fileSystem = jsonObject(permissions["file_system"])
     else { return }
 
-    var legacyEntries: [CodexProtocol.JSONValue] = []
+    var legacyEntries: [SageProtocol.JSONValue] = []
     for (field, access) in [("read", "read"), ("write", "write")] {
         guard let paths = fileSystem.removeValue(forKey: field) else { continue }
         if case .null = paths { continue }
@@ -169,7 +169,7 @@ func resolvePermissionPathStrings(
         }
     }
     if !legacyEntries.isEmpty {
-        var entries: [CodexProtocol.JSONValue]
+        var entries: [SageProtocol.JSONValue]
         if let existing = fileSystem["entries"] {
             guard case .array(let current) = existing else {
                 throw FunctionCallError.respondToModel(
@@ -195,7 +195,7 @@ func resolvePermissionPathStrings(
 }
 
 func resolvePermissionEntryPath(
-    _ entry: inout CodexProtocol.JSONValue,
+    _ entry: inout SageProtocol.JSONValue,
     context: FileSystemSandboxPolicyContext
 ) throws {
     guard var object = jsonObject(entry),
@@ -211,7 +211,7 @@ func resolvePermissionEntryPath(
 }
 
 func resolvePermissionPathString(
-    _ value: inout CodexProtocol.JSONValue,
+    _ value: inout SageProtocol.JSONValue,
     context: FileSystemSandboxPolicyContext
 ) throws {
     guard case .string(let path) = value else { return }
@@ -244,8 +244,8 @@ func resolvePermissionPathString(
 }
 
 func permissionModelMessage(_ error: Error) -> String {
-    if let codex = error as? CodexErr {
-        return codex.description
+    if let sage = error as? SageErr {
+        return sage.description
     }
     if let describable = error as? CustomStringConvertible {
         return describable.description

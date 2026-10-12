@@ -8,8 +8,8 @@
 //  Port status: adapted
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 let SEND_MESSAGE_TO_USER_ASYNC_TOOL_NAME = "send_message_to_user_async"

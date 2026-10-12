@@ -1,6 +1,6 @@
 //
 //  in_memory.swift
-//  CodexThreadStore
+//  SageThreadStore
 //
 //  Port of codex-rs/thread-store/src/in_memory.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,9 +12,9 @@
 //  in memory here (Rust leaves those trait methods unsupported).
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexRollout
+import SageHistory
+import SageProtocol
+import SageRollout
 import Foundation
 import os
 

@@ -1,5 +1,5 @@
 @testable import Sage
-import CodexProtocol
+import SageProtocol
 import XCTest
 
 @MainActor
@@ -161,8 +161,8 @@ final class ExecuteHarnessGuardianLiveApprovalTests: XCTestCase {
         )
     }
 
-    func testRoutesApprovalPolicyMatchesCodex() {
-        let cases: [(CodexProtocol.AskForApproval, [Bool])] = [
+    func testRoutesApprovalPolicyMatchesSage() {
+        let cases: [(SageProtocol.AskForApproval, [Bool])] = [
             (.unlessTrusted, [false, false]),
             (.onRequest, [false, true]),
             (
@@ -536,7 +536,6 @@ final class ExecuteHarnessGuardianLiveApprovalTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        runtime.turns.execute.useHarnessRunTurn = false
         return runtime
     }
 

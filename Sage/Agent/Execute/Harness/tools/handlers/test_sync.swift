@@ -10,8 +10,8 @@
 //  process-local actor instead of tokio Mutex.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 let TEST_SYNC_DEFAULT_TIMEOUT_MS: UInt64 = 1_000

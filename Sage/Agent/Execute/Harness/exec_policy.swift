@@ -11,12 +11,12 @@
 //  rules-dir layers plus an optional requirements overlay.
 //
 
-import CodexExecPolicy
-import CodexProtocol
-import CodexShellCommand
+import SageExecPolicy
+import SageProtocol
+import SageShellCommand
 import Foundation
 
-typealias ExecPolicyRequirements = CodexExecPolicy.RequirementsExecPolicy
+typealias ExecPolicyRequirements = SageExecPolicy.RequirementsExecPolicy
 
 let PROMPT_CONFLICT_REASON =
     "approval required by policy, but AskForApproval is set to Never"
@@ -410,10 +410,10 @@ public final class ExecPolicyManager: @unchecked Sendable {
         }
     }
 
-    public func appendAmendmentAndUpdate(codexHome: String, amendment: ExecPolicyAmendment) async throws {
+    public func appendAmendmentAndUpdate(sageHome: String, amendment: ExecPolicyAmendment) async throws {
         updateLock.lock()
         defer { updateLock.unlock() }
-        let policyPath = defaultPolicyPath(codexHome)
+        let policyPath = defaultPolicyPath(sageHome)
         do {
             try blockingAppendAllowPrefixRule(policyPath: policyPath, prefix: amendment.command)
         } catch {
@@ -446,7 +446,7 @@ public final class ExecPolicyManager: @unchecked Sendable {
     }
 
     func appendNetworkRuleAndUpdate(
-        codexHome: String,
+        sageHome: String,
         host: String,
         protocol_: NetworkRuleProtocol,
         decision: Decision,
@@ -454,7 +454,7 @@ public final class ExecPolicyManager: @unchecked Sendable {
     ) async throws {
         updateLock.lock()
         defer { updateLock.unlock() }
-        let policyPath = defaultPolicyPath(codexHome)
+        let policyPath = defaultPolicyPath(sageHome)
         do {
             try blockingAppendNetworkRule(
                 policyPath: policyPath,
@@ -597,7 +597,7 @@ func loadExecPolicy(
         }
         do {
             try parser.parse(policyIdentifier: policyPath, policyFileContents: contents)
-        } catch let source as CodexExecPolicy.ExecPolicyError {
+        } catch let source as SageExecPolicy.ExecPolicyError {
             throw ExecPolicyError.parsePolicy(
                 path: policyPath,
                 source: source.description,
@@ -699,8 +699,8 @@ func profileHasManagedFilesystemRestrictions(_ permissionProfile: PermissionProf
     return false
 }
 
-func defaultPolicyPath(_ codexHome: String) -> String {
-    ((codexHome as NSString).appendingPathComponent(RULES_DIR_NAME) as NSString)
+func defaultPolicyPath(_ sageHome: String) -> String {
+    ((sageHome as NSString).appendingPathComponent(RULES_DIR_NAME) as NSString)
         .appendingPathComponent(DEFAULT_POLICY_FILE)
 }
 

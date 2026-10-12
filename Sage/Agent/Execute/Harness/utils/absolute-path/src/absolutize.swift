@@ -1,6 +1,6 @@
 //
 //  absolutize.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/absolute-path/src/absolutize.rs (Apache-2.0;
 //  adapted from path-absolutize 3.1.1, MIT, (c) 2018 magiclen.org (Ron Li)).

@@ -6,13 +6,13 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  The same events Codex runs around a turn: session start, prompt submit,
+//  The same events Sage runs around a turn: session start, prompt submit,
 //  pre-tool, permission request, post-tool, stop, interrupt, compact,
 //  session end. Rules live in `.sage/hooks.json` and skill `hooks.json`.
 //  A deny stops the turn. `ask` is HUD-only (`preToolUseDecision`).
 //  `continue` injects context. A second Stop hook does not fire while one
 //  is active. `run` executes a local command via CommandHookRuntime and
-//  parses Codex hook JSON. SessionStart stdin carries rust `source`;
+//  parses Sage hook JSON. SessionStart stdin carries rust `source`;
 //  UserPromptSubmit stdin carries prompt plus turn fields.
 //  Pre/PostCompact stdin carries rust `trigger` (auto / manual).
 //  Interrupt / SessionEnd / Stop stdin carry rust turn fields;
@@ -22,10 +22,10 @@
 //  MCP hook execution stays out.
 //
 
-import CodexCore
-import CodexHooks
-import CodexProtocol
-import CodexUtils
+import SageCore
+import SageHooks
+import SageProtocol
+import SageUtils
 import CryptoKit
 import Foundation
 
@@ -391,7 +391,7 @@ enum HookRuntime {
         )
     }
 
-    /// Codex Stop hook can hand a prompt back and sample once more.
+    /// Sage Stop hook can hand a prompt back and sample once more.
     /// `alreadyActive` matches `stop_hook_active`: a continuation does not block again.
     static func stopContinuation(
         projectRoot: URL?,
@@ -883,7 +883,7 @@ func sessionStartInputJSON(_ input: SessionStartHookInput) -> String {
     ).encodedJSON()
 }
 
-func hookPermissionMode(_ approvalPolicy: CodexProtocol.AskForApproval) -> String {
+func hookPermissionMode(_ approvalPolicy: SageProtocol.AskForApproval) -> String {
     switch approvalPolicy {
     case .never:
         return "bypassPermissions"

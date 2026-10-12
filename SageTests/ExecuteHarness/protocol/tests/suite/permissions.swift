@@ -8,8 +8,8 @@
 //
 
 import Foundation
-@testable import CodexProtocol
-import CodexUtils
+@testable import SageProtocol
+import SageUtils
 import XCTest
 
 final class PermissionsTests: XCTestCase {
@@ -118,8 +118,8 @@ final class PermissionsTests: XCTestCase {
 
     func testProtectedMetadataHelpers() {
         XCTAssertTrue(isProtectedMetadataName(".git"))
-        XCTAssertTrue(isProtectedMetadataName(".codex"))
+        XCTAssertTrue(isProtectedMetadataName(".sage"))
         XCTAssertFalse(isProtectedMetadataName("src"))
-        XCTAssertEqual(PROTECTED_METADATA_PATH_NAMES, [".git", ".agents", ".codex"])
+        XCTAssertEqual(PROTECTED_METADATA_PATH_NAMES, [".git", ".agents", ".sage"])
     }
 }

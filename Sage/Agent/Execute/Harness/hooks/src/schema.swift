@@ -1,6 +1,6 @@
 //
 //  schema.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/schema.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `write_schema_fixtures` still waits on schemars-generated fixtures.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct NullableString: Equatable, Sendable, Codable {
@@ -408,7 +408,7 @@ public struct InterruptCommandInput: Equatable, Sendable {
 
 public func writeSchemaFixtures(outputDir: String) throws {
     _ = outputDir
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "write_schema_fixtures waits on schemars-generated hook fixtures"
     )
 }

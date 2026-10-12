@@ -6,11 +6,11 @@
 //  Phase 7 rollout JSONL round-trip, policy, and truncation tests.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexRollout
-import CodexState
-import CodexThreadStore
+import SageHistory
+import SageProtocol
+import SageRollout
+import SageState
+import SageThreadStore
 import Foundation
 import XCTest
 
@@ -61,7 +61,7 @@ final class Phase7PersistenceTests: XCTestCase {
 
         let threadId = ThreadId()
         let recorder = try RolloutRecorder.create(
-            config: RolloutConfig(codexHome: home.path, cwd: "/tmp"),
+            config: RolloutConfig(sageHome: home.path, cwd: "/tmp"),
             params: .new(
                 conversationId: threadId,
                 source: .cli,
@@ -100,7 +100,7 @@ final class Phase7PersistenceTests: XCTestCase {
     }
 
     func testSqliteConfigPaths() {
-        let config = SqliteConfig(sqliteHome: "/tmp/codex-home")
+        let config = SqliteConfig(sqliteHome: "/tmp/sage-home")
         XCTAssertTrue(config.stateDbPath().hasSuffix("state_5.sqlite"))
         XCTAssertTrue(config.logsDbPath().hasSuffix("logs_2.sqlite"))
     }

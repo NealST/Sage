@@ -1,6 +1,6 @@
 //
 //  schema_loader.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/schema_loader.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  fixtures still trap at load, like the rust panic.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct GeneratedHookSchemas: Equatable, Sendable {

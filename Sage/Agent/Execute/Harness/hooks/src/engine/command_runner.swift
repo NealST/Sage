@@ -1,6 +1,6 @@
 //
 //  command_runner.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/command_runner.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  do not signal the test-runner process group.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Darwin
 import Foundation
 

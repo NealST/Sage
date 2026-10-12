@@ -10,7 +10,7 @@ import Foundation
 /// A high-density working-memory snapshot for one task.
 ///
 /// After compact, the folded prefix is replaced by one summary event in
-/// SQLite, matching Codex's local history swap.
+/// SQLite, matching Sage's local history swap.
 ///
 /// Distinct from `WorkPlan` (a user-confirmed strategy, frozen onto
 /// schedules) and from `TaskRecord.summary` / `topic` (chrome titles).

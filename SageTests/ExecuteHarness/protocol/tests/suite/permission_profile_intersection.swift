@@ -8,8 +8,8 @@
 //
 
 import Foundation
-@testable import CodexProtocol
-import CodexUtils
+@testable import SageProtocol
+import SageUtils
 import XCTest
 
 final class PermissionProfileIntersectionTests: XCTestCase {
@@ -97,7 +97,7 @@ final class PermissionProfileIntersectionTests: XCTestCase {
 
     func testExactDeniesNestedReadCarveoutsAndReopenedWritesArePreserved() throws {
         let temp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("codex-intersect-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("sage-intersect-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
         let root = try AbsolutePathBuf.fromAbsolutePath(temp.path).canonicalize()

@@ -8,7 +8,7 @@
 //  Port status: adapted
 //
 
-@testable import CodexShellCommand
+@testable import SageShellCommand
 import XCTest
 
 final class ShellCommandSnapshotTests: XCTestCase {

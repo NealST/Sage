@@ -1,13 +1,13 @@
 //
 //  user_goal.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/context/user_goal.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public enum ThreadGoalStatus: String, Codable, Equatable, Sendable {
@@ -37,8 +37,8 @@ public enum UserGoalUpdate: ContextualUserFragment, Equatable, Sendable {
         }
     }
 
-    public var openMarker: String { "<codex_internal_context source=\"user_goal\">" }
-    public var closeMarker: String { "</codex_internal_context>" }
+    public var openMarker: String { "<sage_internal_context source=\"user_goal\">" }
+    public var closeMarker: String { "</sage_internal_context>" }
 
     public var body: String {
         switch self {

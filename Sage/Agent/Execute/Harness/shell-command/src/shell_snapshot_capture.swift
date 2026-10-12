@@ -1,6 +1,6 @@
 //
 //  shell_snapshot_capture.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/shell_snapshot_capture.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -14,7 +14,7 @@ import Foundation
 import SwiftTreeSitter
 
 private let snapshotCommandHelper = #"""
-__codex_snapshot_command() {
+__sage_snapshot_command() {
   if command -v "$1" >/dev/null 2>&1; then
     "$@"
   else
@@ -62,7 +62,7 @@ public func snapshotCaptureScript(
     let startupEnvironmentReplacement: String
     if options.declarations && options.environment {
         startupEnvironmentReplacement = #"""
-        printf '\0CODEX_SNAPSHOT_POSIX_STARTUP\0%s\0' "$__codex_env_file"
+        printf '\0SAGE_SNAPSHOT_POSIX_STARTUP\0%s\0' "$__sage_env_file"
             SNAPSHOT_ENVIRONMENT
             printf '\0'
         """#
@@ -91,12 +91,12 @@ private func zshSnapshotScript(_ startup: SnapshotStartup) -> String {
     functions
     print ''
     SNAPSHOT_COMMAND_HELPER
-    setopt_count=$(setopt | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+    setopt_count=$(setopt | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
     print "# setopts $setopt_count"
-    setopt | __codex_snapshot_command sed 's/^/setopt /'
+    setopt | __sage_snapshot_command sed 's/^/setopt /'
     print ''
     printf '\0'
-    alias_count=$(alias -L | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+    alias_count=$(alias -L | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
     print "# aliases $alias_count"
     alias -L
     print ''
@@ -120,15 +120,15 @@ private func bashSnapshotScript(_ startup: SnapshotStartup) -> String {
     declare -f
     echo ''
     SNAPSHOT_COMMAND_HELPER
-    bash_opts=$(set -o | __codex_snapshot_command awk '$2=="on"{print $1}')
-    bash_opt_count=$(printf '%s\n' "$bash_opts" | __codex_snapshot_command sed '/^$/d' | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+    bash_opts=$(set -o | __sage_snapshot_command awk '$2=="on"{print $1}')
+    bash_opt_count=$(printf '%s\n' "$bash_opts" | __sage_snapshot_command sed '/^$/d' | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
     echo "# setopts $bash_opt_count"
     if [ -n "$bash_opts" ]; then
       printf 'set -o %s\n' $bash_opts
     fi
     echo ''
     printf '\0'
-    alias_count=$(alias -p | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+    alias_count=$(alias -p | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
     echo "# aliases $alias_count"
     alias -p
     echo ''
@@ -148,17 +148,17 @@ private func shSnapshotScript(_ startup: SnapshotStartup) -> String {
     if startup == .interactive {
         prefix = posixEnvPathExpansionFunction() + "\n" + #"""
         if [ -n "${ENV-}" ]; then
-          __codex_env_file=$(__codex_snapshot_expand_env "$ENV")
-          if [ -r "$__codex_env_file" ] && [ ! -d "$__codex_env_file" ]; then
+          __sage_env_file=$(__sage_snapshot_expand_env "$ENV")
+          if [ -r "$__sage_env_file" ] && [ ! -d "$__sage_env_file" ]; then
             SNAPSHOT_STARTUP_ENVIRONMENT
-            case "$__codex_env_file" in
-              /*) . "$__codex_env_file" ;;
-              *) . "./$__codex_env_file" ;;
+            case "$__sage_env_file" in
+              /*) . "$__sage_env_file" ;;
+              *) . "./$__sage_env_file" ;;
             esac
           fi
-          command unset __codex_env_file
+          command unset __sage_env_file
         fi
-        command unset -f __codex_snapshot_expand_env
+        command unset -f __sage_snapshot_expand_env
 
         """#
     } else {
@@ -181,8 +181,8 @@ private func shSnapshotScript(_ startup: SnapshotStartup) -> String {
     echo ''
     SNAPSHOT_COMMAND_HELPER
     if set -o >/dev/null 2>&1; then
-      sh_opts=$(set -o | __codex_snapshot_command awk '$2=="on"{print $1}')
-      sh_opt_count=$(printf '%s\n' "$sh_opts" | __codex_snapshot_command sed '/^$/d' | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+      sh_opts=$(set -o | __sage_snapshot_command awk '$2=="on"{print $1}')
+      sh_opt_count=$(printf '%s\n' "$sh_opts" | __sage_snapshot_command sed '/^$/d' | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
       echo "# setopts $sh_opt_count"
       if [ -n "$sh_opts" ]; then
         printf 'set -o %s\n' $sh_opts
@@ -193,7 +193,7 @@ private func shSnapshotScript(_ startup: SnapshotStartup) -> String {
     echo ''
     printf '\0'
     if alias >/dev/null 2>&1; then
-      alias_count=$(alias | __codex_snapshot_command wc -l | __codex_snapshot_command tr -d ' ')
+      alias_count=$(alias | __sage_snapshot_command wc -l | __sage_snapshot_command tr -d ' ')
       echo "# aliases $alias_count"
       alias
       echo ''
@@ -247,7 +247,7 @@ public struct CapturedSnapshot: Equatable, Sendable {
     public static func parse(shellType: ShellType, captured: [UInt8]) -> CapturedSnapshot? {
         guard shellType == .bash || shellType == .zsh || shellType == .sh else { return nil }
         var remaining = captured[...]
-        let startupMarker = Array("\0CODEX_SNAPSHOT_POSIX_STARTUP\0".utf8)
+        let startupMarker = Array("\0SAGE_SNAPSHOT_POSIX_STARTUP\0".utf8)
         var startupEnvironment: CapturedStartupEnvironment?
         if shellType == .sh,
            let start = remaining.firstIndex(ofSequence: startupMarker) {

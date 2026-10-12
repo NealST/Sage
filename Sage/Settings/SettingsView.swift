@@ -128,7 +128,6 @@ struct SettingsView: View {
 
         case .capabilities:
             SettingsCapabilitiesSection(
-                settings: settings,
                 pinnedSkillsSession: $pinnedSkillsSession,
                 showMCPManage: $showMCPManage,
                 showSkillsManage: $showSkillsManage

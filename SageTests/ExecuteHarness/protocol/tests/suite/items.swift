@@ -8,8 +8,8 @@
 
 import Foundation
 import XCTest
-@testable import CodexProtocol
-import CodexUtils
+@testable import SageProtocol
+import SageUtils
 
 final class ItemsTests: XCTestCase {
     func testModelInvocationContextRoundTripViaCommandItem() throws {
@@ -39,8 +39,8 @@ final class ItemsTests: XCTestCase {
         XCTAssertTrue(isSafePluginRelativePath("scripts/run.py"))
         for path in [
             "",
-            "/home/user/.codex/plugins/cache/sample/scripts/run.py",
-            "C:/Users/user/.codex/plugins/cache/sample/scripts/run.py",
+            "/home/user/.sage/plugins/cache/sample/scripts/run.py",
+            "C:/Users/user/.sage/plugins/cache/sample/scripts/run.py",
             "scripts/C:/run.py",
             #"\\server\share\sample\scripts\run.py"#,
             #"scripts\run.py"#,

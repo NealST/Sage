@@ -10,8 +10,8 @@
 //  Analytics emit waits on SessionTelemetry.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 func recordMultiAgentV2ToolCall(toolName: String, status: String) {
     _ = toolName

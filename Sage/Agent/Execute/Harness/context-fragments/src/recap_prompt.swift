@@ -1,6 +1,6 @@
 //
 //  recap_prompt.swift
-//  CodexContextFragments
+//  SageContextFragments
 //
 //  Port of codex-rs/context-fragments/src/recap_prompt.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,8 +12,8 @@
 //  because Swift has no compile-time call of that helper.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 let RECAP_PROMPT_PREFIX = """

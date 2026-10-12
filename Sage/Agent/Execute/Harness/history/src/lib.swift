@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexHistory
+//  SageHistory
 //
 //  Port of codex-rs/history/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,10 +11,10 @@
 //  optional JSON payloads until those files are ported.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
-public struct CodexHarnessMetadata: Codable, Equatable, Sendable {
+public struct SageHarnessMetadata: Codable, Equatable, Sendable {
     public var clientAuthored: Bool
     public var historyTruncationTokenLimit: UInt64?
     public var deliveredAssistantMessage: String?
@@ -49,9 +49,9 @@ public struct CodexHarnessMetadata: Codable, Equatable, Sendable {
 
 public struct ResponseItemEnvelope: Codable, Equatable, Sendable {
     public var item: ResponseItem
-    public var metadata: CodexHarnessMetadata?
+    public var metadata: SageHarnessMetadata?
 
-    public init(item: ResponseItem, metadata: CodexHarnessMetadata? = nil) {
+    public init(item: ResponseItem, metadata: SageHarnessMetadata? = nil) {
         self.item = item
         self.metadata = metadata
     }
@@ -117,7 +117,7 @@ extension RolloutItem: Codable {
             self = .sessionMeta(try container.decode(SessionMetaLine.self, forKey: .payload))
         case "response_item":
             let item = try container.decode(ResponseItem.self, forKey: .payload)
-            let metadata = try container.decodeIfPresent(CodexHarnessMetadata.self, forKey: .metadata)
+            let metadata = try container.decodeIfPresent(SageHarnessMetadata.self, forKey: .metadata)
             self = .responseItem(ResponseItemEnvelope(item: item, metadata: metadata))
         case "inter_agent_communication":
             self = .interAgentCommunication(try container.decode(InterAgentCommunication.self, forKey: .payload))

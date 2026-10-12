@@ -8,7 +8,7 @@
 //
 
 import Foundation
-@testable import CodexProtocol
+@testable import SageProtocol
 import XCTest
 
 final class ToolNameTests: XCTestCase {

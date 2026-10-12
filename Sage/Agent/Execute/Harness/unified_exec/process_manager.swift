@@ -11,10 +11,10 @@
 //  instead of waiting inside `runTurn`. Plugin sidecar stays out.
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 let UNIFIED_EXEC_ENV: [(String, String)] = [
@@ -27,7 +27,7 @@ let UNIFIED_EXEC_ENV: [(String, String)] = [
     ("PAGER", "cat"),
     ("GIT_PAGER", "cat"),
     ("GH_PAGER", "cat"),
-    ("CODEX_CI", "1"),
+    ("SAGE_CI", "1"),
 ]
 
 private let forceDeterministicProcessIds = LockedFlag()

@@ -1,6 +1,6 @@
 //
 //  local_media.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/local_media.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -8,11 +8,11 @@
 //
 //  Snapshots local image and audio input into portable, validated data URLs.
 //  `std::path::Path` maps to String paths; `io::Result` maps to `throws` with
-//  CodexUtils' `IOError`. Image loading/encoding comes from CodexUtils
+//  SageUtils' `IOError`. Image loading/encoding comes from SageUtils
 //  (`utils/image`), which the protocol crate links upstream.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// Maximum accepted decoded byte length for prompt audio inputs.

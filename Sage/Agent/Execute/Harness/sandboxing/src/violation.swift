@@ -1,6 +1,6 @@
 //
 //  violation.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/violation.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `os.Logger`. `BlockedRequest` / `NetworkMode` are the inlined type layer.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 

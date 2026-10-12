@@ -1,6 +1,6 @@
 //
 //  manager.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/manager.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  argv. Linux landlock / Windows token wrappers stay excluded.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public enum SandboxablePreference: Equatable, Sendable {
@@ -158,7 +158,7 @@ public enum SandboxTransformError: Error, CustomStringConvertible {
         case .invalidSandboxPolicyCwd(let cwd, let message):
             return "sandbox policy cwd URI `\(cwd)` is not valid on this host: \(message)"
         case .missingLinuxSandboxExecutable:
-            return "missing codex-linux-sandbox executable path"
+            return "missing sage-linux-sandbox executable path"
         case .windowsMxcPreparation(let err):
             return "failed to prepare MXC sandbox: \(err)"
         case .environmentNetworkProxy(let err):
@@ -171,11 +171,11 @@ public enum SandboxTransformError: Error, CustomStringConvertible {
 
 public struct SandboxManager: Sendable {
     var seatbeltProfile: MacosSeatbeltProfile
-    var allowedSymlinkedCodexHome: AbsolutePathBuf?
+    var allowedSymlinkedSageHome: AbsolutePathBuf?
 
     public init() {
         seatbeltProfile = .process
-        allowedSymlinkedCodexHome = nil
+        allowedSymlinkedSageHome = nil
     }
 
     public static func forFileSystemHelpers() -> SandboxManager {
@@ -184,11 +184,11 @@ public struct SandboxManager: Sendable {
         return manager
     }
 
-    public func withAllowedSymlinkedCodexHome(
-        _ allowedSymlinkedCodexHome: AbsolutePathBuf?
+    public func withAllowedSymlinkedSageHome(
+        _ allowedSymlinkedSageHome: AbsolutePathBuf?
     ) -> SandboxManager {
         var copy = self
-        copy.allowedSymlinkedCodexHome = allowedSymlinkedCodexHome
+        copy.allowedSymlinkedSageHome = allowedSymlinkedSageHome
         return copy
     }
 
@@ -276,7 +276,7 @@ public struct SandboxManager: Sendable {
                         extraAllowUnixSockets: []
                     ),
                     profile: seatbeltProfile,
-                    allowedSymlinkedCodexHome: allowedSymlinkedCodexHome
+                    allowedSymlinkedSageHome: allowedSymlinkedSageHome
                 )
                 command = [MACOS_PATH_TO_SEATBELT_EXECUTABLE] + seatbeltArgs
             } catch {

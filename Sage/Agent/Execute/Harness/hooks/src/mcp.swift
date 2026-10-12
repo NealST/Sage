@@ -1,6 +1,6 @@
 //
 //  mcp.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/mcp.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `[String: JSONValue]`. `Duration` is `TimeInterval`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// One MCP tool call requested by a configured hook handler.

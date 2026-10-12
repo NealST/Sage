@@ -1,6 +1,6 @@
 //
 //  spawn.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/spawn.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  remains excluded(platform).
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public struct WindowsSandboxSpawnRequest: Sendable {
@@ -95,11 +95,11 @@ public struct SpawnRequest: Sendable {
 
 public func spawnProcess(_ request: SpawnRequest) async throws -> SpawnedProcess {
     guard let program = request.command.first else {
-        throw CodexErr.io("command args are empty")
+        throw SageErr.io("command args are empty")
     }
     let args = Array(request.command.dropFirst())
     if request.sandbox == .windowsRestrictedToken {
-        throw CodexErr.unsupportedOperation(
+        throw SageErr.unsupportedOperation(
             "Windows sandbox process spawn is unavailable on this platform"
         )
     }

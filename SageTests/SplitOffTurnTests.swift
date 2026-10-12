@@ -186,7 +186,6 @@ final class SplitOffTurnTests: XCTestCase {
             taskRepository: repository,
             skills: SkillSessionController()
         )
-        runtime.turns.execute.useHarnessRunTurn = false
         return runtime
     }
 

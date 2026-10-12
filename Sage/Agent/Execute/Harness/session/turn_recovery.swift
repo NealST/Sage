@@ -15,8 +15,8 @@
 //  Host drain admission stays on ThreadSession.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 extension Session {

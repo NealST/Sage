@@ -1,17 +1,17 @@
 //
 //  openai_models.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/openai_models.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: faithful
 //
-//  Shared model metadata types exchanged between Codex services and clients.
+//  Shared model metadata types exchanged between Sage services and clients.
 //  `strum::Display`, `strum::EnumIter`, `schemars::JsonSchema`, and `ts_rs::TS`
 //  are omitted (no runtime JSON-schema or TypeScript binding generation needed).
 //
 //  `ReasoningEffort` is defined in config_types.swift; all files are in the same
-//  CodexProtocol module so no import is needed.
+//  SageProtocol module so no import is needed.
 //
 //  `chrono::DateTime<Utc>` is mapped to Foundation `Date` with custom RFC-3339
 //  Codable helpers.

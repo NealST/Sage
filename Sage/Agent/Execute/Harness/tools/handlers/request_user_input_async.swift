@@ -11,8 +11,8 @@
 //  questions and invokes onRequestUserInputAsync.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 let REQUEST_USER_INPUT_ASYNC_TOOL_NAME = "request_user_input_async"

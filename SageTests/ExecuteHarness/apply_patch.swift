@@ -8,9 +8,9 @@
 //
 
 import ApplyPatch
-import CodexProtocol
-import CodexUtils
-@testable import CodexCore
+import SageProtocol
+import SageUtils
+@testable import SageCore
 import XCTest
 
 final class CoreApplyPatchTests: XCTestCase {

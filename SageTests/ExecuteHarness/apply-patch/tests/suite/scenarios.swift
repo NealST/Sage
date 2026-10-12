@@ -3,7 +3,7 @@
 import XCTest
 
 /// Port of codex-rs/apply-patch/tests/suite/scenarios.rs.
-/// Fixtures live at tests/fixtures/scenarios, matching the Codex tree.
+/// Fixtures live at tests/fixtures/scenarios, matching the Sage tree.
 final class ApplyPatchScenarioTests: XCTestCase {
     func testApplyPatchScenarios() throws {
         let scenarios = try FileManager.default.contentsOfDirectory(
@@ -14,7 +14,7 @@ final class ApplyPatchScenarioTests: XCTestCase {
         .filter(\.hasDirectoryPath)
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        XCTAssertFalse(scenarios.isEmpty, "expected transplanted Codex apply-patch fixtures")
+        XCTAssertFalse(scenarios.isEmpty, "expected transplanted Sage apply-patch fixtures")
         for scenario in scenarios {
             try runScenario(scenario)
         }

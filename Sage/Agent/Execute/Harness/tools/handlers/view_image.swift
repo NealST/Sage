@@ -10,8 +10,8 @@
 //  validates the path argument and invokes onViewImage.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct ViewImageArgs: Decodable {

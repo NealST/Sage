@@ -1,6 +1,6 @@
 //
 //  loading.swift
-//  CodexSkills
+//  SageSkills
 //
 //  Port of codex-rs/skills/src/loading.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  `ObjectIdentifier` of the cache box.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 /// A skill document that could not be read, parsed, or validated.

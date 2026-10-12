@@ -1,6 +1,6 @@
 //
 //  types.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/types.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  RFC3339 seconds with a `Z` suffix. `Box<dyn Error>` is `any Error`.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public typealias HookFn = @Sendable (HookPayload) async -> HookResult

@@ -1,6 +1,6 @@
 //
 //  apply.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/apply.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -72,7 +72,7 @@ public func applyGitPatch(_ req: ApplyGitRequest) throws -> ApplyGitResult {
     }
 
     var cfgParts: [String] = []
-    if let cfg = ProcessInfo.processInfo.environment["CODEX_APPLY_GIT_CFG"] {
+    if let cfg = ProcessInfo.processInfo.environment["SAGE_APPLY_GIT_CFG"] {
         for pair in cfg.split(separator: ",") {
             let p = pair.trimmingCharacters(in: .whitespaces)
             if p.isEmpty || !p.contains("=") { continue }
@@ -149,7 +149,7 @@ private func resolveGitRoot(_ cwd: String) throws -> String {
 
 private func writeTempPatch(_ diff: String) throws -> (URL, String) {
     let dir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("codex-git-apply-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("sage-git-apply-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let path = dir.appendingPathComponent("patch.diff")
     try diff.write(to: path, atomically: true, encoding: .utf8)

@@ -10,7 +10,7 @@
 //  file keeps a local snapshot used by ToolRouter.
 //
 
-import CodexProtocol
+import SageProtocol
 
 let TOOL_SEARCH_TOOL_NAME = "tool_search"
 let TOOL_SEARCH_FUNCTION_NAME = "tool_search_tool"

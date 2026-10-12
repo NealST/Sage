@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  of the crate.
 //
 
-import CodexHistory
-import CodexProtocol
+import SageHistory
+import SageProtocol
 import Foundation
 
 public let SESSIONS_SUBDIR = "sessions"

@@ -1,6 +1,6 @@
 //
 //  network_proxy_types.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of the network-proxy types referenced by sandboxing (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -156,5 +156,5 @@ public struct NetworkProxy: Equatable, Sendable {
 public func sharedDaemonSocketDirectory() throws -> String {
     let temporaryRoot = URL(fileURLWithPath: "/tmp").resolvingSymlinksInPath().path
     let uid = geteuid()
-    return (temporaryRoot as NSString).appendingPathComponent("codex-daemon-\(uid)")
+    return (temporaryRoot as NSString).appendingPathComponent("sage-daemon-\(uid)")
 }

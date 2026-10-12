@@ -1,6 +1,6 @@
 //
 //  responses_headers.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/responses_headers.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,7 +9,7 @@
 //  http::HeaderMap is [String: String]. Header names are recorded for Debug.
 //
 
-public struct CodexResponsesHeaders: Sendable {
+public struct SageResponsesHeaders: Sendable {
     public var model: String
     public var headers: [String: String]
 
@@ -19,8 +19,8 @@ public struct CodexResponsesHeaders: Sendable {
     }
 }
 
-extension CodexResponsesHeaders: CustomDebugStringConvertible {
+extension SageResponsesHeaders: CustomDebugStringConvertible {
     public var debugDescription: String {
-        "CodexResponsesHeaders(model: \(model), header_names: \(headers.keys.sorted()))"
+        "SageResponsesHeaders(model: \(model), header_names: \(headers.keys.sorted()))"
     }
 }

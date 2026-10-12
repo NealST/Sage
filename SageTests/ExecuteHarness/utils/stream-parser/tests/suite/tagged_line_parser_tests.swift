@@ -10,7 +10,7 @@
 
 import Foundation
 import XCTest
-@testable import CodexUtils
+@testable import SageUtils
 
 private enum Tag {
     case block

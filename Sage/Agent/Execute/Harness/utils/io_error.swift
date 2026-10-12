@@ -1,6 +1,6 @@
 //
 //  io_error.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Sage addition (no codex counterpart).
 //

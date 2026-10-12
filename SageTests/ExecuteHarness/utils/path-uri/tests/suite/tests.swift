@@ -24,7 +24,7 @@
 //
 
 import Foundation
-@testable import CodexUtils
+@testable import SageUtils
 import XCTest
 
 final class PathUriTests: XCTestCase {
@@ -359,7 +359,7 @@ final class PathUriTests: XCTestCase {
 
     func testUnsupportedSchemesAreRejectedAtConstruction() {
         for (input, expectedScheme) in [
-            ("codex-env:///devbox/workspace", "codex-env"),
+            ("sage-env:///devbox/workspace", "sage-env"),
             ("artifact://store/object-1", "artifact"),
             ("http://example.com/file", "http"),
             ("https://example.com/file", "https"),

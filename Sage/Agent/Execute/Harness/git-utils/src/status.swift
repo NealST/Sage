@@ -1,6 +1,6 @@
 //
 //  status.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/status.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  port uses an actor that shares one `Task` per `(git, repoRoot)` key.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 private struct GitStatusKey: Hashable, Sendable {

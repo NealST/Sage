@@ -1,14 +1,14 @@
 //
 //  thread_startup_metadata.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/thread_startup_metadata.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 /// The configuration reported when a thread started, without its replay history.

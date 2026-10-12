@@ -9,7 +9,7 @@
 //  Extension contributors wait for Phase 9. Session still records start/stop.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 enum TurnStartPhase: Equatable, Sendable {

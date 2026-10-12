@@ -10,7 +10,7 @@
 //  stay out; the record is the payload later session wiring wraps.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct UserShellCommandRecord: Equatable, Sendable {

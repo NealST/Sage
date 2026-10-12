@@ -1,6 +1,6 @@
 //
 //  declarations.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/declarations.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  Declaration keys still use `hook_key`.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Minimal declaration metadata for one bundled plugin hook handler.

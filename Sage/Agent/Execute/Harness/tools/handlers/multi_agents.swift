@@ -10,8 +10,8 @@
 //  on AgentControl / Session.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 let MULTI_AGENT_TOOL_SEARCH_SOURCE_NAME = "Multi-agent tools"
 let MULTI_AGENT_TOOL_SEARCH_SOURCE_DESCRIPTION = "Spawn and manage sub-agents."

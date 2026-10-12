@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,22 +11,22 @@
 //  surface. Realtime modules stay deferred. windows_sandbox is excluded.
 //
 
-import CodexNetworkProxy
-import CodexTerminalDetection
+import SageNetworkProxy
+import SageTerminalDetection
 
 @available(*, deprecated, renamed: "ThreadManager")
 public typealias ConversationManager = ThreadManager
 @available(*, deprecated, renamed: "NewThread")
 public typealias NewConversation = NewThread
-@available(*, deprecated, renamed: "CodexThread")
-public typealias CodexConversation = CodexThread
+@available(*, deprecated, renamed: "SageThread")
+public typealias SageConversation = SageThread
 
-public typealias EnvironmentNetworkPolicy = CodexNetworkProxy.EnvironmentNetworkPolicy
-public typealias NetworkDomainPermission = CodexNetworkProxy.NetworkDomainPermission
-public typealias NetworkDomainPermissionEntry = CodexNetworkProxy.NetworkDomainPermissionEntry
-public typealias NetworkDomainPermissions = CodexNetworkProxy.NetworkDomainPermissions
-public typealias NetworkUnixSocketPermission = CodexNetworkProxy.NetworkUnixSocketPermission
-public typealias NetworkUnixSocketPermissions = CodexNetworkProxy.NetworkUnixSocketPermissions
+public typealias EnvironmentNetworkPolicy = SageNetworkProxy.EnvironmentNetworkPolicy
+public typealias NetworkDomainPermission = SageNetworkProxy.NetworkDomainPermission
+public typealias NetworkDomainPermissionEntry = SageNetworkProxy.NetworkDomainPermissionEntry
+public typealias NetworkDomainPermissions = SageNetworkProxy.NetworkDomainPermissions
+public typealias NetworkUnixSocketPermission = SageNetworkProxy.NetworkUnixSocketPermission
+public typealias NetworkUnixSocketPermissions = SageNetworkProxy.NetworkUnixSocketPermissions
 
 public func currentTerminalUserAgent() -> String {
     userAgent()

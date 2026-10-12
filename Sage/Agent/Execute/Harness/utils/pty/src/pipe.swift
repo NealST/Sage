@@ -1,13 +1,14 @@
 //
 //  pipe.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/pty/src/pipe.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Pipe-backed spawn. Foundation `Process` plus `posix_spawn` file actions
-//  for NewSession / explicit descriptors. Windows job objects omitted.
+//  Pipe-backed spawn. Foundation `Process` owns the child. The child
+//  inherits ignored terminal-stop signals so `setpgid` does not freeze a
+//  login shell. Windows job objects omitted.
 //
 
 import Darwin
@@ -61,7 +62,7 @@ private func spawnProcessWithStdinMode(
     inheritedFds: [Int32]
 ) throws -> SpawnedProcess {
     if program.isEmpty {
-        throw NSError(domain: "CodexUtils.PTY", code: 2, userInfo: [
+        throw NSError(domain: "SageUtils.PTY", code: 2, userInfo: [
             NSLocalizedDescriptionKey: "missing program for pipe spawn"
         ])
     }
@@ -72,7 +73,6 @@ private func spawnProcessWithStdinMode(
     if stdinNull {
         stdinPipe.fileHandleForWriting.closeFile()
     }
-
     let process = Process()
     process.executableURL = URL(fileURLWithPath: program)
     process.arguments = args
@@ -81,9 +81,15 @@ private func spawnProcessWithStdinMode(
     process.standardInput = stdinNull ? FileHandle.nullDevice : stdinPipe
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
+    let exitBox = PipeExitBox(process)
+    let previousOutputStop = signal(SIGTTOU, SIG_IGN)
+    let previousInputStop = signal(SIGTTIN, SIG_IGN)
     try process.run()
+    _ = signal(SIGTTOU, previousOutputStop)
+    _ = signal(SIGTTIN, previousInputStop)
     let pid = process.processIdentifier
     _ = setpgid(pid, pid)
+    exitBox.watch()
 
     var stdoutCont: AsyncStream<Data>.Continuation!
     let stdout = AsyncStream<Data> { stdoutCont = $0 }
@@ -119,7 +125,8 @@ private func spawnProcessWithStdinMode(
         stdout: stdout,
         closeWriter: {
             try? stdinPipe.fileHandleForWriting.close()
-        }
+        },
+        exitTask: Task.detached(priority: .userInitiated) { await exitBox.wait() }
     )
     _ = inheritedFds
     _ = arg0
@@ -130,4 +137,51 @@ private func spawnProcessWithStdinMode(
         exit: exitTask,
         processGroupId: UInt32(pid)
     )
+}
+
+private final class PipeExitBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Int32, Never>?
+    private var status: Int32?
+    private var finished = false
+    private let process: Process
+
+    init(_ process: Process) {
+        self.process = process
+    }
+
+    func watch() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            self.process.waitUntilExit()
+            self.finish(self.process.terminationStatus)
+        }
+    }
+
+    func wait() async -> Int32 {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if let status {
+                lock.unlock()
+                continuation.resume(returning: status)
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    private func finish(_ status: Int32) {
+        lock.lock()
+        if finished {
+            lock.unlock()
+            return
+        }
+        finished = true
+        let continuation = self.continuation
+        if continuation == nil { self.status = status }
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: status)
+    }
 }

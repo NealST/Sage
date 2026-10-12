@@ -1,6 +1,6 @@
 //
 //  residency.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/control/residency.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  waits on ThreadManager / Session.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 import os
 
@@ -32,7 +32,7 @@ public final class V2Residency: @unchecked Sendable {
     public func reserveSlot(capacity: Int) throws -> V2ResidencySlot {
         try lock.withLock { state in
             if state.residents.count + state.pendingSlots >= capacity {
-                throw CodexErr.agentLimitReached(maxThreads: capacity)
+                throw SageErr.agentLimitReached(maxThreads: capacity)
             }
             state.pendingSlots += 1
         }

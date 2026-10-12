@@ -6,11 +6,11 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Wraps `CodexShellCommand` detection. `ShellInfo` from exec-server is
+//  Wraps `SageShellCommand` detection. `ShellInfo` from exec-server is
 //  accepted as name + path until that crate is ported.
 //
 
-import CodexShellCommand
+import SageShellCommand
 import Foundation
 
 public struct Shell: Equatable, Sendable, Codable {
@@ -52,13 +52,13 @@ public struct Shell: Equatable, Sendable, Codable {
         case "sh": shellType = .sh
         case "cmd": shellType = .cmd
         default:
-            throw CodexShellLookupError.unknownEnvironmentShell(name)
+            throw SageShellLookupError.unknownEnvironmentShell(name)
         }
         return Shell(shellType: shellType, shellPath: path)
     }
 }
 
-public enum CodexShellLookupError: Error, Equatable, CustomStringConvertible {
+public enum SageShellLookupError: Error, Equatable, CustomStringConvertible {
     case unknownEnvironmentShell(String)
 
     public var description: String {
@@ -70,13 +70,13 @@ public enum CodexShellLookupError: Error, Equatable, CustomStringConvertible {
 }
 
 public func getShellByModelProvidedPath(_ shellPath: String) -> Shell {
-    Shell(CodexShellCommand.getShellByModelProvidedPath(shellPath))
+    Shell(SageShellCommand.getShellByModelProvidedPath(shellPath))
 }
 
 public func getShell(_ shellType: ShellType) -> Shell? {
-    CodexShellCommand.getShell(shellType).map(Shell.init)
+    SageShellCommand.getShell(shellType).map(Shell.init)
 }
 
 public func defaultUserShell() -> Shell {
-    Shell(CodexShellCommand.defaultUserShell())
+    Shell(SageShellCommand.defaultUserShell())
 }

@@ -11,7 +11,7 @@
 //  is a tag without `ZshForkConfig` until Phase 4 tools land.
 //
 
-import CodexShellCommand
+import SageShellCommand
 import Foundation
 
 extension ExecPolicyManager {

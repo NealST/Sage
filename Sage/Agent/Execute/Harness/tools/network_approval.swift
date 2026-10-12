@@ -30,7 +30,7 @@ enum NetworkApproval {
         return copy
     }
 
-    /// Codex `begin_network_approval` returns nothing when managed network
+    /// Sage `begin_network_approval` returns nothing when managed network
     /// is off. Seatbelt is that managed network on Mac.
     static func begin(networkManaged: Bool, spec: NetworkProxySpec) -> NetworkProxySpec? {
         guard networkManaged, spec.enabled else { return nil }

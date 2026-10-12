@@ -3,7 +3,7 @@
 //  Sage
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 extension ToolBatchExecutor {
@@ -32,7 +32,7 @@ extension ToolBatchExecutor {
             policy: pathPolicy,
             retry: retry,
             scope: GuardianApprovalRequest.from(action).scope,
-            approvalPolicy: CodexProtocol.AskForApproval.onRequest,
+            approvalPolicy: SageProtocol.AskForApproval.onRequest,
             reviewer: reviewer
         ) else {
             return .askHUD
@@ -50,7 +50,7 @@ extension ToolBatchExecutor {
                     policy: pathPolicy,
                     retry: retry
                 ),
-                approvalPolicy: CodexProtocol.AskForApproval.onRequest,
+                approvalPolicy: SageProtocol.AskForApproval.onRequest,
                 approvalsReviewer: reviewer
             ),
             events: services.events

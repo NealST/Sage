@@ -18,7 +18,7 @@ func createTestSyncTool() -> ToolSpec {
     return .function(
         ResponsesApiTool(
             name: "test_sync_tool",
-            description: "Internal synchronization helper used by Codex integration tests.",
+            description: "Internal synchronization helper used by Sage integration tests.",
             strict: false,
             parameters: .object(
                 [

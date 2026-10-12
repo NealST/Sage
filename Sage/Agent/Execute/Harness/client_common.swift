@@ -1,22 +1,22 @@
 //
 //  client_common.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/client_common.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Re-exports CodexAPI.ResponseEvent. Prompt.tools is pre-serialized
+//  Re-exports SageAPI.ResponseEvent. Prompt.tools is pre-serialized
 //  JSON (Sage ToolSpec lives in the app module). ResponseStream is an
 //  AsyncStream; dropping the stream cancels via Task.
 //
 
-import CodexAPI
-import CodexAsyncUtils
-import CodexProtocol
+import SageAPI
+import SageAsyncUtils
+import SageProtocol
 import Foundation
 
-public typealias ResponseEvent = CodexAPI.ResponseEvent
+public typealias ResponseEvent = SageAPI.ResponseEvent
 
 public struct Prompt: Sendable {
     public var input: [ResponseItem]
@@ -101,12 +101,12 @@ func normalizeImageDetail(_ detail: inout ImageDetail?, modelInfo: ModelInfo) {
 }
 
 public struct ResponseStream: Sendable {
-    public var events: AsyncStream<CodexResult<ResponseEvent>>
+    public var events: AsyncStream<SageResult<ResponseEvent>>
     public var consumerDropped: CancellationToken
     public var upstreamRequestId: String?
 
     public init(
-        events: AsyncStream<CodexResult<ResponseEvent>>,
+        events: AsyncStream<SageResult<ResponseEvent>>,
         consumerDropped: CancellationToken = CancellationToken(),
         upstreamRequestId: String? = nil
     ) {

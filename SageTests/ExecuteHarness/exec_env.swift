@@ -8,8 +8,8 @@
 //
 
 import ApplyPatch
-import CodexProtocol
-@testable import CodexCore
+import SageProtocol
+@testable import SageCore
 import XCTest
 
 final class ExecEnvTests: XCTestCase {
@@ -19,19 +19,19 @@ final class ExecEnvTests: XCTestCase {
             &env,
             activePermissionProfile: ActivePermissionProfile(id: ":workspace")
         )
-        XCTAssertEqual(env[CODEX_PERMISSION_PROFILE_ENV_VAR], ":workspace")
+        XCTAssertEqual(env[SAGE_PERMISSION_PROFILE_ENV_VAR], ":workspace")
     }
 
     func testClearsPermissionProfileWhenNil() {
-        var env = [CODEX_PERMISSION_PROFILE_ENV_VAR: "stale"]
+        var env = [SAGE_PERMISSION_PROFILE_ENV_VAR: "stale"]
         injectPermissionProfileEnv(&env, activePermissionProfile: nil)
-        XCTAssertNil(env[CODEX_PERMISSION_PROFILE_ENV_VAR])
+        XCTAssertNil(env[SAGE_PERMISSION_PROFILE_ENV_VAR])
     }
 
     func testInjectApplyPatchEnvHonorsFeatureBit() {
-        var env = [CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR.lowercased(): "stale"]
+        var env = [SAGE_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR.lowercased(): "stale"]
         injectApplyPatchEnv(&env, preserveLineEndings: true)
-        XCTAssertNil(env[CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR.lowercased()])
-        XCTAssertEqual(env[CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR], "1")
+        XCTAssertNil(env[SAGE_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR.lowercased()])
+        XCTAssertEqual(env[SAGE_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR], "1")
     }
 }

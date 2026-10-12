@@ -1,6 +1,6 @@
 //
 //  session_prefix.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/session_prefix.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,8 +10,8 @@
 //  renders through `ContextualUserFragment`.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 let completionMessageMaxTokens = 1_000

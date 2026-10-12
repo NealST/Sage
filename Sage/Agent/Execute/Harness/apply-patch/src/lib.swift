@@ -11,10 +11,10 @@
 //
 
 @_exported import FileSystem
-import CodexUtils
+import SageUtils
 import Foundation
 
-public let CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR = "CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS"
+public let SAGE_APPLY_PATCH_PRESERVE_LINE_ENDINGS_ENV_VAR = "SAGE_APPLY_PATCH_PRESERVE_LINE_ENDINGS"
 
 public enum ApplyPatchFileUpdateMode: Equatable {
     case normalizeToLf

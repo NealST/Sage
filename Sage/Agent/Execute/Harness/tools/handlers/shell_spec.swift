@@ -9,7 +9,7 @@
 //  Windows shell guidance is kept but not selected on macOS.
 //
 
-import CodexProtocol
+import SageProtocol
 
 func createExecCommandTool(
     options: CommandToolOptions,

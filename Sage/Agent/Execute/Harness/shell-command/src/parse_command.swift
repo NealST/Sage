@@ -1,6 +1,6 @@
 //
 //  parse_command.swift
-//  CodexShellCommand
+//  SageShellCommand
 //
 //  Port of codex-rs/shell-command/src/parse_command.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  `String`. `shlex` is the local POSIX splitter.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func shlexJoin(_ tokens: [String]) -> String {

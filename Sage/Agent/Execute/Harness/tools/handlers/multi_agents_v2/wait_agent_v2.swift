@@ -10,12 +10,12 @@
 //  Spec, argument parsing, mailbox activity, and steer waits are live
 //  when LocalAgentControl is attached. Session InputQueue and
 //  AgentDeliveryState are raced; pending steer wins over mailbox.
-//  Turn items record on the caller CodexThread when a ThreadManager
+//  Turn items record on the caller SageThread when a ThreadManager
 //  is present.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct WaitAgentV2Args: Decodable, Equatable, Sendable {

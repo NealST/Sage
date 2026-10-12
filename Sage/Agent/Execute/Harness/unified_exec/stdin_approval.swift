@@ -11,9 +11,9 @@
 //  needed review is thrown, never waited on inside `runTurn`.
 //
 
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 enum TerminalSandboxSource: Equatable, Sendable {

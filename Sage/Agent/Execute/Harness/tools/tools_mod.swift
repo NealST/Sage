@@ -10,10 +10,10 @@
 //  the requested mode directly.
 //
 
-import CodexCore
-import CodexProtocol
-import CodexShellCommand
-import CodexUtils
+import SageCore
+import SageProtocol
+import SageShellCommand
+import SageUtils
 import Foundation
 
 func flatToolName(_ toolName: ToolName) -> String {

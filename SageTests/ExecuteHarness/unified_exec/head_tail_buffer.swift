@@ -7,7 +7,7 @@
 //  Port status: faithful
 //
 
-@testable import CodexCore
+@testable import SageCore
 import XCTest
 
 final class HeadTailBufferTests: XCTestCase {

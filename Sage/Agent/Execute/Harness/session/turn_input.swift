@@ -1,6 +1,6 @@
 //
 //  turn_input.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/session/turn_input.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,8 +13,8 @@
 //  deferred with the voice subset.
 //
 
-import CodexContextFragments
-import CodexProtocol
+import SageContextFragments
+import SageProtocol
 import Foundation
 
 public enum TurnStartKind: Equatable, Sendable {
@@ -82,14 +82,14 @@ public func validateStartOrSteerInput(_ input: TurnInput) throws {
     case .interAgentCommunication:
         break
     }
-    throw CodexErr.invalidRequest(
+    throw SageErr.invalidRequest(
         "only user input or standalone function-call outputs can start or steer a turn"
     )
 }
 
 public func validateSteerOnlyInput(_ input: TurnInput) throws {
     guard case .userInput = input else {
-        throw CodexErr.invalidRequest("only user input can steer a turn")
+        throw SageErr.invalidRequest("only user input can steer a turn")
     }
 }
 

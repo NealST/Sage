@@ -1,6 +1,6 @@
 //
 //  compact.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/compact.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,8 +11,8 @@
 //  streaming.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public let compactUserMessageMaxTokens = 20_000
@@ -151,7 +151,7 @@ public func buildCompactedHistory(
     return history
 }
 
-/// Codex `insert_initial_context_before_last_real_user_or_summary`.
+/// Sage `insert_initial_context_before_last_real_user_or_summary`.
 public func insertInitialContextBeforeLastRealUserOrSummary(
     _ compactedHistory: [ResponseItemEnvelope],
     initialContext: [ResponseItemEnvelope]

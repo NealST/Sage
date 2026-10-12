@@ -1,6 +1,6 @@
 //
 //  permission_profile_intersection.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/permission_profile_intersection.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -11,7 +11,7 @@
 //  cannot acquire authority beyond either input.
 //
 
-import CodexUtils
+import SageUtils
 import Foundation
 
 /// A policy cannot be intersected without weakening either input.
@@ -146,7 +146,7 @@ public func intersectEffectivePermissionProfiles(
                     || !writableRoots.contains { root in
                         root.readOnlySubpaths.contains(path)
                             || defaultReadOnlySubpathsForWritableRoot(
-                                root.root, protectMissingDotCodex: false
+                                root.root, protectMissingDotSage: false
                             ).contains(path)
                             || path.parent == root.root
                                 && PROTECTED_METADATA_PATH_NAMES.contains {

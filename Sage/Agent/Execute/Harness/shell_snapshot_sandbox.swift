@@ -8,13 +8,13 @@
 //
 //  `SandboxAttempt` lives in Phase 4 tools, so this struct is constructed
 //  from sandbox fields directly. Network-proxy prepare-for-environment is
-//  the inlined CodexSandboxing subset (env overlay only).
+//  the inlined SageSandboxing subset (env overlay only).
 //
 
-import CodexAsyncUtils
-import CodexProtocol
-import CodexSandboxing
-import CodexUtils
+import SageAsyncUtils
+import SageProtocol
+import SageSandboxing
+import SageUtils
 import Foundation
 
 struct ShellSnapshotSandbox: Equatable, Sendable {
@@ -88,7 +88,7 @@ extension ShellSnapshotSandbox {
         snapshotReadPath: AbsolutePathBuf?
     ) async throws -> String {
         if sandboxRequested && sandbox == .none {
-            throw CodexErr.fatal("shell snapshot sandbox cannot be enforced on this host")
+            throw SageErr.fatal("shell snapshot sandbox cannot be enforced on this host")
         }
 
         var env = env
@@ -96,7 +96,7 @@ extension ShellSnapshotSandbox {
             try network.applyToEnvForOptionalEnvironment(&env, environmentId: environmentId)
         }
         guard let program = args.first else {
-            throw CodexErr.fatal("shell snapshot command is empty")
+            throw SageErr.fatal("shell snapshot command is empty")
         }
         let snapshotPermissions = snapshotReadPath.flatMap { path in
             snapshotReadPermissions(
@@ -148,19 +148,19 @@ extension ShellSnapshotSandbox {
         switch result {
         case .success(let output):
             if output.exitCode != 0 {
-                throw CodexErr.fatal("Snapshot command exited with status \(output.exitCode)")
+                throw SageErr.fatal("Snapshot command exited with status \(output.exitCode)")
             }
             return output.stdout.text
         case .failure(let error):
             switch error.details {
             case .sandbox(.denied(let output, _)):
-                throw CodexErr.fatal(
+                throw SageErr.fatal(
                     "Snapshot command was denied by sandbox with status \(output.exitCode)"
                 )
             case .sandbox(.timeout):
-                throw CodexErr.fatal("Snapshot command timed out")
+                throw SageErr.fatal("Snapshot command timed out")
             default:
-                throw CodexErr.fatal("Failed to execute sandboxed \(shellName): \(error)")
+                throw SageErr.fatal("Failed to execute sandboxed \(shellName): \(error)")
             }
         }
     }

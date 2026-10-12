@@ -1,6 +1,6 @@
 //
 //  thread_id.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/thread_id.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -13,9 +13,9 @@
 
 import Foundation
 
-/// Identifier for a Codex thread.
+/// Identifier for a Sage thread.
 ///
-/// Codex-generated thread IDs are UUIDv7, and some use cases rely on that.
+/// Sage-generated thread IDs are UUIDv7, and some use cases rely on that.
 public struct ThreadId: Hashable, Sendable {
     let uuid: UUID
 

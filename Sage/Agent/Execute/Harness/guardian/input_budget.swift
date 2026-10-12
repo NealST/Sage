@@ -11,8 +11,8 @@
 //  finalized review attachment.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct PendingReviewContext: Equatable, Sendable {
@@ -56,7 +56,7 @@ enum GuardianInputBudget {
         )
         if pending.estimatedTokens.saturatingAdd(minimumPrefix) > maximum {
             session.exhaustedReviewBudget = .detected
-            throw CodexErr(details: .contextWindowExceeded)
+            throw SageErr(details: .contextWindowExceeded)
         }
     }
 
@@ -67,7 +67,7 @@ enum GuardianInputBudget {
     ) throws {
         guard let pending = session.pendingReviewContext else { return }
         guard input.count == 1, case .userInput(var content, let clientId, let metadata) = input[0] else {
-            throw CodexErr(details: .invalidRequest("Guardian expects one review input"))
+            throw SageErr(details: .invalidRequest("Guardian expects one review input"))
         }
         let model = step.turn.modelInfoValue()
         let historyTokens = session.cloneHistory().forPrompt().reduce(0) { partial, item in
@@ -94,7 +94,7 @@ enum GuardianInputBudget {
         let reserved = existing.saturatingAdd(estimateItemTokenCount(framing))
         if pending.estimatedTokens.saturatingAdd(reserved) > budget {
             session.exhaustedReviewBudget = .detected
-            throw CodexErr(details: .contextWindowExceeded)
+            throw SageErr(details: .contextWindowExceeded)
         }
         content = pending.userInputs
         input[0] = .userInput(content: content, clientId: clientId, metadata: metadata)

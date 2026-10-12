@@ -1,17 +1,17 @@
 //
 //  agent_api.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/api.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  R4a: basename `api.swift` is reserved for `agent/control/control_api.swift`.
-//  `Config` is not in CodexCore; `SpawnRequest` / `SendRequest` omit it.
+//  `Config` is not in SageCore; `SpawnRequest` / `SendRequest` omit it.
 //  Boxed Rust futures become Swift `async` methods.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Coordinates agent operations and shared state through a local or host backend.

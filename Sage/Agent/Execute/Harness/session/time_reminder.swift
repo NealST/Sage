@@ -7,8 +7,8 @@
 //  Port status: adapted
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct CurrentTimeReminderState: Equatable, Sendable {

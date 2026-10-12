@@ -8,8 +8,8 @@
 //  Port status: faithful
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 let REQUEST_USER_INPUT_TOOL_NAME = "request_user_input"
 

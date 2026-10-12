@@ -1,5 +1,5 @@
 @testable import Sage
-import CodexProtocol
+import SageProtocol
 import XCTest
 
 final class ExecuteHarnessTokenBudgetConfigTests: XCTestCase {

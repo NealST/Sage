@@ -47,7 +47,7 @@ struct ToolInvocationRequest {
     var turnId: String? = nil
     /// Set after the user approves a sandbox-escalation card for this call.
     var allowUnsandboxedRetry = false
-    /// Session-scoped Codex approval cache shared with `SessionToolAllowlist`.
+    /// Session-scoped Sage approval cache shared with `SessionToolAllowlist`.
     var approvalStore: ApprovalStore?
     /// Set when `registry.dispatch` already ran Pre/PostToolUse.
     var skipEventHooks = false

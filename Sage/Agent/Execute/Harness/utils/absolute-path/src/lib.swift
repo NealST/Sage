@@ -1,6 +1,6 @@
 //
 //  lib.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/absolute-path/src/lib.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -259,8 +259,8 @@ public struct AbsolutePathDeserializationError: Error, Equatable {
 /// provide a base path for resolving relative paths. Because this relies on
 /// thread-local storage, the deserialization must be single-threaded and
 /// occur on the same thread that created the guard.
-private let absolutePathBaseKey = "codex.utils.absolute-path.base"
-private let absolutePathHomeKey = "codex.utils.absolute-path.home"
+private let absolutePathBaseKey = "sage.utils.absolute-path.base"
+private let absolutePathHomeKey = "sage.utils.absolute-path.home"
 
 public final class AbsolutePathBufGuard {
 

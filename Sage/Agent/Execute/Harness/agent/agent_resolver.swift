@@ -1,6 +1,6 @@
 //
 //  agent_resolver.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/agent/agent_resolver.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -9,16 +9,16 @@
 //  Resolution closes over Session / TurnContext / AgentControl.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func resolveAgentTarget(_ target: String) async throws -> ThreadId {
-    throw CodexErr.unsupportedOperation(
+    throw SageErr.unsupportedOperation(
         "resolve_agent_target waits on Session / TurnContext / AgentControl"
     )
 }
 
-public func resolveAgentTargetError(_ error: CodexErr) -> FunctionCallError {
+public func resolveAgentTargetError(_ error: SageErr) -> FunctionCallError {
     switch error.detailsValue() {
     case .unsupportedOperation(let message):
         return .respondToModel(message)

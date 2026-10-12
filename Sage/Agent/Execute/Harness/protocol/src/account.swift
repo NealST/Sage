@@ -1,6 +1,6 @@
 //
 //  account.swift
-//  CodexProtocol
+//  SageProtocol
 //
 //  Port of codex-rs/protocol/src/account.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -104,5 +104,5 @@ extension AccountPlanType {
 public enum ProviderAccount: Equatable, Sendable {
     case apiKey
     case chatgpt(email: String?, planType: AccountPlanType)
-    case amazonBedrock(usesCodexManagedCredentials: Bool)
+    case amazonBedrock(usesSageManagedCredentials: Bool)
 }

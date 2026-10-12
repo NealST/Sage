@@ -9,8 +9,8 @@
 //  Session.send_event waits for Phase 5. The handler invokes onPlanUpdate.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 
 let PLAN_UPDATED_MESSAGE = "Plan updated"
 

@@ -1,6 +1,6 @@
 //
 //  output_parser.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/output_parser.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,7 +12,7 @@
 //  in events/permission_request.rs.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public struct HookUniversalOutput: Equatable, Sendable {

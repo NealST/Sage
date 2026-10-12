@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 
 func createListMcpResourcesTool(description: String? = nil, parameters: String? = nil) -> ToolSpec {
     withModelMessages(

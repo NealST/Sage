@@ -1,6 +1,6 @@
 //
 //  thread_metadata.swift
-//  CodexState
+//  SageState
 //
 //  Port of codex-rs/state/src/model/thread_metadata.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  `DateTime<Utc>` maps to `Date` with RFC3339 Codable.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// The sort key to use when listing threads.

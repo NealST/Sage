@@ -1,6 +1,6 @@
 //
 //  session_startup_prewarm.swift
-//  CodexCore
+//  SageCore
 //
 //  Port of codex-rs/core/src/session_startup_prewarm.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -12,10 +12,49 @@
 //  Upstream moved this file out of `session/`.
 //
 
-import CodexAsyncUtils
-import CodexOtel
-import CodexProtocol
+import SageAsyncUtils
+import SageProtocol
 import Foundation
+
+let STARTUP_PREWARM_AGE_AT_FIRST_TURN_METRIC = "sage.startup_prewarm.age_at_first_turn"
+let STARTUP_PREWARM_DURATION_METRIC = "sage.startup_prewarm.duration"
+
+/// No-op stand-in after the OTEL product crate was removed.
+public struct SessionTelemetry: Sendable {
+    public var conversationId: ThreadId
+    public var model: String
+    public var slug: String
+    public var originator: String
+    public var logUserPrompts: Bool
+    public var terminalType: String
+    public var sessionSource: SessionSource
+
+    public init(
+        conversationId: ThreadId,
+        model: String,
+        slug: String,
+        originator: String,
+        logUserPrompts: Bool,
+        terminalType: String,
+        sessionSource: SessionSource
+    ) {
+        self.conversationId = conversationId
+        self.model = model
+        self.slug = slug
+        self.originator = originator
+        self.logUserPrompts = logUserPrompts
+        self.terminalType = terminalType
+        self.sessionSource = sessionSource
+    }
+
+    public func recordStartupPhase(phase: String, duration: Duration, status: String) {
+        _ = (phase, duration, status)
+    }
+
+    public func recordDuration(_ name: String, duration: Duration, tags: [(String, String)]) {
+        _ = (name, duration, tags)
+    }
+}
 
 public struct SessionStartupPrewarmHandle: Sendable {
     public var startedAt: ContinuousClock.Instant

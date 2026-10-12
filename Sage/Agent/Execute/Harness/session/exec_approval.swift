@@ -13,16 +13,16 @@
 //  `Op::ExecApproval` resumes that waiter and does not start a turn.
 //  Abort interrupts the active turn instead of delivering a decision.
 //  A dropped waiter returns abort. An execpolicy amendment is appended to
-//  `codexHome/rules/default.rules` and the in-memory policy. A failure
+//  `sageHome/rules/default.rules` and the in-memory policy. A failure
 //  emits a warning and the decision is still delivered. Plugin
 //  attribution waits.
 //
 
-import CodexCore
-import CodexExecPolicy
-import CodexProtocol
-import CodexShellCommand
-import CodexUtils
+import SageCore
+import SageExecPolicy
+import SageProtocol
+import SageShellCommand
+import SageUtils
 import Foundation
 
 struct CommandApprovalRequest: Sendable {
@@ -36,7 +36,7 @@ struct CommandApprovalRequest: Sendable {
     var networkApprovalContext: NetworkApprovalContext?
     var proposedExecpolicyAmendment: ExecPolicyAmendment?
     var additionalPermissions: AdditionalPermissionProfile?
-    var availableDecisions: [CodexProtocol.ReviewDecision]?
+    var availableDecisions: [SageProtocol.ReviewDecision]?
 
     init(
         kind: ExecApprovalKind = .command,
@@ -49,7 +49,7 @@ struct CommandApprovalRequest: Sendable {
         networkApprovalContext: NetworkApprovalContext? = nil,
         proposedExecpolicyAmendment: ExecPolicyAmendment? = nil,
         additionalPermissions: AdditionalPermissionProfile? = nil,
-        availableDecisions: [CodexProtocol.ReviewDecision]? = nil
+        availableDecisions: [SageProtocol.ReviewDecision]? = nil
     ) {
         self.kind = kind
         self.callId = callId
@@ -72,9 +72,9 @@ extension Session {
     func requestCommandApproval(
         turnContext: TurnContext,
         request: CommandApprovalRequest
-    ) async -> CodexProtocol.ReviewDecision {
+    ) async -> SageProtocol.ReviewDecision {
         let replaced = ReplacedApproval()
-        let decision: CodexProtocol.ReviewDecision = await withCheckedContinuation { continuation in
+        let decision: SageProtocol.ReviewDecision = await withCheckedContinuation { continuation in
             let waiter = ApprovalDecision(continuation)
             if let turn = activeTurn {
                 replaced.decision = turn.turnState.insertPendingApproval(
@@ -93,7 +93,7 @@ extension Session {
     func handleExecApproval(
         id: String,
         turnId: String?,
-        decision: CodexProtocol.ReviewDecision
+        decision: SageProtocol.ReviewDecision
     ) async {
         if case .approvedExecpolicyAmendment(let amendment) = decision,
            let message = await persistExecpolicyAmendment(amendment) {
@@ -112,7 +112,7 @@ extension Session {
     }
 
     /// rust `Session::notify_approval`.
-    func notifyApproval(id: String, decision: CodexProtocol.ReviewDecision) {
+    func notifyApproval(id: String, decision: SageProtocol.ReviewDecision) {
         guard let turn = activeTurn,
               let waiter = turn.turnState.removePendingApproval(key: id)
         else { return }
@@ -128,7 +128,7 @@ extension Session {
         let manager = ExecPolicyManager(policy)
         do {
             try await manager.appendAmendmentAndUpdate(
-                codexHome: state.sessionConfiguration.codexHome,
+                sageHome: state.sessionConfiguration.sageHome,
                 amendment: amendment
             )
         } catch {

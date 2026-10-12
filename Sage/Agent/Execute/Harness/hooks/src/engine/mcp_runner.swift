@@ -1,6 +1,6 @@
 //
 //  mcp_runner.swift
-//  CodexHooks
+//  SageHooks
 //
 //  Port of codex-rs/hooks/src/engine/mcp_runner.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -10,7 +10,7 @@
 //  MCP execution still goes through HookMcpExecutor.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 public func runMcpTool(
@@ -33,7 +33,7 @@ func runMcpTool(
     let started = ContinuousClock.now
     do {
         guard let data = hookEventJSON.data(using: .utf8) else {
-            throw CodexErr.fatal("failed to parse hook event input")
+            throw SageErr.fatal("failed to parse hook event input")
         }
         let hookEvent = try JSONDecoder().decode(JSONValue.self, from: data)
         let input = try expandMcpArgumentTemplate(argumentTemplate, hookEvent: hookEvent)
@@ -133,7 +133,7 @@ private func resolveMcpString(_ text: String, hookEvent: JSONValue) throws -> JS
        matches[0].range.length == ns.length {
         let path = ns.substring(with: matches[0].range(at: 1))
         guard let value = resolveMcpPath(hookEvent, path) else {
-            throw CodexErr.fatal("hook input placeholder `${\(path)}` was not found")
+            throw SageErr.fatal("hook input placeholder `${\(path)}` was not found")
         }
         return value
     }
@@ -144,7 +144,7 @@ private func resolveMcpString(_ text: String, hookEvent: JSONValue) throws -> JS
         resolved += ns.substring(with: NSRange(location: previous, length: range.location - previous))
         let path = ns.substring(with: match.range(at: 1))
         guard let value = resolveMcpPath(hookEvent, path) else {
-            throw CodexErr.fatal("hook input placeholder `${\(path)}` was not found")
+            throw SageErr.fatal("hook input placeholder `${\(path)}` was not found")
         }
         if case .string(let text) = value {
             resolved += text

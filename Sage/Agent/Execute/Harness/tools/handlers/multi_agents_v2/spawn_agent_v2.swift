@@ -8,14 +8,14 @@
 //  Port status: adapted
 //
 //  Spec, argument parsing, registry spawn, and fork_turns history copy
-//  are live. emit_sub_agent_activity records on the caller CodexThread
+//  are live. emit_sub_agent_activity records on the caller SageThread
 //  when a ThreadManager is attached. Child thread create submits the
 //  initial user input through ThreadSession. Analytics and
 //  hide_spawn_agent_metadata stay deferred.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct SpawnAgentV2Args: Decodable, Equatable, Sendable {
@@ -134,7 +134,7 @@ struct SpawnAgentV2Handler: CoreToolRuntime {
                     )
                 )
             )
-        } catch let err as CodexErr {
+        } catch let err as SageErr {
             throw collabSpawnError(err)
         }
         try? await control.emitSubAgentActivity(

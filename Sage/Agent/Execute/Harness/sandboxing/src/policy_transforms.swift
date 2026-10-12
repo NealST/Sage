@@ -1,17 +1,17 @@
 //
 //  policy_transforms.swift
-//  CodexSandboxing
+//  SageSandboxing
 //
 //  Port of codex-rs/sandboxing/src/policy_transforms.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Normalize / merge / intersect / materialize / effective-policy helpers
-//  match upstream. `Result<_, String>` is `CodexErr.invalidRequest`.
+//  match upstream. `Result<_, String>` is `SageErr.invalidRequest`.
 //
 
-import CodexProtocol
-import CodexUtils
+import SageProtocol
+import SageUtils
 import Foundation
 
 public func normalizeAdditionalPermissions(
@@ -24,7 +24,7 @@ public func normalizeAdditionalPermissions(
         entries.reserveCapacity(permissions.entries.count)
         for entry in permissions.entries {
             if case .globPattern = entry.path, entry.access != .deny {
-                throw CodexErr.invalidRequest(
+                throw SageErr.invalidRequest(
                     "glob file system permissions only support deny-read entries"
                 )
             }
@@ -54,7 +54,7 @@ public func normalizeAdditionalPermissionsWithContext(
             if path.inferPathConvention() == nil
                 || path.inferPathConvention() != context.cwd.inferPathConvention()
                 || (try? path.join(".")) == nil {
-                throw CodexErr.invalidRequest(
+                throw SageErr.invalidRequest(
                     "permission path `\(path)` does not match executor cwd `\(context.cwd)`"
                 )
             }
@@ -73,7 +73,7 @@ public func materializeAdditionalPermissionsWithContext(
     var additionalPermissions = additionalPermissions
     if var fileSystem = additionalPermissions.fileSystem {
         guard let entries = materializeContextDependentEntries(fileSystem.entries, context: context) else {
-            throw CodexErr.invalidRequest(
+            throw SageErr.invalidRequest(
                 "unable to resolve permission path in `\(context.cwd)`"
             )
         }

@@ -8,7 +8,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 struct ResponsesApiTool: Equatable, Sendable {

@@ -8,9 +8,9 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
-import CodexUtils
-@testable import CodexCore
+import SageProtocol
+import SageUtils
+@testable import SageCore
 import XCTest
 
 final class CoreShellSnapshotTests: XCTestCase {
@@ -44,10 +44,10 @@ final class CoreShellSnapshotTests: XCTestCase {
             .appendingPathComponent("sage-snap-\(UUID().uuidString)")
         try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(atPath: home) }
-        let codexHome = try AbsolutePathBuf.fromAbsolutePath(home)
-        let snapshot = ShellSnapshot(codexHome: codexHome, sessionId: ThreadId())
+        let sageHome = try AbsolutePathBuf.fromAbsolutePath(home)
+        let snapshot = ShellSnapshot(sageHome: sageHome, sessionId: ThreadId())
         let built = await snapshot.build(
-            cwd: PathUri.fromAbsPath(codexHome),
+            cwd: PathUri.fromAbsPath(sageHome),
             shell: Shell(shellType: .sh, shellPath: "/bin/sh"),
             allowLoginShell: true,
             sandbox: nil

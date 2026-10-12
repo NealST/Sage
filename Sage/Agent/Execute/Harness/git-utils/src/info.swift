@@ -1,17 +1,17 @@
 //
 //  info.swift
-//  CodexGitUtils
+//  SageGitUtils
 //
 //  Port of codex-rs/git-utils/src/info.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
 //  Git invocations use `/usr/bin/git` via `Process`. `GitInfo` is the
-//  git-utils type; CodexProtocol also exports `GitInfo` — callers that
+//  git-utils type; SageProtocol also exports `GitInfo` — callers that
 //  import both modules must qualify.
 //
 
-import CodexProtocol
+import SageProtocol
 import Foundation
 
 /// Timeout for git commands to prevent freezing on large repositories

@@ -10,7 +10,7 @@
 //  legacy native paths.
 //
 
-import CodexProtocol
+import SageProtocol
 
 enum ExecPermissionProfileSerde {
     static func decode<K: CodingKey>(

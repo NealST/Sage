@@ -1,6 +1,6 @@
 //
 //  list.swift
-//  CodexRollout
+//  SageRollout
 //
 //  Port of codex-rs/rollout/src/list.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -14,16 +14,16 @@
 //  `EventMsg.threadGoalUpdated` is not in the protocol subset yet.
 //
 
-import CodexHistory
-import CodexProtocol
-import CodexState
-import CodexUtils
+import SageHistory
+import SageProtocol
+import SageState
+import SageUtils
 import Foundation
 
 private let maxScanFiles = 10000
 private let headRecordLimit = 10
 private let userEventScanLimit = 200
-private let userMessageBegin = "## My request for Codex:"
+private let userMessageBegin = "## My request for Sage:"
 /// Returned page of thread summaries.
 public struct ThreadsPage: Equatable, Sendable {
     public var items: [ThreadItem]
@@ -313,7 +313,7 @@ private struct FilesByUpdatedAtVisitor: RolloutFileVisitor {
 
 /// Retrieve recorded thread file paths with token pagination.
 public func getThreads(
-    codexHome: String,
+    sageHome: String,
     pageSize: Int,
     cursor: Cursor?,
     sortKey: ThreadSortKey,
@@ -322,7 +322,7 @@ public func getThreads(
     cwdFilters: [String]?,
     defaultProvider: String
 ) throws -> ThreadsPage {
-    let root = (codexHome as NSString).appendingPathComponent(SESSIONS_SUBDIR)
+    let root = (sageHome as NSString).appendingPathComponent(SESSIONS_SUBDIR)
     return try getThreadsInRoot(
         root: root,
         pageSize: pageSize,
@@ -912,7 +912,7 @@ private func readHeadSummary(path: String, headLimit: Int) throws -> HeadTailSum
                 summary.cliVersion = sessionMetaLine.meta.cliVersion
                 summary.createdAt = sessionMetaLine.meta.timestamp
                 summary.sawSessionMeta = true
-                if CodexState.isGuardianReviewSource(sessionMetaLine.meta.source) {
+                if SageState.isGuardianReviewSource(sessionMetaLine.meta.source) {
                     summary.preview = GUARDIAN_THREAD_PREVIEW
                     return summary
                 }
@@ -1075,12 +1075,12 @@ func parseRfc3339(_ token: String) -> Date? {
 
 /// Locate the newest rollout file owned by a thread ID.
 public func findThreadPathByIdStr(
-    codexHome: String,
+    sageHome: String,
     idStr: String,
     stateDbCtx: Any? = nil
 ) throws -> String? {
     try findThreadPathByIdStrInSubdir(
-        codexHome: codexHome,
+        sageHome: sageHome,
         subdir: SESSIONS_SUBDIR,
         idStr: idStr,
         stateDbCtx: stateDbCtx
@@ -1089,12 +1089,12 @@ public func findThreadPathByIdStr(
 
 /// Locate the newest archived rollout file owned by a thread ID.
 public func findArchivedThreadPathByIdStr(
-    codexHome: String,
+    sageHome: String,
     idStr: String,
     stateDbCtx: Any? = nil
 ) throws -> String? {
     try findThreadPathByIdStrInSubdir(
-        codexHome: codexHome,
+        sageHome: sageHome,
         subdir: ARCHIVED_SESSIONS_SUBDIR,
         idStr: idStr,
         stateDbCtx: stateDbCtx
@@ -1102,9 +1102,9 @@ public func findArchivedThreadPathByIdStr(
 }
 
 /// Locate one immutable rollout file by its rollout ID across unarchived and archived storage.
-public func findRolloutPathByRolloutId(codexHome: String, rolloutId: RolloutId) throws -> String? {
+public func findRolloutPathByRolloutId(sageHome: String, rolloutId: RolloutId) throws -> String? {
     for subdir in [SESSIONS_SUBDIR, ARCHIVED_SESSIONS_SUBDIR] {
-        let root = (codexHome as NSString).appendingPathComponent(subdir)
+        let root = (sageHome as NSString).appendingPathComponent(subdir)
         if let path = try findRolloutPathByRolloutIdFromFilenames(root: root, rolloutId: rolloutId) {
             return path
         }
@@ -1124,14 +1124,14 @@ public func rolloutDateParts(_ fileName: String) -> (String, String, String)? {
 }
 
 private func findThreadPathByIdStrInSubdir(
-    codexHome: String,
+    sageHome: String,
     subdir: String,
     idStr: String,
     stateDbCtx: Any?
 ) throws -> String? {
     _ = stateDbCtx
     guard UUID(uuidString: idStr) != nil else { return nil }
-    let root = (codexHome as NSString).appendingPathComponent(subdir)
+    let root = (sageHome as NSString).appendingPathComponent(subdir)
     guard FileManager.default.fileExists(atPath: root) else { return nil }
     if let path = try findThreadPathByIdFromFilenames(root: root, idStr: idStr) {
         return path

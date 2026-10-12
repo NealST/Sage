@@ -1,9 +1,9 @@
-@testable import CodexCore
+@testable import SageCore
 @testable import Sage
-import CodexAPI
-import CodexAsyncUtils
-import CodexModelProviderInfo
-import CodexProtocol
+import SageAPI
+import SageAsyncUtils
+import SageModelProviderInfo
+import SageProtocol
 import XCTest
 
 final class ExecuteHarnessModelClientRequestTests: XCTestCase {
@@ -67,7 +67,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
 
     func testBuildResponsesCompatibilityHeadersAddsMemgenForMemoryConsolidation() throws {
         let client = try makeClient(sessionSource: .internal(.memoryConsolidation))
-        var metadata = CodexResponsesMetadata(
+        var metadata = SageResponsesMetadata(
             installationId: "inst",
             sessionId: "sess",
             threadId: "thr",
@@ -75,8 +75,8 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
         )
         metadata.requestKind = .turn
         let headers = client.buildResponsesCompatibilityHeaders(metadata)
-        XCTAssertEqual(headers[xOpenaiMemgenRequestHeader], "true")
-        XCTAssertEqual(headers[xCodexWindowIdHeader], "win")
+        XCTAssertEqual(headers[xSageMemgenRequestHeader], "true")
+        XCTAssertEqual(headers[xSageWindowIdHeader], "win")
     }
 
     func testBuildResponsesOptionsAssemblesLiteTimingAndMetadataHeaders() throws {
@@ -84,7 +84,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
         client.includeTimingMetrics = true
         client.betaFeaturesHeader = "plan,foo"
         let session = client.newSession()
-        var metadata = CodexResponsesMetadata(
+        var metadata = SageResponsesMetadata(
             installationId: "inst",
             sessionId: "sess",
             threadId: "thr-meta",
@@ -97,11 +97,11 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
             useResponsesLite: true
         )
         XCTAssertEqual(options.threadId, "thr-meta")
-        XCTAssertEqual(options.extraHeaders[xOpenaiInternalCodexResponsesLiteHeader], "true")
-        XCTAssertEqual(options.extraHeaders[xResponsesapiIncludeTimingMetricsHeader], "true")
-        XCTAssertEqual(options.extraHeaders["x-codex-beta-features"], "plan,foo")
-        XCTAssertEqual(options.extraHeaders[xOpenaiSubagentHeader], "review")
-        XCTAssertEqual(options.extraHeaders[xCodexWindowIdHeader], "win")
+        XCTAssertEqual(options.extraHeaders[xSageInternalResponsesLiteHeader], "true")
+        XCTAssertEqual(options.extraHeaders[xSageIncludeTimingMetricsHeader], "true")
+        XCTAssertEqual(options.extraHeaders["x-sage-beta-features"], "plan,foo")
+        XCTAssertEqual(options.extraHeaders[xSageSubagentHeader], "review")
+        XCTAssertEqual(options.extraHeaders[xSageWindowIdHeader], "win")
     }
 
     func testSanitizeOriginalImageDetailOnItemsDowngradesUnsupportedOriginal() {
@@ -176,7 +176,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 responsesMetadata: streamMetadata()
             )
             XCTFail("expected unauthorized")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             guard case .unexpectedStatus(let status) = error.details else {
                 return XCTFail("expected unexpectedStatus, got \(error)")
             }
@@ -201,7 +201,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 responsesMetadata: streamMetadata()
             )
             XCTFail("expected connection failure")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             guard case .connectionFailed = error.details else {
                 return XCTFail("expected connectionFailed, got \(error)")
             }
@@ -220,7 +220,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
 
         var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
         info.supportsWebsockets = false
-        let plain = CodexCore.ModelClient(
+        let plain = SageCore.ModelClient(
             threadId: ThreadId(),
             providerInfo: info,
             auth: BearerAuthProvider(apiKey: "sk-test")
@@ -238,7 +238,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
         sess.runSamplingStreamOverride = { _ in
             attempts += 1
             if attempts == 1 {
-                throw CodexErr.connectionFailed(
+                throw SageErr.connectionFailed(
                     ConnectionFailedError(source: HttpError(message: "offline"))
                 )
             }
@@ -290,7 +290,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 cancellationToken: CancellationToken()
             )
             XCTFail("expected connection failure")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             guard case .connectionFailed = error.details else {
                 return XCTFail("expected connectionFailed, got \(error)")
             }
@@ -321,7 +321,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 cancellationToken: CancellationToken()
             )
             XCTFail("expected connection failure")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             guard case .connectionFailed = error.details else {
                 return XCTFail("expected connectionFailed, got \(error)")
             }
@@ -344,7 +344,7 @@ final class ExecuteHarnessModelClientRequestTests: XCTestCase {
                 responsesMetadata: streamMetadata()
             )
             XCTFail("expected context window")
-        } catch let error as CodexErr {
+        } catch let error as SageErr {
             XCTAssertEqual(error.details, .contextWindowExceeded)
         }
         XCTAssertEqual(attempts, 1)
@@ -365,8 +365,8 @@ private final class RecoverCounter: @unchecked Sendable {
     }
 }
 
-private func streamMetadata() -> CodexResponsesMetadata {
-    var metadata = CodexResponsesMetadata(
+private func streamMetadata() -> SageResponsesMetadata {
+    var metadata = SageResponsesMetadata(
         installationId: "inst",
         sessionId: "sess",
         threadId: "thr",
@@ -377,19 +377,19 @@ private func streamMetadata() -> CodexResponsesMetadata {
     return metadata
 }
 
-private func emptyAPIStream() -> CodexAPI.ResponseStream {
-    CodexAPI.ResponseStream(
+private func emptyAPIStream() -> SageAPI.ResponseStream {
+    SageAPI.ResponseStream(
         events: AsyncStream { continuation in
             continuation.finish()
         }
     )
 }
 
-private func connectionClient(maxRetries: UInt64, name: String = "OpenAI") throws -> CodexCore.ModelClient {
+private func connectionClient(maxRetries: UInt64, name: String = "OpenAI") throws -> SageCore.ModelClient {
     var info = ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1")
     info.name = name
     info.streamMaxRetriesOverride = maxRetries
-    return CodexCore.ModelClient(
+    return SageCore.ModelClient(
         threadId: ThreadId(),
         providerInfo: info,
         auth: BearerAuthProvider(apiKey: "sk-test")
@@ -416,8 +416,8 @@ private func modelInfoFixture() throws -> ModelInfo {
 
 private func makeClient(
     sessionSource: SessionSource = .cli
-) throws -> CodexCore.ModelClient {
-    CodexCore.ModelClient(
+) throws -> SageCore.ModelClient {
+    SageCore.ModelClient(
         threadId: ThreadId(),
         providerInfo: ModelProviderInfo.createOpenaiProvider("https://api.openai.com/v1"),
         sessionSource: sessionSource,

@@ -6,13 +6,13 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Checks the assembled reviewer prompt, including the margin Codex keeps
+//  Checks the assembled reviewer prompt, including the margin Sage keeps
 //  so a continuation cannot overflow the window. Request-token estimate
 //  uses history items + instructions until ResponsesApiRequest exists.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 enum ExhaustedReviewBudget: Equatable {
@@ -59,7 +59,7 @@ enum GuardianRequestBudget {
         )
         if estimateRequestTokens(prompt: prompt) > limit {
             session.exhaustedReviewBudget = .detected
-            throw CodexErr(details: .contextWindowExceeded)
+            throw SageErr(details: .contextWindowExceeded)
         }
         session.exhaustedReviewBudget = nil
     }

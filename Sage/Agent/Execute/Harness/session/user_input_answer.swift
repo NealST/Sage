@@ -13,8 +13,8 @@
 //  recorded when `guardian_approval` is enabled and history is thread-owned.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 extension Session {

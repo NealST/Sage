@@ -7,7 +7,7 @@
 //  Port status: adapted
 //
 
-import CodexProtocol
+import SageProtocol
 
 let WEB_SEARCH_TEXT_AND_IMAGE_CONTENT_TYPES = ["text", "image"]
 

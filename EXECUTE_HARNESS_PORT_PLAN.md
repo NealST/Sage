@@ -1,34 +1,44 @@
-# Sage Execute Harness — Codex 完整复写计划
+# Sage Execute Harness — Codex agent runtime 复写计划
 
-> **目标**：将 codex 的 agent harness（`codex-rs/core` 及其运行时依赖锥）用 Swift 完整复写为 Sage 的 Execute 层，目录结构与文件名与 codex 一一对应，实现充分还原上游语义。
+> **目标**：复写 Codex 的 **agent runtime**（单代理回合 + 多 agent spawn/mailbox/wait），作为 Sage Execute 的运行内核。不复写 Codex 这个产品。用户可见形态、持久化、工具表面、编排入口仍是 Sage。
 >
 > **上游基线**：`codex-rs` @ `0a2eb4696c26ac33204bcd255721ab30220a4774`（本工作区 `codex/` 仓库当前 HEAD，与现有移植文件头部一致）。
 >
-> **现状一句话**：范围内 830 个文件已有 Swift 对应 741 个（89%，`scripts/harness_port.py stats`，2026-10-09）。文件覆盖不是行为对齐。单代理回合的提交循环和 `request_user_input` 等待已经接上；深度缺口见 §3。
+> **现状一句话**：范围内 830 个文件已有 Swift 对应 741 个（89%，`scripts/harness_port.py stats`，2026-10-12）。文件覆盖不是行为对齐。单代理回合已接通；Codex 产品层已删/冻结；SPM 模块、标识符与 Sage 自有线上协议已按 §5.3 换成 Sage 名。Phase 9：Live Execute 已挂 `ThreadManager`（父线程 adopt、不双采样）；spawn 开子 `SageThread`/`runTurn`；wait 订阅子线程完成状态；interrupt 经 `sendOp` 打到 `ThreadSession`。粘合层双轨：Live Execute 一律走 `runTurn`；`ToolInvocationPipeline` 已删，validate/timeout/dispatch 只在 `ToolOrchestrator`。Explore 仍走只读 `ExploreSubagentRunner`。
+>
+> **当前下一步**：Sage 服务 host 等后端约定后再对 `ModelSettings.baseURL`。Explore 收敛到 spawn/wait 要等子线程能带上只读工具过滤。
 
 ---
 
 ## 1. 背景与目标
 
-Sage 的 agent 架构分三层：**Plan → Execute → Review**。Execute 承接 Plan 产出的 workplan，其运行核心（回合循环、工具编排、沙盒、压缩、审批）应当完全对齐 codex 的 harness——即 `codex-rs/core` crate 加上它运行时直接依赖的 `codex-*` crate 集合。
+Sage 的产品编排是 **Plan → Execute → Review**，外加 `ExploreSubagent`。要向 Codex 对齐的不是这套产品形态，而是 Execute（以及子 agent）底下的 runtime：回合循环、工具编排、沙盒、压缩、审批等待、**以及多 agent 的 spawn / mailbox / wait**。
 
-**复写目标（三条硬要求）**：
+**复写目标**：
 
-1. **完整**：范围内每一个 Rust 文件都有对应的 Swift 文件（或被明确标记为平台排除/暂缓），不允许无声跳过。
-2. **一一对应**：目录结构与文件名镜像 codex（映射规则见 §5），codex 侧重命名/移动时 Swift 侧跟随。
-3. **充分还原**：逐文件对齐行为语义；只有平台差异（Landlock/Windows 沙盒、本地代理进程等）和 Sage 已有子系统（GRDB 持久化、MCP client、Settings）允许走「适配」，且必须在文件头显式标注差异。
+1. **Agent runtime 行为对齐**：§2.5 列出的内核（含多 agent）按 Codex 语义还原。验收看行为，不看文件覆盖率。
+2. **一一对应仅约束 runtime 文件**：目录与文件名镜像上游（§5）；Codex 产品层已有的 Swift 文件保留映射，但标 `frozen`，不再补齐。
+3. **Sage 产品优先**：Plan/Review、HUD、GRDB task、Settings、Skill catalog、Mac 工具表面走适配层。Harness 禁止变成 Codex CLI/Cloud 的 Swift 版。
 
-**非目标**：不移植 codex 的 UI 层（tui/cli/app-server）、不做 Sage 没有对应能力形态的语音 realtime（保留映射占位，见 §2.4）。
+**非目标**：不移植 Codex UI（tui/cli/app-server）；不做语音 realtime；不把 `thread-store` / plugin 市场 / code mode / exec-server / ChatGPT 登录做成 Sage 产品。详见 §2.4、§2.6。
 
 ---
 
 ## 2. 复写范围界定
 
+文件可以留在树里，**不等于还要 faithful**。每个文件只属于下面三档之一。
+
+| 档 | 含义 | 验收 |
+|---|---|---|
+| **runtime** | Codex agent 逻辑，Sage 没有第二套语义 | 行为对齐上游 |
+| **host** | Sage 已有能力；harness 只经 protocol 注入 | Sage 产品语义优先，差异写文件头 `adapted` |
+| **frozen** | Codex 产品层 | 不再补齐；协议类型可留以免编译散架；实现保持 throw/空操作 |
+
 ### 2.1 范围内：harness 本体（`codex-rs/core`）
 
-- 非测试生产代码：**391 个 `.rs` 文件，~118,200 行**
-- 测试代码：~117,000 行（移植策略见 §8）
-- 公开门面：`ThreadManager` / `CodexThread` / `TurnContext` / `ModelClient`；`session`、`tasks`、`tools`、`state` 均为 `pub(crate)`——即 harness 内部机制，正是本次复写的主体。
+- 非测试生产代码：**391 个 `.rs` 文件，~118,200 行**（其中 runtime 子集才继续加深）
+- 测试代码：~117,000 行（只移植 runtime 的 P0/P1，见 §8）
+- Runtime 门面：`Session` / `TurnContext` / `ModelClient` / `AgentRegistry` / `AgentControl`。`ThreadManager` / `SageThread` **只作为子 agent 的内存会话工厂**，不是 Sage 的用户可见 thread 产品。
 
 ### 2.2 范围内：运行时依赖 crate（按移植优先级分层）
 
@@ -39,9 +49,10 @@ Sage 的 agent 架构分三层：**Plan → Execute → Review**。Execute 承�
 | P2 文件/补丁 | `file-system`、`apply-patch`、`git-utils` | 1,140 / 4,828 / 4,055 | apply-patch 已有较忠实基础 |
 | P3 执行/沙盒 | `sandboxing`（含 macOS `seatbelt.rs` 1,122 行）、`shell-command`、`execpolicy`、`utils/pty` | 4,135 / 7,883 / 1,954 / 5,302 | Landlock/bwrap/Windows 后端为平台排除 |
 | P4 工具系统 | （core 内 `tools/`，见 §7 Phase 4） | ~28,000 | router/registry/spec_plan/parallel/orchestrator/handlers/runtimes |
-| P6 模型客户端 | `model-provider-info`、`codex-api` SSE 子集 | 924 / ~4,000（子集） | `codex-api` 全量 13,506 行，realtime/websocket 部分暂缓 |
-| P7 持久化 | `rollout`、`state`、`thread-store` | 9,334 / 20,362 / 22,930 | rollout JSONL 忠实移植；state/thread-store 语义对齐、存储适配 GRDB |
-| P8 审查/钩子/技能 | `hooks`、`skills`、`agent-roles`、`context-fragments` | 11,657 / 1,493 / 592 / 478 | guardian 完整版依赖 |
+| P6 模型客户端 | `model-provider-info`、上游 `codex-api` SSE 子集（Swift 模块 `SageAPI`，目录 `sage-api/`） | 924 / ~4,000（子集） | runtime：Sage 服务 SSE；ChatGPT/WS **frozen/deferred** |
+| P7 持久化 | `rollout`（runtime）；`state`、`thread-store`（**frozen**） | 9,334 / 20,362 / 22,930 | rollout JSONL 供会话回放；用户可见 task 继续 Sage GRDB，不对齐 Codex thread schema |
+| P8 审查/钩子/技能 | `hooks`、`skills`、`agent-roles`、`context-fragments` | 11,657 / 1,493 / 592 / 478 | guardian/hooks/agent-roles 属 runtime；Sage Skill catalog 仍是产品入口 |
+| P9 多 agent | core `agent/` + `tools/handlers/multi_agents*` | ~10,000 | **runtime**（见 §2.5）；plugin/code_mode/exec-server **frozen** |
 | 裁剪 | `otel`、`terminal-detection` | 4,898 / 423 | 遥测裁剪为最小接口 |
 
 ### 2.3 平台适配项（不逐行复写，做 macOS 等价实现）
@@ -56,22 +67,60 @@ Sage 的 agent 架构分三层：**Plan → Execute → Review**。Execute 承�
 | `process-hardening`（Linux pre-main） | 排除 |
 | `network-proxy`（22,784 行，补记） | core 的 `network_policy.rs` 依赖其策略类型；仅移植类型层 5 文件（`config.rs`/`network_policy.rs`/`policy.rs`/`reasons.rs`/`environment_policy.rs`，Phase 4），本地代理进程机械全部 `excluded` |
 
-### 2.4 明确排除/暂缓项
+### 2.4 明确排除 / 暂缓 / 冻结项
 
-| 项 | 行数 | 原因 |
-|---|---:|---|
-| `tui` / `cli` / `exec` / `app-server*` / `core-api` / `chatgpt` | — | codex 的 UI/宿主层，不是 harness |
-| `realtime_*`（core 内 ~6,100 行）+ `realtime-webrtc` | ~6,100 | 语音 realtime，Sage 无此能力形态；**暂缓**，追踪表标记 `deferred`，保留文件映射占位 |
-| `ansi-escape`、`file-search`、`responses-api-proxy`、`codex-home` | — | TUI/工具向，core 运行时不依赖 |
-| `login`、`agent-identity` | — | ChatGPT 登录链路；Sage 用 API Key（适配层处理鉴权） |
+| 项 | 档 | 原因 |
+|---|---|---|
+| `tui` / `cli` / `exec` / `app-server*` / `core-api` / `chatgpt` | excluded | Codex UI/宿主，不是 runtime |
+| `realtime_*` + `realtime-webrtc` | deferred | Sage 无语音形态 |
+| `login`、`agent-identity`、gateway OAuth | frozen | Sage 用 Keychain API Key |
+| 本地 `network-proxy` 进程 | excluded | 只留策略类型 |
+| `state` crate（memories/goals/remote_control）+ `thread-store` | **frozen** | Codex thread 产品；Sage 用 `AgentTaskStore` |
+| Plugin 市场、`request_plugin_install`、Apps、Connectors | **frozen** | Codex 生态，不是 Sage 能力模型 |
+| `tools/code_mode/*` | **frozen** | Codex JS cell，不是 runtime 必需 |
+| `environment_selection` / exec-server / `cyber_access_program` | **frozen** | Codex remote/cloud 环境 |
+| 完整 OTEL、`installation_id`、`attestation`、`feedback_config` | frozen | Codex 遥测与账号 |
+| `config.toml` managed features 全套 | host | 配置源是 Sage Settings |
+| `ansi-escape`、`file-search`、`responses-api-proxy`、`codex-home` | excluded | TUI/工具向 |
 
-**范围内总量**：约 **28 万行 Rust**（core 11.8 万 + 依赖 crate ~16 万）。其中忠实复写约 17 万行、语义对齐+存储/平台适配约 7 万行、暂缓约 4 万行。按 Rust→Swift 经验系数 0.7–0.9 估算，最终 Swift 侧约 **18–22 万行**。
+对用户与运行时标识一律用 Sage 名（`sageHome`、`SAGE_HOME`、`SAGE_NETWORK_PROXY_*`、`.sage`）。禁止再引入 `codex` / `CODEX_*` 标识符；Apache 文件头里的上游路径除外（§5.3）。
+
+### 2.5 多 agent 属于 agent runtime（要做）
+
+多 agent 不是 Codex 产品壳，是 runtime 的一部分：模型可以再开一个 agent、给它发消息、等它结束、打断它。Sage 的 Plan / Execute / Review / Explore 跑在这套机制上，而不是另写一套 spawn。
+
+**要对齐的 runtime：**
+
+- `agent/registry`：reserve / commit / close / list / inspect，深度与数量上限
+- `agent/control`：spawn（含 history fork）、send、status、interrupt、wait、resume
+- mailbox + `agent_communication` / `agent_message_board`
+- 子 Session 创建：内存里的 `SageThread` / `ThreadManager` 工厂，提交子 agent 的初始输入
+- `session/multi_agents.rs` 与 `tools/handlers/multi_agents*`（v1/v2）
+- `agent-roles`：子 agent 角色配置（explorer 等）
+
+**现在已经有的：** registry spawn/close/list/inspect，mailbox send/status/interrupt/wait poll。  
+**还要补的：** history fork、子 Session 真正跑起来、wait 与调用方回合的衔接。这些目前仍 throw 或只记 turn item。
+
+**产品怎么接（Sage 赢）：**
+
+```
+Sage 产品编排     Plan → Execute → Review（TurnCoordinator）
+                  ExploreSubagent 收敛到 spawn/wait，不再自建第二套生命周期
+Harness runtime   AgentRegistry + mailbox + 子 Session
+Sage 持久化       用户可见 task / recents 仍是 GRDB；子 agent 会话内存 + rollout 回放
+```
+
+不要把 `TurnCoordinator` 改成 Codex `ThreadManager` 的产品门面。Plan/Review 可以是 runtime 上的两个 agent，窗口、确认、transcript 仍是 Sage 的。
+
+### 2.6 范围内工作量（修订）
+
+原「28 万行全量 faithful」作废。继续加深的是 Phase 1–6 的 runtime、Phase 8 的 guardian/hooks、Phase 9 的 **agent/mailbox 子集**、Phase 7 的 **rollout JSONL**。`state` / `thread-store` / plugin / code_mode / exec-server 从目标里拿掉。
 
 ---
 
 ## 3. 现状盘点
 
-逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-09）。
+逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-12）。覆盖率只说明文件在不在；runtime / host / frozen 以 §2 为准。
 
 ### 3.1 文件覆盖
 
@@ -92,28 +141,29 @@ Sage 的 agent 架构分三层：**Plan → Execute → Review**。Execute 承�
 
 ### 3.2 单代理回合已经接上的行为
 
-Live Execute 在 `useHarnessRunTurn` 打开时走 `RegularTask` → `runTurn`。app `Session` 的提交循环目前包括：
+Live Execute 一律走 `RegularTask` → `runTurn`（已去掉 Settings 开关与旧 `Turn.run` Execute 路径）。app `Session` 的提交循环目前包括：
 
 - 回合准入、工具计划与路由、MCP 调用、采样流里的一次可恢复 401
 - `Op::Review`（不起子线程）、ThreadSettings、TurnSettings、InterruptIfNoPendingInput、RecoverTurn、SuspendTurnAndShutdown
-- 不另开回合的应答：UserInputAnswer、RequestPermissionsResponse、DynamicToolResponse、ExecApproval、PatchApproval。`approvedExecpolicyAmendment` 追加到 `codexHome/rules/default.rules` 并更新内存策略；失败只发 warning，决定照常送达
+- 不另开回合的应答：UserInputAnswer、RequestPermissionsResponse、DynamicToolResponse、ExecApproval、PatchApproval。`approvedExecpolicyAmendment` 追加到 `sageHome/rules/default.rules` 并更新内存策略；失败只发 warning，决定照常送达
 - RefreshMcpServers、ReloadUserConfig、CleanBackgroundTerminals。`RefreshMcpServers` 标记重连并抬高资源目录代际；prewarm worker 合并请求后，按当前配置的 MCP server、批准策略和可见工具发布一份新的 binding，并吃掉 `reconnect_pending`。已经截下的步骤保留旧 binding。auth 代际变化会把 runtime 标脏并再发布一次，不重连、不抬高资源目录代际。发布时，url 没变的已启用 server 沿用原来的连接；重连或 url 变化才打开新连接。Live Execute 的重连走 `CapabilityStore.reconnectEnabledServers`。已经禁用或移除的 server 在这次发布的 ensure 或 reconnect 之后，经 `CapabilityStore.disconnectServers` 断开，不改写保存的 server 列表
 - `request_user_input` 由 `ToolCallRuntime` 等到 `Session.requestUserInput`，`Op::UserInputAnswer` 唤醒它。回合打开 `guardian_approval` 且历史是 thread-owned 时，把已验证问答记进 retained context；空白回答、未问的 id、legacy 模式不记。同一条记录不重复写入。Live Execute 打开 rollout 写入后，新记录追加为 `retained_context`；没打开写入器时只留在内存里。下一次接上同一个 rollout 时，把能框住这次恢复的 `retained_context` 和 response item 记回历史：有替换历史、窗口号和 resume metadata 的最新压实点先装上替换历史和 verified-answer 快照，再只重放它后面的记录；否则整份文件都重放。system 消息、未署名的 configuration update、compaction trigger 不进历史。同一条 verified answer 不重复记。suffix 里的 function call output 和 custom tool output 按模型截断策略缩短，并乘上序列化余量；元数据里的 token 上限直接使用、不再乘余量。替换历史里的输出保持原样。suffix 里的 `ThreadRolledBack` 丢掉已经恢复历史中最近的那么多个用户回合，以及这些回合上的 verified answer；第一个用户回合之前的前缀留下。suffix 里没有替换历史的旧压实点，用到此为止的用户消息和这条摘要重建历史；thread-owned 保留这些消息的 id，其他模式清掉。已经记下的 verified answer 留在原处。带了替换历史的压实点不会在 suffix 里再重建一次。选检查点时，`ThreadRolledBack` 跳过那么多个更新的用户回合，那段里的 replacement history 不当检查点；被跳过之后，仍能框住重放的更早压实点才用来安装替换历史。更新的压实点自己框不住重放时，更早的也不能顶上。仍存活回合里的 world state 在历史装完后按时间重放：压实点清掉基线，完整快照换上新基线，补丁合并进已有基线；没有完整快照的补丁丢掉。被回滚的回合不贡献 world state。仍存活、并且有用户回合或更新的完整 world-state 快照的那段，恢复它的 reference context；压实点会清掉同一段里更早的 context。suffix 里没有替换历史的旧压实把恢复出来的 reference context 清掉。同一段还恢复 previous turn settings：模型、comp hash、realtime。裸的 `TurnContext` 不恢复。最新压实点带了 resume metadata、而它后面的回合没有完成时，用 metadata 里的设置；完成了的回合覆盖 metadata。检查点后面最新的 `TurnStarted` 是 last started turn id；后面没有时用这份 resume metadata 里的 `last_started_turn_id`。检查点前面的 `TurnStarted` 不算。上下文窗口优先取能框住重放的最新压实点上的窗口号和三个 window id（只认 UUID v7）。这个压实点不存在时，用仍存活回合里最新的带窗口号的压实；被回滚的回合不贡献窗口。没有任何带窗口号的压实、并且 rollout 里没有缺窗口号的旧压实时，用第一份能解析的 session meta `context_window`，窗口号为 0。否则窗口号等于压实条数，id 留空。写回会话时，空的 window id 沿用会话当前 id，空的 first id 再用这个 window id
 - `request_permissions` 先按回合环境解析文件系统路径，再由 `ToolCallRuntime` 等到 `Session.requestPermissions`。策略上下文带上该环境的工作区根目录和临时目录；根目录列表为空时用环境 cwd，临时目录未上报时保持空。进入用户等待之前，`Never` 和禁止该工具的 granular 策略直接返回空的回合授权；guardian 有决定时按决定记录授权（`strict_auto_review` 为 false）并且不发用户请求，没有决定才等到 `Op::RequestPermissionsResponse`。用户授权和 guardian 授权都按这个上下文做交集。步骤环境列表为空时用已准入回合的环境，准入时抄下会话的工作区根目录和本机临时目录
 - dynamic tool 由 `ToolCallRuntime` 等到 `Session.requestDynamicTool`，`Op::DynamicToolResponse` 唤醒它。开回合时从会话配置抄下 dynamic tools，`appendDynamicToolRuntimes` 把直接可见的注册进工具路由；延迟加载的只注册、不进模型可见列表
 
-`Op::ResolveElicitation` 不开新回合。auto-deny 直接接受空表单，不发请求。否则把请求记在当前回合上并暂停会话，直到同 server、同 request id 的应答唤醒它；Accept 没带 content 时补空对象，Decline 和 Cancel 丢掉 content。替换同一条等待会立刻取消前一条。没有活跃回合时请求照发，应答是空的。回合上没有等待者时，应答交给 MCP runtime fallback。`Op::ApproveGuardianDeniedAction` 也不开新回合：只有 `denied` 的评估会注入一条 developer 片段，标记为空，正文是手动批准前缀加上 pretty JSON（`action` 与 `outcome: allowed`，对象键排序）。有活跃回合时进 pending input，否则写入历史。其他状态忽略。`SetThreadMemoryMode` 和 `RunUserShellCommand` 还没接到这条提交循环。语音 realtime、network-proxy、逐行 state / thread-store、多智能体不在这条单代理回合上。
+`Op::ResolveElicitation` 不开新回合。auto-deny 直接接受空表单，不发请求。否则把请求记在当前回合上并暂停会话，直到同 server、同 request id 的应答唤醒它；Accept 没带 content 时补空对象，Decline 和 Cancel 丢掉 content。替换同一条等待会立刻取消前一条。没有活跃回合时请求照发，应答是空的。回合上没有等待者时，应答交给 MCP runtime fallback。`Op::ApproveGuardianDeniedAction` 也不开新回合：只有 `denied` 的评估会注入一条 developer 片段，标记为空，正文是手动批准前缀加上 pretty JSON（`action` 与 `outcome: allowed`，对象键排序）。有活跃回合时进 pending input，否则写入历史。其他状态忽略。`Op::SetThreadMemoryMode` 也不开新回合，也不调用模型。没有 live thread 时发一条 persistence disabled 错误。有 live thread 时先 `persist(standard)` 再 flush，然后以 `include_archived = false` 更新 memory mode，再 flush 一次。任一步失败只发 `Error`，`sage_error_info` 为 other。`Op::RunUserShellCommand` 在空闲时开一个 shell 回合：发一次 `TurnStarted`，用登录 shell 无沙盒执行，把输出记成 `user_shell_command` 片段，然后 `TurnComplete`，不采样、不改 reference context。已有回合时作为附属命令执行，不另发 `TurnStarted`，结果注入 pending input。进程一退出就记结果，不等到命令超时。工作目录不是本机绝对路径时只发错误。命令还在跑时，stdout 和 stderr 按块发出 `ExecCommandOutputDelta`，事件 id 是回合 sub id，call id 与命令项相同。`shell_snapshot` 打开且回合环境带有 snapshot 文件时，先 source 该文件再执行原命令。没有文件时，按该 cwd 抓一次登录 shell 的 `export -p` 并复用。安装包里的 Sage 路径会加到 PATH 最前面，snapshot source 之后再补回去。`SAGE_NETWORK_PROXY_ACTIVE` 存在时，启动前去掉托管代理变量、带标记的 `GIT_SSH_COMMAND`，以及与 broker 记录一致的凭据变量。记下来的命令仍是登录 shell。托管 CA 证书路径校验还没接上。语音 realtime、network-proxy、逐行 state / thread-store 不在这条单代理回合上。多 agent spawn/wait 已接到 Live Execute：父线程 adopt，子线程走 `SageThread`/`runTurn`。Explore 仍单独跑只读子回合。
 
 ### 3.3 现有 Sage 粘合层（`Agent/Execute/` 根级，~3,900 行）的处理原则
 
-这些文件**不是**第二棵 codex 树，是 app 接线：`ToolBatchExecutor(+Waves/+Approval)`、`ToolInvocationPipeline/Dispatcher/Request`、`ToolAuthorization*`、`SessionToolAllowlist`、`PreToolUseHooks`、`ExecuteServices`、`ExploreSubagentRunner`、`TextToolCallParser` 等。
+这些文件**不是**第二棵 codex 树，是 app 接线：`ToolBatchExecutor(+Waves/+Approval)`、`ToolInvocationDispatcher/Request`、`ToolAuthorization*`、`SessionToolAllowlist`、`PreToolUseHooks`、`ExecuteServices`、`ExploreSubagentRunner`、`TextToolCallParser` 等。
 
-处理原则（详见 §4.3）：随着忠实 port 落地，粘合层逐步**退化为适配层**——实现 harness 定义的 protocol，不再自带机制语义。已知需要收敛的重叠点：
+处理原则（详见 §4.3）：随着忠实 port 落地，粘合层逐步**退化为适配层**——实现 harness 定义的 protocol，不再自带机制语义。重叠点收口进度：
 
-- `ToolBatchExecutor+Waves` 的波次执行 ↔ codex `tools/parallel.rs` 的准入控制
-- `SessionToolAllowlist`（HUD 批准）↔ `tools/approvals.rs` 的 `ApprovalStore`
-- `PreToolUseHooks`（声明式 JSON）↔ `hook_runtime.rs` + `hooks` crate（事件钩子）
-- `ToolInvocationPipeline`（validate/timeout/dispatch）↔ orchestrator 内部的执行管线
+- `ToolBatchExecutor+Waves` ↔ `tools/parallel.rs`：HUD 波次走 `ParallelAdmission`（适配）
+- `SessionToolAllowlist` ↔ `ApprovalStore`：同一 store，HUD 写入 harness 读取
+- `PreToolUseHooks` ↔ `HookRuntime`：声明式 JSON 的 evaluator 已转发到事件钩子
+- `ToolInvocationPipeline` ↔ orchestrator：Pipeline 已删；Live Execute 一律 `runTurn`，旧 `Turn.run` 只留给 Explore
+- `ExploreSubagentRunner` ↔ spawn/wait（§2.5）：仍双轨；收敛前同一子任务不得两套生命周期
 
 ---
 
@@ -121,25 +171,29 @@ Live Execute 在 `useHarnessRunTurn` 打开时走 `RegularTask` → `runTurn`。
 
 ### 4.1 SwiftPM 模块图
 
-`ExecuteHarness` 本地包（`Sage/Agent/Execute/Harness/Package.swift`）随 phase 推进扩展。模块边界 = codex crate 边界，依赖方向与 codex 一致：
+`ExecuteHarness` 本地包（`Sage/Agent/Execute/Harness/Package.swift`）随 phase 推进扩展。模块边界 = 上游 crate 边界，**Swift 模块名按 §5.3 用 Sage 前缀**；依赖方向与上游一致：
 
 ```
-CodexProtocol        ← codex-rs/protocol            [Phase 1] 纯值类型，Codable，无依赖
-CodexUtils           ← codex-rs/utils 子集           [Phase 1]
-CodexAsyncUtils      ← codex-rs/async-utils         [Phase 1] SPM 一个 target 只能有一个
+SageProtocol         ← codex-rs/protocol            [Phase 1] 纯值类型，Codable
+SageUtils            ← codex-rs/utils 子集           [Phase 1]
+SageAsyncUtils       ← codex-rs/async-utils         [Phase 1] SPM 一个 target 只能有一个
                                                        path，async-utils/ 不在 utils/ 子树，
                                                        故独立模块（与 §5.1 R4a 同类的工程适配）
-FileSystem           ← codex-rs/file-system         [已有，Phase 2 补齐]
+FileSystem           ← codex-rs/file-system         [已有，Phase 2 补齐]  无 Codex 前缀，保持域名
 ApplyPatch           ← codex-rs/apply-patch         [已有，Phase 2 补齐]  deps: FileSystem
-CodexShellCommand    ← codex-rs/shell-command       [Phase 3]
-CodexSandboxing      ← codex-rs/sandboxing          [Phase 3]  macOS seatbelt 全量
-CodexExecPolicy      ← codex-rs/execpolicy          [Phase 3，风险项 §10.1]
-CodexHooks           ← codex-rs/hooks               [Phase 8]
-CodexSkills          ← codex-rs/skills + agent-roles [Phase 8]
-CodexRollout         ← codex-rs/rollout             [Phase 7]
-CodexCore            ← codex-rs/core 其余全部        [Phase 4–5 逐步迁入]
+SageGitUtils         ← codex-rs/git-utils           [Phase 2]
+SageShellCommand     ← codex-rs/shell-command       [Phase 3]
+SageSandboxing       ← codex-rs/sandboxing          [Phase 3]  macOS seatbelt 全量
+SageExecPolicy       ← codex-rs/execpolicy          [Phase 3，风险项 §10.1]
+SageHooks            ← codex-rs/hooks               [Phase 8]
+SageSkills           ← codex-rs/skills              [Phase 8]
+SageAgentRoles       ← codex-rs/agent-roles         [Phase 8]
+SageContextFragments ← codex-rs/context-fragments   [Phase 8]
+SageRollout          ← codex-rs/rollout             [Phase 7]
+SageAPI              ← codex-rs/codex-api           [Phase 6] 磁盘目录 sage-api/（R2a）
+SageCore             ← codex-rs/core 其余全部        [Phase 4–5 逐步迁入]
                        deps: 以上全部
-ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 CodexCore 或保留，
+ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 SageCore 或保留，
                        deps: ApplyPatch              取决于可见性拆分需要]
 ```
 
@@ -160,13 +214,14 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 C
 │  PathGuardFileSystem    → ExecutorFileSystem 协议
 │  HUDApprovalSink        → 审批/elicitation 协议（弹卡片、问用户）
 │  SeatbeltSandboxSupport → 沙盒执行支持（进程 spawn、profile 应用）
-│  GRDBThreadStore        → ThreadStore 协议（桥现有 GRDB task store）
+│  InMemoryThreadStore    → 仅子 agent 内存会话（用户 task 仍走 AgentTaskStore）
 │  SageMCPHub             → MCP 管理协议（桥 CapabilityStore/MCPStdioClient）
 │  SageSettingsBridge     → Config 提供（桥 Settings）
-├─ Harness 层（ExecuteHarness SPM，忠实复写）──────────────
-│  CodexCore: session / turn / tasks / tools / state /
-│  context_manager / compact / guardian / client ...
+├─ Harness 层（ExecuteHarness SPM，runtime 忠实复写）─────
+│  session / turn / tasks / tools / compact / guardian /
+│  client / agent registry / mailbox / 子 Session 工厂
 │  ⚠️ 禁止 import Sage app 类型；一切外部能力经 protocol 注入
+│  ⚠️ 禁止把 Codex thread-store / plugin / code mode 做成产品源
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -176,7 +231,7 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 C
 
 当前 `tools/*.swift`、`tools/handlers/`、`session/`、`tasks/`、`guardian/`、`hook_runtime.swift`、`config/` 编译在 app target 内（它们闭合引用 `PathGuard`、`AgentTool`、`TurnCoordinator`）。迁移规则：
 
-1. **每个 phase 内**，先把该区域的 codex 忠实 port 写入对应 SPM 模块（只依赖 `CodexProtocol` + 注入 protocol）；
+1. **每个 phase 内**，先把该区域的上游忠实 port 写入对应 SPM 模块（只依赖 `SageProtocol` + 注入 protocol）；
 2. 然后把 app-target 旧文件改为薄适配（或直接删除，调用点改接 harness）；
 3. 迁移期间允许「双轨」短暂共存，但同一机制不得有两份语义——旧文件删除前，其调用点必须全部切换；
 4. `Package.swift` 头部注释（模块划分理由）随每次结构调整同步更新。
@@ -191,6 +246,7 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 C
 |---|---|
 | R1 | `codex-rs/core/src/<path>.rs` → `Sage/Agent/Execute/Harness/<path>.swift`（core crate 映射到 Harness 根，沿用现有惯例） |
 | R2 | `codex-rs/<crate>/src/<path>.rs` → `Sage/Agent/Execute/Harness/<crate>/src/<path>.swift`（独立 crate 保留 crate 目录名，如 `apply-patch/src/parser.swift`） |
+| R2a | **crate / 文件名含 `codex`**：Swift 侧改成 `sage`。上游 `codex-api/` → `sage-api/`（模块 `SageAPI`）；`core/src/codex_thread.rs` → `sage_thread.swift`（类型 `SageThread`）；`codex_delegate.rs` → `sage_delegate.swift`；`protocol/src/codex_error_info.rs` → `protocol/src/sage_error_info.swift`。追踪表左列仍写上游路径 |
 | R3 | Rust `mod.rs` → Swift `mod.swift`（mod.rs 中有实际类型/函数时；纯 `mod` 声明无对应物） |
 | R4 | 文件名保持 snake_case 不变；一个 Rust 文件 → 一个 Swift 文件，禁止合并或拆分 |
 | R4a | **模块内 basename 冲突**：Swift 要求同一 module 内文件名唯一（swiftc 拒绝两个 `lib.swift`）。冲突时**先到先得**（仓库中已存在的文件保留原名）；同批多个新文件冲突时按 codex 路径排序，首个保留原名；其余加前缀：crate 文件用 crate 目录名（`-`→`_`，如 `utils/path-uri/src/lib.rs` → `utils/path-uri/src/path_uri_lib.swift`），core 文件用父目录名（如 `sandboxing/mod.rs` → `sandboxing_mod.swift`）。`harness_port.py` 自动判定 |
@@ -208,19 +264,60 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 C
 //
 //  Port of codex-rs/<crate>/src/<path>.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
-//  Port status: faithful | adapted | partial | stub
+//  Port status: faithful | adapted | partial | stub | frozen
 //
 //  <2–4 句行为摘要；adapted/partial 时必须写清与上游的差异及原因>
 //
 ```
 
 `stub` 仅允许出现在「依赖尚未就绪的过渡 phase」，进入 Phase 5 后不允许新增 stub。
+`frozen` 用于 §2.4 / §2.6 的 Codex 产品层：文件可留、不再加深；与 `adapted` 的区别是没有「补齐到 faithful」的后续目标。
 
-### 5.3 命名与类型
+### 5.3 命名规范（强制）
 
-- Rust 类型名原样保留（`TurnContext`、`ToolOrchestrator`、`SessionState`），不做 Swift 化改名；
-- 函数名按 Swift API 规范改写（`run_turn` → `runTurn`），但在追踪表中保持 codex 原名可检索；
-- 与 Swift 标准库重名时以模块名限定（`CodexProtocol.Event`），不改类型名。
+产品是 Sage，不是 Codex。**Swift 代码里的库名、类型名、变量名、命令名、环境变量、用户可见路径，凡含 `codex` 一律改成 `sage`。** 追踪与版权仍指向上游。
+
+#### 5.3.1 必须改成 Sage 的
+
+| 层 | 规则 | 例子 |
+|---|---|---|
+| SPM 模块 / product | 上游 crate 名带 Codex 前缀，或本会被命名为 `Codex*` 的，用 `Sage*` | `SageProtocol`、`SageCore`、`SageAPI`、`SageUtils`、`SageRollout`、`SageThreadStore` |
+| 无品牌 crate | 域名本身不含 Codex，保持域名 | `FileSystem`、`ApplyPatch`、`ToolsRuntimes` |
+| 类型 / 变量 / 函数 | `CodexFoo` → `SageFoo`；`codexFoo` → `sageFoo` | `SageThread`、`SageErr`、`sageHome` |
+| 环境变量 / 进程 env | `CODEX_*` → `SAGE_*` | `SAGE_HOME`、`SAGE_SANDBOX`、`SAGE_NETWORK_PROXY_ACTIVE` |
+| 磁盘 / 产品路径 | `.codex` / `codex-path` → `.sage` / Sage 安装路径 | `protectMissingDotSage`、`~/.sage` |
+| 源文件名 | basename 含 `codex` 的按 R2a 改 | `sage_thread.swift`、`sage-api/src/…` |
+
+#### 5.3.2 Sage 自有线上协议（不沿用 Codex/ChatGPT 外网协议）
+
+Sage 最终对接 **Sage 自己的服务**。不要为了兼容 ChatGPT Codex 后端而保留对方的 URL、JSON key、SSE 事件名、限流 id、上传 use-case、Sage 侧请求头。
+
+| 类别 | Sage | 不要再用 |
+|---|---|---|
+| 后端路径 | `/backend-api/sage` | `/backend-api/codex`、`chatgpt.com/backend-api/…` 作为 Sage 默认 host |
+| 请求头 | `x-sage-*`（`x-sage-model`、`x-sage-subagent`、`x-sage-memgen-request`…） | `x-codex-*`、`OpenAI-Beta`、`openai-model`、`x-responsesapi-*` |
+| JSON / SSE Sage 字段 | `sage_rollout_budget_units`、`sage.rate_limits`、`sage.response.metadata`、`sage_output_schema`、`sage_moderation_metadata` | `codex_*`、`openai_chatgpt_*`、`codex.rate_limits` |
+| Product / use-case / 限流族 | `"sage"` | `"codex"` 别名 |
+| 内部元数据目的地 | 仅路径后缀 `backend-api/sage` | 不要把 `api.openai.com` / `chatgpt.com` 当 Sage 内部后端 |
+
+流式帧形状暂时仍用 Responses 风格的 `response.created` 一类事件名（通用采样协议，不是 Codex 产品协议）。Sage 服务若另定事件名，再整表替换。用户配置的通用 LLM `baseURL`（设置里的 OpenAI-compatible 占位）不是 Codex 协议，Live Execute 继续走 `ModelSettings.baseURL`。
+
+#### 5.3.3 必须保留的「codex」字样
+
+| 位置 | 为什么留 |
+|---|---|
+| 文件头 `Port of codex-rs/<crate>/src/<path>.rs (Apache-2.0).` | 版权溯源，指向上游路径 |
+| 文件头 / 注释里的 `codex_rs::…`、`codex_client::…` 对照 | 说明这段对应上游哪个符号 |
+| `PORTING.md` / `harness_port.py` 左列 | 上游相对路径，用来对拍与升级 |
+| 本计划提到 `codex-rs`、crate 名 | 界定复写范围，不是 Swift API |
+
+新代码、新测试、新 env、新 JSON key **禁止**再引入 `codex` 标识符。
+
+#### 5.3.4 类型与函数形态
+
+- 不含 Codex 品牌的领域类型保持原名（`TurnContext`、`ToolOrchestrator`、`SessionState`），按 Swift API 改函数名（`run_turn` → `runTurn`）；追踪表仍用上游原名检索。
+- 与 Swift 标准库重名时用模块限定（`SageProtocol.Event`），不改类型名。
+- 适配层对外只暴露 Sage 名；HUD / Settings / GRDB 不得出现 `codexHome` 一类用户可见字符串。
 
 ---
 
@@ -252,7 +349,7 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 C
 | tokio | Swift | 备注 |
 |---|---|---|
 | `tokio::spawn` | `Task {}` / `Task.detached {}` | |
-| `tokio::sync::mpsc::channel` | `AsyncThrowingChannel` 风格封装 / actor 邮箱 | Phase 1 在 `CodexUtils` 交付统一封装 |
+| `tokio::sync::mpsc::channel` | `AsyncThrowingChannel` 风格封装 / actor 邮箱 | Phase 1 在 `SageUtils` 交付统一封装 |
 | `tokio::select!` | `async let` + 首个完成语义的 helper，或 `TaskGroup` | codex 的 select 语义（取消其余分支）必须保留 |
 | `CancellationToken` | 结构化取消（`Task.isCancelled` / `withTaskCancellationHandler`） | token 的「同步立即取消」语义差异处逐处标注 |
 | `spawn_blocking`（阻塞 IO/进程） | `Task.detached(priority:)` / 专用 `DispatchQueue` | 禁止阻塞 cooperative 线程池 |
@@ -305,7 +402,7 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 ### Phase 1 — 协议与基础类型层（~40,000 行）
 
 - **范围**：`protocol` crate 全部 55 文件（`protocol.rs` 6,444 / `models.rs` 4,565 / `permissions.rs` 4,488 / `openai_models.rs` 1,935 / `config_types.rs` / `error.rs` / `items.rs` / `mcp.rs` / `approvals.rs` / `turn_input.rs` / `exec_output.rs` / `user_input.rs` / `session_id.rs` / `thread_id.rs` / `tool_name.rs` / `plan_tool.rs` …）；`utils` 子集（absolute-path、path、path-uri、path-utils、output-truncation、string、stream-parser、cache、home-dir、git-discovery、image）+ `async-utils`；core 的 `util.rs`、`utils/`。
-- **产出**：`CodexProtocol`、`CodexUtils` 两个 SPM 模块；`JSONValue`、channel/取消封装等并发基础设施。
+- **产出**：`SageProtocol`、`SageUtils` 两个 SPM 模块；`JSONValue`、channel/取消封装等并发基础设施。
 - **验收**：serde↔Codable round-trip 对拍测试（用 codex JSON fixture）；`permissions.rs` 的 profile 求交/校验逻辑单测移植。
 
 ### Phase 2 — 文件系统与补丁（~10,000 行）
@@ -317,13 +414,13 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 ### Phase 3 — 执行与沙盒（~24,000 行）
 
 - **范围**：`sandboxing` crate（`seatbelt.rs` 1,122 全量、`manager.rs` 802、`policy_transforms.rs` 670、`spawn.rs`、`violation.rs`、`denial.rs`、`seatbelt_scratch.rs`、`terminal_queries.rs`；`landlock/bwrap/windows/mxc` 平台排除）；`shell-command`（`parse_command.rs` 2,766、`bash.rs`、`shell_detect.rs`、`command_safety/is_dangerous_command.rs`、`shell_snapshot*`；PowerShell/Windows 部分适配标注）；`execpolicy`（**风险项 §10.1，先做 spike**）；`utils/pty`（macOS `forkpty` 路径）；core 内 `exec.rs`、`exec_env.rs`、`exec_policy.rs` + `exec_policy/`、`shell.rs`、`shell_snapshot.rs` + `_sandbox`、`spawn.rs`、`safety.rs`、`sandbox_tags.rs`、`sandboxing/mod.rs`、`command_canonicalization.rs`、`user_shell_command.rs`、`unified_exec/` 全部 10 文件（4,105 行）。
-- **产出**：`CodexShellCommand`、`CodexSandboxing`、`CodexExecPolicy` 模块；core 侧执行文件（先入 app target 过渡或直接入 `CodexCore`，视 Phase 4 节奏）。
+- **产出**：`SageShellCommand`、`SageSandboxing`、`SageExecPolicy` 模块；core 侧执行文件（先入 app target 过渡或直接入 `SageCore`，视 Phase 4 节奏）。
 - **验收**：seatbelt profile 生成与 codex 输出对拍；`parse_command` / 危险命令判定单测移植；`unified_exec` 进程管理（spawn/复用/输出截断/stdin 审批）行为测试。
 
 ### Phase 4 — 工具系统（~28,000 行）
 
 - **范围**：core `tools/` 全量——`router.rs` 385、`registry.rs` 851、`spec_plan.rs` 1,479、`parallel.rs` 787、`orchestrator.rs` 551、`approvals.rs` 884、`events.rs` 885、`context.rs` 607、`lifecycle.rs`、`sandboxing.rs` 561、`network_approval.rs` 1,254、`executed_tool_calls*` ~1,200、`call_trace` / `tool_dispatch_trace` / `hook_names` / `hosted_spec` / `user_messaging` / `catalog_parameters` / `tool_namespaces_info` / `control_tool_analytics` / `multi_agent_tool`；`handlers/` 全部（`mod.rs` 616、`mcp.rs` 882、`extension_tools.rs` 640、`apply_patch.rs` 641 已有、`shell_spec.rs` 348、`unified_exec*` 873、`view_image.rs` 526、`tool_search.rs` 487、`request_user_input*` 465、`plan.rs` + spec、`sleep`、`current_time`、`request_permissions`、`new_context_window*`、`get_context_remaining*`、`test_sync*`、`send_message_to_user_async`、`dynamic.rs`、`mcp_resource*` ~800；`multi_agents*` / `request_plugin_install*` / `list_available_plugins*` 归 Phase 9）；`runtimes/` 全量（`mod.rs` 918、`unified_exec.rs` 975、`apply_patch.rs` 242、`zsh_fork.rs` 105 + `unix_escalation.rs` 875）；`function_tool.rs`；`network_policy_decision.rs`。
-- **迁移**：现有 `orchestrator.swift` / `parallel.swift` / `approvals.swift` / `sandboxing.swift` / `network_approval.swift` / `handlers/apply_patch*.swift` 逐文件对照上游补全并迁入 `CodexCore`；`ToolBatchExecutor+Waves` 的波次语义收敛到 `parallel.rs` 准入模型；`SessionToolAllowlist` 与 `ApprovalStore` 合并为单一审批缓存（HUD 交互留在适配层）。
+- **迁移**：现有 `orchestrator.swift` / `parallel.swift` / `approvals.swift` / `sandboxing.swift` / `network_approval.swift` / `handlers/apply_patch*.swift` 逐文件对照上游补全并迁入 `SageCore`；`ToolBatchExecutor+Waves` 的波次语义收敛到 `parallel.rs` 准入模型；`SessionToolAllowlist` 与 `ApprovalStore` 合并为单一审批缓存（HUD 交互留在适配层）。
 - **验收**：工具注册表/规格快照测试；orchestrator「审批→沙盒→尝试→升级重试」行为测试扩展现有 313 行套件；parallel 准入/并发票测试；每个 handler 至少一个行为用例。
 
 ### Phase 5 — 会话、回合与上下文（~49,000 行，核心中的核心）
@@ -343,13 +440,15 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 ### Phase 6 — 模型客户端（~9,000 行）
 
 - **范围**：`client.rs` 2,852、`client_common.rs` 141（`Prompt`/`ResponseEvent`/`ResponseStream`）、`responses_headers.rs`、`responses_metadata.rs` 592、`responses_retry.rs` 180、`prompt_debug.rs`、`image_preparation.rs` 428、`original_image_detail.rs`、`current_time.rs`、`web_search.rs`；`model-provider-info` 924；`codex-api` 的 SSE responses 子集（`sse/responses.rs` 2,124 等 ~4,000 行）。
-- **适配**：HTTP/SSE 传输用 `URLSession` bytes 流（Sage 已有 SSE 实现，此处对齐 codex 的重试/退避/头语义）；鉴权走适配层（API Key / ChatGPT auth 暂缓）。
+- **适配**：HTTP/SSE 传输用 `URLSession` bytes 流；鉴权走适配层（Keychain API Key）。线上字段按 §5.3.2 用 Sage 名，不保留 ChatGPT Codex 外网协议。ChatGPT 登录 frozen。
 - **验收**：SSE 解析 golden 测试（codex sse fixture）；重试/限流（429 + `Retry-After`）行为与 Sage 现有 `RetryPolicy` 对齐合并。
 
-### Phase 7 — 持久化与线程（~58,000 行，适配为主）
+### Phase 7 — 持久化：rollout runtime，thread 产品冻结（~58,000 行）
 
-- **范围**：`rollout` crate（`recorder.rs` 2,249、`list.rs` 1,703、`compression.rs` 1,403、`state_db.rs` 744 等 9,334 行）——JSONL rollout **忠实移植**；`state` crate（20,362 行）与 `thread-store`（22,930 行）——**语义对齐、存储适配 GRDB**（Sage 已有 GRDB task store，schema 对齐 codex 表结构）；core 内 `rollout.rs`、`rollout_budget.rs`、`thread_rollout_truncation.rs` 305、`thread_manager.rs` 2,583 + `thread_manager/`、`codex_thread.rs` 1,065、`codex_delegate.rs`、`session_prefix.rs`、`thread_startup_metadata.rs`、`state_db_bridge.rs`、`session_rollout_init_error.rs`、`memory_usage.rs`、`installation_id.rs`、`feedback_config.rs`、`attestation.rs`。
-- **验收**：rollout 写入→回放 round-trip（与 codex JSONL 格式逐字节对拍）；thread 列表/恢复/fork 行为测试；与 Sage 现有 task 持久化的迁移/共存方案评审。
+- **runtime**：`rollout` crate 的 JSONL 写入/回放（会话恢复、子 agent history fork 需要）。`thread_manager` / `sage_thread`（类型 `SageThread`）只作内存会话工厂，给多 agent spawn 用，不是 Recents UI。
+- **frozen**：`state` crate（memories/goals/remote_control 等 20,362 行）、`thread-store`（22,930 行）、`installation_id` / `attestation` / `feedback_config`。已有 Swift 文件保留，不再按 Codex schema 灌进 GRDB。
+- **host**：用户可见 task / transcript / recents 继续 `AgentTaskStore`。
+- **验收**：rollout 写入→回放 round-trip；子 agent fork 能从父历史切出一份内存会话。不做 Codex thread 列表/归档/section 产品测试。
 
 ### Phase 8 — Guardian、Hooks、Skills 完整版（~19,500 行）
 
@@ -357,12 +456,13 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 - **迁移**：`PreToolUseHooks`（声明式）与 `HookRuntime`/`hooks` crate 收敛为一套钩子语义（§3.3）；guardian 与 Sage Review 层的关系定稿（guardian 是 execute 内的隔离审查者；Review 层是任务级复盘——两者并存，文档化边界）。
 - **验收**：guardian 决策/预算/证据链测试（对齐 `guardian/tests.rs` 关键场景）；hooks schema 校验与 discovery 单测；skills 加载/提及解析单测。
 
-### Phase 9 — 多智能体与高级特性（~15,000 行，按需启动）
+### Phase 9 — 多 agent runtime（要做）与 Codex 产品壳（冻结）
 
-- **进度**：Phase 9 追踪表已无未开始行。registry spawn/close/list/inspect 与 mailbox send/status/interrupt/wait poll 已落地。history fork、exec-server、code_mode cell、plugin elicitation、Session thread create 仍 throw。
-- **范围**：`agent/` 全部（~5,700 行，`control/spawn.rs` 1,380 等）；`tools/handlers/multi_agents*`（~4,000 行）；`session/multi_agents.rs`；`tools/code_mode/`（~2,000 行）；`plugins/`、`apps/`、`connectors.rs` 555、`environment_selection.rs` 2,311、`cyber_access_program.rs`。
-- **对接**：此 phase 把 Sage 的 Plan/Execute/Review 三层编排映射到 codex 的 `ThreadManager`/`AgentControl` 语义——Plan agent = 上游 `plan` 工具/角色配置的 Sage 形态，Review agent = `tasks/review.rs` + guardian 的组合。启动前需单独评审 Sage 三层架构与 codex 多智能体模型的对应关系。
-- **验收**：子 agent spawn/wait/消息传递行为测试。
+- **进度**：registry spawn/close/list/inspect、mailbox send/status/interrupt/wait、history fork、子 `SageThread`/`ThreadSession` 开跑，以及 Live Execute `ThreadManager` 接线已落地。Explore 仍单独跑只读子回合。plugin / code_mode / exec-server 仍 throw——这些改为 **frozen**，不再补。
+- **runtime（要对齐）**：`agent/`（registry、control spawn/send/wait/interrupt、role、child_config）；`tools/handlers/multi_agents*`；`session/multi_agents.rs`；`agent_communication` / `agent_message_board`。补齐 history fork + 子 Session 真正开跑，接到 Live Execute。
+- **frozen（不再做）**：`tools/code_mode/*`、`plugins/`、`apps/`、`connectors.rs`、`environment_selection.rs`、`cyber_access_program.rs`、`request_plugin_install*`、`list_available_plugins*`、`wait_for_environment`。
+- **对接**：Sage 产品编排仍是 Plan → Execute → Review。它们可以作为 runtime 上的 agent 跑。`ExploreSubagentRunner` 仍保留只读工具过滤，等子 `TurnToolRunner` 能按 child 收窄工具后再收敛到 spawn/wait。不要把产品门面换成 Codex `ThreadManager`。
+- **验收**：父回合 spawn 子 agent、mailbox 传消息、wait/interrupt、可选 history fork；子 agent 自己走 `runTurn`。不做 plugin 安装、code mode cell、exec-server 连接测试。
 
 ### Phase 10 — 暂缓与平台项（收尾对齐）
 
@@ -382,9 +482,9 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | 4 | ~28,000 | 工具系统全量 | 🟡 骨架 |
 | 5 | ~49,000 | 会话/回合/上下文/压缩/配置 | 🟡 骨架 |
 | 6 | ~9,000 | 模型客户端 | 无（Sage 有 SSE 可桥） |
-| 7 | ~58,000 | 持久化/线程（适配为主） | Sage GRDB 可桥 |
+| 7 | ~9,000 runtime + ~49,000 frozen | rollout 回放；thread 产品冻结 | Sage GRDB 已是产品源 |
 | 8 | ~19,500 | guardian/hooks/skills | 🟡 薄骨架 |
-| 9 | ~15,000 | 多智能体/高级 | 无 |
+| 9 | ~10,000 runtime + ~5,000 frozen | 多 agent spawn/mailbox；plugin/code_mode 冻结 | 🟡 registry/mailbox 骨架 |
 | 10 | ~6,000+ | 暂缓/平台收尾 | — |
 | **合计** | **~258,000** | | 已移植 ~4,700 |
 
@@ -431,16 +531,17 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | 10.2 | **tokio → Swift Concurrency 语义差** | `select!` 取消语义、`CancellationToken` 同步取消、`spawn_blocking` 线程模型不同。对策：§6.2 对照表 + 每处差异文件头标注 + Phase 1 交付统一并发封装。 |
 | 10.3 | **PTY（`utils/pty` 5,302 行）** | macOS 有 `forkpty`，路径可行但行为差异（终端尺寸、信号、job control）需逐条核对；`unified_exec` 依赖它。Phase 3 早期验证。 |
 | 10.4 | **`config/mod.rs` 4,893 行 vs Sage Settings** | codex 的 config.toml + managed config 体系与 Sage Settings 模型不同。对策：移植 `Config` 类型与合并/优先级语义，配置源桥接 Sage Settings；`config/edit.rs`（toml 编辑）标记适配。 |
-| 10.5 | **`state`/`thread-store` 43,000 行 vs Sage GRDB** | 逐行复写收益低、风险高（与现有 task 持久化冲突）。对策：schema 与读写语义对齐，存储引擎用 GRDB；rollout JSONL 部分忠实移植（格式是跨工具契约）。 |
+| 10.5 | **`state`/`thread-store` vs Sage GRDB** | 不再对齐 Codex thread schema。对策：这两棵树 **frozen**；rollout JSONL 作 runtime 回放；用户 task 继续 `AgentTaskStore`。 |
 | 10.6 | **MCP：rmcp-client vs Sage `MCPStdioClient`** | harness 机制（工具暴露、审批模板、调用遥测）忠实移植；传输/进程管理适配 Sage 现有实现。 |
-| 10.7 | **工作量** | ~25.8 万行 Rust 在范围内，是长期工程；每个 phase 独立可用，Phase 1→5 是 harness 对齐的关键路径（~15 万行），Phase 6 之后可按 Sage 产品节奏穿插。 |
-| 10.8 | **双轨期行为漂移** | Phase 4–5 迁移期旧粘合层与新 port 短暂共存，必须遵守 §4.3「同一机制不得有两份语义」，切换以调用点为单位原子完成。 |
+| 10.7 | **工作量** | 不再按 25.8 万行全量 faithful 估。关键路径是 Phase 1–6 runtime + Phase 8 guardian/hooks + Phase 9 多 agent 子集。 |
+| 10.8 | **双轨期行为漂移** | Phase 4–5 迁移期旧粘合层与新 port 短暂共存，必须遵守 §4.3「同一机制不得有两份语义」，切换以调用点为单位原子完成。Explore 子 agent 同理。 |
+| 10.9 | **多 agent vs Sage 三层编排** | runtime 对齐 spawn/mailbox/wait；产品层仍是 Plan/Execute/Review。禁止为了「更像 Codex」而拆掉 `TurnCoordinator`。 |
 
 ---
 
 ## 附录 A：`codex-rs/core` 全量文件映射表（391 文件，按 phase 分组）
 
-> 状态图例：✅ 已移植（忠实）｜🟡 已移植（partial/adapted/薄）｜⬜ 待移植｜⛔ 平台排除｜💤 暂缓（deferred）｜➕ Sage 新增（无 codex 对应）
+> 状态图例：✅ 已移植（忠实）｜🟡 已移植（partial/adapted/薄）｜⬜ 待移植｜⛔ 平台排除｜💤 暂缓（deferred）｜❄️ frozen（Codex 产品，不再补）｜➕ Sage 新增（无 codex 对应）
 > Swift 目标路径按 §5.1 R1 机械推导（`Harness/<path>.swift`），不再逐行列出；仅标注例外。
 
 ### Phase 3 — 执行与沙盒（core 内）
@@ -484,7 +585,7 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | `tools/registry.rs` | 851 | ⬜ | |
 | `tools/spec_plan.rs` | 1,479 | ⬜ | 回合工具计划 |
 | `tools/parallel.rs` | 787 | 🟡 | 波次替代 RWLock 准入，需收敛 |
-| `tools/orchestrator.rs` | 551 | 🟡 | 形状对齐，去 `ToolInvocationPipeline` 依赖 |
+| `tools/orchestrator.rs` | 551 | 🟡 | 形状对齐；`ToolInvocationPipeline` 已删，execute 自管 validate/timeout/dispatch |
 | `tools/approvals.rs` | 884 | 🟡 | 与 `SessionToolAllowlist` 合并 |
 | `tools/events.rs` | 885 | ⬜ | |
 | `tools/context.rs` | 607 | ⬜ | |
@@ -627,8 +728,8 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | codex 文件 | 行数 | 状态 | 备注 |
 |---|---:|---|---|
 | `thread_manager.rs` + `thread_manager/{managed,shared_instructions}.rs` | 2,804 | ⬜ | `ThreadManager` 门面 |
-| `codex_thread.rs` | 1,065 | ⬜ | |
-| `codex_delegate.rs` | 382 | ⬜ | |
+| `codex_thread.rs` | 1,065 | 🟡 | Swift：`sage_thread.swift` / `SageThread`（R2a） |
+| `codex_delegate.rs` | 382 | 🟡 | Swift：`sage_delegate.swift`（R2a） |
 | `rollout.rs` / `rollout_budget.rs` | 182 | ⬜ | |
 | `thread_rollout_truncation.rs` | 305 | ⬜ | |
 | `session_prefix.rs` / `thread_startup_metadata.rs` / `session_rollout_init_error.rs` / `state_db_bridge.rs` | 235 | ⬜ | |
@@ -661,18 +762,20 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | `elicitation.rs` | 100 | ⬜ | |
 | `mention_syntax.rs` | 2 | ⬜ | |
 
-### Phase 9 — 多智能体与高级（core 内）
+### Phase 9 — 多 agent runtime 与冻结的产品壳（core 内）
 
 | codex 文件 | 行数 | 状态 | 备注 |
 |---|---:|---|---|
-| `agent/`（mod/api/types/status/registry/role/child_config/control + `control/*` 18 文件） | ~5,700 | 🟡 | registry spawn/close/list/inspect + mailbox send/status；Session thread create 仍 throw |
-| `agent_communication.rs` / `agent_message_board.rs` | 268 | 🟡 | |
-| `plugins/`（6 文件） | 548 | 🟡 | DiscoverableTool 类型/过滤 + fixture writer；listing 仍 throw |
-| `apps/mod.rs` / `apps/render.rs` | 68 | ✅ | |
-| `connectors.rs` | 555 | 🟡 | collect/cache 已落地；live MCP list 仍 throw |
-| `environment_selection.rs` | 2,311 | 🟡 | origin/校验/snapshot；exec-server 连接仍 throw |
-| `cyber_access_program.rs` | 12 | 🟡 | |
-| （另见 Phase 4 表中标 → Phase 9 的 handlers/code_mode 项） | ~6,100 | 🟡 | send/wait/resume/interrupt mailbox 已落地；code_mode execute/wait/delegate Session 体仍 throw |
+| `agent/`（mod/api/types/status/registry/role/child_config/control + `control/*` 18 文件） | ~5,700 | 🟡 runtime | registry/mailbox 已落地；history fork + 子 Session 仍要补 |
+| `agent_communication.rs` / `agent_message_board.rs` | 268 | 🟡 runtime | |
+| `session/multi_agents.rs` + `tools/handlers/multi_agents*` | ~4,000 | 🟡 runtime | spawn/wait 工具面；接到 Live Execute |
+| `plugins/`（6 文件） | 548 | ❄️ frozen | Codex plugin 市场 |
+| `apps/mod.rs` / `apps/render.rs` | 68 | ❄️ frozen | Codex Apps |
+| `connectors.rs` | 555 | ❄️ frozen | Codex connectors |
+| `environment_selection.rs` | 2,311 | ❄️ frozen | exec-server / remote env |
+| `cyber_access_program.rs` | 12 | ❄️ frozen | |
+| `tools/code_mode/*` | ~2,000 | ❄️ frozen | Codex JS cell |
+| `request_plugin_install*` / `list_available_plugins*` / `wait_for_environment` | ~1,100 | ❄️ frozen | |
 
 ### Phase 10 — 暂缓/收尾（core 内）
 
@@ -697,10 +800,10 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 | `shell-command` | `parse_command.rs`(2,766) `command_safety/windows_dangerous_commands.rs`(771) `shell_snapshot_literals.rs`(715) `bash.rs`(565) `shell_detect.rs`(495) `command_safety/powershell_tree_sitter.rs`(482) `shell_snapshot_capture.rs`(408) `command_safety/powershell_parser.rs`(373) `shell_snapshot_credentials.rs`(342) `command_safety/is_dangerous_command.rs`(323) `powershell.rs`(291) `shell_snapshot.rs`(112) `shell_snapshot_render.rs`(106) `shell_snapshot_exports.rs`(81) `startup.rs`(30) `lib.rs`(14) | 3 | bash/sh/通用部分忠实；powershell/windows 适配标注 |
 | `execpolicy` | `parser.rs`(473) `policy.rs`(412) `amend.rs`(337) `rule.rs`(306) `sandbox_migration.rs`(123) `error.rs`(101) `execpolicycheck.rs`(95) `lib.rs`(33) `executable_name.rs`(29) `decision.rs`(27) | 3 | 风险项 §10.1 |
 | `model-provider-info` | `lib.rs`(767) `gateway_oauth.rs`(157) | 6 | 忠实 |
-| `codex-api` | `sse/responses.rs`(2,124) 等 SSE/responses 子集 ~4,000；realtime/websocket 部分 | 6/10 | 子集忠实；realtime 💤 |
-| `rollout` | `recorder.rs`(2,249) `list.rs`(1,703) `compression.rs`(1,403) `state_db.rs`(744) 等 22 文件 | 7 | JSONL 忠实；SQLite 索引适配 GRDB |
-| `state` | `runtime/memories.rs`(5,468) `runtime/threads.rs`(3,637) `runtime/logs.rs`(1,915) `runtime/goals.rs`(1,728) `model/thread_metadata.rs`(894) 等 36 文件 | 7 | 语义对齐，存储适配 GRDB（§10.5） |
-| `thread-store` | `local/update_thread_metadata.rs`(2,431) `local/mod.rs`(2,137) `local/read_thread.rs`(1,641) `local/rollout_migration.rs`(1,386) `in_memory.rs`(1,204) `types.rs`(1,127) 等 50 文件 | 7 | 语义对齐，适配 |
+| `codex-api` | `sse/responses.rs`(2,124) 等 SSE/responses 子集 ~4,000；realtime/websocket 部分 | 6/10 | Swift 目录 `sage-api/`、模块 `SageAPI`（R2a）；子集忠实；realtime 💤 |
+| `rollout` | `recorder.rs`(2,249) `list.rs`(1,703) `compression.rs`(1,403) `state_db.rs`(744) 等 22 文件 | 7 | JSONL **runtime**；SQLite 索引不必灌 GRDB |
+| `state` | `runtime/memories.rs`(5,468) `runtime/threads.rs`(3,637) 等 36 文件 | 7 | **frozen**（§10.5） |
+| `thread-store` | `local/update_thread_metadata.rs`(2,431) 等 50 文件 | 7 | **frozen**；仅内存工厂给子 agent 用 |
 | `hooks` | `engine/discovery.rs`(1,741) `schema.rs`(1,254) `events/pre_tool_use.rs`(820) `events/stop.rs`(723) `engine/dispatcher.rs`(656) `events/post_tool_use.rs`(637) 等 28 文件 | 8 | 忠实 |
 | `skills` | `mentions.rs`(232) `parser.rs`(225) `lib.rs`(214) `selection.rs`(205) `interface.rs`(201) `invocation.rs`(160) `loading.rs`(119) `model.rs`(112) | 8 | 忠实 |
 | `agent-roles` | `loader.rs`(335) `agent_role_config.rs`(209) `discovery.rs`(40) | 8 | 忠实 |
@@ -709,7 +812,7 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
 
 ## 附录 C：与 Sage 现有文档的关系
 
-- `DEVELOPMENT_ROADMAP.md`：产品路线图；本计划是 Execute 层的工程对齐计划，Phase 完成度可回填到路线图的 Execute 条目。
-- `Sage/Tools/TOOL_DESIGN.md`：Sage 工具设计标准；当 codex handler 与 Sage 工具规范冲突时，以 harness 对齐为准、Sage 规范约束适配层输出格式。
+- `DEVELOPMENT_ROADMAP.md`：产品路线图。本计划只覆盖 agent runtime；Plan/Review/HUD/Schedules 仍以路线图为准。
+- `Sage/Tools/TOOL_DESIGN.md`：Sage 自有 Mac 工具的规范。Runtime 工具（spawn_agent、apply_patch、shell）跟 harness；Sage 工具跟本规范。
 - `Harness/Package.swift` 头部注释：模块划分理由，随 §4.1 演进同步更新。
 - `Harness/PORTING.md`（Phase 0 新建）：逐文件追踪表，本计划附录 A/B 为其初始基线。

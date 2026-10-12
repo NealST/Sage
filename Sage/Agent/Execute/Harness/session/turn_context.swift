@@ -11,11 +11,12 @@
 //  root turn ids, service tier) are captured when the turn is admitted.
 //  `dynamicTools` is copied from the session configuration at admission.
 //  `TurnEnvironment` carries workspace roots and temporary directories
-//  for `request_permissions`. Shell snapshot futures and plugin metrics wait.
+//  for `request_permissions`, plus a resolved shell snapshot path.
+//  Snapshot capture futures and plugin metrics wait.
 //
 
-import CodexCore
-import CodexProtocol
+import SageCore
+import SageProtocol
 import Foundation
 
 struct TurnEnvironment: Sendable {
@@ -28,6 +29,8 @@ struct TurnEnvironment: Sendable {
     var workspaceRoots: [String]
     /// `nil` means the executor did not report temporary directories.
     var temporaryDirectories: [String]?
+    /// Peeked non-brokered snapshot file. `nil` means this environment has none.
+    var shellSnapshotPath: String?
 
     init(
         environmentId: String = "local",
@@ -35,7 +38,8 @@ struct TurnEnvironment: Sendable {
         userHomeDir: String? = NSHomeDirectory(),
         executorPlatformOS: String? = "macos",
         workspaceRoots: [String] = [],
-        temporaryDirectories: [String]? = nil
+        temporaryDirectories: [String]? = nil,
+        shellSnapshotPath: String? = nil
     ) {
         self.environmentId = environmentId
         self.cwd = cwd
@@ -43,6 +47,7 @@ struct TurnEnvironment: Sendable {
         self.executorPlatformOS = executorPlatformOS
         self.workspaceRoots = workspaceRoots
         self.temporaryDirectories = temporaryDirectories
+        self.shellSnapshotPath = shellSnapshotPath
     }
 }
 
@@ -75,17 +80,17 @@ final class TurnContext: @unchecked Sendable {
     var autoCompactTokenLimitValue: Int64?
     var sessionSource: SessionSource
     var config: Config
-    var approvalPolicy: CodexProtocol.AskForApproval
+    var approvalPolicy: SageProtocol.AskForApproval
     var sandboxPolicy: SandboxPolicy
     var permissionProfile: PermissionProfile
     var disabledPluginIds: [String]
     var collaborationMode: CollaborationMode?
     var environment: TurnEnvironment
-    var finalOutputJsonSchema: CodexProtocol.JSONValue?
+    var finalOutputJsonSchema: SageProtocol.JSONValue?
     var cyberAccessProgram: CyberAccessProgram?
     var realtimeActive: Bool
     var nextStepSettings: StepSettings
-    var terminalError: CodexErr?
+    var terminalError: SageErr?
     var turnTrigger: String?
     var parentTurnId: String?
     var rootTurnId: String?
@@ -108,17 +113,17 @@ final class TurnContext: @unchecked Sendable {
         autoCompactTokenLimitValue: Int64? = nil,
         sessionSource: SessionSource = .cli,
         config: Config = Config(),
-        approvalPolicy: CodexProtocol.AskForApproval = CodexProtocol.AskForApproval.onRequest,
+        approvalPolicy: SageProtocol.AskForApproval = SageProtocol.AskForApproval.onRequest,
         sandboxPolicy: SandboxPolicy = .readOnly(networkAccess: false),
         permissionProfile: PermissionProfile = .readOnly(),
         disabledPluginIds: [String] = [],
         collaborationMode: CollaborationMode? = nil,
         environment: TurnEnvironment = TurnEnvironment(),
-        finalOutputJsonSchema: CodexProtocol.JSONValue? = nil,
+        finalOutputJsonSchema: SageProtocol.JSONValue? = nil,
         cyberAccessProgram: CyberAccessProgram? = nil,
         realtimeActive: Bool = false,
         nextStepSettings: StepSettings = StepSettings(),
-        terminalError: CodexErr? = nil,
+        terminalError: SageErr? = nil,
         turnTrigger: String? = nil,
         parentTurnId: String? = nil,
         rootTurnId: String? = nil,

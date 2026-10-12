@@ -1,6 +1,6 @@
 //
 //  pty.swift
-//  CodexUtils
+//  SageUtils
 //
 //  Port of codex-rs/utils/pty/src/pty.rs (Apache-2.0).
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
@@ -36,7 +36,7 @@ public func spawnPtyProcess(
     inheritedFds: ChildFds
 ) async throws -> SpawnedProcess {
     if program.isEmpty {
-        throw NSError(domain: "CodexUtils.PTY", code: 2, userInfo: [
+        throw NSError(domain: "SageUtils.PTY", code: 2, userInfo: [
             NSLocalizedDescriptionKey: "missing program for PTY spawn"
         ])
     }
@@ -223,21 +223,44 @@ private func sysExecve(
     _ envp: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
 ) -> Int32
 
+func reapChild(_ pid: pid_t) -> Int32 {
+    var status: Int32 = 0
+    while true {
+        let result = waitpid(pid, &status, 0)
+        if result == pid {
+            return exitCodeFromWaitStatus(status)
+        }
+        if errno != EINTR {
+            return -1
+        }
+    }
+}
+
 func makeSpawnedHandle(
     pid: pid_t,
     masterFd: Int32?,
     writer: @escaping (Data) -> Void,
     stdout: AsyncStream<Data>,
-    closeWriter: @escaping () -> Void
+    closeWriter: @escaping () -> Void,
+    exitTask: Task<Int32, Never>? = nil
 ) -> (Task<Int32, Never>, ProcessHandle) {
     let exitBox = ExitBox()
-    let waitTask = Task<Int32, Never> {
-        var status: Int32 = 0
-        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
-        let code = exitCodeFromWaitStatus(status)
+    let waitTask = exitTask ?? Task<Int32, Never> {
+        let code = await withCheckedContinuation { (continuation: CheckedContinuation<Int32, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: reapChild(pid))
+            }
+        }
         exitBox.store(code)
         closeWriter()
         return code
+    }
+    if exitTask != nil {
+        Task {
+            let code = await waitTask.value
+            exitBox.store(code)
+            closeWriter()
+        }
     }
     let handle = ProcessHandle(
         writer: writer,
