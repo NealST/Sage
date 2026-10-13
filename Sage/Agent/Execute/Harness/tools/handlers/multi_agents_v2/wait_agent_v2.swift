@@ -7,9 +7,11 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, mailbox activity, and steer waits are live
-//  when LocalAgentControl is attached. Session InputQueue and
-//  AgentDeliveryState are raced; pending steer wins over mailbox.
+//  Spec (through `WaitAgentTimeoutOptions`), argument parsing, mailbox
+//  activity, and steer waits are live when LocalAgentControl is
+//  attached. Timeout bounds come from the turn's multi-agent v2 config
+//  on the invocation (`nil` means upstream defaults). Session InputQueue
+//  and AgentDeliveryState are raced; pending steer wins over mailbox.
 //  Turn items record on the caller SageThread when a ThreadManager
 //  is present.
 //
@@ -139,13 +141,25 @@ func waitForV2Activity(
 }
 
 struct WaitAgentV2Handler: CoreToolRuntime {
+    let options: WaitAgentTimeoutOptions
+
+    init(options: WaitAgentTimeoutOptions = WaitAgentTimeoutOptions()) {
+        self.options = options
+    }
+
     func toolName() -> ToolName { ToolName(plain: "wait_agent") }
-    func spec() -> ToolSpec { createWaitAgentToolV2() }
+    func spec() -> ToolSpec { createWaitAgentToolV2(options) }
 
     func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
         let arguments = try functionArguments(invocation.payload)
         let args: WaitAgentV2Args = try parseArguments(arguments)
-        let timeoutMs = try resolveWaitAgentV2TimeoutMs(requestedTimeoutMs: args.timeoutMs)
+        let config = invocation.multiAgentV2Config ?? MultiAgentV2Config()
+        let timeoutMs = try resolveWaitAgentV2TimeoutMs(
+            requestedTimeoutMs: args.timeoutMs,
+            minTimeoutMs: config.minWaitTimeoutMs,
+            maxTimeoutMs: config.maxWaitTimeoutMs,
+            defaultTimeoutMs: config.defaultWaitTimeoutMs
+        )
         let control = try requireLocalAgentControl(invocation)
         let caller = try requireCallerThreadId(invocation)
         try? await control.emitTurnItemStarted(

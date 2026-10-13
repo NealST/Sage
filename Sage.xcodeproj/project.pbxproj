@@ -1177,9 +1177,6 @@
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
 			productName = SageModelProviderInfo;
 		};
-			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
-		};
 		A10PROTOPROD000000000001 /* SageProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;

@@ -1076,7 +1076,8 @@ private final class ExecuteChildToolRunner: TurnToolRunner, @unchecked Sendable 
     ) async throws -> String {
         _ = turnId
         if cancellation.isCancelled { throw CancellationError() }
-        guard let invoke = task?.invokeHarnessTool else {
+        let invoke = await task?.invokeHarnessTool
+        guard let invoke else {
             throw SageErr.unsupportedOperation("child tool invoke is not attached")
         }
         return try await invoke(

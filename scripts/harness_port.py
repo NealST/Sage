@@ -38,6 +38,7 @@ STATUS_LABEL = {
     "not-started": "⬜ 未开始",
     "excluded": "⛔ excluded",
     "deferred": "💤 deferred",
+    "frozen": "❄️ frozen",
 }
 
 # ---------------------------------------------------------------------------
@@ -128,56 +129,98 @@ CORE_P9 = {
 }
 CORE_P10 = {"otel_init.rs", "lib.rs", "test_support.rs"}
 
+# 计划 §2.4 / §7 Phase 9 / PORTING.md 范围块（2026-10-12）的 frozen 清单：
+# Codex 产品层，不再补齐。仅对未建/已删文件生效；保留文件以文件头为准。
+CORE_FROZEN_PREFIXES = (
+    "tools/code_mode/",
+    "plugins/",
+    "apps/",
+    "tools/handlers/request_plugin_install",
+    "tools/handlers/list_available_plugins",
+)
+CORE_FROZEN = {
+    "connectors.rs": "Codex connectors 产品（§2.4）",
+    "environment_selection.rs": "Codex remote/exec-server 环境（§2.4）",
+    "cyber_access_program.rs": "Codex 产品（§2.4）",
+    "tools/handlers/wait_for_environment.rs": "Codex remote 环境（§7 Phase 9 frozen）",
+    # plugin 市场 / apps / 环境的提示片段（随 2026-10-12 产品层清理删除）
+    "context/apps_instructions.rs": "apps 产品提示片段（§2.4）",
+    "context/available_plugins_instructions.rs": "plugin 市场提示片段（§2.4）",
+    "context/environments_instructions.rs": "exec-server 环境提示片段（§2.4）",
+    "context/plugin_instructions.rs": "plugin 市场提示片段（§2.4）",
+    "context/recommended_plugins_instructions.rs": "plugin 市场提示片段（§2.4）",
+    "context/world_state/apps_instructions.rs": "apps 产品提示片段（§2.4）",
+    "context/world_state/environments_instructions.rs": "exec-server 环境提示片段（§2.4）",
+    "context/world_state/plugins_instructions.rs": "plugin 市场提示片段（§2.4）",
+    "session/code_mode_warning.rs": "code mode 产品提示（§2.4）",
+    "session/plugin_selection.rs": "plugin 市场产品（§2.4）",
+    # Codex 遥测与账号（§2.4）
+    "installation_id.rs": "Codex 遥测与账号（§2.4）",
+    "attestation.rs": "Codex 遥测与账号（§2.4）",
+    "feedback_config.rs": "Codex 遥测与账号（§2.4）",
+    # ChatGPT 后端文件上传（§5.3.2 不保留 ChatGPT 外网协议；2026-10-12 已删）
+    "mcp_openai_file.rs": "ChatGPT 后端文件上传，Sage 自有服务不保留（§5.3.2）",
+}
 
-def core_classify(rel: str) -> tuple[int | None, str]:
-    """返回 (phase, note)；phase=None 表示不计入范围。"""
+
+def core_frozen_note(rel: str) -> str:
+    return CORE_FROZEN.get(rel) or "Codex 产品层，不再补齐（计划 §2.4 / §7）"
+
+
+def is_core_frozen(rel: str) -> bool:
+    return rel in CORE_FROZEN or rel.startswith(CORE_FROZEN_PREFIXES)
+
+
+def core_classify(rel: str) -> tuple[int | None, str, str | None]:
+    """返回 (phase, note, forced)；phase=None 表示不计入范围。"""
     name = rel.rsplit("/", 1)[-1]
     if rel in CORE_EXCLUDED:
-        return (None, CORE_EXCLUDED[rel])
+        return (None, CORE_EXCLUDED[rel], None)
     if rel in CORE_TEST_ONLY:
-        return (None, "test-only")
+        return (None, "test-only", None)
     # Phase 10 deferred：语音 realtime
-    if name.startswith("realtime_") or rel.startswith("realtime_conversation/") \
+    if name.startswith("realtime_") or name == "realtime.rs" \
+            or rel.startswith("realtime_conversation/") \
             or rel.startswith("realtime_history/") or rel == "session/realtime_history.rs":
-        return (10, "deferred: 语音 realtime，Sage 无此形态")
+        return (10, "语音 realtime，Sage 无此形态", "deferred")
     if rel in CORE_P10:
-        return (10, "")
+        return (10, "", None)
     # Phase 9 需在 4/5 之前判断（子目录优先）
     if rel.startswith("agent/") or rel in CORE_P9:
-        return (9, "")
+        return (9, "", None)
     if rel.startswith("tools/code_mode/") or rel.startswith("plugins/") or rel.startswith("apps/"):
-        return (9, "")
+        return (9, "", None)
     if "multi_agents" in rel or rel == "session/multi_agents.rs":
-        return (9, "")
+        return (9, "", None)
     if rel.startswith("tools/handlers/request_plugin_install") \
             or rel.startswith("tools/handlers/list_available_plugins") \
             or rel == "tools/handlers/wait_for_environment.rs":
-        return (9, "")
+        return (9, "", None)
     # Phase 3
     if rel in CORE_P3 or rel.startswith("unified_exec/") or rel.startswith("exec_policy/") \
             or rel == "sandboxing/mod.rs":
-        return (3, "")
+        return (3, "", None)
     # Phase 4
     if rel.startswith("tools/") or rel in ("function_tool.rs", "network_policy_decision.rs"):
-        return (4, "")
+        return (4, "", None)
     # Phase 8
     if rel.startswith("guardian/") or rel in CORE_P8:
-        return (8, "")
+        return (8, "", None)
     # Phase 7
     if rel in CORE_P7 or rel.startswith("thread_manager/"):
-        return (7, "")
+        return (7, "", None)
     # Phase 6
     if rel in CORE_P6:
-        return (6, "")
+        return (6, "", None)
     # Phase 1：core 自带小工具
     if rel == "util.rs" or rel.startswith("utils/"):
-        return (1, "")
+        return (1, "", None)
     # Phase 5
     if rel in CORE_P5_ROOT or rel.startswith("mcp_tool_call/"):
-        return (5, "")
+        return (5, "", None)
     if rel.startswith(("state/", "session/", "tasks/", "context/", "context_manager/", "config/")):
-        return (5, "")
-    return (5, "unclassified at generate time; assign phase")
+        return (5, "", None)
+    return (5, "unclassified at generate time; assign phase", None)
 
 
 # crate 内文件级规则：rel → (status, note)
@@ -221,12 +264,24 @@ CRATE_FILE_RULES: dict[str, dict[str, tuple[str | None, str]]] = {
         "standalone_executable.rs": ("not-started", "适配项：Sage 进程内调用，无独立可执行"),
         "main.rs": ("excluded", "独立可执行入口，Sage 不需要"),
     },
+    "hooks": {
+        "bin/write_hooks_schema_fixtures.rs": ("excluded", "测试 fixture 生成 CLI，Sage 不需要"),
+    },
+    "model-provider-info": {
+        "gateway_oauth.rs": ("frozen", "gateway OAuth（§2.4）；Sage 用 Keychain API Key"),
+    },
 }
 
 
 # crate 级默认规则（文件级规则未命中时生效）：crate → (status, note)
+# frozen 仅对未建/已删文件生效；保留文件（协议类型、内存会话工厂）以文件头为准。
 CRATE_DEFAULT_RULES: dict[str, tuple[str, str]] = {
     "network-proxy": ("excluded", "适配: 本地代理进程不移植，仅移植策略类型层（plan §2.3 补记）"),
+    "state": ("frozen", "Codex thread 产品（§10.5）；Sage 用 AgentTaskStore"),
+    "thread-store": ("frozen", "Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂"),
+    "otel": ("frozen", "完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2）"),
+    "terminal-detection": ("frozen", "TUI 终端探测，Sage 无此形态（§2.2 裁剪）"),
+    "utils/plugins": ("frozen", "Codex plugin 市场工具层（§2.4）"),
 }
 
 
@@ -252,7 +307,7 @@ class Row:
     lines: int
     phase: int | None   # None = 不计入（平台排除/测试）
     swift: str          # 相对 Harness/ 的路径；无对应物时 "-"
-    status: str         # faithful/adapted/partial/stub/not-started/excluded/deferred
+    status: str         # faithful/adapted/partial/stub/not-started/excluded/deferred/frozen
     note: str = ""
 
 
@@ -274,6 +329,16 @@ SAGE_FILE_RENAMES = {
     "core/src/codex_thread.rs": "sage_thread.swift",
     "core/src/codex_delegate.rs": "sage_delegate.swift",
     "protocol/src/codex_error_info.rs": "protocol/src/sage_error_info.swift",
+    # 计划 §5.1 R4a 先到先得：v1/v2 spawn/wait 基名冲突，既有文件用
+    # _agent / _agent_v2 后缀保留原名（2026-10 之前已在仓库中）。
+    "core/src/tools/handlers/multi_agents/spawn.rs":
+        "tools/handlers/multi_agents/spawn_agent.swift",
+    "core/src/tools/handlers/multi_agents/wait.rs":
+        "tools/handlers/multi_agents/wait_agent.swift",
+    "core/src/tools/handlers/multi_agents_v2/spawn.rs":
+        "tools/handlers/multi_agents_v2/spawn_agent_v2.swift",
+    "core/src/tools/handlers/multi_agents_v2/wait.rs":
+        "tools/handlers/multi_agents_v2/wait_agent_v2.swift",
 }
 
 
@@ -353,7 +418,7 @@ def resolve_collisions(entries: list[tuple[str, int | None, str, str | None]],
     existing = existing or {}
     base: dict[str, str] = {}
     for codex_rel, phase, _note, forced in entries:
-        if phase is None or forced in ("excluded", "deferred"):
+        if phase is None or forced in ("excluded", "deferred", "frozen"):
             continue
         base[codex_rel] = swift_path_for(codex_rel)
 
@@ -417,7 +482,7 @@ def scan_swift_headers() -> dict[str, dict[str, str]]:
     out: dict[str, dict[str, str]] = {}
     for f in sorted(HARNESS.rglob("*.swift")):
         rel = f.relative_to(HARNESS).as_posix()
-        if rel == "Package.swift":
+        if rel == "Package.swift" or ".build" in f.relative_to(HARNESS).parts:
             continue
         head = "\n".join(f.read_text().splitlines()[:24])
         info = {
@@ -447,8 +512,11 @@ def collect_entries() -> list[tuple[str, int | None, str, str | None]]:
         if is_test_file(f.relative_to(CODEX / "core" / "src")):
             continue
         rel = f.relative_to(CODEX / "core" / "src").as_posix()
-        phase, note = core_classify(rel)
-        entries.append((f"core/src/{rel}", phase, note, None))
+        phase, note, core_forced = core_classify(rel)
+        forced = "frozen" if is_core_frozen(rel) else core_forced
+        if forced == "frozen" and not note:
+            note = core_frozen_note(rel)
+        entries.append((f"core/src/{rel}", phase, note, forced))
     # crates
     for crate, phase in sorted(CRATES.items()):
         src = CODEX / crate / "src"
@@ -485,8 +553,12 @@ def build_rows() -> list[Row]:
             sp = "-"
             if phase is None and not forced:
                 status = "excluded"
-        if forced == "deferred":
-            status = "deferred"
+            # frozen/deferred 只对未建文件生效；保留的文件（协议类型、内存会话工厂等）
+            # 以文件头状态为准（计划 §2.4「协议类型可留以免编译散架」）。
+            if forced == "deferred":
+                status = "deferred"
+            if forced == "frozen":
+                status = "frozen"
         if phase is None:
             status = "excluded"
         rows.append(Row(codex=codex_rel, lines=count_lines(CODEX / codex_rel),
@@ -579,14 +651,21 @@ def generate() -> None:
     lines.append(f"> 由 `scripts/harness_port.py generate` 生成（{rev[:8]} 基线）。")
     lines.append("> 状态随 PR 手工更新；`check` 模式校验文件头与本表一致。")
     lines.append("> 重新生成会保留手工备注；已移植行的状态以 Swift 文件头为准。")
+    lines.append(">")
+    lines.append("> **范围（2026-10-12）**：验收看 agent runtime 行为，不要求范围内每个文件 faithful。分类见 `EXECUTE_HARNESS_PORT_PLAN.md` §2。")
+    lines.append("> - **runtime**：回合 / 工具 / 沙盒 / 压缩 / 审批 / MCP 机制 / SSE / rollout 回放 / **多 agent spawn·mailbox·wait**")
+    lines.append("> - **host**：Sage Settings / GRDB task / HUD / Skill catalog / Mac 工具")
+    lines.append("> - **frozen**：`state`/`thread-store` 产品、plugin 市场、code mode、exec-server、ChatGPT auth、OTEL 全套。文件可留，不再补齐。")
+    lines.append(">")
+    lines.append("> **命名（计划 §5.3）**：Swift 模块/类型/变量/env/路径含 `codex` 的改成 `sage`。左列仍是上游 `codex-rs` 路径。例外：`codex-api/` → `sage-api/`，`codex_thread.rs` → `sage_thread.swift`，`codex_delegate.rs` → `sage_delegate.swift`，`codex_error_info.rs` → `sage_error_info.swift`。文件头 `Port of codex-rs/…` 保留。")
     lines.append("")
-    lines.append("状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred")
+    lines.append("状态图例：✅ faithful ｜ 🟡 adapted / partial ｜ 🟥 stub ｜ ⬜ 未开始 ｜ ⛔ excluded(platform/test) ｜ 💤 deferred ｜ ❄️ frozen（产品层，不再加深）")
     lines.append("")
 
     # 汇总
     lines.append("## 进度汇总")
     lines.append("")
-    lines.append("| Phase | 文件数 | ✅ | 🟡 | 🟥 | ⬜ | ⛔/💤 |")
+    lines.append("| Phase | 文件数 | ✅ | 🟡 | 🟥 | ⬜ | ⛔/💤/❄️ |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|")
     for phase in sorted(p for p in by_phase if p is not None):
         rs = [r for r in by_phase[phase] if r.status != "sage-addition"]
@@ -595,7 +674,7 @@ def generate() -> None:
         ad = sum(1 for r in rs if r.status in ("adapted", "partial"))
         st = sum(1 for r in rs if r.status == "stub")
         ns = sum(1 for r in rs if r.status == "not-started")
-        ex = sum(1 for r in rs if r.status in ("excluded", "deferred"))
+        ex = sum(1 for r in rs if r.status in ("excluded", "deferred", "frozen"))
         lines.append(f"| Phase {phase} | {n} | {fa} | {ad} | {st} | {ns} | {ex} |")
     lines.append("")
 
@@ -719,7 +798,8 @@ def stats() -> None:
     stub = sum(1 for r in rows if r.status == "stub")
     print(f"范围内文件 {total}：已移植 {done}（{done * 100 // max(total, 1)}%），stub {stub}，"
           f"未开始 {sum(1 for r in rows if r.status == 'not-started')}，"
-          f"excluded/deferred {sum(1 for r in rows if r.status in ('excluded', 'deferred'))}")
+          f"excluded/deferred {sum(1 for r in rows if r.status in ('excluded', 'deferred'))}，"
+          f"frozen {sum(1 for r in rows if r.status == 'frozen')}")
     for phase in sorted({r.phase for r in rows if r.phase is not None}):
         rs = [r for r in rows if r.phase == phase]
         d = sum(1 for r in rs if r.status in ("faithful", "adapted", "partial"))

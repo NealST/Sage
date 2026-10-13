@@ -46,7 +46,6 @@ struct ToolRouterPlanOptions: Equatable, Sendable {
     var includeExecCommand = false
     var includeWriteStdin = false
     var includeMcpResources = false
-    var includeWaitForEnvironment = false
     var includeCollaborationTools = false
     var toolMode: ToolMode = .direct
 }
@@ -107,7 +106,6 @@ func planCoreToolOptions(_ input: CoreToolPlanInput) -> ToolRouterPlanOptions {
     options.includeExecCommand = shellAllowed
     options.includeWriteStdin = shellAllowed && features.enabled(.unifiedExec)
     options.includeMcpResources = input.hasMcpServers
-    options.includeWaitForEnvironment = features.enabled(.deferredExecutor)
     return options
 }
 
@@ -143,7 +141,6 @@ func finalizeToolRouter(_ options: ToolRouterPlanOptions = ToolRouterPlanOptions
         add(ListMcpResourceTemplatesHandler())
         add(ReadMcpResourceHandler())
     }
-    if options.includeWaitForEnvironment { add(WaitForEnvironmentHandler()) }
     if options.includeCollaborationTools {
         add(SpawnAgentHandler())
         add(WaitAgentHandler())

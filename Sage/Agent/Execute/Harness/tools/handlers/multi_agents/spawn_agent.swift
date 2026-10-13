@@ -7,11 +7,16 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, registry spawn, fork_context, and
-//  turn-item recording on the caller SageThread are live. Child thread
-//  create submits the initial user input through ThreadSession.
-//  Analytics stay deferred. R4a: basename `spawn.swift` belongs to
-//  core/src/spawn.rs.
+//  Spec (through `SpawnAgentToolOptions`), argument parsing, registry
+//  spawn, fork_context, and turn-item recording on the caller SageThread
+//  are live. Child thread create submits the initial user input through
+//  ThreadSession and carries the parent/root turn linkage and cyber
+//  program from the invocation. `prepare_agent_spawn_config` (model /
+//  reasoning overrides, role-resolved child config) waits on Session /
+//  Config, as does the reasoning-effort fallback from the config
+//  snapshot. Environments stay unset with the frozen environment layer
+//  (§2.4). Analytics stay deferred. R4a: basename `spawn.swift` belongs
+//  to core/src/spawn.rs.
 //
 
 import SageCore
@@ -64,8 +69,14 @@ struct SpawnAgentResult: Encodable, Equatable, Sendable, ToolOutput {
 }
 
 struct SpawnAgentHandler: CoreToolRuntime {
+    let options: SpawnAgentToolOptions
+
+    init(options: SpawnAgentToolOptions = SpawnAgentToolOptions()) {
+        self.options = options
+    }
+
     func toolName() -> ToolName { ToolName(namespaced: MULTI_AGENT_V1_NAMESPACE, name: "spawn_agent") }
-    func spec() -> ToolSpec { createSpawnAgentToolV1(SpawnAgentToolOptions()) }
+    func spec() -> ToolSpec { createSpawnAgentToolV1(options) }
     func searchInfo() -> ToolSearchInfo? {
         multiAgentToolSearchInfo(
             searchText:
@@ -122,7 +133,11 @@ struct SpawnAgentHandler: CoreToolRuntime {
                     options: SpawnAgentOptions(
                         forkParentSpawnCallId: args.forkContext ? invocation.callId : nil,
                         forkMode: args.forkContext ? .fullHistory : nil,
-                        parentThreadId: caller
+                        parentThreadId: caller,
+                        parentTurnId: invocation.turnId,
+                        turnTrigger: invocation.turnTrigger,
+                        rootTurnId: invocation.rootTurnId,
+                        cyberAccessProgram: invocation.cyberAccessProgram
                     )
                 )
             )

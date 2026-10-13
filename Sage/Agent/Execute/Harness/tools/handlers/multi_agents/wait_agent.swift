@@ -7,9 +7,15 @@
 //  Upstream revision: 0a2eb4696c26ac33204bcd255721ab30220a4774
 //  Port status: adapted
 //
-//  Spec, argument parsing, and subscribeStatus wait are live when
-//  LocalAgentControl is attached. Turn items record on the caller
-//  SageThread when a ThreadManager is present.
+//  Spec (through `WaitAgentTimeoutOptions`), argument parsing, and the
+//  subscribeStatus wait are live when LocalAgentControl is attached. The
+//  initial subscription loop runs per target like rust `wait_agent`:
+//  already-final targets return immediately, a missing thread maps to
+//  `notFound`, and a failed subscription reports that target's id.
+//  Timeout validation keeps the shared constants (rust v1 does the same;
+//  configured timeouts only shape the spec, which waits on Session /
+//  Config wiring). Turn items record on the caller SageThread when a
+//  ThreadManager is present.
 //
 
 import SageCore
@@ -53,8 +59,14 @@ struct WaitAgentResult: Encodable, Equatable, Sendable, ToolOutput {
 }
 
 struct WaitAgentHandler: CoreToolRuntime {
+    let options: WaitAgentTimeoutOptions
+
+    init(options: WaitAgentTimeoutOptions = WaitAgentTimeoutOptions()) {
+        self.options = options
+    }
+
     func toolName() -> ToolName { ToolName(namespaced: MULTI_AGENT_V1_NAMESPACE, name: "wait_agent") }
-    func spec() -> ToolSpec { createWaitAgentToolV1() }
+    func spec() -> ToolSpec { createWaitAgentToolV1(options) }
     func searchInfo() -> ToolSearchInfo? {
         multiAgentToolSearchInfo(
             searchText: "wait_agent wait agent subagent status final result complete timeout targets",
@@ -100,33 +112,52 @@ struct WaitAgentHandler: CoreToolRuntime {
             )
         )
 
+        var initialFinalStatuses: [(ThreadId, AgentStatus)] = []
+        for threadId in targets {
+            do {
+                let updates = try await control.subscribeStatus(agentId: threadId)
+                var iterator = updates.makeAsyncIterator()
+                guard let initial = await iterator.next() else {
+                    throw SageErr.internalAgentDied
+                }
+                let status = initial.status() ?? .notFound
+                if isFinal(status) {
+                    initialFinalStatuses.append((threadId, status))
+                }
+            } catch let err as SageErr {
+                if case .threadNotFound = err.detailsValue() {
+                    initialFinalStatuses.append((threadId, .notFound))
+                    continue
+                }
+                var failed: [ThreadId: AgentStatus] = [:]
+                failed[threadId] = await control.getStatus(threadId)
+                try? await control.emitTurnItemCompleted(
+                    threadId: caller,
+                    turnId: invocation.turnId,
+                    item: .collabAgentToolCall(
+                        CollabAgentToolCallItem(
+                            id: invocation.callId,
+                            tool: .wait,
+                            status: waitToolCallStatus(failed),
+                            senderThreadId: caller,
+                            receiverThreadIds: Array(failed.keys),
+                            receiverAgents: waitReceiverAgents(failed, receiverAgents: receiverAgents),
+                            agentsStates: failed
+                        )
+                    )
+                )
+                throw collabAgentError(agentId: threadId, err: err)
+            }
+        }
+
         let statuses: [(ThreadId, AgentStatus)]
-        do {
-            statuses = try await control.waitForFinalStatuses(
+        if !initialFinalStatuses.isEmpty {
+            statuses = initialFinalStatuses
+        } else {
+            statuses = try await control.raceFinalStatuses(
                 threadIds: targets,
                 timeout: .milliseconds(timeoutMs)
             )
-        } catch let err as SageErr {
-            var failed: [ThreadId: AgentStatus] = [:]
-            if let threadId = targets.first {
-                failed[threadId] = await control.getStatus(threadId)
-            }
-            try? await control.emitTurnItemCompleted(
-                threadId: caller,
-                turnId: invocation.turnId,
-                item: .collabAgentToolCall(
-                    CollabAgentToolCallItem(
-                        id: invocation.callId,
-                        tool: .wait,
-                        status: waitToolCallStatus(failed),
-                        senderThreadId: caller,
-                        receiverThreadIds: Array(failed.keys),
-                        receiverAgents: waitReceiverAgents(failed, receiverAgents: receiverAgents),
-                        agentsStates: failed
-                    )
-                )
-            )
-            throw collabAgentError(agentId: targets.first ?? caller, err: err)
         }
 
         let timedOut = statuses.isEmpty

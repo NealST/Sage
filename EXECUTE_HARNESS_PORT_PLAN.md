@@ -4,7 +4,7 @@
 >
 > **上游基线**：`codex-rs` @ `0a2eb4696c26ac33204bcd255721ab30220a4774`（本工作区 `codex/` 仓库当前 HEAD，与现有移植文件头部一致）。
 >
-> **现状一句话**：范围内 830 个文件已有 Swift 对应 741 个（89%，`scripts/harness_port.py stats`，2026-10-12）。文件覆盖不是行为对齐。单代理回合已接通；Codex 产品层已删/冻结；SPM 模块、标识符与 Sage 自有线上协议已按 §5.3 换成 Sage 名。Phase 9：Live Execute 已挂 `ThreadManager`（父线程 adopt、不双采样）；spawn 开子 `SageThread`/`runTurn`；wait 订阅子线程完成状态；interrupt 经 `sendOp` 打到 `ThreadSession`。粘合层双轨：Live Execute 一律走 `runTurn`；`ToolInvocationPipeline` 已删，validate/timeout/dispatch 只在 `ToolOrchestrator`。Explore 仍走只读 `ExploreSubagentRunner`。
+> **现状一句话**：范围内 830 个文件：已移植 608（73%），未开始 1（仅 `otel_init.rs`，按 §7 Phase 10 裁剪移植），excluded/deferred 86，**frozen 135**（`state`/`thread-store` 已删产品文件、plugin 市场、code mode、ChatGPT auth、OTEL 全套等 Codex 产品层，已从「未开始」拆出为独立分类；`scripts/harness_port.py stats`，2026-10-13）。文件覆盖不是行为对齐。单代理回合已接通；Codex 产品层已删/冻结；SPM 模块、标识符与 Sage 自有线上协议已按 §5.3 换成 Sage 名。Phase 9：Live Execute 已挂 `ThreadManager`（父线程 adopt、不双采样）；spawn 开子 `SageThread`/`runTurn`；wait 订阅子线程完成状态；interrupt 经 `sendOp` 打到 `ThreadSession`；multi_agents v1/v2 的 spawn/wait handler 文件已在盘（`spawn_agent*.swift`/`wait_agent*.swift`，R4a 后缀式命名已注册进追踪脚本）。粘合层双轨：Live Execute 一律走 `runTurn`；`ToolInvocationPipeline` 已删，validate/timeout/dispatch 只在 `ToolOrchestrator`。Explore 仍走只读 `ExploreSubagentRunner`。
 >
 > **当前下一步**：Sage 服务 host 等后端约定后再对 `ModelSettings.baseURL`。Explore 收敛到 spawn/wait 要等子线程能带上只读工具过滤。
 
@@ -120,24 +120,24 @@ Sage 持久化       用户可见 task / recents 仍是 GRDB；子 agent 会话�
 
 ## 3. 现状盘点
 
-逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-12）。覆盖率只说明文件在不在；runtime / host / frozen 以 §2 为准。
+逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-13）。覆盖率只说明文件在不在；runtime / host / frozen 以 §2 为准。frozen 状态由脚本按 §2.4 清单强制（只作用于已删/未建文件，保留的协议类型与内存会话工厂文件以文件头为准）。
 
 ### 3.1 文件覆盖
 
-范围内 830 个文件：已有 Swift 对应 **741（89%）**，stub 0，未开始 18，excluded/deferred 71。Phase 5（会话 / 回合）155/155 已有文件。文件在，不等于这一行的行为已经对齐上游。
+范围内 830 个文件：已移植 **608（73%）**，stub 0，未开始 **1**（`otel_init.rs`），excluded/deferred 86，frozen 135。Phase 9 的 multi_agents v1/v2 spawn/wait handler 已在盘（行数对上游的缺口是行为欠债，不是文件缺失）。文件在，不等于这一行的行为已经对齐上游。
 
-| Phase | 已有文件 | 范围内文件 | Rust 行数 |
-|---|---:|---:|---:|
-| 1 协议与基础类型 | 94 | 94 | 34,571 |
-| 2 文件与补丁 | 25 | 26 | 10,023 |
-| 3 执行与沙盒 | 71 | 82 | 26,801 |
-| 4 工具 | 71 | 112 | 44,290 |
-| 5 会话与回合 | 155 | 155 | 49,435 |
-| 6 模型客户端 | 36 | 49 | 18,848 |
-| 7 持久化与线程 | 126 | 126 | 58,121 |
-| 8 Guardian / hooks / skills | 69 | 70 | 20,322 |
-| 9 多智能体 | 69 | 73 | 16,025 |
-| 10 暂缓与平台 | 25 | 38 | 10,539 |
+| Phase | 已有文件 | 范围内文件 | Rust 行数 | 备注 |
+|---|---:|---:|---:|---|
+| 1 协议与基础类型 | 90 | 94 | 34,571 | 4 个 `utils/plugins` frozen |
+| 2 文件与补丁 | 25 | 26 | 10,023 | |
+| 3 执行与沙盒 | 71 | 82 | 26,801 | 11 个平台 excluded |
+| 4 工具 | 71 | 112 | 44,290 | 41 个 network-proxy 进程 excluded |
+| 5 会话与回合 | 143 | 154 | 49,339 | 11 个 frozen 提示片段；realtime 归 Phase 10 |
+| 6 模型客户端 | 35 | 49 | 18,848 | 13 个 realtime/websocket deferred；gateway_oauth frozen |
+| 7 持久化与线程 | 54 | 126 | 58,121 | 72 个 state/thread-store 已删文件 frozen；保留文件是活 runtime 依赖 |
+| 8 Guardian / hooks / skills | 69 | 70 | 20,322 | fixture 生成 bin excluded |
+| 9 多智能体 | 47 | 73 | 16,025 | 26 个 Codex 产品壳 frozen |
+| 10 暂缓与平台 | 3 | 39 | 10,635 | 21 个 otel/terminal-detection frozen；realtime deferred；otel_init 未开始 |
 
 ### 3.2 单代理回合已经接上的行为
 

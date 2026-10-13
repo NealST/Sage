@@ -7,7 +7,11 @@
 //  Port status: adapted
 //
 //  Host skill lookup and prompt fragments for `build_skills_and_plugins`.
-//  Analytics emit paths still throw until Session / TurnContext land here.
+//  Plugin mention collection (plugins/mentions.rs) and explicit plugin
+//  injections (plugins/injection.rs, plugins/render.rs, and the
+//  context/plugin_instructions.rs fragment) are adapted into this file;
+//  apps/render.rs stays deferred with the connectors layer. Analytics
+//  emit paths still throw until Session / TurnContext land here.
 //
 
 import SageProtocol
@@ -106,6 +110,21 @@ public struct SkillInstructions: ContextualUserFragment, Equatable, Sendable {
     public var body: String {
         "\n<name>\(name)</name>\n<path>\(path)</path>\n\(contents)\n"
     }
+}
+
+/// Port of `codex-rs/core/src/context/plugin_instructions.rs`.
+public struct PluginInstructions: ContextualUserFragment, Equatable, Sendable {
+    public var text: String
+
+    public init(text: String) {
+        self.text = text
+    }
+
+    public var contentKind: ContentItemKind { ContentItemKind("plugins.instructions") }
+    public var role: String { "developer" }
+    public var openMarker: String { "" }
+    public var closeMarker: String { "" }
+    public var body: String { text }
 }
 
 public func loadSkillPromptItems(_ skills: [SkillMetadata]) -> (items: [ResponseItem], warnings: [String]) {
@@ -255,10 +274,16 @@ public struct PluginCapabilitySummary: Equatable, Sendable {
 public struct PluginToolInfo: Equatable, Sendable {
     public var name: String
     public var serverName: String
+    public var pluginDisplayNames: [String]
 
-    public init(name: String = "", serverName: String = "") {
+    public init(
+        name: String = "",
+        serverName: String = "",
+        pluginDisplayNames: [String] = []
+    ) {
         self.name = name
         self.serverName = serverName
+        self.pluginDisplayNames = pluginDisplayNames
     }
 }
 
@@ -267,17 +292,20 @@ public struct AppInfo: Equatable, Sendable {
     public var name: String
     public var isAccessible: Bool
     public var isEnabled: Bool
+    public var pluginDisplayNames: [String]
 
     public init(
         id: String,
         name: String,
         isAccessible: Bool = false,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        pluginDisplayNames: [String] = []
     ) {
         self.id = id
         self.name = name
         self.isAccessible = isAccessible
         self.isEnabled = isEnabled
+        self.pluginDisplayNames = pluginDisplayNames
     }
 }
 
@@ -301,11 +329,17 @@ public func collectToolMentionsFromMessages(_ messages: [String]) -> CollectedTo
 }
 
 public func collectExplicitAppIds(_ input: [UserInput]) -> [String] {
-    Array(mentionedPaths(in: input).compactMap(appIdFromPath)).sorted()
+    Array(mentionedPaths(in: input, sigil: TOOL_MENTION_SIGIL).compactMap(appIdFromPath))
+        .sorted()
 }
 
 public func collectExplicitPluginIds(_ input: [UserInput]) -> [String] {
-    Array(mentionedPaths(in: input).compactMap(pluginConfigNameFromPath)).sorted()
+    // Plugin plaintext links use `@`, not the default `$` tool sigil.
+    Array(
+        mentionedPaths(in: input, sigil: PLUGIN_TEXT_MENTION_SIGIL)
+            .compactMap(pluginConfigNameFromPath)
+    )
+    .sorted()
 }
 
 public func collectExplicitPluginMentions(
@@ -338,8 +372,32 @@ public func buildPluginInjections(
     mcpTools: [PluginToolInfo],
     availableConnectors: [AppInfo]
 ) -> [ResponseItem] {
-    _ = (mentionedPlugins, mcpTools, availableConnectors)
-    return []
+    guard !mentionedPlugins.isEmpty else { return [] }
+
+    // Turn each explicit plugin mention into a developer hint that points the
+    // model at the plugin's visible MCP servers, enabled apps, and skill prefix.
+    return mentionedPlugins.compactMap { plugin in
+        let availableMcpServers = Set(
+            mcpTools
+                .filter {
+                    $0.serverName != SAGE_APPS_MCP_SERVER_NAME
+                        && $0.pluginDisplayNames.contains(plugin.displayName)
+                }
+                .map(\.serverName)
+        ).sorted()
+        let availableApps = Set(
+            availableConnectors
+                .filter { $0.isEnabled && $0.pluginDisplayNames.contains(plugin.displayName) }
+                // Upstream maps via `connector_display_label`, which is the connector name.
+                .map(\.name)
+        ).sorted()
+        return renderExplicitPluginInstructions(
+            plugin: plugin,
+            availableMcpServers: availableMcpServers,
+            availableApps: availableApps
+        )
+        .map { PluginInstructions(text: $0).asResponseItem() }
+    }
 }
 
 public func renderExplicitPluginInstructions(
@@ -347,8 +405,58 @@ public func renderExplicitPluginInstructions(
     availableMcpServers: [String],
     availableApps: [String]
 ) -> String? {
-    _ = (plugin, availableMcpServers, availableApps)
-    return nil
+    var lines = ["Capabilities from the `\(plugin.displayName)` plugin:"]
+
+    if !availableApps.isEmpty {
+        lines.append(
+            "- For the user request that explicitly selected this plugin, and only for that "
+                + "request, if `tool_search` is available and an app from this plugin may help, "
+                + "search for its tools before falling back to unrelated or built-in tools."
+        )
+    }
+
+    if plugin.hasSkills {
+        let skillNamespace = plugin.pluginNamespace ?? plugin.displayName
+        lines.append("- Skills from this plugin are prefixed with `\(skillNamespace):`.")
+    }
+
+    if !availableApps.isEmpty {
+        lines.append(
+            "- Apps from this plugin available in this session: "
+                + availableApps.map { "`\($0)`" }.joined(separator: ", ")
+                + "."
+        )
+    }
+
+    if !availableMcpServers.isEmpty {
+        lines.append(
+            "- MCP servers from this plugin available in this session: "
+                + availableMcpServers.map { "`\($0)`" }.joined(separator: ", ")
+                + "."
+        )
+    }
+
+    if lines.count == 1 {
+        return nil
+    }
+
+    lines.append("Use these plugin-associated capabilities to help solve the task.")
+
+    return boundExplicitPluginInstructions(lines.joined(separator: "\n"))
+}
+
+private let maxExplicitPluginInstructionsBytes = 4 * 1024
+private let truncatedPluginInstructionsSuffix =
+    "\n- Additional plugin capabilities omitted to fit the context limit."
+
+private func boundExplicitPluginInstructions(_ rendered: String) -> String {
+    if rendered.utf8.count <= maxExplicitPluginInstructionsBytes {
+        return rendered
+    }
+    let maxPrefixBytes = maxExplicitPluginInstructionsBytes
+        - truncatedPluginInstructionsSuffix.utf8.count
+    let prefix = takeBytesAtCharBoundary(rendered, maxb: maxPrefixBytes)
+    return String(prefix) + truncatedPluginInstructionsSuffix
 }
 
 public func renderAppsSection(_ apps: [AppInfo]) -> String? {
@@ -356,7 +464,7 @@ public func renderAppsSection(_ apps: [AppInfo]) -> String? {
     return nil
 }
 
-private func mentionedPaths(in input: [UserInput]) -> Set<String> {
+private func mentionedPaths(in input: [UserInput], sigil: Character) -> Set<String> {
     var paths: Set<String> = []
     var messages: [String] = []
     for item in input {
@@ -369,6 +477,6 @@ private func mentionedPaths(in input: [UserInput]) -> Set<String> {
             break
         }
     }
-    paths.formUnion(collectToolMentionsFromMessages(messages).paths)
+    paths.formUnion(messages.flatMap { extractToolMentions($0, sigil: sigil).paths })
     return paths
 }

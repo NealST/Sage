@@ -76,6 +76,12 @@ struct ToolInvocation: Sendable {
     var sessionSource: SessionSource
     var parentThreadId: ThreadId?
     var agentMaxDepth: Int32
+    /// Turn linkage recorded with the spawned child's first turn.
+    var rootTurnId: String?
+    var turnTrigger: String?
+    var cyberAccessProgram: CyberAccessProgram?
+    /// Multi-agent v2 session config; `nil` means defaults.
+    var multiAgentV2Config: MultiAgentV2Config?
     var onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)?
     var onNewContextWindow: (@Sendable () -> Void)?
     var onAsyncUserMessage: (@Sendable (String) -> Void)?
@@ -120,6 +126,10 @@ struct ToolInvocation: Sendable {
         sessionSource: SessionSource = .unknown,
         parentThreadId: ThreadId? = nil,
         agentMaxDepth: Int32 = Int32.max,
+        rootTurnId: String? = nil,
+        turnTrigger: String? = nil,
+        cyberAccessProgram: CyberAccessProgram? = nil,
+        multiAgentV2Config: MultiAgentV2Config? = nil,
         onPlanUpdate: (@Sendable (UpdatePlanArgs) -> Void)? = nil,
         onNewContextWindow: (@Sendable () -> Void)? = nil,
         onAsyncUserMessage: (@Sendable (String) -> Void)? = nil,
@@ -160,6 +170,10 @@ struct ToolInvocation: Sendable {
         self.sessionSource = sessionSource
         self.parentThreadId = parentThreadId
         self.agentMaxDepth = agentMaxDepth
+        self.rootTurnId = rootTurnId
+        self.turnTrigger = turnTrigger
+        self.cyberAccessProgram = cyberAccessProgram
+        self.multiAgentV2Config = multiAgentV2Config
         self.onPlanUpdate = onPlanUpdate
         self.onNewContextWindow = onNewContextWindow
         self.onAsyncUserMessage = onAsyncUserMessage

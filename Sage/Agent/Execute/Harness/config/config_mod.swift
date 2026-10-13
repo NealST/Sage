@@ -46,6 +46,9 @@ let autoCompactFallbackPromptMaxBytes = 2000
 let tokenBudgetDefaultReminderTemplate =
     "Context is filling. Prefer compacting or finishing the current task before adding more tool output."
 
+/// rust `config::DEFAULT_AGENT_MAX_DEPTH`: one level of subagents.
+let DEFAULT_AGENT_MAX_DEPTH: Int32 = 1
+
 enum TokenBudgetConfigError: Error, Equatable, CustomStringConvertible {
     case invalid(String)
 
@@ -200,6 +203,8 @@ struct Config: Equatable, Sendable {
     var startupWarnings: [String]
     var tokenBudget: TokenBudgetConfig?
     var mcpServers: [String: ConfiguredMcpServer]
+    var agentMaxDepth: Int32
+    var multiAgentV2: MultiAgentV2Config
 
     init(
         model: String? = nil,
@@ -225,7 +230,9 @@ struct Config: Equatable, Sendable {
         permissions: Permissions = Permissions(),
         startupWarnings: [String] = [],
         tokenBudget: TokenBudgetConfig? = nil,
-        mcpServers: [String: ConfiguredMcpServer] = [:]
+        mcpServers: [String: ConfiguredMcpServer] = [:],
+        agentMaxDepth: Int32 = DEFAULT_AGENT_MAX_DEPTH,
+        multiAgentV2: MultiAgentV2Config = MultiAgentV2Config()
     ) {
         self.model = model
         self.reviewModel = reviewModel
@@ -251,6 +258,8 @@ struct Config: Equatable, Sendable {
         self.startupWarnings = startupWarnings
         self.tokenBudget = tokenBudget
         self.mcpServers = mcpServers
+        self.agentMaxDepth = agentMaxDepth
+        self.multiAgentV2 = multiAgentV2
     }
 
     func applying(_ overrides: ConfigOverrides) -> Config {

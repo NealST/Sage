@@ -277,6 +277,11 @@ struct ToolCallRuntime: Sendable {
             invocation.localAgentControl = session.services.localAgentControl
             invocation.parentThreadId = session.state.sessionConfiguration.parentThreadId
             invocation.inputQueue = session.inputQueue
+            invocation.agentMaxDepth = stepContext.turn.config.agentMaxDepth
+            invocation.rootTurnId = stepContext.turn.rootTurnId
+            invocation.turnTrigger = stepContext.turn.turnTrigger
+            invocation.cyberAccessProgram = stepContext.turn.cyberAccessProgram
+            invocation.multiAgentV2Config = stepContext.turn.config.multiAgentV2
             invocation.hookProjectRoot = session.services.hookProjectRoot
             invocation.hookModel = stepContext.turn.model
             invocation.hookPermissionMode = hookPermissionMode(stepContext.turn.approvalPolicy)

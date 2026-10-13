@@ -82,7 +82,10 @@ extension LocalAgentControl {
         return try await raceFinalStatuses(threadIds: threadIds, timeout: timeout)
     }
 
-    private func raceFinalStatuses(
+    /// Race per-target status watches until the first final status, then
+    /// collect any other already-finished watches. A timeout yields an
+    /// empty result, matching rust `wait_agent` (no late finishers).
+    public func raceFinalStatuses(
         threadIds: [ThreadId],
         timeout: Duration
     ) async throws -> [(ThreadId, AgentStatus)] {
@@ -133,12 +136,8 @@ extension LocalAgentControl {
                     }
                 case .timedOut:
                     group.cancelAll()
-                    while let extra = await group.next() {
-                        if case .finished(let extraId, let extraStatus) = extra {
-                            results.append((extraId, extraStatus))
-                        }
-                    }
-                    return results
+                    while await group.next() != nil {}
+                    return []
                 case .cancelled:
                     continue
                 }

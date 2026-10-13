@@ -8,10 +8,16 @@
 //  Port status: adapted
 //
 //  Spec, argument parsing, registry spawn, and fork_turns history copy
-//  are live. emit_sub_agent_activity records on the caller SageThread
-//  when a ThreadManager is attached. Child thread create submits the
-//  initial user input through ThreadSession. Analytics and
-//  hide_spawn_agent_metadata stay deferred.
+//  are live. Turn linkage (parent/root turn ids, trigger, cyber
+//  program) reaches the child's first TurnStartOptions through
+//  ThreadSession, and the hide_spawn_agent_metadata output branch is
+//  live (nil config means upstream defaults, which hide metadata).
+//  emit_sub_agent_activity records on the caller SageThread when a
+//  ThreadManager is attached. Deferred: model / reasoning_effort
+//  overrides and multi_agent_v2_usage_hints wait on Session / Config
+//  and the prompts crate (SpawnRequest carries no config); analytics
+//  waits on the telemetry client. Deviation: upstream v2 has no depth
+//  check in the handler; Sage keeps the v1 depth guard.
 //
 
 import SageCore
@@ -90,8 +96,21 @@ enum SpawnAgentV2Result: Encodable, Equatable, Sendable, ToolOutput {
 }
 
 struct SpawnAgentV2Handler: CoreToolRuntime {
+    let options: SpawnAgentToolOptions
+    let descriptionOverride: String?
+
+    init(
+        options: SpawnAgentToolOptions = SpawnAgentToolOptions(),
+        descriptionOverride: String? = nil
+    ) {
+        self.options = options
+        self.descriptionOverride = descriptionOverride
+    }
+
     func toolName() -> ToolName { ToolName(plain: "spawn_agent") }
-    func spec() -> ToolSpec { createSpawnAgentToolV2(SpawnAgentToolOptions()) }
+    func spec() -> ToolSpec {
+        createSpawnAgentToolV2(options, descriptionOverride: descriptionOverride)
+    }
 
     func handle(_ invocation: ToolInvocation) async throws -> any ToolOutput {
         let arguments = try functionArguments(invocation.payload)
@@ -130,7 +149,11 @@ struct SpawnAgentV2Handler: CoreToolRuntime {
                     options: SpawnAgentOptions(
                         forkParentSpawnCallId: forkMode == nil ? nil : invocation.callId,
                         forkMode: forkMode,
-                        parentThreadId: caller
+                        parentThreadId: caller,
+                        parentTurnId: invocation.turnId,
+                        turnTrigger: invocation.turnTrigger,
+                        rootTurnId: invocation.rootTurnId,
+                        cyberAccessProgram: invocation.cyberAccessProgram
                     )
                 )
             )
@@ -150,9 +173,12 @@ struct SpawnAgentV2Handler: CoreToolRuntime {
         let taskName = snapshot.sessionSource.getAgentPath()?.asStr
             ?? spawnedAgent.metadata.agentPath?.asStr
             ?? newAgentPath.asStr
-        return SpawnAgentV2Result.withNickname(
-            taskName: taskName,
-            nickname: snapshot.sessionSource.getNickname() ?? spawnedAgent.metadata.agentNickname
-        )
+        let nickname = snapshot.sessionSource.getNickname() ?? spawnedAgent.metadata.agentNickname
+        let hideAgentMetadata = (invocation.multiAgentV2Config ?? MultiAgentV2Config())
+            .hideSpawnAgentMetadata
+        if hideAgentMetadata {
+            return SpawnAgentV2Result.hiddenMetadata(taskName: taskName)
+        }
+        return SpawnAgentV2Result.withNickname(taskName: taskName, nickname: nickname)
     }
 }

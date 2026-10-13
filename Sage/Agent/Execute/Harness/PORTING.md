@@ -15,18 +15,18 @@
 
 ## 进度汇总
 
-| Phase | 文件数 | ✅ | 🟡 | 🟥 | ⬜ | ⛔/💤 |
+| Phase | 文件数 | ✅ | 🟡 | 🟥 | ⬜ | ⛔/💤/❄️ |
 |---|---:|---:|---:|---:|---:|---:|
-| Phase 1 | 94 | 69 | 25 | 0 | 0 | 0 |
+| Phase 1 | 94 | 67 | 23 | 0 | 0 | 4 |
 | Phase 2 | 26 | 10 | 15 | 0 | 0 | 0 |
 | Phase 3 | 82 | 19 | 52 | 0 | 0 | 0 |
 | Phase 4 | 112 | 11 | 60 | 0 | 0 | 0 |
-| Phase 5 | 155 | 27 | 128 | 0 | 0 | 0 |
-| Phase 6 | 49 | 4 | 32 | 0 | 0 | 0 |
-| Phase 7 | 126 | 6 | 120 | 0 | 0 | 0 |
+| Phase 5 | 154 | 23 | 121 | 0 | 0 | 10 |
+| Phase 6 | 49 | 4 | 31 | 0 | 0 | 1 |
+| Phase 7 | 126 | 5 | 49 | 0 | 0 | 72 |
 | Phase 8 | 70 | 22 | 47 | 0 | 0 | 0 |
-| Phase 9 | 73 | 10 | 59 | 0 | 0 | 0 |
-| Phase 10 | 38 | 7 | 18 | 0 | 0 | 0 |
+| Phase 9 | 73 | 5 | 42 | 0 | 0 | 26 |
+| Phase 10 | 39 | 1 | 2 | 0 | 0 | 21 |
 
 ## Phase 1
 
@@ -111,10 +111,10 @@
 | `utils/path-utils/src/env.rs` | 19 | `utils/path-utils/src/env.swift` | ✅ faithful |  |
 | `utils/path-utils/src/lib.rs` | 242 | `utils/path-utils/src/path_utils_lib.swift` | 🟡 adapted |  |
 | `utils/path-utils/src/system_commands.rs` | 166 | `utils/path-utils/src/system_commands.swift` | 🟡 adapted |  |
-| `utils/plugins/src/lib.rs` | 53 | `utils/plugins/src/plugins_lib.swift` | 🟡 adapted |  |
-| `utils/plugins/src/mcp_connector.rs` | 20 | `utils/plugins/src/mcp_connector.swift` | ✅ faithful |  |
-| `utils/plugins/src/mention_syntax.rs` | 7 | `utils/plugins/src/mention_syntax.swift` | ✅ faithful |  |
-| `utils/plugins/src/plugin_namespace.rs` | 366 | `utils/plugins/src/plugin_namespace.swift` | 🟡 adapted |  |
+| `utils/plugins/src/lib.rs` | 53 | - | ❄️ frozen | Codex plugin 市场工具层（§2.4） |
+| `utils/plugins/src/mcp_connector.rs` | 20 | - | ❄️ frozen | Codex plugin 市场工具层（§2.4） |
+| `utils/plugins/src/mention_syntax.rs` | 7 | - | ❄️ frozen | Codex plugin 市场工具层（§2.4） |
+| `utils/plugins/src/plugin_namespace.rs` | 366 | - | ❄️ frozen | Codex plugin 市场工具层（§2.4） |
 | `utils/stream-parser/src/assistant_text.rs` | 130 | `utils/stream-parser/src/assistant_text.swift` | ✅ faithful |  |
 | `utils/stream-parser/src/citation.rs` | 179 | `utils/stream-parser/src/citation.swift` | ✅ faithful |  |
 | `utils/stream-parser/src/inline_hidden_tag.rs` | 323 | `utils/stream-parser/src/inline_hidden_tag.swift` | ✅ faithful |  |
@@ -394,15 +394,15 @@
 | `core/src/config/windows_sandbox_config.rs` | 126 | `config/windows_sandbox_config.swift` | 🟡 adapted |  |
 | `core/src/context/agent_message_board_notification.rs` | 42 | `context/agent_message_board_notification.swift` | 🟡 adapted |  |
 | `core/src/context/approved_command_prefix_saved.rs` | 43 | `context/approved_command_prefix_saved.swift` | ✅ faithful |  |
-| `core/src/context/apps_instructions.rs` | 33 | `context/apps_instructions.swift` | ✅ faithful |  |
-| `core/src/context/available_plugins_instructions.rs` | 49 | `context/available_plugins_instructions.swift` | ✅ faithful |  |
+| `core/src/context/apps_instructions.rs` | 33 | - | ❄️ frozen | apps 产品提示片段（§2.4） |
+| `core/src/context/available_plugins_instructions.rs` | 49 | - | ❄️ frozen | plugin 市场提示片段（§2.4） |
 | `core/src/context/base_instructions.rs` | 31 | `context/base_instructions.swift` | ✅ faithful |  |
 | `core/src/context/compaction_summary.rs` | 37 | `context/compaction_summary.swift` | ✅ faithful |  |
 | `core/src/context/contextual_user_message.rs` | 112 | `context/contextual_user_message.swift` | 🟡 adapted |  |
 | `core/src/context/current_time_reminder.rs` | 71 | `context/current_time_reminder.swift` | ✅ faithful |  |
 | `core/src/context/developer_instructions.rs` | 37 | `context/developer_instructions.swift` | ✅ faithful |  |
 | `core/src/context/environment_context.rs` | 243 | `context/environment_context.swift` | 🟡 adapted |  |
-| `core/src/context/environments_instructions.rs` | 38 | `context/environments_instructions.swift` | ✅ faithful |  |
+| `core/src/context/environments_instructions.rs` | 38 | - | ❄️ frozen | exec-server 环境提示片段（§2.4） |
 | `core/src/context/guardian_approved_action.rs` | 48 | `context/guardian_approved_action.swift` | 🟡 adapted | empty markers; body is the manual-approval prefix plus the approved action JSON |
 | `core/src/context/guardian_budget_omission.rs` | 32 | `context/guardian_budget_omission.swift` | ✅ faithful |  |
 | `core/src/context/guardian_context_mode.rs` | 48 | `context/guardian_context_mode.swift` | 🟡 adapted |  |
@@ -427,8 +427,8 @@
 | `core/src/context/multi_agent_usage_hint.rs` | 42 | `context/multi_agent_usage_hint.swift` | 🟡 adapted |  |
 | `core/src/context/network_rule_saved.rs` | 48 | `context/network_rule_saved.swift` | 🟡 adapted |  |
 | `core/src/context/node_repl_review_evidence.rs` | 316 | `context/node_repl_review_evidence.swift` | 🟡 adapted |  |
-| `core/src/context/plugin_instructions.rs` | 35 | `context/plugin_instructions.swift` | ✅ faithful |  |
-| `core/src/context/recommended_plugins_instructions.rs` | 55 | `context/recommended_plugins_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/plugin_instructions.rs` | 35 | - | ❄️ frozen | plugin 市场提示片段（§2.4） |
+| `core/src/context/recommended_plugins_instructions.rs` | 55 | - | ❄️ frozen | plugin 市场提示片段（§2.4） |
 | `core/src/context/rollout_budget.rs` | 32 | `context/context_rollout_budget.swift` | ✅ faithful |  |
 | `core/src/context/subagent_notification.rs` | 47 | `context/subagent_notification.swift` | 🟡 adapted |  |
 | `core/src/context/token_budget_context.rs` | 245 | `context/token_budget_context.swift` | 🟡 adapted |  |
@@ -438,12 +438,12 @@
 | `core/src/context/user_shell_command.rs` | 53 | `context/context_user_shell_command.swift` | ✅ faithful |  |
 | `core/src/context/user_verification_notice.rs` | 28 | `context/user_verification_notice.swift` | ✅ faithful |  |
 | `core/src/context/world_state/agents_md.rs` | 84 | `context/world_state/agents_md.swift` | 🟡 adapted |  |
-| `core/src/context/world_state/apps_instructions.rs` | 55 | `context/world_state/world_state_apps_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/apps_instructions.rs` | 55 | - | ❄️ frozen | apps 产品提示片段（§2.4） |
 | `core/src/context/world_state/collaboration_mode.rs` | 177 | `context/world_state/collaboration_mode.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/compact_permissions.rs` | 59 | `context/world_state/compact_permissions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/context_window_guidance.rs` | 76 | `context/world_state/context_window_guidance.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/environment.rs` | 557 | `context/world_state/environment.swift` | 🟡 adapted |  |
-| `core/src/context/world_state/environments_instructions.rs` | 55 | `context/world_state/world_state_environments_instructions.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/environments_instructions.rs` | 55 | - | ❄️ frozen | exec-server 环境提示片段（§2.4） |
 | `core/src/context/world_state/managed_developer_instructions.rs` | 157 | `context/world_state/managed_developer_instructions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/mod.rs` | 556 | `context/world_state/world_state_mod.swift` | 🟡 adapted | snapshot + renderDiff/renderFull; SHA-1 hashing stays out |
 | `core/src/context/world_state/model.rs` | 65 | `context/world_state/model.swift` | 🟡 adapted |  |
@@ -451,8 +451,7 @@
 | `core/src/context/world_state/multi_agent_usage_hint.rs` | 50 | `context/world_state/world_state_multi_agent_usage_hint.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/permissions.rs` | 131 | `context/world_state/permissions.swift` | 🟡 adapted |  |
 | `core/src/context/world_state/persistent_mode.rs` | 120 | `context/world_state/persistent_mode.swift` | 🟡 adapted |  |
-| `core/src/context/world_state/plugins_instructions.rs` | 55 | `context/world_state/plugins_instructions.swift` | 🟡 adapted |  |
-| `core/src/context/world_state/realtime.rs` | 96 | `context/world_state/realtime.swift` | 🟡 adapted |  |
+| `core/src/context/world_state/plugins_instructions.rs` | 55 | - | ❄️ frozen | plugin 市场提示片段（§2.4） |
 | `core/src/context/world_state/tools.rs` | 170 | `context/world_state/tools.swift` | 🟡 adapted |  |
 | `core/src/context_manager/history.rs` | 1,225 | `context_manager/history.swift` | 🟡 adapted | verified request_user_input answers stay on the history snapshot |
 | `core/src/context_manager/history_user_authorization.rs` | 105 | `context_manager/history_user_authorization.swift` | 🟡 adapted |  |
@@ -461,14 +460,14 @@
 | `core/src/context_manager/updates.rs` | 60 | `context_manager/updates.swift` | 🟡 adapted |  |
 | `core/src/event_mapping.rs` | 261 | `event_mapping.swift` | 🟡 adapted |  |
 | `core/src/mcp.rs` | 394 | `mcp.swift` | 🟡 adapted |  |
-| `core/src/mcp_openai_file.rs` | 698 | `mcp_openai_file.swift` | 🟡 adapted |  |
+| `core/src/mcp_openai_file.rs` | 698 | - | ❄️ frozen | ChatGPT 后端文件上传，Sage 自有服务不保留（§5.3.2） |
 | `core/src/mcp_skill_dependencies.rs` | 531 | `mcp_skill_dependencies.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_approval_templates.rs` | 371 | `mcp_tool_approval_templates.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call/account.rs` | 39 | `mcp_tool_call/account.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call/telemetry.rs` | 166 | `mcp_tool_call/telemetry.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_call.rs` | 2,504 | `mcp_tool_call.swift` | 🟡 adapted |  |
 | `core/src/mcp_tool_exposure.rs` | 189 | `mcp_tool_exposure.swift` | 🟡 adapted | Apps omit/visibility/budget + binding generation cache |
-| `core/src/session/code_mode_warning.rs` | 26 | `session/code_mode_warning.swift` | 🟡 adapted |  |
+| `core/src/session/code_mode_warning.rs` | 26 | - | ❄️ frozen | code mode 产品提示（§2.4） |
 | `core/src/session/context_window.rs` | 130 | `session/context_window.swift` | 🟡 adapted | fallback buffer from TokenBudgetConfig when a prompt is set |
 | `core/src/session/daemon_recovery.rs` | 46 | `session/daemon_recovery.swift` | 🟡 adapted |  |
 | `core/src/session/environment.rs` | 307 | `session/environment.swift` | 🟡 adapted |  |
@@ -483,7 +482,7 @@
 | `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted | dirty bit plus one in-flight permit |
 | `core/src/session/mcp_runtime.rs` | 381 | `session/mcp_runtime.swift` | 🟡 adapted | publish reuses a live connection when the url is unchanged; reconnect opens a fresh client; disabled or removed servers are closed |
 | `core/src/session/mod.rs` | 5,130 | `session/session_mod.swift` | 🟡 adapted |  |
-| `core/src/session/plugin_selection.rs` | 32 | `session/plugin_selection.swift` | 🟡 adapted |  |
+| `core/src/session/plugin_selection.rs` | 32 | `session/plugin_selection.swift` | 🟡 adapted | plugin 市场产品（§2.4） |
 | `core/src/session/reasoning_effort.rs` | 162 | `session/reasoning_effort.swift` | 🟡 adapted |  |
 | `core/src/session/retained_context.rs` | 35 | `session/retained_context.swift` | 🟡 adapted | records a verified answer; a new record is appended to the rollout when persistence is enabled |
 | `core/src/session/review.rs` | 229 | `session/session_review.swift` | 🟡 adapted |  |
@@ -573,18 +572,18 @@
 | `codex-api/src/sse/mod.rs` | 5 | `sage-api/src/sse/sse_mod.swift` | 🟡 adapted |  |
 | `codex-api/src/sse/responses.rs` | 2,124 | `sage-api/src/sse/responses.swift` | 🟡 adapted |  |
 | `codex-api/src/telemetry.rs` | 98 | `sage-api/src/telemetry.swift` | 🟡 adapted |  |
-| `model-provider-info/src/gateway_oauth.rs` | 157 | `model-provider-info/src/gateway_oauth.swift` | 🟡 adapted |  |
+| `model-provider-info/src/gateway_oauth.rs` | 157 | - | ❄️ frozen | gateway OAuth（§2.4）；Sage 用 Keychain API Key |
 | `model-provider-info/src/lib.rs` | 767 | `model-provider-info/src/lib.swift` | 🟡 adapted |  |
 
 ## Phase 7
 
 | codex 文件 | 行数 | Swift 文件 | 状态 | 备注 |
 |---|---:|---|---|---|
-| `core/src/attestation.rs` | 26 | `attestation.swift` | 🟡 adapted |  |
+| `core/src/attestation.rs` | 26 | - | ❄️ frozen | Codex 遥测与账号（§2.4） |
 | `core/src/codex_delegate.rs` | 382 | `sage_delegate.swift` | 🟡 adapted | R2a |
 | `core/src/codex_thread.rs` | 1,065 | `sage_thread.swift` | 🟡 adapted | R2a |
-| `core/src/feedback_config.rs` | 81 | `feedback_config.swift` | 🟡 adapted |  |
-| `core/src/installation_id.rs` | 149 | `installation_id.swift` | 🟡 adapted |  |
+| `core/src/feedback_config.rs` | 81 | - | ❄️ frozen | Codex 遥测与账号（§2.4） |
+| `core/src/installation_id.rs` | 149 | - | ❄️ frozen | Codex 遥测与账号（§2.4） |
 | `core/src/memory_usage.rs` | 51 | `memory_usage.swift` | 🟡 adapted |  |
 | `core/src/rollout.rs` | 61 | `rollout.swift` | 🟡 adapted |  |
 | `core/src/rollout_budget.rs` | 121 | `rollout_budget.swift` | 🟡 adapted |  |
@@ -618,94 +617,94 @@
 | `rollout/src/sqlite_metrics.rs` | 73 | `rollout/src/sqlite_metrics.swift` | 🟡 adapted |  |
 | `rollout/src/state_db.rs` | 744 | `rollout/src/state_db.swift` | 🟡 adapted |  |
 | `rollout/src/writer_lock.rs` | 200 | `rollout/src/writer_lock.swift` | 🟡 adapted |  |
-| `state/src/audit.rs` | 48 | `state/src/audit.swift` | 🟡 adapted |  |
-| `state/src/extract.rs` | 850 | `state/src/extract.swift` | 🟡 adapted |  |
-| `state/src/lib.rs` | 152 | `state/src/lib.swift` | 🟡 adapted |  |
-| `state/src/log_db.rs` | 884 | `state/src/log_db.swift` | 🟡 adapted |  |
-| `state/src/migrations.rs` | 122 | `state/src/migrations.swift` | 🟡 adapted |  |
-| `state/src/model/backfill_state.rs` | 73 | `state/src/model/backfill_state.swift` | 🟡 adapted |  |
-| `state/src/model/graph.rs` | 11 | `state/src/model/graph.swift` | ✅ faithful |  |
-| `state/src/model/log.rs` | 57 | `state/src/model/log.swift` | 🟡 adapted |  |
-| `state/src/model/memories.rs` | 69 | `state/src/model/memories.swift` | 🟡 adapted |  |
-| `state/src/model/mod.rs` | 56 | `state/src/model/mod.swift` | ✅ faithful |  |
-| `state/src/model/project.rs` | 39 | `state/src/model/project.swift` | ✅ faithful |  |
-| `state/src/model/queued_item.rs` | 22 | `state/src/model/queued_item.swift` | 🟡 adapted |  |
-| `state/src/model/rollout_migration_state.rs` | 67 | `state/src/model/rollout_migration_state.swift` | 🟡 adapted |  |
-| `state/src/model/thread_attachment.rs` | 48 | `state/src/model/thread_attachment.swift` | 🟡 adapted |  |
-| `state/src/model/thread_goal.rs` | 117 | `state/src/model/thread_goal.swift` | 🟡 adapted |  |
-| `state/src/model/thread_metadata.rs` | 894 | `state/src/model/thread_metadata.swift` | 🟡 adapted |  |
-| `state/src/paths.rs` | 9 | `state/src/paths.swift` | ✅ faithful |  |
-| `state/src/runtime/backfill.rs` | 288 | `state/src/runtime/backfill.swift` | 🟡 adapted |  |
-| `state/src/runtime/external_agent_config_imports.rs` | 148 | `state/src/runtime/external_agent_config_imports.swift` | 🟡 adapted |  |
-| `state/src/runtime/goals.rs` | 1,728 | `state/src/runtime/goals.swift` | 🟡 adapted |  |
-| `state/src/runtime/logs.rs` | 1,915 | `state/src/runtime/logs.swift` | 🟡 adapted |  |
-| `state/src/runtime/memories.rs` | 5,468 | `state/src/runtime/runtime_memories.swift` | 🟡 adapted |  |
-| `state/src/runtime/memory_readiness.rs` | 16 | `state/src/runtime/memory_readiness.swift` | 🟡 adapted |  |
-| `state/src/runtime/memory_versions.rs` | 56 | `state/src/runtime/memory_versions.swift` | 🟡 adapted |  |
-| `state/src/runtime/projects.rs` | 573 | `state/src/runtime/projects.swift` | 🟡 adapted |  |
-| `state/src/runtime/queued_items.rs` | 215 | `state/src/runtime/queued_items.swift` | 🟡 adapted |  |
-| `state/src/runtime/recovery.rs` | 243 | `state/src/runtime/recovery.swift` | 🟡 adapted |  |
-| `state/src/runtime/remote_control.rs` | 393 | `state/src/runtime/remote_control.swift` | 🟡 adapted |  |
-| `state/src/runtime/rollout_migration.rs` | 149 | `state/src/runtime/rollout_migration.swift` | 🟡 adapted |  |
-| `state/src/runtime/test_support.rs` | 84 | `state/src/runtime/test_support.swift` | 🟡 adapted |  |
-| `state/src/runtime/thread_attachments.rs` | 291 | `state/src/runtime/thread_attachments.swift` | 🟡 adapted |  |
-| `state/src/runtime/thread_section_order.rs` | 284 | `state/src/runtime/thread_section_order.swift` | 🟡 adapted |  |
-| `state/src/runtime/thread_sections.rs` | 93 | `state/src/runtime/thread_sections.swift` | 🟡 adapted |  |
-| `state/src/runtime/threads.rs` | 3,637 | `state/src/runtime/threads.swift` | 🟡 adapted |  |
-| `state/src/runtime.rs` | 764 | `state/src/runtime.swift` | 🟡 adapted |  |
-| `state/src/sqlite.rs` | 332 | `state/src/sqlite.swift` | 🟡 adapted |  |
-| `state/src/telemetry.rs` | 251 | `state/src/telemetry.swift` | 🟡 adapted |  |
-| `thread-store/src/error.rs` | 55 | `thread-store/src/error.swift` | 🟡 adapted |  |
-| `thread-store/src/in_memory.rs` | 1,204 | `thread-store/src/in_memory.swift` | 🟡 adapted |  |
-| `thread-store/src/lib.rs` | 114 | `thread-store/src/lib.swift` | 🟡 adapted |  |
-| `thread-store/src/live_thread.rs` | 463 | `thread-store/src/live_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/archive_thread.rs` | 371 | `thread-store/src/local/archive_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/create_thread.rs` | 68 | `thread-store/src/local/create_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/delete_thread.rs` | 883 | `thread-store/src/local/delete_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/helpers.rs` | 385 | `thread-store/src/local/helpers.swift` | 🟡 adapted |  |
-| `thread-store/src/local/list_threads.rs` | 793 | `thread-store/src/local/list_threads.swift` | 🟡 adapted |  |
-| `thread-store/src/local/live_writer.rs` | 374 | `thread-store/src/local/live_writer.swift` | 🟡 adapted |  |
-| `thread-store/src/local/mod.rs` | 2,137 | `thread-store/src/local/mod.swift` | 🟡 adapted |  |
-| `thread-store/src/local/model_context.rs` | 193 | `thread-store/src/local/model_context.swift` | 🟡 adapted |  |
-| `thread-store/src/local/move_thread_to_section.rs` | 58 | `thread-store/src/local/move_thread_to_section.swift` | 🟡 adapted |  |
-| `thread-store/src/local/paginated_fork.rs` | 191 | `thread-store/src/local/paginated_fork.swift` | 🟡 adapted |  |
-| `thread-store/src/local/pending_thread_metadata.rs` | 58 | `thread-store/src/local/pending_thread_metadata.swift` | 🟡 adapted |  |
-| `thread-store/src/local/projects.rs` | 192 | `thread-store/src/local/local_projects.swift` | 🟡 adapted |  |
-| `thread-store/src/local/read_thread.rs` | 1,641 | `thread-store/src/local/read_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/revert_thread.rs` | 208 | `thread-store/src/local/revert_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_lineage.rs` | 304 | `thread-store/src/local/rollout_lineage.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/canonicalizer.rs` | 502 | `thread-store/src/local/rollout_migration/canonicalizer.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/legacy_event.rs` | 313 | `thread-store/src/local/rollout_migration/legacy_event.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/line_parser.rs` | 201 | `thread-store/src/local/rollout_migration/line_parser.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/publish.rs` | 267 | `thread-store/src/local/rollout_migration/publish.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/rollback.rs` | 147 | `thread-store/src/local/rollout_migration/rollback.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/rollback_plan.rs` | 541 | `thread-store/src/local/rollout_migration/rollback_plan.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/rollback_replay.rs` | 195 | `thread-store/src/local/rollout_migration/rollback_replay.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/startup.rs` | 412 | `thread-store/src/local/rollout_migration/startup.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/subagent.rs` | 55 | `thread-store/src/local/rollout_migration/subagent.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration/telemetry.rs` | 152 | `thread-store/src/local/rollout_migration/telemetry.swift` | 🟡 adapted |  |
-| `thread-store/src/local/rollout_migration.rs` | 1,386 | `thread-store/src/local/rollout_migration.swift` | 🟡 adapted |  |
-| `thread-store/src/local/search_threads.rs` | 257 | `thread-store/src/local/search_threads.swift` | 🟡 adapted |  |
-| `thread-store/src/local/test_support.rs` | 131 | `thread-store/src/local/test_support.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_attachments.rs` | 116 | `thread-store/src/local/local_thread_attachments.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history/read.rs` | 432 | `thread-store/src/local/thread_history/read.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history/realtime.rs` | 246 | `thread-store/src/local/thread_history/realtime.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history/search.rs` | 494 | `thread-store/src/local/thread_history/search.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history/segment_paging.rs` | 506 | `thread-store/src/local/thread_history/segment_paging.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history/turn_lookup.rs` | 100 | `thread-store/src/local/thread_history/turn_lookup.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history.rs` | 579 | `thread-store/src/local/thread_history.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_history_materialization.rs` | 366 | `thread-store/src/local/thread_history_materialization.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_rollout_resolver.rs` | 216 | `thread-store/src/local/thread_rollout_resolver.swift` | 🟡 adapted |  |
-| `thread-store/src/local/thread_sections.rs` | 99 | `thread-store/src/local/local_thread_sections.swift` | 🟡 adapted |  |
-| `thread-store/src/local/unarchive_thread.rs` | 286 | `thread-store/src/local/unarchive_thread.swift` | 🟡 adapted |  |
-| `thread-store/src/local/update_thread_metadata.rs` | 2,431 | `thread-store/src/local/update_thread_metadata.swift` | 🟡 adapted |  |
-| `thread-store/src/projects.rs` | 81 | `thread-store/src/projects.swift` | 🟡 adapted |  |
-| `thread-store/src/queue_store.rs` | 158 | `thread-store/src/queue_store.swift` | 🟡 adapted |  |
-| `thread-store/src/store.rs` | 554 | `thread-store/src/store.swift` | 🟡 adapted |  |
-| `thread-store/src/thread_attachments.rs` | 39 | `thread-store/src/thread_attachments.swift` | 🟡 adapted |  |
-| `thread-store/src/thread_metadata_sync.rs` | 928 | `thread-store/src/thread_metadata_sync.swift` | 🟡 adapted |  |
-| `thread-store/src/thread_sections.rs` | 52 | `thread-store/src/thread_sections.swift` | 🟡 adapted |  |
-| `thread-store/src/types.rs` | 1,127 | `thread-store/src/types.swift` | 🟡 adapted |  |
+| `state/src/audit.rs` | 48 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/extract.rs` | 850 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/lib.rs` | 152 | `state/src/lib.swift` | 🟡 adapted | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/log_db.rs` | 884 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/migrations.rs` | 122 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/backfill_state.rs` | 73 | `state/src/model/backfill_state.swift` | 🟡 adapted | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/graph.rs` | 11 | `state/src/model/graph.swift` | ✅ faithful | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/log.rs` | 57 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/memories.rs` | 69 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/mod.rs` | 56 | `state/src/model/mod.swift` | ✅ faithful | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/project.rs` | 39 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/queued_item.rs` | 22 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/rollout_migration_state.rs` | 67 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/thread_attachment.rs` | 48 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/thread_goal.rs` | 117 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/model/thread_metadata.rs` | 894 | `state/src/model/thread_metadata.swift` | 🟡 adapted | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/paths.rs` | 9 | `state/src/paths.swift` | ✅ faithful | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/backfill.rs` | 288 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/external_agent_config_imports.rs` | 148 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/goals.rs` | 1,728 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/logs.rs` | 1,915 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/memories.rs` | 5,468 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/memory_readiness.rs` | 16 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/memory_versions.rs` | 56 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/projects.rs` | 573 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/queued_items.rs` | 215 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/recovery.rs` | 243 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/remote_control.rs` | 393 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/rollout_migration.rs` | 149 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/test_support.rs` | 84 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/thread_attachments.rs` | 291 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/thread_section_order.rs` | 284 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/thread_sections.rs` | 93 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime/threads.rs` | 3,637 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/runtime.rs` | 764 | - | ❄️ frozen | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/sqlite.rs` | 332 | `state/src/sqlite.swift` | 🟡 adapted | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `state/src/telemetry.rs` | 251 | `state/src/telemetry.swift` | 🟡 adapted | Codex thread 产品（§10.5）；Sage 用 AgentTaskStore |
+| `thread-store/src/error.rs` | 55 | `thread-store/src/error.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/in_memory.rs` | 1,204 | `thread-store/src/in_memory.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/lib.rs` | 114 | `thread-store/src/lib.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/live_thread.rs` | 463 | `thread-store/src/live_thread.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/archive_thread.rs` | 371 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/create_thread.rs` | 68 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/delete_thread.rs` | 883 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/helpers.rs` | 385 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/list_threads.rs` | 793 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/live_writer.rs` | 374 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/mod.rs` | 2,137 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/model_context.rs` | 193 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/move_thread_to_section.rs` | 58 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/paginated_fork.rs` | 191 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/pending_thread_metadata.rs` | 58 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/projects.rs` | 192 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/read_thread.rs` | 1,641 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/revert_thread.rs` | 208 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_lineage.rs` | 304 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/canonicalizer.rs` | 502 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/legacy_event.rs` | 313 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/line_parser.rs` | 201 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/publish.rs` | 267 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/rollback.rs` | 147 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/rollback_plan.rs` | 541 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/rollback_replay.rs` | 195 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/startup.rs` | 412 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/subagent.rs` | 55 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration/telemetry.rs` | 152 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/rollout_migration.rs` | 1,386 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/search_threads.rs` | 257 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/test_support.rs` | 131 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_attachments.rs` | 116 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history/read.rs` | 432 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history/realtime.rs` | 246 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history/search.rs` | 494 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history/segment_paging.rs` | 506 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history/turn_lookup.rs` | 100 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history.rs` | 579 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_history_materialization.rs` | 366 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_rollout_resolver.rs` | 216 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/thread_sections.rs` | 99 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/unarchive_thread.rs` | 286 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/local/update_thread_metadata.rs` | 2,431 | - | ❄️ frozen | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/projects.rs` | 81 | `thread-store/src/projects.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/queue_store.rs` | 158 | `thread-store/src/queue_store.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/store.rs` | 554 | `thread-store/src/store.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/thread_attachments.rs` | 39 | `thread-store/src/thread_attachments.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/thread_metadata_sync.rs` | 928 | `thread-store/src/thread_metadata_sync.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/thread_sections.rs` | 52 | `thread-store/src/thread_sections.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
+| `thread-store/src/types.rs` | 1,127 | `thread-store/src/types.swift` | 🟡 adapted | Codex thread 产品（§10.5）；保留文件仅作子 agent 内存会话工厂 |
 
 ## Phase 8
 
@@ -720,7 +719,6 @@
 | `core/src/guardian/feedback.rs` | 44 | `guardian/feedback.swift` | ✅ faithful |  |
 | `core/src/guardian/input_budget.rs` | 197 | `guardian/input_budget.swift` | 🟡 adapted |  |
 | `core/src/guardian/mod.rs` | 208 | `guardian/guardian_mod.swift` | 🟡 adapted | R4a basename |
-| `core/src/guardian/permissions.rs` |  | `guardian/guardian_permissions.swift` | 🟡 adapted | R4a basename |
 | `core/src/guardian/prompt.rs` | 365 | `guardian/prompt.swift` | 🟡 adapted | ACTION + truncated transcript; composed sections stay out |
 | `core/src/guardian/request_budget.rs` | 90 | `guardian/request_budget.swift` | 🟡 adapted |  |
 | `core/src/guardian/review.rs` | 287 | `guardian/review.swift` | 🟡 adapted | source-kind + project/retry routing; isolated session spawn still thin |
@@ -816,35 +814,35 @@
 | `core/src/agent/types.rs` | 88 | `agent/types.swift` | 🟡 adapted |  |
 | `core/src/agent_communication.rs` | 78 | `agent_communication.swift` | 🟡 adapted |  |
 | `core/src/agent_message_board.rs` | 190 | `agent_message_board.swift` | 🟡 adapted |  |
-| `core/src/apps/mod.rs` | 2 | `apps/apps_mod.swift` | ✅ faithful |  |
-| `core/src/apps/render.rs` | 66 | `apps/apps_render.swift` | ✅ faithful |  |
-| `core/src/connectors.rs` | 555 | `connectors.swift` | 🟡 adapted |  |
-| `core/src/cyber_access_program.rs` | 12 | `cyber_access_program.swift` | 🟡 adapted |  |
-| `core/src/environment_selection.rs` | 2,311 | `environment_selection.swift` | 🟡 adapted |  |
-| `core/src/plugins/discoverable.rs` | 59 | `plugins/discoverable.swift` | 🟡 adapted |  |
-| `core/src/plugins/injection.rs` | 59 | `plugins/injection.swift` | 🟡 adapted |  |
-| `core/src/plugins/mentions.rs` | 121 | `plugins/mentions.swift` | ✅ faithful |  |
-| `core/src/plugins/metrics.rs` | 62 | `plugins/metrics.swift` | 🟡 adapted |  |
-| `core/src/plugins/mod.rs` | 46 | `plugins/plugins_mod.swift` | 🟡 adapted |  |
-| `core/src/plugins/render.rs` | 92 | `plugins/plugins_render.swift` | ✅ faithful |  |
-| `core/src/plugins/test_support.rs` | 109 | `plugins/test_support.swift` | 🟡 adapted |  |
+| `core/src/apps/mod.rs` | 2 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/apps/render.rs` | 66 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/connectors.rs` | 555 | - | ❄️ frozen | Codex connectors 产品（§2.4） |
+| `core/src/cyber_access_program.rs` | 12 | - | ❄️ frozen | Codex 产品（§2.4） |
+| `core/src/environment_selection.rs` | 2,311 | - | ❄️ frozen | Codex remote/exec-server 环境（§2.4） |
+| `core/src/plugins/discoverable.rs` | 59 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/injection.rs` | 59 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/mentions.rs` | 121 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/metrics.rs` | 62 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/mod.rs` | 46 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/render.rs` | 92 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/plugins/test_support.rs` | 109 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
 | `core/src/session/multi_agents.rs` | 121 | `session_multi_agents.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/delegate.rs` | 497 | `tools/code_mode/delegate.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/execute_handler.rs` | 245 | `tools/code_mode/execute_handler.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/execute_spec.rs` | 104 | `tools/code_mode/execute_spec.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/mod.rs` | 567 | `tools/code_mode/code_mode_mod.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/output.rs` | 76 | `tools/code_mode/code_mode_output.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/response_adapter.rs` | 51 | `tools/code_mode/response_adapter.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/telemetry.rs` | 148 | `tools/code_mode/telemetry.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/wait_handler.rs` | 231 | `tools/code_mode/wait_handler.swift` | 🟡 adapted |  |
-| `core/src/tools/code_mode/wait_spec.rs` | 126 | `tools/code_mode/wait_spec.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/list_available_plugins_to_install.rs` | 181 | `tools/handlers/list_available_plugins_to_install.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/list_available_plugins_to_install_spec.rs` | 45 | `tools/handlers/list_available_plugins_to_install_spec.swift` | ✅ faithful |  |
+| `core/src/tools/code_mode/delegate.rs` | 497 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/execute_handler.rs` | 245 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/execute_spec.rs` | 104 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/mod.rs` | 567 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/output.rs` | 76 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/response_adapter.rs` | 51 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/telemetry.rs` | 148 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/wait_handler.rs` | 231 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/code_mode/wait_spec.rs` | 126 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/handlers/list_available_plugins_to_install.rs` | 181 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/handlers/list_available_plugins_to_install_spec.rs` | 45 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
 | `core/src/tools/handlers/multi_agents/close_agent.rs` | 133 | `tools/handlers/multi_agents/close_agent.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents/resume_agent.rs` | 177 | `tools/handlers/multi_agents/resume_agent.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents/send_input.rs` | 173 | `tools/handlers/multi_agents/send_input.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/multi_agents/spawn.rs` | 239 | - | 🟡 adapted | registry spawn; fork_context copies history; turn items on caller SageThread |
-| `core/src/tools/handlers/multi_agents/wait.rs` | 334 | - | 🟡 adapted | subscribeStatus wait; turn items on caller SageThread |
+| `core/src/tools/handlers/multi_agents/spawn.rs` | 239 | `tools/handlers/multi_agents/spawn_agent.swift` | 🟡 adapted | registry spawn; fork_context copies history; turn items on caller SageThread |
+| `core/src/tools/handlers/multi_agents/wait.rs` | 334 | `tools/handlers/multi_agents/wait_agent.swift` | 🟡 adapted | subscribeStatus wait; turn items on caller SageThread |
 | `core/src/tools/handlers/multi_agents.rs` | 99 | `tools/handlers/multi_agents.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_common.rs` | 157 | `tools/handlers/multi_agents_common.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_spec.rs` | 891 | `tools/handlers/multi_agents_spec.swift` | 🟡 adapted |  |
@@ -854,12 +852,12 @@
 | `core/src/tools/handlers/multi_agents_v2/list_agents.rs` | 109 | `tools/handlers/multi_agents_v2/list_agents.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_v2/message_tool.rs` | 100 | `tools/handlers/multi_agents_v2/message_tool.swift` | 🟡 adapted |  |
 | `core/src/tools/handlers/multi_agents_v2/send_message.rs` | 57 | `tools/handlers/multi_agents_v2/send_message.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 330 | - | 🟡 adapted | registry spawn; fork_turns copies parent SageThread history |
-| `core/src/tools/handlers/multi_agents_v2/wait.rs` | 205 | - | 🟡 adapted | mailbox+steer wait; InputQueue races AgentDeliveryState; pending steer wins |
+| `core/src/tools/handlers/multi_agents_v2/spawn.rs` | 330 | `tools/handlers/multi_agents_v2/spawn_agent_v2.swift` | 🟡 adapted | registry spawn; fork_turns copies parent SageThread history |
+| `core/src/tools/handlers/multi_agents_v2/wait.rs` | 205 | `tools/handlers/multi_agents_v2/wait_agent_v2.swift` | 🟡 adapted | mailbox+steer wait; InputQueue races AgentDeliveryState; pending steer wins |
 | `core/src/tools/handlers/multi_agents_v2.rs` | 66 | `tools/handlers/multi_agents_v2.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/request_plugin_install.rs` | 551 | `tools/handlers/request_plugin_install.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/request_plugin_install_spec.rs` | 189 | `tools/handlers/request_plugin_install_spec.swift` | 🟡 adapted |  |
-| `core/src/tools/handlers/wait_for_environment.rs` | 182 | `tools/handlers/wait_for_environment.swift` | 🟡 adapted |  |
+| `core/src/tools/handlers/request_plugin_install.rs` | 551 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/handlers/request_plugin_install_spec.rs` | 189 | - | ❄️ frozen | Codex 产品层，不再补齐（计划 §2.4 / §7） |
+| `core/src/tools/handlers/wait_for_environment.rs` | 182 | - | ❄️ frozen | Codex remote 环境（§7 Phase 9 frozen） |
 
 ## Phase 10
 
@@ -869,8 +867,9 @@
 | `core/src/context/realtime_end_instructions.rs` | 51 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/context/realtime_start_instructions.rs` | 33 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/context/realtime_start_with_instructions.rs` | 42 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
+| `core/src/context/world_state/realtime.rs` | 96 | - | 🟡 adapted | 语音 realtime，Sage 无此形态 |
 | `core/src/lib.rs` | 247 | `lib.swift` | 🟡 adapted |  |
-| `core/src/otel_init.rs` | 111 | `otel_init.swift` | 🟡 adapted |  |
+| `core/src/otel_init.rs` | 111 | - | 🟡 adapted |  |
 | `core/src/realtime_context.rs` | 583 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/realtime_conversation/bem.rs` | 71 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/realtime_conversation/existing_call.rs` | 90 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
@@ -881,28 +880,28 @@
 | `core/src/realtime_prompt.rs` | 82 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/session/realtime_history.rs` | 56 | - | 💤 deferred | deferred: 语音 realtime，Sage 无此形态 |
 | `core/src/test_support.rs` | 264 | `core_test_support.swift` | 🟡 adapted |  |
-| `otel/src/config.rs` | 120 | `otel/src/config.swift` | 🟡 adapted |  |
-| `otel/src/events/mod.rs` | 2 | `otel/src/events/mod.swift` | ✅ faithful |  |
-| `otel/src/events/session_telemetry.rs` | 1,358 | `otel/src/events/session_telemetry.swift` | 🟡 adapted |  |
-| `otel/src/events/shared.rs` | 70 | `otel/src/events/shared.swift` | 🟡 adapted |  |
-| `otel/src/lib.rs` | 94 | `otel/src/lib.swift` | 🟡 adapted |  |
-| `otel/src/metrics/client.rs` | 677 | `otel/src/metrics/client.swift` | 🟡 adapted |  |
-| `otel/src/metrics/config.rs` | 135 | `otel/src/metrics/metrics_config.swift` | 🟡 adapted |  |
-| `otel/src/metrics/error.rs` | 46 | `otel/src/metrics/error.swift` | 🟡 adapted |  |
-| `otel/src/metrics/mod.rs` | 58 | `otel/src/metrics/metrics_mod.swift` | 🟡 adapted |  |
-| `otel/src/metrics/names.rs` | 70 | `otel/src/metrics/names.swift` | ✅ faithful |  |
-| `otel/src/metrics/process.rs` | 27 | `otel/src/metrics/process.swift` | ✅ faithful |  |
-| `otel/src/metrics/runtime_metrics.rs` | 220 | `otel/src/metrics/runtime_metrics.swift` | 🟡 adapted |  |
-| `otel/src/metrics/tags.rs` | 134 | `otel/src/metrics/tags.swift` | ✅ faithful |  |
-| `otel/src/metrics/timer.rs` | 41 | `otel/src/metrics/timer.swift` | 🟡 adapted |  |
-| `otel/src/metrics/validation.rs` | 55 | `otel/src/metrics/validation.swift` | ✅ faithful |  |
-| `otel/src/network_policy.rs` | 127 | `otel/src/network_policy.swift` | 🟡 adapted |  |
-| `otel/src/otlp.rs` | 277 | `otel/src/otlp.swift` | 🟡 adapted |  |
-| `otel/src/provider.rs` | 851 | `otel/src/provider.swift` | 🟡 adapted |  |
-| `otel/src/targets.rs` | 11 | `otel/src/targets.swift` | ✅ faithful |  |
-| `otel/src/tool_result.rs` | 114 | `otel/src/tool_result.swift` | 🟡 adapted |  |
-| `otel/src/trace_context.rs` | 411 | `otel/src/trace_context.swift` | 🟡 adapted |  |
-| `terminal-detection/src/lib.rs` | 423 | `terminal-detection/src/lib.swift` | ✅ faithful |  |
+| `otel/src/config.rs` | 120 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/events/mod.rs` | 2 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/events/session_telemetry.rs` | 1,358 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/events/shared.rs` | 70 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/lib.rs` | 94 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/client.rs` | 677 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/config.rs` | 135 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/error.rs` | 46 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/mod.rs` | 58 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/names.rs` | 70 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/process.rs` | 27 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/runtime_metrics.rs` | 220 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/tags.rs` | 134 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/timer.rs` | 41 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/metrics/validation.rs` | 55 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/network_policy.rs` | 127 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/otlp.rs` | 277 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/provider.rs` | 851 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/targets.rs` | 11 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/tool_result.rs` | 114 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `otel/src/trace_context.rs` | 411 | - | ❄️ frozen | 完整 OTEL 不移植，最小指标接口接 Sage 埋点（§2.2） |
+| `terminal-detection/src/lib.rs` | 423 | `terminal-detection/src/lib.swift` | ✅ faithful | TUI 终端探测，Sage 无此形态（§2.2 裁剪） |
 
 ## 不计入范围（平台/测试）
 
@@ -918,17 +917,18 @@
 
 | Swift 文件 | 备注 |
 |---|---|
-| `Tests/Phase10OtelTests/Phase10OtelTests.swift` | Sage 新增，无 codex 对应 |
 | `Tests/Phase7PersistenceTests/Phase7PersistenceTests.swift` | Sage 新增，无 codex 对应 |
 | `Tests/Phase8GuardianSkillsTests/Phase8GuardianSkillsTests.swift` | Sage 新增，无 codex 对应 |
+| `Tests/Phase9AgentTests/McpToolExposureTests.swift` | Sage 新增，无 codex 对应 |
 | `Tests/Phase9AgentTests/Phase9AgentTests.swift` | Sage 新增，无 codex 对应 |
 | `async-utils/src/cancellation_token.swift` | Sage 新增，无 codex 对应 |
 | `context/context_fragments_bridge.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/json_value.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/serde_helpers.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/uuid_v7.swift` | Sage 新增，无 codex 对应 |
-| `tasks/explore.swift` | Sage 新增，无 codex 对应 |
 | `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载；Responses client 租约 |
+| `tasks/explore.swift` | Sage 新增，无 codex 对应 |
+| `tasks/user_shell_package_path.swift` | Sage 新增，无 codex 对应 |
 | `tools/handlers/sage_execute.swift` | Sage 新增：execute 工具 → onSageToolCall |
 | `utils/io_error.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/file_url.swift` | Sage 新增，无 codex 对应 |
