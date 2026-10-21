@@ -8,7 +8,7 @@
 
 **已落地：**
 
-- **Agent Runtime**：Plan → Execute → Review 三阶段全部跑在 `Sage/Agent/Execute/Harness/` 的同一套 agent runtime 上（`AGENT_RUNTIME_INTEGRATION_PLAN.md` M0–M5 已收口）：一个 task 一个持久 Session / root 线程（`TaskHarness`），每个阶段 = 一次 `runTurn`，阶段行为由 `TurnContext.toolAllowlist` 双门收窄（plan / review 只读小集、execute 全量 + act-only todo、explorer 子 agent 只读）；must-fix 返工在同一 session 提交显式输入；压缩在问之前，MCP 启动与工具钩子照旧；观察可并行，写入 / shell / MCP / todo 串行。`act` 策略确认一次；observe / answer 回合经 `screenMutations` 拒绝副作用工具并落 transcript
+- **Agent Runtime**：Plan → Execute → Review 三阶段全部跑在 `Sage/Harness/` 的同一套 agent runtime 上（`AGENT_RUNTIME_INTEGRATION_PLAN.md` M0–M5 已收口）：一个 task 一个持久 Session / root 线程（`TaskHarness`），每个阶段 = 一次 `runTurn`，阶段行为由 `TurnContext.toolAllowlist` 双门收窄（plan / review 只读小集、execute 全量 + act-only todo、explorer 子 agent 只读）；must-fix 返工在同一 session 提交显式输入；压缩在问之前，MCP 启动与工具钩子照旧；观察可并行，写入 / shell / MCP / todo 串行。`act` 策略确认一次；observe / answer 回合经 `screenMutations` 拒绝副作用工具并落 transcript
 - **Task**：GRDB 持久化、窗口线程、workspace snapshot；默认粘住当前线程，显式「新任务」才开新 task；主题漂移是 Plan 给出的非阻塞提示；chrome Recents 菜单显式切线程
 - **Transcript**：点回复时放开输入框焦点；窗口变 key 不抢焦点，便于选中复制
 - **主题**：从首条用户消息确定性截取 topic + abstract（无本地模型）

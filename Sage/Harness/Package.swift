@@ -1,6 +1,7 @@
 // swift-tools-version: 6.0
 //
-// Execute harness modules. Source paths match the Sage tree so a Sage file
+// Agent runtime (harness) modules, shared by the Plan/Execute/Review phases.
+// Source paths match the Sage tree so a Sage file
 // and its Swift port stay side by side (EXECUTE_HARNESS_PORT_PLAN.md §5):
 //
 //   codex-rs/protocol/src/<file>.rs
@@ -42,7 +43,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "ExecuteHarness",
+    name: "SageAgentRuntime",
     // .v15: SageProtocol uses UInt128 (ThreadId.init(u128:)), available macOS 15+.
     platforms: [.macOS(.v15)],
     products: [

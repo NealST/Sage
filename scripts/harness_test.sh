@@ -1,5 +1,5 @@
 #!/bin/zsh
-# harness_test.sh — build ExecuteHarness modules and run their tests without
+# harness_test.sh — build SageAgentRuntime (Harness) modules and run their tests without
 # xcodebuild (the Xcode license prompt blocks `swift build` on this machine).
 #
 # Uses the Xcode toolchain binaries directly and a minimal XCTest
@@ -14,8 +14,8 @@
 set -euo pipefail
 
 SAGE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HARNESS="$SAGE_ROOT/Sage/Agent/Execute/Harness"
-TESTS="$SAGE_ROOT/SageTests/ExecuteHarness"
+HARNESS="$SAGE_ROOT/Sage/Harness"
+TESTS="$SAGE_ROOT/SageTests/Harness"
 TC=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc
 SDK=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
 TARGET=arm64-apple-macosx15.0

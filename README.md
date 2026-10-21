@@ -1,6 +1,6 @@
 # Sage
 
-macOS 端 AI 编码代理。核心 agent runtime 从 codex-rs 移植为 Swift（`Sage/Agent/Execute/Harness/`，
+macOS 端 AI 编码代理。核心 agent runtime 从 codex-rs 移植为 Swift（`Sage/Harness/`，
 见 `Docs/EXECUTE_HARNESS_PORT_PLAN.md` 与 `Harness/PORTING.md` 的移植状态表），外围是自有的
 任务路由、计划/评审、技能、定时调度与 SwiftUI 桌面 UI。
 
@@ -28,7 +28,7 @@ xcodebuild -project Sage.xcodeproj -scheme Sage -configuration Debug -destinatio
 | `Sage/Commands/` `Sage/Dashboard/` `Sage/MenuBar/` `Sage/HUD/` `Sage/Hotkey/` | 其余 UI 表面 |
 | `Sage/Settings/` | 设置界面与存储 |
 | `Sage/Util/` | 基础工具（路径、diff、git 读取、ProjectAgentsMarkdown 解析） |
-| `SageTests/` | 测试；子目录镜像 `Sage/` 分区（AgentTests/、ToolsTests/…），ExecuteHarness/ 为上游移植测试 |
+| `SageTests/` | 测试；子目录镜像 `Sage/` 分区（AgentTests/、ToolsTests/…），Harness/ 为上游移植测试 |
 | `Docs/` | 设计文档：项目系统设计、agent runtime 集成计划、移植计划、调度与任务路由设计 |
 | `scripts/` | 移植追踪 lint、离线测试脚本（见 `scripts/README.md`） |
 | `ThirdParty/` | vendored 上游依赖（swift-markdown-engine 等） |
@@ -36,7 +36,7 @@ xcodebuild -project Sage.xcodeproj -scheme Sage -configuration Debug -destinatio
 ## 分层规则
 
 - `Agent/`（逻辑）不 import `Panel/`（UI）；UI 只经 Agent 层意图方法写状态。
-- `Agent/Execute/Harness/` 是 codex-rs 忠实移植，改动需同步 `Harness/PORTING.md`；
+- `Sage/Harness/` 是 codex-rs 忠实移植，改动需同步 `Harness/PORTING.md`；
   Sage 自有胶水（TaskHarness、PhaseTurnRunner、ExecuteTask）放在其外层。
 - 纯 Foundation 逻辑（如 ToolCallPresentation）归 Agent 层，UI 只做渲染。
 

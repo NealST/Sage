@@ -1,6 +1,6 @@
 # Sage Agent Runtime 整合计划 — Plan / Execute / Review 全 runtime 化
 
-> **目标**：把已移植的 Codex agent runtime（`Sage/Agent/Execute/Harness/`，下称 harness）与 Sage 的三层编排（Plan → Execute → Review）整合为**每阶段都是完整 agent runtime**：同一套回合循环、工具编排、审批、压缩、rollout，阶段之间只有行为配置与输出契约的差别。同时把双轨工具系统收口到 harness 侧单一组装点。
+> **目标**：把已移植的 Codex agent runtime（`Sage/Harness/`，下称 harness）与 Sage 的三层编排（Plan → Execute → Review）整合为**每阶段都是完整 agent runtime**：同一套回合循环、工具编排、审批、压缩、rollout，阶段之间只有行为配置与输出契约的差别。同时把双轨工具系统收口到 harness 侧单一组装点。
 >
 > **上游关系**：harness 的忠实度目标与文件映射仍以 `EXECUTE_HARNESS_PORT_PLAN.md` 为准；本计划只动**接线与整合**，不新增 codex 侧忠实度欠债（新增机制按 R8 标注 Sage addition）。产品路线（HUD、Schedules、UI）仍以 `DEVELOPMENT_ROADMAP.md` 为准。
 >
@@ -184,9 +184,9 @@ struct PhaseProfile {
 2. `sageToolSpecs` 真实 schema 通道 + `registerSageTools` 改造 + 删 `sageResponsesTools` 旁路（§4.6 前两行）。
 3. spawn → 子线程白名单传递 + 内建 `explorer` 角色（§4.5 前置）。子线程走 `ThreadManager.childModelTools(for:)` → `ModelClientTurnSampler.tools` 组装门 + `ThreadSession.functionCallOutputs` 派发门（双门对齐 §4.1）。
 
-**验收**：现有测试全绿（`SageTests/ExecuteHarness/**`、TurnTests、ToolLoopPolicyTests）；新增单测：白名单过滤（组装 + 派发双门）、真实 schema 注册 round-trip（spec 名 / 描述 / 参数与 `ToolDefinition` 一致）、explorer 角色子线程只读、`builtTools` 全量输出与旧 `sageResponsesTools` 输出语义等价（golden 对拍）。
+**验收**：现有测试全绿（`SageTests/Harness/**`、TurnTests、ToolLoopPolicyTests）；新增单测：白名单过滤（组装 + 派发双门）、真实 schema 注册 round-trip（spec 名 / 描述 / 参数与 `ToolDefinition` 一致）、explorer 角色子线程只读、`builtTools` 全量输出与旧 `sageResponsesTools` 输出语义等价（golden 对拍）。
 
-> 落地记录：app 侧 4 个 ExecuteHarness 测试类 220 全绿；包侧 Phase9AgentTests 54 全绿（含 4 个新 e2e/单元测试）。泛用回合机械测试（`testRegularTurnRunsToolsThenSamplesAgain` / `testRegularTurnInterruptAbortsToolFollowUp`）的 spawn 角色从 "explorer" 改为 nil——explorer 角色现在带只读门，这两处测的是通用机械而非角色语义。
+> 落地记录：app 侧 4 个 Harness 测试类 220 全绿；包侧 Phase9AgentTests 54 全绿（含 4 个新 e2e/单元测试）。泛用回合机械测试（`testRegularTurnRunsToolsThenSamplesAgain` / `testRegularTurnInterruptAbortsToolFollowUp`）的 spawn 角色从 "explorer" 改为 nil——explorer 角色现在带只读门，这两处测的是通用机械而非角色语义。
 
 ### M1 — Review 阶段 harness 化 ✅ 已完成（2026-10-15）
 
@@ -276,7 +276,7 @@ struct PhaseProfile {
 
 1. **单元**：M0 的白名单 / schema / explorer 角色三组；PhaseTurnRunner 用假 `ModelClient` 回放 `ResponseEvent` 流（对齐移植计划 Phase 5 的回合 golden 测试做法）。
 2. **行为级**：Plan 只读检查、Review 自主检查 + verdict、返工闭环、explore spawn/wait、中断——每个里程碑的验收清单即行为用例。
-3. **回归**：`SageTests/ExecuteHarness/**` 全绿；app 侧 TurnTests / ToolLoopPolicyTests / ReviewAgent / PlanAgent 测试改路径后全绿；工具审批（`ApprovalStore` / SessionToolAllowlist / GrantStore 三层）行为不回归。
+3. **回归**：`SageTests/Harness/**` 全绿；app 侧 TurnTests / ToolLoopPolicyTests / ReviewAgent / PlanAgent 测试改路径后全绿；工具审批（`ApprovalStore` / SessionToolAllowlist / GrantStore 三层）行为不回归。
 4. **手动 golden path**（每个里程碑收尾跑一次真实任务）：observe 任务（无工具）→ answer 任务 → act 任务（确认卡 + 执行 + 评审）→ must-fix 返工 → explore 工具调用 → Stop / 恢复。
 5. **wire 对拍**：`builtTools` 输出与旧 `sageResponsesTools` 输出做语义等价对拍（M0）；rollout 写入 → 回放 round-trip（M3）。
 

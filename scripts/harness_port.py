@@ -7,8 +7,8 @@
   python3 scripts/harness_port.py stats      # 打印分 phase 进度统计
 
 约定（计划 §5 / §5.3）：
-  codex-rs/core/src/<path>.rs        → Sage/Agent/Execute/Harness/<path>.swift
-  codex-rs/<crate>/src/<path>.rs     → Sage/Agent/Execute/Harness/<crate>/src/<path>.swift
+  codex-rs/core/src/<path>.rs        → Sage/Harness/<path>.swift
+  codex-rs/<crate>/src/<path>.rs     → Sage/Harness/<crate>/src/<path>.swift
   含 codex 的 crate/文件名按 R2a 改 sage（codex-api/ → sage-api/，codex_thread.rs → sage_thread.swift）
   模块名 Sage*（FileSystem / ApplyPatch / ToolsRuntimes 除外）。
   mod.rs → mod.swift；文件名保持 snake_case；一个 Rust 文件对应一个 Swift 文件。
@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CODEX = ROOT.parent / "codex" / "codex-rs"
-HARNESS = ROOT / "Sage" / "Agent" / "Execute" / "Harness"
+HARNESS = ROOT / "Sage" / "Harness"
 PORTING = HARNESS / "PORTING.md"
 FALLBACK_REVISION = "0a2eb4696c26ac33204bcd255721ab30220a4774"
 

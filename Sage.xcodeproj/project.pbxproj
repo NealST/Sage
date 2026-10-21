@@ -28,7 +28,7 @@
 		A10GRDB000000000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A10GRDB000000000000000002 /* GRDB */; };
 		A10HISTFRM0000000000001 /* SageHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* SageHistory */; };
 		A10HISTFRMT000000000001 /* SageHistory in Frameworks */ = {isa = PBXBuildFile; productRef = A10HISTPROD000000000001 /* SageHistory */; };
-		A10HOOKBLD0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10HOOKREF0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift */; };
+		A10HOOKBLD0000000000001 /* Sage/Harness/hook_runtime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10HOOKREF0000000000001 /* Sage/Harness/hook_runtime.swift */; };
 		A10HOOKFRM0000000000001 /* SageHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* SageHooks */; };
 		A10HOOKFRMT000000000001 /* SageHooks in Frameworks */ = {isa = PBXBuildFile; productRef = A10HOOKPROD000000000001 /* SageHooks */; };
 		A10MARKDOWN00000000000001 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = A10MARKDOWN00000000000002 /* MarkdownUI */; };
@@ -82,12 +82,12 @@
 
 /* Begin PBXFileReference section */
 		30ACE9D53001EBF5006F8C54 /* Sage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sage.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10HOOKREF0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sage/Agent/Execute/Harness/hook_runtime.swift; sourceTree = "<group>"; };
+		A10HOOKREF0000000000001 /* Sage/Harness/hook_runtime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sage/Harness/hook_runtime.swift; sourceTree = "<group>"; };
 		A10TESTPROD000000000001 /* SageTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SageTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A10HARNTOOLSEX000000001 /* Exceptions for "Sage/Agent/Execute/Harness/tools" folder in "Sage" target */ = {
+		A10HARNTOOLSEX000000001 /* Exceptions for "Sage/Harness/tools" folder in "Sage" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				runtimes/apply_patch.swift,
@@ -106,7 +106,7 @@
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
 		};
-		A10SESSMODX000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/session" folder in "Sage" target */ = {
+		A10SESSMODX000000000001 /* Exceptions for "Sage/Harness/session" folder in "Sage" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				session_mod.swift,
@@ -114,7 +114,7 @@
 			);
 			target = 30ACE9D43001EBF5006F8C54 /* Sage */;
 		};
-		A10STATEX000000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/state" folder in "Sage" target */ = {
+		A10STATEX000000000000001 /* Exceptions for "Sage/Harness/state" folder in "Sage" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				src/audit.swift,
@@ -160,156 +160,156 @@
 		A10TESTEXC0000000000001 /* Exceptions for "SageTests" folder in "SageTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				ExecuteHarness/apply_patch.swift,
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/.gitattributes",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/001_add_file/expected/bar.md",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/001_add_file/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/expected/modify.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/expected/nested/new.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/input/delete.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/input/modify.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/expected/multi.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/input/multi.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/expected/old/other.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/expected/renamed/dir/name.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/input/old/name.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/input/old/other.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/expected/modify.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/input/modify.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/expected/old/other.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/expected/renamed/dir/name.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/old/name.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/old/other.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/renamed/dir/name.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/expected/duplicate.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/input/duplicate.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/expected/dir/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/input/dir/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/expected/no_newline.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/input/no_newline.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/015_failure_after_partial_success_leaves_changes/expected/created.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/015_failure_after_partial_success_leaves_changes/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/expected/input.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/input/input.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/expected/file.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/input/file.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/expected/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/input/foo.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/expected/keep.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/input/keep.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/input/obsolete.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/expected/file.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/input/file.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/expected/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/input/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/expected/tail.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/input/tail.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/expected/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/input/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/patch.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/expected/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/input/lines.txt",
-				"ExecuteHarness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/patch.txt",
-				"ExecuteHarness/apply-patch/tests/suite/parser.swift",
-				"ExecuteHarness/apply-patch/tests/suite/scenarios.swift",
-				"ExecuteHarness/apply-patch/tests/suite/tool.swift",
-				"ExecuteHarness/async-utils/tests/suite/lib_tests.swift",
-				ExecuteHarness/client/Phase6ClientTests.swift,
-				ExecuteHarness/command_canonicalization.swift,
-				ExecuteHarness/exec_env.swift,
-				ExecuteHarness/exec_policy.swift,
-				ExecuteHarness/exec.swift,
-				ExecuteHarness/execpolicy/tests/suite/policy.swift,
-				"ExecuteHarness/file-system/tests/suite/find_up.swift",
-				"ExecuteHarness/git-utils/tests/suite/info.swift",
-				ExecuteHarness/guardian/prompt.swift,
-				ExecuteHarness/hooks/command_runner.swift,
-				ExecuteHarness/hooks/discovery.swift,
-				ExecuteHarness/hooks/event_run.swift,
-				ExecuteHarness/hooks/output_parser.swift,
-				ExecuteHarness/hooks/registry.swift,
-				ExecuteHarness/hooks/schema_loader.swift,
-				ExecuteHarness/protocol/tests/suite/error.swift,
-				ExecuteHarness/protocol/tests/suite/items.swift,
-				ExecuteHarness/protocol/tests/suite/permission_profile_intersection.swift,
-				ExecuteHarness/protocol/tests/suite/permissions.swift,
-				ExecuteHarness/protocol/tests/suite/protocol_events.swift,
-				ExecuteHarness/protocol/tests/suite/response_item_id.swift,
-				ExecuteHarness/protocol/tests/suite/serde_wire_format.swift,
-				ExecuteHarness/protocol/tests/suite/session_id.swift,
-				ExecuteHarness/protocol/tests/suite/thread_id.swift,
-				ExecuteHarness/protocol/tests/suite/tool_name.swift,
-				ExecuteHarness/protocol/tests/suite/turn_input.swift,
-				ExecuteHarness/rollout/Phase7PersistenceTests.swift,
-				ExecuteHarness/sandbox_tags.swift,
-				ExecuteHarness/sandboxing/tests/suite/denial.swift,
-				ExecuteHarness/sandboxing/tests/suite/policy_transforms.swift,
-				ExecuteHarness/session/Phase5SessionTests.swift,
-				ExecuteHarness/shell_snapshot.swift,
-				"ExecuteHarness/shell-command/tests/suite/parse_command.swift",
-				"ExecuteHarness/shell-command/tests/suite/safety.swift",
-				"ExecuteHarness/shell-command/tests/suite/shell_snapshot.swift",
-				ExecuteHarness/shell.swift,
-				ExecuteHarness/tasks/compact.swift,
-				ExecuteHarness/tasks/execute_attach.swift,
-				ExecuteHarness/tools/parallel.swift,
-				ExecuteHarness/tools/suite/orchestrator.swift,
-				ExecuteHarness/tools/suite/sandboxing.swift,
-				ExecuteHarness/unified_exec/head_tail_buffer.swift,
-				ExecuteHarness/unified_exec/mod.swift,
-				"ExecuteHarness/utils/absolute-path/tests/suite/absolutize.swift",
-				"ExecuteHarness/utils/absolute-path/tests/suite/lib.swift",
-				ExecuteHarness/utils/cache/tests/suite/cache_lib_tests.swift,
-				"ExecuteHarness/utils/home-dir/tests/suite/home_dir_lib_tests.swift",
-				"ExecuteHarness/utils/path-uri/tests/suite/api_path_string_tests.swift",
-				"ExecuteHarness/utils/path-uri/tests/suite/config_path_tests.swift",
-				"ExecuteHarness/utils/path-uri/tests/suite/platform_tests.swift",
-				"ExecuteHarness/utils/path-uri/tests/suite/tests.swift",
-				"ExecuteHarness/utils/path-utils/tests/suite/path_utils_tests.swift",
-				"ExecuteHarness/utils/path-utils/tests/suite/system_commands_tests.swift",
-				ExecuteHarness/utils/pty.swift,
-				"ExecuteHarness/utils/stream-parser/tests/suite/assistant_text_tests.swift",
-				"ExecuteHarness/utils/stream-parser/tests/suite/citation_tests.swift",
-				"ExecuteHarness/utils/stream-parser/tests/suite/inline_hidden_tag_tests.swift",
-				"ExecuteHarness/utils/stream-parser/tests/suite/proposed_plan_tests.swift",
-				"ExecuteHarness/utils/stream-parser/tests/suite/tagged_line_parser_tests.swift",
-				"ExecuteHarness/utils/stream-parser/tests/suite/utf8_stream_tests.swift",
-				ExecuteHarness/utils/string/tests/suite/json_tests.swift,
-				ExecuteHarness/utils/string/tests/suite/string_lib_tests.swift,
-				ExecuteHarness/utils/string/tests/suite/truncate_tests.swift,
+				Harness/apply_patch.swift,
+				"Harness/apply-patch/tests/fixtures/scenarios/.gitattributes",
+				"Harness/apply-patch/tests/fixtures/scenarios/001_add_file/expected/bar.md",
+				"Harness/apply-patch/tests/fixtures/scenarios/001_add_file/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/expected/modify.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/expected/nested/new.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/input/delete.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/input/modify.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/002_multiple_operations/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/expected/multi.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/input/multi.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/003_multiple_chunks/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/expected/old/other.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/expected/renamed/dir/name.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/input/old/name.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/input/old/other.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/004_move_to_new_directory/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/005_rejects_empty_patch/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/expected/modify.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/input/modify.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/006_rejects_missing_context/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/007_rejects_missing_file_delete/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/008_rejects_empty_update_hunk/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/009_requires_existing_file_for_update/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/expected/old/other.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/expected/renamed/dir/name.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/old/name.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/old/other.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/input/renamed/dir/name.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/010_move_overwrites_existing_destination/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/expected/duplicate.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/input/duplicate.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/011_add_overwrites_existing_file/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/expected/dir/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/input/dir/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/012_delete_directory_fails/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/013_rejects_invalid_hunk_header/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/expected/no_newline.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/input/no_newline.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/014_update_file_appends_trailing_newline/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/015_failure_after_partial_success_leaves_changes/expected/created.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/015_failure_after_partial_success_leaves_changes/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/expected/input.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/input/input.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/016_pure_addition_update_chunk/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/017_whitespace_padded_hunk_header/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/expected/file.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/input/file.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/018_whitespace_padded_patch_markers/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/expected/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/input/foo.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/019_unicode_simple/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/expected/keep.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/input/keep.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/input/obsolete.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_delete_file_success/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/expected/file.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/input/file.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/020_whitespace_padded_patch_marker_lines/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/expected/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/input/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/021_update_file_deletion_only/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/expected/tail.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/input/tail.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/022_update_file_end_of_file_marker/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/expected/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/input/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/023_preserves_crlf_line_endings/patch.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/expected/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/input/lines.txt",
+				"Harness/apply-patch/tests/fixtures/scenarios/024_preserves_mixed_line_endings/patch.txt",
+				"Harness/apply-patch/tests/suite/parser.swift",
+				"Harness/apply-patch/tests/suite/scenarios.swift",
+				"Harness/apply-patch/tests/suite/tool.swift",
+				"Harness/async-utils/tests/suite/lib_tests.swift",
+				Harness/client/Phase6ClientTests.swift,
+				Harness/command_canonicalization.swift,
+				Harness/exec_env.swift,
+				Harness/exec_policy.swift,
+				Harness/exec.swift,
+				Harness/execpolicy/tests/suite/policy.swift,
+				"Harness/file-system/tests/suite/find_up.swift",
+				"Harness/git-utils/tests/suite/info.swift",
+				Harness/guardian/prompt.swift,
+				Harness/hooks/command_runner.swift,
+				Harness/hooks/discovery.swift,
+				Harness/hooks/event_run.swift,
+				Harness/hooks/output_parser.swift,
+				Harness/hooks/registry.swift,
+				Harness/hooks/schema_loader.swift,
+				Harness/protocol/tests/suite/error.swift,
+				Harness/protocol/tests/suite/items.swift,
+				Harness/protocol/tests/suite/permission_profile_intersection.swift,
+				Harness/protocol/tests/suite/permissions.swift,
+				Harness/protocol/tests/suite/protocol_events.swift,
+				Harness/protocol/tests/suite/response_item_id.swift,
+				Harness/protocol/tests/suite/serde_wire_format.swift,
+				Harness/protocol/tests/suite/session_id.swift,
+				Harness/protocol/tests/suite/thread_id.swift,
+				Harness/protocol/tests/suite/tool_name.swift,
+				Harness/protocol/tests/suite/turn_input.swift,
+				Harness/rollout/Phase7PersistenceTests.swift,
+				Harness/sandbox_tags.swift,
+				Harness/sandboxing/tests/suite/denial.swift,
+				Harness/sandboxing/tests/suite/policy_transforms.swift,
+				Harness/session/Phase5SessionTests.swift,
+				Harness/shell_snapshot.swift,
+				"Harness/shell-command/tests/suite/parse_command.swift",
+				"Harness/shell-command/tests/suite/safety.swift",
+				"Harness/shell-command/tests/suite/shell_snapshot.swift",
+				Harness/shell.swift,
+				Harness/tasks/compact.swift,
+				Harness/tasks/execute_attach.swift,
+				Harness/tools/parallel.swift,
+				Harness/tools/suite/orchestrator.swift,
+				Harness/tools/suite/sandboxing.swift,
+				Harness/unified_exec/head_tail_buffer.swift,
+				Harness/unified_exec/mod.swift,
+				"Harness/utils/absolute-path/tests/suite/absolutize.swift",
+				"Harness/utils/absolute-path/tests/suite/lib.swift",
+				Harness/utils/cache/tests/suite/cache_lib_tests.swift,
+				"Harness/utils/home-dir/tests/suite/home_dir_lib_tests.swift",
+				"Harness/utils/path-uri/tests/suite/api_path_string_tests.swift",
+				"Harness/utils/path-uri/tests/suite/config_path_tests.swift",
+				"Harness/utils/path-uri/tests/suite/platform_tests.swift",
+				"Harness/utils/path-uri/tests/suite/tests.swift",
+				"Harness/utils/path-utils/tests/suite/path_utils_tests.swift",
+				"Harness/utils/path-utils/tests/suite/system_commands_tests.swift",
+				Harness/utils/pty.swift,
+				"Harness/utils/stream-parser/tests/suite/assistant_text_tests.swift",
+				"Harness/utils/stream-parser/tests/suite/citation_tests.swift",
+				"Harness/utils/stream-parser/tests/suite/inline_hidden_tag_tests.swift",
+				"Harness/utils/stream-parser/tests/suite/proposed_plan_tests.swift",
+				"Harness/utils/stream-parser/tests/suite/tagged_line_parser_tests.swift",
+				"Harness/utils/stream-parser/tests/suite/utf8_stream_tests.swift",
+				Harness/utils/string/tests/suite/json_tests.swift,
+				Harness/utils/string/tests/suite/string_lib_tests.swift,
+				Harness/utils/string/tests/suite/truncate_tests.swift,
 			);
 			target = A10TESTTARG0000000000001 /* SageTests */;
 		};
@@ -324,43 +324,43 @@
 			path = Sage;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000001 /* Sage/Agent/Execute/Harness/tools */ = {
+		A10HARNAPP0000000000001 /* Sage/Harness/tools */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A10HARNTOOLSEX000000001 /* Exceptions for "Sage/Agent/Execute/Harness/tools" folder in "Sage" target */,
+				A10HARNTOOLSEX000000001 /* Exceptions for "Sage/Harness/tools" folder in "Sage" target */,
 			);
-			path = Sage/Agent/Execute/Harness/tools;
+			path = Sage/Harness/tools;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000002 /* Sage/Agent/Execute/Harness/tasks */ = {
+		A10HARNAPP0000000000002 /* Sage/Harness/tasks */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Sage/Agent/Execute/Harness/tasks;
+			path = Sage/Harness/tasks;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000003 /* Sage/Agent/Execute/Harness/session */ = {
+		A10HARNAPP0000000000003 /* Sage/Harness/session */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A10SESSMODX000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/session" folder in "Sage" target */,
+				A10SESSMODX000000000001 /* Exceptions for "Sage/Harness/session" folder in "Sage" target */,
 			);
-			path = Sage/Agent/Execute/Harness/session;
+			path = Sage/Harness/session;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000004 /* Sage/Agent/Execute/Harness/guardian */ = {
+		A10HARNAPP0000000000004 /* Sage/Harness/guardian */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Sage/Agent/Execute/Harness/guardian;
+			path = Sage/Harness/guardian;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000005 /* Sage/Agent/Execute/Harness/config */ = {
+		A10HARNAPP0000000000005 /* Sage/Harness/config */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Sage/Agent/Execute/Harness/config;
+			path = Sage/Harness/config;
 			sourceTree = "<group>";
 		};
-		A10HARNAPP0000000000006 /* Sage/Agent/Execute/Harness/state */ = {
+		A10HARNAPP0000000000006 /* Sage/Harness/state */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A10STATEX000000000000001 /* Exceptions for "Sage/Agent/Execute/Harness/state" folder in "Sage" target */,
+				A10STATEX000000000000001 /* Exceptions for "Sage/Harness/state" folder in "Sage" target */,
 			);
-			path = Sage/Agent/Execute/Harness/state;
+			path = Sage/Harness/state;
 			sourceTree = "<group>";
 		};
 		A10TESTGROUP000000000001 /* SageTests */ = {
@@ -456,13 +456,13 @@
 			children = (
 				30ACE9D73001EBF5006F8C54 /* Sage */,
 				A10TESTGROUP000000000001 /* SageTests */,
-				A10HARNAPP0000000000001 /* Sage/Agent/Execute/Harness/tools */,
-				A10HARNAPP0000000000002 /* Sage/Agent/Execute/Harness/tasks */,
-				A10HARNAPP0000000000003 /* Sage/Agent/Execute/Harness/session */,
-				A10HARNAPP0000000000004 /* Sage/Agent/Execute/Harness/guardian */,
-				A10HARNAPP0000000000005 /* Sage/Agent/Execute/Harness/config */,
-				A10HARNAPP0000000000006 /* Sage/Agent/Execute/Harness/state */,
-				A10HOOKREF0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift */,
+				A10HARNAPP0000000000001 /* Sage/Harness/tools */,
+				A10HARNAPP0000000000002 /* Sage/Harness/tasks */,
+				A10HARNAPP0000000000003 /* Sage/Harness/session */,
+				A10HARNAPP0000000000004 /* Sage/Harness/guardian */,
+				A10HARNAPP0000000000005 /* Sage/Harness/config */,
+				A10HARNAPP0000000000006 /* Sage/Harness/state */,
+				A10HOOKREF0000000000001 /* Sage/Harness/hook_runtime.swift */,
 				30ACE9D63001EBF5006F8C54 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -493,12 +493,12 @@
 			);
 			fileSystemSynchronizedGroups = (
 				30ACE9D73001EBF5006F8C54 /* Sage */,
-				A10HARNAPP0000000000001 /* Sage/Agent/Execute/Harness/tools */,
-				A10HARNAPP0000000000002 /* Sage/Agent/Execute/Harness/tasks */,
-				A10HARNAPP0000000000003 /* Sage/Agent/Execute/Harness/session */,
-				A10HARNAPP0000000000004 /* Sage/Agent/Execute/Harness/guardian */,
-				A10HARNAPP0000000000005 /* Sage/Agent/Execute/Harness/config */,
-				A10HARNAPP0000000000006 /* Sage/Agent/Execute/Harness/state */,
+				A10HARNAPP0000000000001 /* Sage/Harness/tools */,
+				A10HARNAPP0000000000002 /* Sage/Harness/tasks */,
+				A10HARNAPP0000000000003 /* Sage/Harness/session */,
+				A10HARNAPP0000000000004 /* Sage/Harness/guardian */,
+				A10HARNAPP0000000000005 /* Sage/Harness/config */,
+				A10HARNAPP0000000000006 /* Sage/Harness/state */,
 			);
 			name = Sage;
 			packageProductDependencies = (
@@ -638,7 +638,7 @@
 				A10TSRBPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-ruby" */,
 				A10TSJAVAPKG000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-java" */,
 				A10TSKTPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-kotlin" */,
-				A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */,
+				A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 30ACE9D63001EBF5006F8C54 /* Products */;
@@ -673,7 +673,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10HOOKBLD0000000000001 /* Sage/Agent/Execute/Harness/hook_runtime.swift in Sources */,
+				A10HOOKBLD0000000000001 /* Sage/Harness/hook_runtime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -960,9 +960,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */ = {
+		A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Sage/Agent/Execute/Harness;
+			relativePath = Sage/Harness;
 		};
 		A10MDENGINE0000000000003 /* XCLocalSwiftPackageReference "ThirdParty/swift-markdown-engine" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -1108,42 +1108,42 @@
 /* Begin XCSwiftPackageProductDependency section */
 		A10APIPROD0000000000001 /* SageAPI */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageAPI;
 		};
 		A10APPLYPROD0000000000001 /* ApplyPatch */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = ApplyPatch;
 		};
 		A10ASYNCPROD00000000001 /* SageAsyncUtils */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageAsyncUtils;
 		};
 		A10COREPROD000000000001 /* SageCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageCore;
 		};
 		A10EXECPPROD00000000001 /* SageExecPolicy */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageExecPolicy;
 		};
 		A10FRAGPROD000000000001 /* SageContextFragments */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageContextFragments;
 		};
 		A10FSPROD00000000000001 /* FileSystem */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = FileSystem;
 		};
 		A10GITPROD0000000000001 /* SageGitUtils */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageGitUtils;
 		};
 		A10GRDB000000000000000002 /* GRDB */ = {
@@ -1153,12 +1153,12 @@
 		};
 		A10HISTPROD000000000001 /* SageHistory */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageHistory;
 		};
 		A10HOOKPROD000000000001 /* SageHooks */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageHooks;
 		};
 		A10MARKDOWN00000000000002 /* MarkdownUI */ = {
@@ -1173,42 +1173,42 @@
 		};
 		A10MPIPROD0000000000001 /* SageModelProviderInfo */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageModelProviderInfo;
 		};
 		A10PROTOPROD000000000001 /* SageProtocol */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageProtocol;
 		};
 		A10ROLEPROD000000000001 /* SageAgentRoles */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageAgentRoles;
 		};
 		A10ROLLPROD000000000001 /* SageRollout */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageRollout;
 		};
 		A10RUNTIMPROD000000000001 /* ToolsRuntimes */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = ToolsRuntimes;
 		};
 		A10SBOXPROD000000000001 /* SageSandboxing */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageSandboxing;
 		};
 		A10SHELLPROD00000000001 /* SageShellCommand */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageShellCommand;
 		};
 		A10STATPROD000000000001 /* SageState */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageState;
 		};
 		A10STSP00000000000000000 /* SwiftTreeSitter */ = {
@@ -1218,12 +1218,12 @@
 		};
 		A10TERMDETPROD0000000001 /* SageTerminalDetection */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageTerminalDetection;
 		};
 		A10THSTPROD000000000001 /* SageThreadStore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageThreadStore;
 		};
 		A10TSBASHP00000000000000 /* TreeSitterBash */ = {
@@ -1303,7 +1303,7 @@
 		};
 		A10UTILSPROD000000000001 /* SageUtils */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Agent/Execute/Harness" */;
+			package = A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */;
 			productName = SageUtils;
 		};
 /* End XCSwiftPackageProductDependency section */

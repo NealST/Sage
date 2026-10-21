@@ -120,7 +120,7 @@ Sage 持久化       用户可见 task / recents 仍是 GRDB；子 agent 会话�
 
 ## 3. 现状盘点
 
-逐文件状态以 `Sage/Agent/Execute/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-13）。覆盖率只说明文件在不在；runtime / host / frozen 以 §2 为准。frozen 状态由脚本按 §2.4 清单强制（只作用于已删/未建文件，保留的协议类型与内存会话工厂文件以文件头为准）。
+逐文件状态以 `Sage/Harness/PORTING.md` 为准（`python3 scripts/harness_port.py stats`，2026-10-13）。覆盖率只说明文件在不在；runtime / host / frozen 以 §2 为准。frozen 状态由脚本按 §2.4 清单强制（只作用于已删/未建文件，保留的协议类型与内存会话工厂文件以文件头为准）。
 
 ### 3.1 文件覆盖
 
@@ -171,7 +171,7 @@ Live Execute 一律走 `RegularTask` → `runTurn`（已去掉 Settings 开关�
 
 ### 4.1 SwiftPM 模块图
 
-`ExecuteHarness` 本地包（`Sage/Agent/Execute/Harness/Package.swift`）随 phase 推进扩展。模块边界 = 上游 crate 边界，**Swift 模块名按 §5.3 用 Sage 前缀**；依赖方向与上游一致：
+`SageAgentRuntime` 本地包（`Sage/Harness/Package.swift`）随 phase 推进扩展。模块边界 = 上游 crate 边界，**Swift 模块名按 §5.3 用 Sage 前缀**；依赖方向与上游一致：
 
 ```
 SageProtocol         ← codex-rs/protocol            [Phase 1] 纯值类型，Codable
@@ -217,7 +217,7 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 S
 │  InMemoryThreadStore    → 仅子 agent 内存会话（用户 task 仍走 AgentTaskStore）
 │  SageMCPHub             → MCP 管理协议（桥 CapabilityStore/MCPStdioClient）
 │  SageSettingsBridge     → Config 提供（桥 Settings）
-├─ Harness 层（ExecuteHarness SPM，runtime 忠实复写）─────
+├─ Harness 层（SageAgentRuntime SPM，runtime 忠实复写）─────
 │  session / turn / tasks / tools / compact / guardian /
 │  client / agent registry / mailbox / 子 Session 工厂
 │  ⚠️ 禁止 import Sage app 类型；一切外部能力经 protocol 注入
@@ -244,13 +244,13 @@ ToolsRuntimes        ← core/src/tools/runtimes      [已有；Phase 4 并入 S
 
 | # | 规则 |
 |---|---|
-| R1 | `codex-rs/core/src/<path>.rs` → `Sage/Agent/Execute/Harness/<path>.swift`（core crate 映射到 Harness 根，沿用现有惯例） |
-| R2 | `codex-rs/<crate>/src/<path>.rs` → `Sage/Agent/Execute/Harness/<crate>/src/<path>.swift`（独立 crate 保留 crate 目录名，如 `apply-patch/src/parser.swift`） |
+| R1 | `codex-rs/core/src/<path>.rs` → `Sage/Harness/<path>.swift`（core crate 映射到 Harness 根，沿用现有惯例） |
+| R2 | `codex-rs/<crate>/src/<path>.rs` → `Sage/Harness/<crate>/src/<path>.swift`（独立 crate 保留 crate 目录名，如 `apply-patch/src/parser.swift`） |
 | R2a | **crate / 文件名含 `codex`**：Swift 侧改成 `sage`。上游 `codex-api/` → `sage-api/`（模块 `SageAPI`）；`core/src/codex_thread.rs` → `sage_thread.swift`（类型 `SageThread`）；`codex_delegate.rs` → `sage_delegate.swift`；`protocol/src/codex_error_info.rs` → `protocol/src/sage_error_info.swift`。追踪表左列仍写上游路径 |
 | R3 | Rust `mod.rs` → Swift `mod.swift`（mod.rs 中有实际类型/函数时；纯 `mod` 声明无对应物） |
 | R4 | 文件名保持 snake_case 不变；一个 Rust 文件 → 一个 Swift 文件，禁止合并或拆分 |
 | R4a | **模块内 basename 冲突**：Swift 要求同一 module 内文件名唯一（swiftc 拒绝两个 `lib.swift`）。冲突时**先到先得**（仓库中已存在的文件保留原名）；同批多个新文件冲突时按 codex 路径排序，首个保留原名；其余加前缀：crate 文件用 crate 目录名（`-`→`_`，如 `utils/path-uri/src/lib.rs` → `utils/path-uri/src/path_uri_lib.swift`），core 文件用父目录名（如 `sandboxing/mod.rs` → `sandboxing_mod.swift`）。`harness_port.py` 自动判定 |
-| R5 | 测试：`…/<path>_tests.rs` 与 `…/tests/**` → `SageTests/ExecuteHarness/<crate>/tests/suite/<path>.swift`（沿用现有目录）；fixture 原样拷贝到 `…/tests/fixtures/` |
+| R5 | 测试：`…/<path>_tests.rs` 与 `…/tests/**` → `SageTests/Harness/<crate>/tests/suite/<path>.swift`（沿用现有目录）；fixture 原样拷贝到 `…/tests/fixtures/` |
 | R6 | 平台排除文件**不建** Swift 文件，在追踪表（§9.2）标记 `excluded(platform)` + 原因 |
 | R7 | 适配文件仍建同名 Swift 文件，文件头标 `Port status: adapted` 并说明差异 |
 | R8 | Sage 新增、无 codex 对应的文件（如 `tasks/explore.swift`）必须标注 `// Sage addition (no codex counterpart)`，且不得放在会造成映射歧义的位置 |
@@ -498,7 +498,7 @@ codex 的 wire 格式由 serde 属性决定，必须逐字段核对：
    - **P2 集成级**：需要进程/网络的（unified_exec 端到端、MCP 全链路），用 Sage 测试宿主。
 2. **fixture 共享**：直接从 `codex/` 仓库拷贝 fixture（沿用 `apply-patch/tests/fixtures/scenarios/` 的做法），不手抄。
 3. **对拍**：凡 wire 格式（serde JSON、rollout JSONL、SSE 帧、seatbelt profile），用 Rust 侧输出做 golden 逐字节比对。
-4. **回归**：每个 phase 结束时 `SageTests/ExecuteHarness/**` 全绿 + app 侧现有测试（TurnTests、ToolLoopPolicyTests 等）不回归。
+4. **回归**：每个 phase 结束时 `SageTests/Harness/**` 全绿 + app 侧现有测试（TurnTests、ToolLoopPolicyTests 等）不回归。
 5. 测试文件同样遵守 §5 映射与文件头规范。
 
 ---
