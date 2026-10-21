@@ -27,9 +27,22 @@ final class Phase4ToolsTests: XCTestCase {
         XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "send_input")))
         XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "close_agent")))
         XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "interrupt_agent")))
-        let names = Set(collaborationFunctionNames(router.modelVisibleSpecs))
+        let names = Set(flatFunctionNames(router.modelVisibleSpecs))
         XCTAssertTrue(names.contains("spawn_agent"))
         XCTAssertTrue(names.contains("wait_agent"))
+    }
+
+    private func flatFunctionNames(_ specs: [ToolSpec]) -> [String] {
+        specs.flatMap { spec -> [String] in
+            switch spec {
+            case .function(let tool):
+                return [tool.name]
+            case .namespace(let namespace):
+                return namespace.tools.map(\.function.name)
+            default:
+                return []
+            }
+        }
     }
 
     func testCurrentTimeHandlerReturnsUTC() async throws {
@@ -181,6 +194,25 @@ final class Phase4ToolsTests: XCTestCase {
             XCTFail("expected unsupported tool")
         } catch let error as FunctionCallError {
             XCTAssertTrue(error.description.contains("unsupported tool"))
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+    }
+
+    func testRegistryDispatchRejectsOutsideTurnAllowlist() async {
+        let registry = HarnessToolRegistry()
+        do {
+            _ = try await registry.dispatch(
+                ToolInvocation(
+                    callId: "x",
+                    toolName: ToolName(plain: "write_text_file"),
+                    payload: .function(arguments: "{}"),
+                    toolAllowlist: ["read_text_file"]
+                )
+            )
+            XCTFail("expected allowlist rejection")
+        } catch let error as FunctionCallError {
+            XCTAssertTrue(error.description.contains("not available this turn"))
         } catch {
             XCTFail("unexpected \(error)")
         }

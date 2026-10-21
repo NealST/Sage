@@ -86,7 +86,7 @@ final class ConfigPathTests: XCTestCase {
         ] {
             let baseUri = try PathUri.parse(base)
             let homeUri = try PathUri.parse(home)
-            try XCTAssertEqual(
+            XCTAssertEqual(
                 try PathUri.resolveConfigPathUri(
                     input: input,
                     convention: convention,
@@ -96,7 +96,7 @@ final class ConfigPathTests: XCTestCase {
                 try PathUri.parse(expectedUri),
                 rustDebugString(input)
             )
-            try XCTAssertEqual(
+            XCTAssertEqual(
                 try PathUri.resolveConfigPath(
                     input: input,
                     convention: convention,
@@ -107,7 +107,7 @@ final class ConfigPathTests: XCTestCase {
                 rustDebugString(input)
             )
             if (!input.hasPrefix(".") && !input.hasPrefix("\\")) || input.hasPrefix("\\\\") {
-                try XCTAssertEqual(
+                XCTAssertEqual(
                     try PathUri.resolveConfigPath(
                         input: input,
                         convention: convention,
@@ -191,7 +191,7 @@ final class ConfigPathTests: XCTestCase {
             )
         }
         // Unused facts cannot change an already absolute path.
-        try XCTAssertEqual(
+        XCTAssertEqual(
             try PathUri.resolveConfigPath(
                 input: "/private",
                 convention: .posix,
@@ -234,7 +234,7 @@ final class ConfigPathTests: XCTestCase {
                     )
                 }
             }
-            try XCTAssertEqual(
+            XCTAssertEqual(
                 try PathUri.resolveConfigPath(
                     input: "~/private/*.key",
                     convention: convention,

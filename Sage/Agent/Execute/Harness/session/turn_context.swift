@@ -13,6 +13,10 @@
 //  `TurnEnvironment` carries workspace roots and temporary directories
 //  for `request_permissions`, plus a resolved shell snapshot path.
 //  Snapshot capture futures and plugin metrics wait.
+//  Sage addition (no codex counterpart): `toolAllowlist` narrows the
+//  model-visible tool set for a phase turn or read-only child, and
+//  `serviceOverrides` borrows the sampling / tool-dispatch services for a
+//  single turn on a shared session (phase turns on the task session).
 //
 
 import SageCore
@@ -68,6 +72,26 @@ func localTemporaryDirectoryPaths() -> [String] {
     return directories
 }
 
+/// Sage addition (no codex counterpart). Turn-level lease of the session's
+/// sampling and tool-dispatch services. A phase turn (plan / review) running
+/// on the shared task session sets these so it samples with its own role
+/// prompt and client and dispatches its own tools, without disturbing the
+/// session-level slots Execute relies on. `nil` fields fall back to the
+/// session slot.
+struct TurnServiceOverrides: @unchecked Sendable {
+    /// When set, `runSamplingRequest` skips `prepareSamplingPrompt` and uses
+    /// this instead of the session's base instructions.
+    var baseInstructions: String? = nil
+    var runSamplingStreamOverride: ((Prompt) async throws -> SageCore.ResponseStream)? = nil
+    /// Same seam as `Session.services.onSageToolCall`: (name, callId, arguments) → output.
+    var onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil
+    /// When set, `assembleToolRouter` registers this spec list for the turn
+    /// instead of the session-level `SessionServices.sageToolSpecs` — the
+    /// phase's registration set, independent of what the last Execute
+    /// sampling round left in the session slot.
+    var sageToolSpecs: [SageToolSpec]? = nil
+}
+
 final class TurnContext: @unchecked Sendable {
     var subId: String
     var sessionId: SessionId
@@ -100,6 +124,13 @@ final class TurnContext: @unchecked Sendable {
     var catalogModelInfo: ModelInfo?
     /// Copied from the session configuration when the turn is admitted.
     var dynamicTools: [DynamicToolSpec]
+    /// Sage addition (no codex counterpart). Flat tool names the model may
+    /// call this turn; `nil` means no restriction. Phase turns (plan /
+    /// review / explorer children) set this to their read-only subset.
+    var toolAllowlist: Set<String>?
+    /// Sage addition (no codex counterpart). Turn-level lease of the session
+    /// sampling / tool-dispatch services; see `TurnServiceOverrides`.
+    var serviceOverrides: TurnServiceOverrides?
 
     init(
         subId: String = UUID().uuidString,
@@ -130,7 +161,9 @@ final class TurnContext: @unchecked Sendable {
         responsesapiClientMetadata: [String: String]? = nil,
         initiatingAgentPath: AgentPath? = nil,
         catalogModelInfo: ModelInfo? = nil,
-        dynamicTools: [DynamicToolSpec] = []
+        dynamicTools: [DynamicToolSpec] = [],
+        toolAllowlist: Set<String>? = nil,
+        serviceOverrides: TurnServiceOverrides? = nil
     ) {
         self.subId = subId
         self.sessionId = sessionId
@@ -161,6 +194,8 @@ final class TurnContext: @unchecked Sendable {
         self.initiatingAgentPath = initiatingAgentPath
         self.catalogModelInfo = catalogModelInfo
         self.dynamicTools = dynamicTools
+        self.toolAllowlist = toolAllowlist
+        self.serviceOverrides = serviceOverrides
     }
 
     func collaborationModeValue() -> CollaborationMode? {

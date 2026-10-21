@@ -285,7 +285,6 @@
 				ExecuteHarness/shell.swift,
 				ExecuteHarness/tasks/compact.swift,
 				ExecuteHarness/tasks/execute_attach.swift,
-				ExecuteHarness/tasks/explore.swift,
 				ExecuteHarness/tools/parallel.swift,
 				ExecuteHarness/tools/suite/orchestrator.swift,
 				ExecuteHarness/tools/suite/sandboxing.swift,

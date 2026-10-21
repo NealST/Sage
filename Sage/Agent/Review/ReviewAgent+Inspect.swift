@@ -2,53 +2,29 @@
 //  ReviewAgent+Inspect.swift
 //  Sage
 //
+//  The inspect loop is one harness turn: the review model autonomously
+//  decides how many read-only tools to call inside `runTurn`, bounded
+//  by the turn's token budget instead of a fixed round count. Output
+//  parsing (`parse`) and the outer `maxAttempts` retry in `evaluate`
+//  are unchanged.
+//
 
 import Foundation
 
 extension ReviewAgent {
-    func inspect(brief: String, tools: [ToolDefinition]) async throws -> ReviewVerdict? {
-        var events = [
-            AgentEvent(kind: .systemInstruction, content: Self.systemPrompt),
-            AgentEvent(kind: .userInput, content: brief),
-        ]
-        let canInspect = !tools.isEmpty && skillHost != nil
-        for round in 1...Self.maxInspectRounds {
-            try Task.checkCancellation()
-            let turn = try await modelGateway.completeUnstreamedTurn(
-                events: events,
-                tools: canInspect ? tools : [],
-                role: .review
-            )
-            let text = turn.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if turn.toolCalls.isEmpty {
-                return Self.parse(text)
-            }
-            let calls = turn.toolCalls.map { call in
-                ToolCallRecord(id: call.id, name: call.name, argumentsJSON: call.argumentsJSON)
-            }
-            events.append(AgentEvent(kind: .assistantResponse, content: text, toolCalls: calls))
-            for call in turn.toolCalls {
-                try Task.checkCancellation()
-                let result = try await invokeInspect(call)
-                events.append(AgentEvent(kind: .toolResult, content: result, toolCallID: call.id))
-            }
-            if round == Self.maxInspectRounds {
-                events.append(
-                    AgentEvent(
-                        kind: .userInput,
-                        content: "Inspect limit reached. Output the JSON verdict now. No more tools."
-                    )
-                )
-                let final = try await modelGateway.completeUnstreamedTurn(
-                    events: events,
-                    tools: [],
-                    role: .review,
-                    toolChoice: "none"
-                )
-                return Self.parse(final.content)
-            }
-        }
-        return nil
+    func inspect(brief: String) async throws -> ReviewVerdict? {
+        // No skill host means inspect tools cannot execute; keep the turn text-only.
+        let canInspect = !inspectToolDefinitions().isEmpty && skillHost != nil
+        let raw = try await phaseRunner.runTurn(
+            profile: PhaseProfile(
+                modelRole: .review,
+                systemPrompt: Self.systemPrompt,
+                tools: modelGateway.availableToolDefinitions(),
+                toolAllowlist: canInspect ? Self.inspectToolNames : []
+            ),
+            userText: brief
+        )
+        return Self.parse(raw)
     }
 
     func inspectToolDefinitions() -> [ToolDefinition] {
@@ -56,6 +32,8 @@ extension ReviewAgent {
     }
 
     func invokeInspect(_ call: ToolCallProposal) async throws -> String {
+        // App-layer fallback: the registry allowlist gate rejects out-of-set
+        // calls before this seam, so this only fires on direct dispatch.
         guard Self.inspectToolNames.contains(call.name) else {
             return "ERROR: Review cannot call '\(call.name)'."
         }

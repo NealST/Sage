@@ -17,8 +17,6 @@ import SageProtocol
 import SageThreadStore
 import Foundation
 
-let gracefulInterruptionTimeoutMs: UInt64 = 100
-
 enum InterruptedTurnHistoryMarker: Equatable, Sendable {
     case disabled
     case contextualUser

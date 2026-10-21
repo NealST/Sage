@@ -48,16 +48,20 @@ nonisolated enum ToolInvocationDispatcher {
             return try await ManageTodoListTool.execute(argumentsJSON: request.argumentsJSON)
         }
         if request.name == ExploreSubagentTool.name {
-            guard let modelSettings = request.modelSettings else {
-                throw ToolError.operationFailed("Explore subagent model settings are unavailable.")
+            struct Args: Decodable {
+                var task: String
+                var context: String?
             }
-            return try await ExploreSubagentRunner.run(
-                argumentsJSON: request.argumentsJSON,
-                settings: modelSettings,
-                tools: request.tools,
-                pathGuardPolicy: request.pathGuardPolicy,
-                skillHost: request.skillHost,
-                extraReadAllowlist: request.extraReadAllowlist
+            let args = try decodeToolArgs(request.argumentsJSON, as: Args.self)
+            let task = args.task.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !task.isEmpty else {
+                throw ToolError.invalidArguments("task must not be empty.")
+            }
+            return try await request.skillHost.runExploreSubagent(
+                task: task,
+                context: args.context,
+                instructions: nil,
+                activatedSkillNames: request.activatedSkillNames
             )
         }
         if MCPToolGroupTool.isGroupTool(request.name) {
@@ -91,6 +95,13 @@ nonisolated enum ToolInvocationDispatcher {
     ///
     /// Answer / observe turns skip plan confirmation, so this is the runtime
     /// backstop. A missing plan is treated as non-act.
+    ///
+    /// M5 boundary: this gate stays even though phase turns now narrow by
+    /// `TurnContext.toolAllowlist` — "would change the Mac" is a capability
+    /// rule (`requiresConfirmation` / writes locally) a name allowlist cannot
+    /// express, and Execute turns on observe / answer plans carry no
+    /// allowlist at all. It also covers every path through
+    /// ToolOrchestrator, not just harness turns.
     static func assertMutatingToolsAllowed(
         for name: String,
         workPlanKind: WorkPlan.Kind?,

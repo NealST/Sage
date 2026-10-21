@@ -70,8 +70,13 @@ final class AgentModelGateway {
         Task { await modelClient.requestImmediateRetry() }
     }
 
-    /// Single source of truth for tools exposed to the model (and UI).
-    func availableToolDefinitions(includeSkills: Bool = true) -> [ToolDefinition] {
+    /// Attach-time full definition set (D4 compat layer): the model-visible
+    /// assembly point is `assembleToolRouter`; this list only feeds
+    /// `sageToolSpecs` registration (task attach, per-execute-turn refresh,
+    /// phase registration sets) plus the Execute chat-completions fallback
+    /// and compaction/occupancy paths. `manage_todo_list` rides here as the
+    /// act-only Execute rule — plan / review allowlists never carry it.
+    func availableToolDefinitions() -> [ToolDefinition] {
         let mcpDefinitions = MCPToolGroupTool.groupedDefinitions(
             mcpToolDefinitions(),
             unlockedServerNames: state.activeTask?.unlockedMCPServerNames ?? []
@@ -84,7 +89,6 @@ final class AgentModelGateway {
         if state.activeTask?.workPlan?.kind == .act {
             defs.append(ManageTodoListTool.definition)
         }
-        guard includeSkills else { return defs }
 
         let skillResult: SkillCatalog.SkillAppendixResult?
         if let cached = skillRecall.cachedResult {
@@ -136,7 +140,7 @@ final class AgentModelGateway {
 
         let toolDefinitions: [ToolDefinition]
         if includeTools {
-            toolDefinitions = availableToolDefinitions(includeSkills: true)
+            toolDefinitions = availableToolDefinitions()
         } else {
             toolDefinitions = []
         }
@@ -172,7 +176,7 @@ final class AgentModelGateway {
     /// window is already over budget so the following `prepareRequest` sees it.
     func compactBeforeSampling(includeTools: Bool) async {
         let tools = includeTools
-            ? availableToolDefinitions(includeSkills: true)
+            ? availableToolDefinitions()
             : []
         let skillResult = skillRecall.cachedResult
         let assembly = await assemblePrompt(
@@ -189,7 +193,7 @@ final class AgentModelGateway {
     /// Occupancy as if the fold were expanded. Used to discard a snapshot when
     /// the window grew enough that raw history already fits.
     func occupancyIgnoringWorkingMemory() async -> Double {
-        let toolDefinitions = availableToolDefinitions(includeSkills: true)
+        let toolDefinitions = availableToolDefinitions()
         let skillResult = skillRecall.cachedResult
         let assembly = await assemblePrompt(
             tools: toolDefinitions,

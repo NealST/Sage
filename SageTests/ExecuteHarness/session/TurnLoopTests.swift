@@ -6163,9 +6163,47 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
                 canManageChildren: false
             )
         )
-        XCTAssertEqual(builtTools(stepContext: step), [.object(["name": .string(spec.name())])])
+        XCTAssertEqual(builtTools(stepContext: step), [spec.toJSON()])
         let prompt = buildPrompt(input: [], stepContext: step, baseInstructions: BaseInstructions())
-        XCTAssertEqual(prompt.tools, [.object(["name": .string(spec.name())])])
+        XCTAssertEqual(prompt.tools, [spec.toJSON()])
+    }
+
+    func testBuiltToolsFiltersToTurnToolAllowlist() {
+        let sess = Session()
+        sess.services.sageToolSpecs = sageTestSpecs(["read_text_file", "write_text_file", "search_files"])
+        let step = StepContext()
+        step.turn.toolAllowlist = ["read_text_file"]
+        let tools = builtTools(sess: sess, stepContext: step)
+        XCTAssertEqual(tools.count, 1)
+        guard case .object(let fields)? = tools.first else {
+            return XCTFail("expected function tool object")
+        }
+        XCTAssertEqual(fields["type"], .string("function"))
+        XCTAssertEqual(fields["name"], .string("read_text_file"))
+        let prompt = buildPrompt(input: [], stepContext: step, baseInstructions: BaseInstructions())
+        XCTAssertEqual(prompt.tools, tools)
+        XCTAssertTrue(prompt.parallelToolCalls)
+    }
+
+    func testAllowlistFilteredSpecKeepsNamespaceSubset() {
+        let read = ResponsesApiTool(name: "read_text_file", description: "r", strict: false, parameters: .object([:], additionalProperties: true))
+        let write = ResponsesApiTool(name: "write_text_file", description: "w", strict: false, parameters: .object([:], additionalProperties: true))
+        let namespace = ToolSpec.namespace(
+            ResponsesApiNamespace(name: "mcp", description: "m", tools: [
+                ResponsesApiNamespaceTool(function: read),
+                ResponsesApiNamespaceTool(function: write),
+            ])
+        )
+        XCTAssertEqual(
+            allowlistFilteredSpec(namespace, allowlist: ["read_text_file"]),
+            .namespace(
+                ResponsesApiNamespace(name: "mcp", description: "m", tools: [
+                    ResponsesApiNamespaceTool(function: read),
+                ])
+            )
+        )
+        XCTAssertNil(allowlistFilteredSpec(namespace, allowlist: ["missing"]))
+        XCTAssertNil(allowlistFilteredSpec(.function(write), allowlist: ["read_text_file"]))
     }
 
     func testPrepareToolRecommendationsCountsPlugins() {
@@ -6468,7 +6506,16 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
         XCTAssertTrue(router.modelVisibleSpecs.contains { spec in
             spec.name() == "linear.search"
         })
-        XCTAssertTrue(builtTools(sess: sess, stepContext: step).contains(.object(["name": .string("linear.search")])))
+        let tools = builtTools(sess: sess, stepContext: step)
+        XCTAssertTrue(tools.contains { value in
+            guard case .object(let fields) = value,
+                  case .string("function")? = fields["type"],
+                  case .string("linear.search")? = fields["name"],
+                  case .object? = fields["parameters"] else {
+                return false
+            }
+            return true
+        })
     }
 
     func testAssembleToolRouterDecodesMcpCatalogSchema() {
@@ -6610,7 +6657,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
     func testAssembleToolRouterRegistersSageExecuteTools() {
         let sess = Session()
-        sess.services.sageToolNames = ["list_directory", "read_text_file"]
+        sess.services.sageToolSpecs = sageTestSpecs(["list_directory", "read_text_file"])
         let router = assembleToolRouter(sess: sess, stepContext: StepContext())
         XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "list_directory")))
         XCTAssertNotNil(router.registry.entry(for: ToolName(plain: "read_text_file")))
@@ -6618,7 +6665,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
     func testToolCallRuntimeForwardsSageExecuteCall() async throws {
         let sess = Session()
-        sess.services.sageToolNames = ["list_directory"]
+        sess.services.sageToolSpecs = sageTestSpecs(["list_directory"])
         sess.services.onSageToolCall = { name, callId, arguments in
             "ok:\(name):\(callId):\(arguments)"
         }
@@ -6668,7 +6715,7 @@ final class ExecuteHarnessTurnLoopTests: XCTestCase {
 
     func testToolRouterToolSupportsParallelMatchesRuntime() {
         let sess = Session()
-        sess.services.sageToolNames = ["list_directory", "write_text_file"]
+        sess.services.sageToolSpecs = sageTestSpecs(["list_directory", "write_text_file"])
         let router = assembleToolRouter(sess: sess, stepContext: StepContext())
         XCTAssertTrue(
             router.toolSupportsParallel(
@@ -7411,11 +7458,16 @@ private func makeSageToolRuntime(
     onCall: @escaping @Sendable (String, String, String) async -> String?
 ) throws -> ToolCallRuntime {
     let sess = Session()
-    sess.services.sageToolNames = names
+    sess.services.sageToolSpecs = sageTestSpecs(names)
     sess.services.onSageToolCall = onCall
     let step = StepContext()
     _ = assembleToolRouter(sess: sess, stepContext: step)
     return ToolCallRuntime(session: sess, stepContext: step)
+}
+
+/// Permissive-object specs for name-only registration in tests.
+private func sageTestSpecs(_ names: [String]) -> [SageToolSpec] {
+    names.map { SageToolSpec(name: $0, description: $0, parameters: .object([:], additionalProperties: true)) }
 }
 
 private func turnLoopMail(_ content: String, triggerTurn: Bool) throws -> InterAgentCommunication {

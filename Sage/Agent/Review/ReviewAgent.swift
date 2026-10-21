@@ -37,7 +37,6 @@ enum ReviewEvaluationError: LocalizedError {
 final class ReviewAgent {
     static let maxRevisions = 2
     static let maxAttempts = 3
-    static let maxInspectRounds = 6
 
     static let inspectToolNames: Set<String> = [
         "list_directory",
@@ -52,11 +51,19 @@ final class ReviewAgent {
 
     let state: AgentSessionState
     let modelGateway: AgentModelGateway
+    let taskStore: AgentTaskStore
+    let phaseRunner: PhaseTurnRunner
     weak var skillHost: SkillToolHost?
 
-    init(state: AgentSessionState, modelGateway: AgentModelGateway) {
+    init(state: AgentSessionState, modelGateway: AgentModelGateway, taskStore: AgentTaskStore) {
         self.state = state
         self.modelGateway = modelGateway
+        self.taskStore = taskStore
+        self.phaseRunner = PhaseTurnRunner(state: state, modelGateway: modelGateway, taskStore: taskStore)
+        phaseRunner.dispatchTool = { [weak self] call in
+            guard let self else { return "ERROR: Review inspect tools are unavailable." }
+            return try await self.invokeInspect(call)
+        }
     }
 
     func evaluate(draft: String, workPlan: WorkPlan?) async throws -> ReviewVerdict {
@@ -68,12 +75,11 @@ final class ReviewAgent {
             sandbox: state.pathGuardPolicy.boundaryDescription,
             inspectPlaces: state.workspaceChanges.snapshot().inspectPlaces()
         )
-        let tools = inspectToolDefinitions()
         var lastDetail = "The reviewer returned unusable output."
         for _ in 1...Self.maxAttempts {
             try Task.checkCancellation()
             do {
-                if let verdict = try await inspect(brief: brief, tools: tools) {
+                if let verdict = try await inspect(brief: brief) {
                     return verdict
                 }
                 lastDetail = "The reviewer returned unusable output."

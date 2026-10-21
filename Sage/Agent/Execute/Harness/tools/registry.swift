@@ -10,6 +10,9 @@
 //  PreToolUse → handle → PostToolUse sandwich through `HookRuntime`.
 //  A second registration of the same flat name records `firstCollision`
 //  and keeps the first runtime. Rust panics on a trusted duplicate.
+//  Sage addition (no codex counterpart): `dispatch` first rejects calls
+//  outside `ToolInvocation.toolAllowlist` (phase turns / read-only
+//  children) with a model-visible error.
 //
 
 import SageCore
@@ -104,6 +107,13 @@ struct HarnessToolRegistry {
     func dispatch(_ invocation: ToolInvocation) async throws -> AnyToolResult {
         var invocation = invocation
         let toolName = flatToolName(invocation.toolName)
+        if let allowlist = invocation.toolAllowlist,
+           !allowlist.contains(toolName),
+           !allowlist.contains(invocation.toolName.name) {
+            throw FunctionCallError.respondToModel(
+                "tool \(toolName) is not available this turn"
+            )
+        }
         if let projectRoot = invocation.hookProjectRoot {
             let command = hookCommand(invocation.payload)
             let pre = await HookRuntime.preToolUse(

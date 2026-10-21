@@ -64,12 +64,12 @@ final class ExecuteHarnessGuardianLiveApprovalTests: XCTestCase {
             steps: [readStep(id: "gated", path: "gated.md")]
         )
 
-        let outcome = await ToolBatchExecutor.runAdmittedBatch(
+        let outcome = await ToolBatchExecutor.admit(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )
 
-        XCTAssertEqual(outcome, .succeeded)
+        XCTAssertEqual(outcome, .halted)
         XCTAssertEqual(plan.steps.map(\.status), [.failed])
         XCTAssertNil(runtime.state.pendingPrompt)
         XCTAssertTrue(plan.steps[0].result?.contains("secrets") == true)
@@ -85,7 +85,7 @@ final class ExecuteHarnessGuardianLiveApprovalTests: XCTestCase {
             steps: [readStep(id: "gated", path: "gated.md")]
         )
 
-        let outcome = await ToolBatchExecutor.runAdmittedBatch(
+        let outcome = await ToolBatchExecutor.admit(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )

@@ -124,7 +124,7 @@ struct TranscriptNoticeBar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             SageDismissButton(
-                action: { session.agent.state.compactNotice = nil },
+                action: { session.agent.dismissCompactNotice() },
                 label: "Hide compact warning",
                 help: "Hide for this task"
             )

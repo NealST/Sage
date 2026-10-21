@@ -263,17 +263,6 @@ extension AgentRuntime {
         state.activatedSkillNames.formUnion(names)
     }
 
-    func executeCurrentPlanUnlocked(retryFailedSteps: Bool = false) async -> ToolBatchExecutor.WaveOutcome {
-        let plan = planProgress.plan ?? state.activeTask?.pendingPlan
-        guard let initialPlan = plan else { return .persistFailed }
-        return await ToolBatchExecutor.execute(
-            initialPlan: initialPlan,
-            services: makeExecuteServices(),
-            retryFailedSteps: retryFailedSteps,
-            followUp: .yieldToCaller
-        )
-    }
-
     @discardableResult
     func performCancelPendingPlan() async -> Bool {
         guard case .awaitingConfirmation = state.phase else { return false }
@@ -307,6 +296,37 @@ extension AgentRuntime {
             await operations.cancelInFlight()
         }
         await taskStore.activateTask(id)
+    }
+
+    /// UI intent: rename the active task's topic. Memory goes through the
+    /// store's adoption path so the topic/summary stay coherent.
+    func renameActiveTaskTopic(_ topic: String) async {
+        guard let activeID = state.activeTaskID else { return }
+        let trimmed = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            let existing = try await taskRepository.loadTaskMetadata(id: activeID)
+            try await taskRepository.updateTopic(
+                taskID: activeID,
+                topic: trimmed,
+                abstract: existing?.abstract ?? "",
+                topicUpdatedAt: .now
+            )
+            if var active = state.activeTask, active.id == activeID {
+                active.topic = trimmed
+                active.topicUpdatedAt = .now
+                active.updatedAt = .now
+                state.activeTask = active
+                state.refreshSummary(for: active)
+            }
+        } catch {
+            reportFailure("Could not rename the task: \(error.localizedDescription)")
+        }
+    }
+
+    /// UI intent: hide the compact warning chip for this task.
+    func dismissCompactNotice() {
+        state.compactNotice = nil
     }
 
     @discardableResult

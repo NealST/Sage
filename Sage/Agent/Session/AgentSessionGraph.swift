@@ -90,6 +90,16 @@ struct AgentSessionGraph {
             )
         )
         parts.skillRecall.bind { [weak host = parts.host] in host }
+        parts.host.runExploreSubagentDelegate = { [weak turns] task, context, instructions, _ in
+            guard let turns else {
+                throw ToolError.operationFailed("Explore subagent is not available.")
+            }
+            return try await turns.runExploreSubagent(
+                task: task,
+                context: context,
+                instructions: instructions
+            )
+        }
         return assembled(parts, context: context, operations: operations, lifecycle: lifecycle, turns: turns)
     }
 

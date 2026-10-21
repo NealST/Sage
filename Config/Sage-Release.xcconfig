@@ -1,3 +1,0 @@
-#include "Sage.xcconfig"
-
-ENABLE_PREVIEWS = NO

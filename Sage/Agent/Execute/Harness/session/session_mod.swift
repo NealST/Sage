@@ -188,10 +188,14 @@ public protocol TurnToolRunner: Sendable {
 public struct ModelClientTurnSampler: TurnSampler {
     public let client: ModelClient
     public let model: String
+    /// Sage addition (no codex counterpart): wire-format tool specs this
+    /// sampler advertises. Spawned children get the role-filtered subset.
+    public let tools: [JSONValue]
 
-    public init(client: ModelClient, model: String) {
+    public init(client: ModelClient, model: String, tools: [JSONValue] = []) {
         self.client = client
         self.model = model
+        self.tools = tools
     }
 
     public func sampleTurn(
@@ -202,7 +206,11 @@ public struct ModelClientTurnSampler: TurnSampler {
         if cancellation.isCancelled { return nil }
         let session = client.newSession()
         let stream = try await session.stream(
-            prompt: Prompt(input: responseItems(from: input)),
+            prompt: Prompt(
+                input: responseItems(from: input),
+                tools: tools,
+                parallelToolCalls: !tools.isEmpty
+            ),
             modelInfo: minimalModelInfo(slug: model),
             responsesMetadata: SageResponsesMetadata(
                 installationId: "sage",
@@ -770,6 +778,13 @@ public final class ThreadSession: @unchecked Sendable {
     ) async {
         var lastText: String?
         var sampledOnce = false
+        // Sage addition (no codex counterpart): explorer children carry a
+        // tool-round budget. Once spent, further tool calls are refused
+        // model-visibly (never dispatched) so the turn ends with a summary.
+        let roundLimit: Int? =
+            sessionSource.getAgentRole() == explorerRoleName ? explorerToolRoundBudget : nil
+        var toolBatches = 0
+        var toolsRefused = false
         while !cancellation.isCancelled && !isClosed {
             let batch = state.withLock { loop -> [TurnInput] in
                 let batch = loop.pending
@@ -791,12 +806,32 @@ public final class ThreadSession: @unchecked Sendable {
                     lastText = text
                 }
                 if !sample.functionCalls.isEmpty {
-                    let outputs = try await functionCallOutputs(
-                        turnId: turnId,
-                        calls: sample.functionCalls,
-                        toolRunner: toolRunner,
-                        cancellation: cancellation
-                    )
+                    if toolsRefused {
+                        // The model kept calling tools after the budget
+                        // refusal; end the turn with what we have instead of
+                        // looping on refusals.
+                        break
+                    }
+                    let outputs: [TurnInput]
+                    if let roundLimit, toolBatches >= roundLimit {
+                        toolsRefused = true
+                        outputs = sample.functionCalls.map { call in
+                            functionCallOutputInput(
+                                call,
+                                text: "ERROR: Tool-round limit reached. Summarize the evidence gathered so far without tools."
+                            )
+                        }
+                    } else {
+                        outputs = try await functionCallOutputs(
+                            turnId: turnId,
+                            calls: sample.functionCalls,
+                            toolRunner: toolRunner,
+                            cancellation: cancellation
+                        )
+                        if !outputs.isEmpty {
+                            toolBatches += 1
+                        }
+                    }
                     if cancellation.isCancelled || isClosed { break }
                     if !outputs.isEmpty {
                         state.withLock { loop in
@@ -855,9 +890,24 @@ public final class ThreadSession: @unchecked Sendable {
                 "regular turn requested tools without a TurnToolRunner"
             )
         }
+        // Sage addition (no codex counterpart): child-role dispatch gate.
+        // Mirrors registry.dispatch's allowlist rejection so out-of-role
+        // calls fail model-visibly instead of reaching the parent runner.
+        let roleName = sessionSource.getAgentRole()
+        let roleAllowlist = roleToolAllowlist(roleName: roleName)
         var outputs: [TurnInput] = []
         for call in calls {
             if cancellation.isCancelled || isClosed { break }
+            if let roleAllowlist {
+                let fullName = call.namespace.map { "\($0).\(call.name)" } ?? call.name
+                if !roleAllowlist.contains(fullName) && !roleAllowlist.contains(call.name) {
+                    outputs.append(functionCallOutputInput(
+                        call,
+                        text: "ERROR: tool '\(call.name)' is not available for role '\(roleName ?? "unknown")'"
+                    ))
+                    continue
+                }
+            }
             let text: String
             do {
                 text = try await toolRunner.runTool(

@@ -146,7 +146,7 @@ final class ApiPathStringTests: XCTestCase {
                 let apiPath = LegacyAppPathString.fromString(rendered)
                 let reparsed = try apiPath.toPathUri(testCase.convention)
                 XCTAssertEqual(reparsed, path, "parsing \(testCase.uri)")
-                try XCTAssertEqual(
+                XCTAssertEqual(
                     try LegacyAppPathString.fromPathUri(reparsed, convention: testCase.convention),
                     apiPath,
                     "round-tripping \(testCase.uri)"
@@ -252,7 +252,7 @@ final class ApiPathStringTests: XCTestCase {
         ] {
             let cwdUri = try PathUri.parse(cwd)
             let homeUri = try userHomeDir.map { try PathUri.parse($0) }
-            try XCTAssertEqual(
+            XCTAssertEqual(
                 try LegacyAppPathString.fromString(path).resolveAgainst(cwd: cwdUri, userHomeDir: homeUri),
                 try PathUri.parse(expected),
                 "resolving \(path) against \(cwd)"
@@ -340,7 +340,7 @@ final class ApiPathStringTests: XCTestCase {
         encoder.outputFormatting = [.withoutEscapingSlashes]
         let data = try encoder.encode(rendered)
         XCTAssertEqual(String(decoding: data, as: UTF8.self), "\"/workspace/src/lib.rs\"")
-        try XCTAssertEqual(
+        XCTAssertEqual(
             try JSONDecoder().decode(LegacyAppPathString.self, from: data),
             rendered
         )

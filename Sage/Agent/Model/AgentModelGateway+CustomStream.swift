@@ -6,11 +6,6 @@
 import Foundation
 
 extension AgentModelGateway {
-    func streamComplete(includeTools: Bool = true) async throws -> ModelTurn {
-        let req = await prepareRequest(includeTools: includeTools)
-        return try await emitStream(req, events: req.events)
-    }
-
     /// Uses harness turn history for the conversation and keeps Sage's system prefix.
     func streamComplete(conversation: [AgentEvent], includeTools: Bool) async throws -> ModelTurn {
         let req = await prepareRequest(includeTools: includeTools)
@@ -49,52 +44,6 @@ extension AgentModelGateway {
             toolCalls: collected.recovered.calls,
             usage: collected.usage
         )
-    }
-
-    /// Streaming completion for a custom system/user pair.
-    func streamCustom(
-        system: String,
-        user: String,
-        role: ModelRole,
-        onText: (String) -> Void
-    ) async throws -> String {
-        let snapshot = settings.snapshot(for: role)
-        let stream = try await modelClient.streamComplete(
-            events: [
-                AgentEvent(kind: .systemInstruction, content: system),
-                AgentEvent(kind: .userInput, content: user),
-            ],
-            tools: [],
-            settings: snapshot
-        )
-        state.retryState = nil
-        var chunks: [String] = []
-        var thinkingChunks: [String] = []
-        var usage = TokenUsage()
-        for try await delta in stream {
-            try Task.checkCancellation()
-            switch delta {
-            case .text(let chunk):
-                chunks.append(chunk)
-                onText(chunk)
-
-            case .thinking(let chunk):
-                thinkingChunks.append(chunk)
-                streaming.publishThinking(thinkingChunks.joined())
-
-            case .usage(let input, let output):
-                usage.input = input
-                usage.output = output
-
-            case .toolCallDelta, .done:
-                break
-            }
-        }
-        state.addTokenUsage(usage)
-        if !thinkingChunks.isEmpty {
-            streaming.flushThinking(thinkingChunks.joined())
-        }
-        return chunks.joined()
     }
 
     private struct CollectedStream {

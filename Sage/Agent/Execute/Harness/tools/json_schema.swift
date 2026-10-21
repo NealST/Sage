@@ -94,6 +94,47 @@ struct JsonSchema: Equatable, Sendable {
             additionalProperties: additionalProperties.map { .boolean($0) }
         )
     }
+
+    /// Wire JSON for the Responses API — the same fields the Codable
+    /// conformance emits, as a `HarnessJSON` object.
+    func toJSON() -> HarnessJSON {
+        var fields: [String: HarnessJSON] = [:]
+        switch schemaType {
+        case .single(let type):
+            fields["type"] = .string(type.rawValue)
+        case .multiple(let types):
+            fields["type"] = .array(types.map { .string($0.rawValue) })
+        case nil:
+            break
+        }
+        if let description {
+            fields["description"] = .string(description)
+        }
+        if let enumValues {
+            fields["enum"] = .array(enumValues)
+        }
+        if let items {
+            fields["items"] = items.value.toJSON()
+        }
+        if let properties {
+            fields["properties"] = .object(properties.mapValues { $0.toJSON() })
+        }
+        if let required {
+            fields["required"] = .array(required.map { .string($0) })
+        }
+        switch additionalProperties {
+        case .boolean(let flag):
+            fields["additionalProperties"] = .bool(flag)
+        case .schema(let nested):
+            fields["additionalProperties"] = nested.toJSON()
+        case nil:
+            break
+        }
+        if let minItems {
+            fields["minItems"] = .int(Int64(minItems))
+        }
+        return .object(fields)
+    }
 }
 
 extension JsonSchema: Codable {

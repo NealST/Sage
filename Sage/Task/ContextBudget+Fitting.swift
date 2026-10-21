@@ -325,6 +325,12 @@ nonisolated extension ContextBudget {
             }
 
             if event.kind == .toolResult {
+                // Protected payloads are contract: orphan cleanup must not
+                // drop a skill body just because no paired call exists.
+                if event.protected {
+                    kept.append(event)
+                    continue
+                }
                 guard let callID = event.toolCallID,
                       completedCallIDs.contains(callID)
                 else { continue }
@@ -340,6 +346,7 @@ nonisolated extension ContextBudget {
         )
         return kept.filter { event in
             guard event.kind == .toolResult else { return true }
+            if event.protected { return true }
             guard let callID = event.toolCallID else { return false }
             return keptCallIDs.contains(callID)
         }

@@ -167,7 +167,7 @@ struct MCPManageView: View {
             Spacer()
             if server.status == .error || server.status == .disconnected {
                 Button("Connect") {
-                    Task { await appState.mcpHub.connect(serverID: server.id) }
+                    Task { await appState.mcpHub.retryServer(server.id) }
                 }
                 .controlSize(.small)
             }

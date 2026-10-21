@@ -10,8 +10,11 @@
 //  forkThreadFromHistory) is wired. startThread opens a ThreadSession
 //  submission loop. adoptRootThread registers the Live Execute parent
 //  without a second sample loop. sendOp interrupt/shutdown/inter-agent
-//  hit that session. setTurnSampler / attachModelClient drives RegularTask
-//  sampling. setTurnToolRunner continues a turn after function calls.
+//  hit that session. attachModelClient stores the client each spawned
+//  child's sampler is built from (Sage addition: role allowlists narrow a
+//  child's model-visible tools); setTurnSampler stays the manual override /
+//  test injection point when no client is attached.
+//  setTurnToolRunner continues a turn after function calls.
 //  Threads opened after installation pick both up. Config,
 //  AuthManager, MCP, extensions, and ConfigLayerStack stay deferred.
 //  StartThreadOptions remains a thin model/cwd/source snapshot instead of
@@ -104,10 +107,17 @@ public final class ThreadManager: @unchecked Sendable {
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
-    /// Installed before `startThread` / spawn. Drives `RegularTask` sampling.
+    /// Installed before `startThread` / spawn. Drives `RegularTask` sampling
+    /// when no model client is attached (tests inject samplers directly).
     public var turnSampler: (any TurnSampler)?
     /// Installed before `startThread` / spawn. Runs function calls inside a regular turn.
     public var turnToolRunner: (any TurnToolRunner)?
+    /// Sage addition (no codex counterpart): attached client each spawned
+    /// child's sampler is built from, so children see the tools their role
+    /// allows. `turnSampler` is the fallback when no client is attached.
+    private var modelClient: ModelClient?
+    private var modelSlug: String = ""
+    private var modelTools: [JSONValue] = []
 
     public init(agentRuntime: LocalAgentRuntime = LocalAgentRuntime()) {
         self.agentRuntime = agentRuntime
@@ -127,8 +137,40 @@ public final class ThreadManager: @unchecked Sendable {
     }
 
     /// Regular turns sample through this client. Function-call follow-up uses `turnToolRunner`.
-    public func attachModelClient(_ client: ModelClient, model: String) {
-        setTurnSampler(ModelClientTurnSampler(client: client, model: model))
+    /// Each spawned child samples through a fresh sampler built from the
+    /// current tool list, narrowed by the child role's allowlist.
+    public func attachModelClient(_ client: ModelClient, model: String, tools: [JSONValue] = []) {
+        modelClient = client
+        modelSlug = model
+        modelTools = tools
+    }
+
+    /// Sage addition (no codex counterpart). Refreshes the tool list future
+    /// child samplers advertise (wire-format specs from the live turn context).
+    public func updateChildModelTools(_ tools: [JSONValue]) {
+        modelTools = tools
+    }
+
+    /// Sage addition (no codex counterpart). Wire-format tools a spawned child
+    /// with this source would advertise: the current list narrowed by role.
+    public func childModelTools(for sessionSource: SessionSource) -> [JSONValue] {
+        guard let allowlist = roleToolAllowlist(roleName: sessionSource.getAgentRole()) else {
+            return modelTools
+        }
+        return filterToolsByAllowlist(modelTools, allowlist: allowlist)
+    }
+
+    /// Sage addition (no codex counterpart). Sampler a spawned child samples
+    /// through: the attached model client with tools filtered to the child
+    /// role's allowlist (`roleToolAllowlist`). Falls back to the manually
+    /// installed `turnSampler` when no client is attached.
+    private func childSampler(sessionSource: SessionSource) -> (any TurnSampler)? {
+        guard let modelClient else { return turnSampler }
+        return ModelClientTurnSampler(
+            client: modelClient,
+            model: modelSlug,
+            tools: childModelTools(for: sessionSource)
+        )
     }
 
     public func reserveThreadId() -> ThreadId {
@@ -424,7 +466,10 @@ public final class ThreadManager: @unchecked Sendable {
         if !inserted {
             throw SageErr.invalidRequest("thread \(threadId) is already running")
         }
-        thread.openLiveSession(sampler: turnSampler, toolRunner: turnToolRunner)
+        thread.openLiveSession(
+            sampler: childSampler(sessionSource: sessionSource),
+            toolRunner: turnToolRunner
+        )
         return NewThread(threadId: threadId, thread: thread, sessionConfigured: event)
     }
 }

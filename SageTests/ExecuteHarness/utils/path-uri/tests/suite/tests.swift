@@ -566,7 +566,7 @@ final class PathUriTests: XCTestCase {
         try XCTAssertEqual(cwd.parent(), try PathUri.parse("file:///server/share"))
         try XCTAssertEqual(try cwd.join("AGENTS.md"), try PathUri.parse("file:///server/share/project/AGENTS.md"))
         // `#[cfg(unix)]` upstream.
-        try XCTAssertEqual(
+        XCTAssertEqual(
             try cwd.toAbsPath(),
             try AbsolutePathBuf.fromAbsolutePathChecked("/server/share/project")
         )
@@ -601,7 +601,7 @@ final class PathUriTests: XCTestCase {
             let baseUri = try PathUri.parse(base)
             let expectedUri = try PathUri.parse(expected)
             if normalizeWindowsDevicePath(path) != nil {
-                try XCTAssertEqual(
+                XCTAssertEqual(
                     try LegacyAppPathString.fromString(path).toPathUri(.windows),
                     expectedUri,
                     "converting \(path)"
@@ -633,7 +633,7 @@ final class PathUriTests: XCTestCase {
                 expected,
                 "parsing \(path)"
             )
-            try XCTAssertEqual(
+            XCTAssertEqual(
                 try LegacyAppPathString.fromString(path).toPathUri(.windows),
                 expected,
                 "converting \(path)"

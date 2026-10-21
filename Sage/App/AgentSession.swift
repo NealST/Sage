@@ -167,10 +167,11 @@ final class AgentSession: Identifiable {
         draftAttachments = payload.draftAttachments.filter(\.isAvailable)
 
         let state = agent.state
-        if let activeID = state.activeTaskID {
-            if let input = payload.turnInputByTask[activeID.uuidString], !input.isEmpty {
-                state.turnInput.apply(turnInputSnapshot(from: input))
-            }
+        var activeSnapshot: TurnInputQueue.Snapshot?
+        if let activeID = state.activeTaskID,
+           let input = payload.turnInputByTask[activeID.uuidString],
+           !input.isEmpty {
+            activeSnapshot = turnInputSnapshot(from: input)
         }
         var parked: [UUID: TurnInputQueue.Snapshot] = [:]
         for (key, input) in payload.turnInputByTask {
@@ -179,7 +180,7 @@ final class AgentSession: Identifiable {
                   !input.isEmpty else { continue }
             parked[taskID] = turnInputSnapshot(from: input)
         }
-        state.parkedTurnInput = parked
+        state.restoreQueues(active: activeSnapshot, parked: parked)
 
         if state.turnInput.hasQueuedItems {
             await agent.drainQueuedTurns()

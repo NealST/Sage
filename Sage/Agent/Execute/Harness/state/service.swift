@@ -67,11 +67,10 @@ final class SessionServices: @unchecked Sendable {
     var persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)?
     /// rust `SessionServices.live_thread`. Nil means persistence is disabled.
     var liveThread: LiveThread?
-    /// Sage execute tools (list_directory, apply_patch, …). Wired by RegularTask.
-    var sageToolNames: [String]
-    /// Full Responses tool schemas for the prompt `runTurn` builds.
-    /// Nil keeps the name-only specs from the tool router.
-    var sageResponsesTools: [SageProtocol.JSONValue]?
+    /// Sage execute tools (list_directory, apply_patch, …) with their real
+    /// JSON Schemas. Wired by RegularTask; `assembleToolRouter` registers
+    /// them so the router is the single tool assembly point.
+    var sageToolSpecs: [SageToolSpec]
     var onSageToolCall: (@Sendable (String, String, String) async -> String?)?
     /// rust `SessionServices.parallel_execution` RWLock.
     var parallelAdmission: ParallelAdmission
@@ -113,8 +112,7 @@ final class SessionServices: @unchecked Sendable {
         reconnectMcp: (@Sendable () async -> Void)? = nil,
         disconnectMcp: (@Sendable ([String]) async -> Void)? = nil,
         persistRolloutItems: (@Sendable ([RolloutItem]) async throws -> Void)? = nil,
-        sageToolNames: [String] = [],
-        sageResponsesTools: [SageProtocol.JSONValue]? = nil,
+        sageToolSpecs: [SageToolSpec] = [],
         onSageToolCall: (@Sendable (String, String, String) async -> String?)? = nil,
         parallelAdmission: ParallelAdmission = ParallelAdmission(),
         turnDiffTracker: TurnDiffTracker = TurnDiffTracker(),
@@ -148,8 +146,7 @@ final class SessionServices: @unchecked Sendable {
         self.reconnectMcp = reconnectMcp
         self.disconnectMcp = disconnectMcp
         self.persistRolloutItems = persistRolloutItems
-        self.sageToolNames = sageToolNames
-        self.sageResponsesTools = sageResponsesTools
+        self.sageToolSpecs = sageToolSpecs
         self.onSageToolCall = onSageToolCall
         self.parallelAdmission = parallelAdmission
         self.turnDiffTracker = turnDiffTracker

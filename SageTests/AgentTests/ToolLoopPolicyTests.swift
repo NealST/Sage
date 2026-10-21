@@ -318,7 +318,7 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
         _ = await runtime.taskStore.createAndActivateTask(relatedTo: [])
         try attachHookProject(to: runtime, hookContains: "gated")
         var plan = mixedReadPlan()
-        let outcome = await ToolBatchExecutor.runAdmittedBatch(
+        let outcome = await ToolBatchExecutor.admit(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )
@@ -344,7 +344,7 @@ final class ToolBatchParallelApprovalTests: XCTestCase {
                 readStep(id: "secret-2", path: "secret-b.md"),
             ]
         )
-        let outcome = await ToolBatchExecutor.runAdmittedBatch(
+        let outcome = await ToolBatchExecutor.admit(
             plan: &plan,
             services: runtime.makeExecuteServices()
         )

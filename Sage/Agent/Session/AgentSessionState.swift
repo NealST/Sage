@@ -72,7 +72,9 @@ final class AgentSessionState {
     /// Attachment-bearing events retained in the most recently assembled model context.
     var modelVisibleAttachmentEventIDs: Set<UUID> = []
     /// Round-limit or per-tool approval sitting in front of the execute loop.
-    var pendingPrompt: AgentPendingPrompt?
+    /// Derived read-only projection: the TaskRecord is the single source of
+    /// truth, so the UI copy can never diverge from the persisted record.
+    var pendingPrompt: AgentPendingPrompt? { activeTask?.pendingPrompt }
     /// Net file mutations for the current execute→review cycle.
     let workspaceChanges = TurnChangeSet()
     /// Mid-turn user messages: offer, queue, and in-flight steer.
@@ -103,6 +105,21 @@ final class AgentSessionState {
         turnInput.reset()
     }
 
+    /// One-shot restore of the queued/parked turn input from persistence.
+    /// Only for session bootstrap — runtime mutations go through
+    /// park/restore/discard above.
+    func restoreQueues(
+        active: TurnInputQueue.Snapshot?,
+        parked: [UUID: TurnInputQueue.Snapshot]
+    ) {
+        if let active {
+            turnInput.apply(active)
+        } else {
+            turnInput.reset()
+        }
+        parkedTurnInput = parked
+    }
+
     func clearParkedTurnInput() {
         parkedTurnInput = [:]
         turnInput.reset()
@@ -118,7 +135,7 @@ final class AgentSessionState {
     }
 
     func clearPendingPrompt() {
-        pendingPrompt = nil
+        activeTask?.pendingPrompt = nil
     }
 
     var pathGuardPolicy: PathGuard.Policy {
@@ -126,6 +143,13 @@ final class AgentSessionState {
             return .project(root: focusedProject.rootURL)
         }
         return .home
+    }
+
+    /// Working directory harness turns run in: the focused project's root,
+    /// or the process CWD for the General scope.
+    var projectCWD: String {
+        if case .project(let root) = pathGuardPolicy { return root.path }
+        return FileManager.default.currentDirectoryPath
     }
 
     /// Scheduled runs share grants across their ephemeral task records.
@@ -190,7 +214,7 @@ final class AgentSessionState {
         isReviewing = false
         reviewFeedback = nil
         steerInstruction = nil
-        pendingPrompt = nil
+        activeTask?.pendingPrompt = nil
         workspaceChanges.reset()
     }
 

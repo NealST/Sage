@@ -11,58 +11,61 @@ extension AgentTaskStore {
         contextCompactor?.cancel()
         suppressScopeActivePointer = false
 
-        if var current = state.activeTask {
-            if case .awaitingConfirmation = state.phase {
-                if let plan = planProgress.plan ?? current.pendingPlan {
-                    current.pendingPlan = plan
+        // Locked phase: persist the outgoing task and adopt the incoming one.
+        // Phase restoration runs after the lock — it may itself commit.
+        let restored: TaskRecord?
+        let failure: String?
+        (restored, failure) = await withCommitLock {
+            if var current = state.activeTask {
+                if case .awaitingConfirmation = state.phase {
+                    if let plan = planProgress.plan ?? current.pendingPlan {
+                        current.pendingPlan = plan
+                    }
+                    current.status = .awaitingApproval
                 }
-                current.status = .awaitingApproval
+                current.updatedAt = .now
+                do {
+                    try await taskRepository.saveTaskState(current, setActive: false)
+                } catch {
+                    return (nil, "Could not save task context: \(error.localizedDescription)")
+                }
+                state.parkTurnInput(for: current.id)
             }
-            current.pendingPrompt = state.pendingPrompt
-            current.updatedAt = .now
+
             do {
-                try await taskRepository.saveTaskState(current, setActive: false)
-            } catch {
-                state.enterFailed(
-                    message: "Could not save task context: \(error.localizedDescription)"
+                guard let task = try await taskRepository.loadTask(id: id) else {
+                    return (nil, "Could not find that task context.")
+                }
+                guard task.projectID == state.focusedProject?.id else {
+                    return (nil, "That task belongs to a different project.")
+                }
+                try await taskRepository.rememberScopeActiveTask(
+                    projectID: state.focusedProject?.id,
+                    taskID: id
                 )
-                return
+                state.activeTask = task
+                state.activeTaskID = task.id
+                state.refreshSummary(for: task)
+                state.sessionAllowlist.reset()
+                state.workspaceChanges.reset()
+                state.restoreTurnInput(for: task.id)
+                return (task, nil)
+            } catch {
+                return (nil, "Could not restore task context: \(error.localizedDescription)")
             }
-            state.parkTurnInput(for: current.id)
         }
 
-        do {
-            guard let task = try await taskRepository.loadTask(id: id) else {
-                restoreParkedTurnInputAfterFailedSwitch()
-                state.enterFailed(message: "Could not find that task context.")
-                return
-            }
-            guard task.projectID == state.focusedProject?.id else {
-                restoreParkedTurnInputAfterFailedSwitch()
-                state.enterFailed(message: "That task belongs to a different project.")
-                return
-            }
-            try await taskRepository.rememberScopeActiveTask(
-                projectID: state.focusedProject?.id,
-                taskID: id
-            )
-            state.activeTask = task
-            state.activeTaskID = task.id
-            state.refreshSummary(for: task)
-            state.sessionAllowlist.reset()
-            state.workspaceChanges.reset()
-            state.restoreTurnInput(for: task.id)
-            await restorePhaseFromActiveTask()
-            state.clearTopicDriftOffer()
-            state.suppressedDriftOfferTaskID = nil
-            state.forceFreshOnNextSubmit = false
-            state.contextHint = nil
-        } catch {
+        if let failure {
             restoreParkedTurnInputAfterFailedSwitch()
-            state.enterFailed(
-                message: "Could not restore task context: \(error.localizedDescription)"
-            )
+            state.enterFailed(message: failure)
+            return
         }
+
+        await restorePhaseFromActiveTask()
+        state.clearTopicDriftOffer()
+        state.suppressedDriftOfferTaskID = nil
+        state.forceFreshOnNextSubmit = false
+        state.contextHint = nil
     }
 
     struct SplitOffTurnResult: Equatable {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""harness_port.py — codex → Swift 移植追踪与 lint（EXECUTE_HARNESS_PORT_PLAN.md Phase 0）
+"""harness_port.py — codex → Swift 移植追踪与 lint（Docs/EXECUTE_HARNESS_PORT_PLAN.md Phase 0）
 
 用法（在 Sage 仓库根目录执行）：
   python3 scripts/harness_port.py generate   # 生成/更新 Harness/PORTING.md（保留已有状态与备注）

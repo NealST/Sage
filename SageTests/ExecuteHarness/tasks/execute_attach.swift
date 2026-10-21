@@ -80,6 +80,35 @@ final class ExecuteHarnessAttachTests: XCTestCase {
         }
     }
 
+    func testSageToolSpecsCarryToolDefinitionFields() {
+        let definition = ToolDefinition(
+            name: "read_text_file",
+            description: "Reads a file.",
+            parameters: .object([
+                "type": .string("object"),
+                "properties": .object([
+                    "path": .object(["type": .string("string")]),
+                ]),
+                "required": .array([.string("path")]),
+                "additionalProperties": .bool(false),
+            ])
+        )
+        XCTAssertEqual(
+            ExecuteHarnessAttach.sageToolSpecs([definition]),
+            [
+                SageToolSpec(
+                    name: "read_text_file",
+                    description: "Reads a file.",
+                    parameters: .object(
+                        ["path": .string(nil)],
+                        required: ["path"],
+                        additionalProperties: false
+                    )
+                )
+            ]
+        )
+    }
+
     func testResponseStreamEmitsFunctionCallsThenCompleted() {
         let stream = ExecuteHarnessAttach.responseStream(
             from: ModelTurn(

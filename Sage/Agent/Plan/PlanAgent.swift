@@ -3,7 +3,8 @@
 //  Sage
 //
 //  Sub-agent: thread judgment, skill recall, written work plan, persist gate.
-//  No tools, no execution, no SKILL.md writes.
+//  Planning samples on the harness (PhaseTurnRunner); execution and
+//  SKILL.md writes stay out.
 //
 
 import Foundation
@@ -20,42 +21,22 @@ nonisolated struct ProposedWorkPlan: Sendable {
 
 @MainActor
 final class PlanAgent {
-    private let state: AgentSessionState
-    private let modelGateway: AgentModelGateway
+    let state: AgentSessionState
+    let modelGateway: AgentModelGateway
+    let phaseRunner: PhaseTurnRunner
+    weak var skillHost: SkillToolHost?
 
-    init(state: AgentSessionState, modelGateway: AgentModelGateway) {
+    init(state: AgentSessionState, modelGateway: AgentModelGateway, taskStore: AgentTaskStore) {
         self.state = state
         self.modelGateway = modelGateway
-    }
-
-    func propose(
-        userText: String,
-        skillAppendix: String,
-        allowedSkillNames: [String]
-    ) async throws -> ProposedWorkPlan {
-        var adapter = PlanStreamAdapter()
-        let raw = try await modelGateway.streamCustom(
-            system: Self.systemPrompt,
-            user: Self.proposeUserPrompt(
-                userText: userText,
-                threadContext: threadContext(),
-                skillAppendix: skillAppendix
-            ),
-            role: .plan
-        ) { chunk in
-            if let visible = adapter.ingest(chunk) {
-                modelGateway.streaming.publish(visible)
-            }
-            modelGateway.streaming.setReservingWorkPlan(adapter.isReservingWorkPlan)
+        self.phaseRunner = PhaseTurnRunner(state: state, modelGateway: modelGateway, taskStore: taskStore)
+        phaseRunner.dispatchTool = { [weak self] call in
+            guard let self else { return "ERROR: Plan inspect tools are unavailable." }
+            return try await self.invokePlanTool(call)
         }
-        return try adoptProposal(
-            adapter.finish(),
-            raw: raw,
-            allowed: Set(allowedSkillNames)
-        )
     }
 
-    private func adoptProposal(
+    func adoptProposal(
         _ outcome: PlanStreamAdapter.Outcome,
         raw: String,
         allowed: Set<String>
@@ -99,7 +80,11 @@ final class PlanAgent {
     }
 
     static let systemPrompt = """
-    You are Sage's planner. You do not call tools and you do not execute.
+    You are Sage's planner. You never change the Mac — planning only.
+
+    You may inspect before you write: list_directory, read_text_file, search_files. \
+    Use them when the request turns on real files or state; verify first, then answer or plan. \
+    Mutating tools are refused at runtime.
 
     Two output forms — pick one. The first token decides:
 
@@ -161,7 +146,7 @@ final class PlanAgent {
     Skip one-off answers, trivial lookups, failed or abandoned work, and things already covered by an existing skill.
     """
 
-    private func threadContext() -> String {
+    func threadContext() -> String {
         guard let task = state.activeTask else { return "No current thread." }
         let label = TopicDriftDetector.threadLabel(
             topic: task.topic,
@@ -197,7 +182,7 @@ final class PlanAgent {
         return lines.joined(separator: "\n")
     }
 
-    private static func proposeUserPrompt(
+    static func proposeUserPrompt(
         userText: String,
         threadContext: String,
         skillAppendix: String

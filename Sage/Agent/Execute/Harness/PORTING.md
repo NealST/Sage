@@ -254,7 +254,7 @@
 | `core/src/tools/approvals.rs` | 884 | `tools/approvals.swift` | 🟡 adapted | HUD `from(step:)` classifies exec/stdin/patch/MCP/network/permissions; SessionToolAllowlist writes session keys into ApprovalStore |
 | `core/src/tools/call_trace.rs` | 88 | `tools/call_trace.swift` | 🟡 adapted |  |
 | `core/src/tools/catalog_parameters.rs` | 14 | `tools/catalog_parameters.swift` | ✅ faithful |  |
-| `core/src/tools/context.rs` | 607 | `tools/context.swift` | 🟡 adapted |  |
+| `core/src/tools/context.rs` | 607 | `tools/context.swift` | 🟡 adapted | `ToolInvocation.toolAllowlist` 镜像回合白名单供派发校验（Sage addition） |
 | `core/src/tools/control_tool_analytics.rs` | 58 | `tools/control_tool_analytics.swift` | 🟡 adapted |  |
 | `core/src/tools/events.rs` | 885 | `tools/events.swift` | 🟡 adapted |  |
 | `core/src/tools/executed_tool_calls/mcp_attribution.rs` | 169 | `tools/executed_tool_calls/mcp_attribution.swift` | 🟡 adapted |  |
@@ -303,7 +303,7 @@
 | `core/src/tools/network_approval.rs` | 1,254 | `tools/network_approval.swift` | 🟡 adapted |  |
 | `core/src/tools/orchestrator.rs` | 551 | `tools/orchestrator.swift` | 🟡 adapted | execute owns validate/timeout/dispatch; Pipeline is a forwarder |
 | `core/src/tools/parallel.rs` | 787 | `tools/parallel.swift` | 🟡 adapted | ToolCallRuntime admits through SessionServices.parallelAdmission and wires request_user_input, request_permissions, and dynamic tools to Session |
-| `core/src/tools/registry.rs` | 851 | `tools/registry.swift` | 🟡 adapted |  |
+| `core/src/tools/registry.rs` | 851 | `tools/registry.swift` | 🟡 adapted | dispatch 越过回合白名单的调用以 respondToModel 拒绝（Sage addition 派发门） |
 | `core/src/tools/router.rs` | 385 | `tools/router.swift` | 🟡 adapted | toolSupportsParallel → ParallelToolRuntime |
 | `core/src/tools/runtimes/apply_patch.rs` | 242 | `tools/runtimes/apply_patch.swift` | 🟡 partial |  |
 | `core/src/tools/runtimes/mod.rs` | 918 | `tools/runtimes/mod.swift` | 🟡 adapted |  |
@@ -481,7 +481,7 @@
 | `core/src/session/mcp_prewarm.rs` | 82 | `session/mcp_prewarm.swift` | 🟡 adapted | worker publishes a binding from the current config; an auth generation change marks dirty and publishes again; disabled or removed servers are disconnected |
 | `core/src/session/mcp_refresh.rs` | 56 | `session/mcp_refresh.swift` | 🟡 adapted | dirty bit plus one in-flight permit |
 | `core/src/session/mcp_runtime.rs` | 381 | `session/mcp_runtime.swift` | 🟡 adapted | publish reuses a live connection when the url is unchanged; reconnect opens a fresh client; disabled or removed servers are closed |
-| `core/src/session/mod.rs` | 5,130 | `session/session_mod.swift` | 🟡 adapted |  |
+| `core/src/session/mod.rs` | 5,130 | `session/session_mod.swift` | 🟡 adapted | `ThreadSession.functionCallOutputs` 按子线程角色白名单拒绝越界调用（Sage addition 派发门） |
 | `core/src/session/plugin_selection.rs` | 32 | `session/plugin_selection.swift` | 🟡 adapted | plugin 市场产品（§2.4） |
 | `core/src/session/reasoning_effort.rs` | 162 | `session/reasoning_effort.swift` | 🟡 adapted |  |
 | `core/src/session/retained_context.rs` | 35 | `session/retained_context.swift` | 🟡 adapted | records a verified answer; a new record is appended to the rollout when persistence is enabled |
@@ -497,8 +497,8 @@
 | `core/src/session/thread_settings.rs` | 152 | `session/thread_settings.swift` | 🟡 adapted | ThreadSettings writes later-turn StepSettings and clears lastStartedTurnId; persistence and MCP prewarm stay out |
 | `core/src/session/time_reminder.rs` | 202 | `session/time_reminder.swift` | 🟡 adapted |  |
 | `core/src/session/token_budget.rs` | 248 | `session/token_budget.swift` | 🟡 adapted | inline compact + resolveTokenBudgetConfig; experimental ChatGPT eligibility stays out |
-| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools + admitted dynamic tools; emit TurnDiff after in-flight tools |
-| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted | newTurnContext copies session dynamicTools onto the admitted turn; TurnEnvironment carries a resolved shell snapshot path |
+| `core/src/session/turn.rs` | 3,105 | `session/turn.swift` | 🟡 adapted | assembleToolRouter: Apps/visibility/budget + Sage execute tools + admitted dynamic tools; emit TurnDiff after in-flight tools; `toolAllowlist` narrows model-visible specs（Sage addition，阶段 / 子 agent 只读集） |
+| `core/src/session/turn_context.rs` | 1,386 | `session/turn_context.swift` | 🟡 adapted | newTurnContext copies session dynamicTools onto the admitted turn; TurnEnvironment carries a resolved shell snapshot path; `TurnContext.toolAllowlist` + `TurnServiceOverrides`（Sage addition：阶段回合租借采样 / 派发 / spec 槽位） |
 | `core/src/session/turn_input.rs` | 765 | `session/turn_input.swift` | 🟡 adapted |  |
 | `core/src/session/turn_suspension.rs` | 119 | `session/turn_suspension.swift` | 🟡 adapted | suspend stops the unfinished root turn without a terminal event; rollout flush and writer close wait |
 | `core/src/session/world_state.rs` | 295 | `session/world_state.swift` | 🟡 adapted | step snapshot + compact reinject + exec-policy prefixes; plugin contributors stay out |
@@ -506,7 +506,7 @@
 | `core/src/state/additional_context.rs` | 35 | `state/additional_context.swift` | ✅ faithful |  |
 | `core/src/state/auto_compact_window.rs` | 237 | `state/auto_compact_window.swift` | ✅ faithful |  |
 | `core/src/state/mod.rs` | 22 | `state/state_mod.swift` | ✅ faithful |  |
-| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore; ensure, reconnect, and disconnect MCP hooks; rollout append hook; live thread |
+| `core/src/state/service.rs` | 104 | `state/service.swift` | 🟡 adapted | parallelAdmission + HUD ApprovalStore; ensure, reconnect, and disconnect MCP hooks; rollout append hook; live thread; `sageToolSpecs` 槽位（Sage addition，回合级 override 优先） |
 | `core/src/state/session.rs` | 475 | `state/state_session.swift` | 🟡 adapted |  |
 | `core/src/state/turn.rs` | 254 | `state/state_turn.swift` | 🟡 adapted |  |
 | `core/src/state/turn_token_usage.rs` | 48 | `state/turn_token_usage.swift` | 🟡 adapted |  |
@@ -514,7 +514,7 @@
 | `core/src/tasks/compact.rs` | 76 | `tasks/compact.swift` | 🟡 adapted | token-budget window reset + occupancy share CompactTokenBudget; remote V2 stays on runAutoCompact |
 | `core/src/tasks/lifecycle.rs` | 119 | `tasks/tasks_lifecycle.swift` | 🟡 adapted |  |
 | `core/src/tasks/mod.rs` | 1,014 | `tasks/tasks_mod.swift` | 🟡 adapted | spawnTask / startTask / onTaskFinished / abortAllTasks; detached start from Session loop |
-| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission; attach shares allowlist ApprovalStore + ParallelAdmission |
+| `core/src/tasks/regular.rs` | 126 | `tasks/regular.swift` | 🟡 adapted | provider text streams into runTurn; function calls wait for HUD admission; attach shares allowlist ApprovalStore + ParallelAdmission; screenMutations 拒非 act 批次并落 transcript；startRework 同 session 提交返工输入（Sage addition） |
 | `core/src/tasks/review.rs` | 280 | `tasks/tasks_review.swift` | 🟡 adapted |  |
 | `core/src/tasks/user_shell.rs` | 485 | `tasks/user_shell.swift` | 🟡 adapted | login shell via defaultUserShell; process exit is observed off the main actor; stdout deltas use the turn sub id; an enabled snapshot is captured once per cwd and sourced; packaged codex-path is prepended and replayed after the snapshot; an active managed proxy is stripped before launch |
 | `core/src/turn_diff_tracker.rs` | 403 | `turn_diff_tracker.swift` | 🟡 adapted | trackDelta / invalidate / emit TurnDiff after sample; Myers timeout stays a line diff |
@@ -592,7 +592,7 @@
 | `core/src/state_db_bridge.rs` | 8 | `state_db_bridge.swift` | 🟡 adapted |  |
 | `core/src/thread_manager/managed.rs` | 109 | `thread_manager/managed.swift` | 🟡 adapted |  |
 | `core/src/thread_manager/shared_instructions.rs` | 112 | `thread_manager/shared_instructions.swift` | 🟡 adapted |  |
-| `core/src/thread_manager.rs` | 2,583 | `thread_manager.swift` | 🟡 adapted |  |
+| `core/src/thread_manager.rs` | 2,583 | `thread_manager.swift` | 🟡 adapted | `childModelTools` 按角色白名单收窄子线程采样工具集（Sage addition 组装门） |
 | `core/src/thread_rollout_truncation.rs` | 305 | `thread_rollout_truncation.swift` | 🟡 adapted |  |
 | `core/src/thread_startup_metadata.rs` | 110 | `thread_startup_metadata.swift` | 🟡 adapted |  |
 | `rollout/src/compression/error_metrics.rs` | 65 | `rollout/src/compression/error_metrics.swift` | 🟡 adapted |  |
@@ -809,7 +809,7 @@
 | `core/src/agent/control.rs` | 904 | `agent/control.swift` | 🟡 adapted |  |
 | `core/src/agent/mod.rs` | 14 | `agent/agent_mod.swift` | ✅ faithful |  |
 | `core/src/agent/registry.rs` | 399 | `agent/registry.swift` | 🟡 adapted |  |
-| `core/src/agent/role.rs` | 418 | `agent/role.swift` | 🟡 adapted |  |
+| `core/src/agent/role.rs` | 418 | `agent/role.swift` | 🟡 adapted | 内建 explorer 角色：只读工具白名单 + 工具轮次预算（Sage addition） |
 | `core/src/agent/status.rs` | 31 | `agent/status.swift` | 🟡 adapted |  |
 | `core/src/agent/types.rs` | 88 | `agent/types.swift` | 🟡 adapted |  |
 | `core/src/agent_communication.rs` | 78 | `agent_communication.swift` | 🟡 adapted |  |
@@ -926,10 +926,9 @@
 | `protocol/src/json_value.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/serde_helpers.swift` | Sage 新增，无 codex 对应 |
 | `protocol/src/uuid_v7.swift` | Sage 新增，无 codex 对应 |
-| `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载；Responses client 租约 |
-| `tasks/explore.swift` | Sage 新增，无 codex 对应 |
+| `tasks/execute_attach.swift` | Sage 新增：AgentEvent → Session / TurnContext 挂载；Responses client 租约；`sageToolSpecs` 真实 schema 映射 |
 | `tasks/user_shell_package_path.swift` | Sage 新增，无 codex 对应 |
-| `tools/handlers/sage_execute.swift` | Sage 新增：execute 工具 → onSageToolCall |
+| `tools/handlers/sage_execute.swift` | Sage 新增：`SageToolSpec` 注册（真实 schema）→ onSageToolCall |
 | `utils/io_error.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/file_url.swift` | Sage 新增，无 codex 对应 |
 | `utils/path-uri/src/url_encoding.swift` | Sage 新增，无 codex 对应 |

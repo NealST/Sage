@@ -57,6 +57,42 @@ final class AgentTaskStore {
 
     // MARK: - Commit / create
 
+    /// Serializes `commit`: read-modify-adopt spans a DB await, so two
+    /// overlapping commits (e.g. parallel tool results) would each adopt a
+    /// base captured before the other's write and drop its events.
+    private var commitWaiters: [CheckedContinuation<Void, Never>] = []
+    private var commitLocked = false
+
+    private func awaitCommitTurn() async {
+        if !commitLocked {
+            commitLocked = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            commitWaiters.append(continuation)
+        }
+    }
+
+    private func endCommitTurn() {
+        if commitWaiters.isEmpty {
+            commitLocked = false
+        } else {
+            commitWaiters.removeFirst().resume()
+        }
+    }
+
+    /// Runs `body` under the same FIFO discipline as `commit`. Lifecycle
+    /// transitions (create / activate / close / spawn) also read-modify-adopt
+    /// the active task across a DB await and must not interleave with commits
+    /// or each other — otherwise a commit's adoption can resurrect a task the
+    /// transition just replaced. Not reentrant: `body` must not call `commit`
+    /// or another lock-taking method.
+    func withCommitLock<T>(_ body: () async throws -> T) async rethrows -> T {
+        await awaitCommitTurn()
+        defer { endCommitTurn() }
+        return try await body()
+    }
+
     /// Updates memory only after a successful atomic DB mutation.
     @discardableResult
     func commit(
@@ -64,6 +100,8 @@ final class AgentTaskStore {
         deleteEventIDs: [UUID],
         mutate: (inout TaskRecord) -> Void = { _ in }
     ) async -> Bool {
+        await awaitCommitTurn()
+        defer { endCommitTurn() }
         guard !state.isTornDown else { return false }
         guard var task = state.activeTask else { return false }
         mutate(&task)
@@ -98,7 +136,7 @@ final class AgentTaskStore {
 
     @discardableResult
     func clearPendingPrompt() async -> Bool {
-        guard state.pendingPrompt != nil || state.activeTask?.pendingPrompt != nil else {
+        guard state.pendingPrompt != nil else {
             return true
         }
         return await commit(appendEvents: [], deleteEventIDs: []) { task in
@@ -116,20 +154,24 @@ final class AgentTaskStore {
             projectID: state.focusedProject?.id,
             relatedTaskIDs: scopedRelated
         )
-        do {
-            try await taskRepository.saveTaskState(task, setActive: true)
-            state.activeTask = task
-            state.activeTaskID = task.id
-            state.pendingPrompt = nil
-            state.refreshSummary(for: task)
-            state.enterIdle()
-            state.lastAssistantText = nil
-            planProgress.clear()
-            onActiveTaskChanged?()
-            return task.id
-        } catch {
-            state.enterFailed(message: "Could not create task storage: \(error.localizedDescription)")
-            return nil
+        return await withCommitLock {
+            guard !self.state.isTornDown else { return nil }
+            do {
+                try await self.taskRepository.saveTaskState(task, setActive: true)
+                self.state.activeTask = task
+                self.state.activeTaskID = task.id
+                self.state.refreshSummary(for: task)
+                self.state.enterIdle()
+                self.state.lastAssistantText = nil
+                self.planProgress.clear()
+                self.onActiveTaskChanged?()
+                return task.id
+            } catch {
+                self.state.enterFailed(
+                    message: "Could not create task storage: \(error.localizedDescription)"
+                )
+                return nil
+            }
         }
     }
 
@@ -167,45 +209,47 @@ final class AgentTaskStore {
             let deleteSet = Set(retractIDs)
             closing.events.removeAll { deleteSet.contains($0.id) }
         }
-        do {
-            if closing.events.isEmpty {
-                try await taskRepository.deleteTask(id: closing.id)
-                ToolAuthorizationGrantStore.shared.removeTaskGrants(
-                    scopeID: "task:\(closing.id.uuidString)"
-                )
-                state.removeSummary(id: closing.id)
-            } else {
-                if closing.status == .active || closing.status == .awaitingApproval {
-                    closing.status = .completed
+        return await withCommitLock {
+            do {
+                if closing.events.isEmpty {
+                    try await self.taskRepository.deleteTask(id: closing.id)
+                    ToolAuthorizationGrantStore.shared.removeTaskGrants(
+                        scopeID: "task:\(closing.id.uuidString)"
+                    )
+                    self.state.removeSummary(id: closing.id)
+                } else {
+                    if closing.status == .active || closing.status == .awaitingApproval {
+                        closing.status = .completed
+                    }
+                    closing.pendingPlan = nil
+                    closing.pendingPrompt = nil
+                    closing.clearWorkPlan()
+                    closing.workingMemory = closing.workingMemory?.validated(against: closing.events)
+                    closing.updatedAt = .now
+                    try await self.taskRepository.mutateTask(
+                        closing,
+                        appendEvents: [],
+                        deleteEventIDs: retractIDs,
+                        setActive: false
+                    )
+                    self.state.refreshSummary(for: closing)
+                    self.topicCoordinator?.scheduleTopicGeneration(for: closing)
+                    if !closing.skillPersistConsidered {
+                        self.skills.scheduleExtraction(for: closing)
+                    }
                 }
-                closing.pendingPlan = nil
-                closing.pendingPrompt = nil
-                closing.clearWorkPlan()
-                closing.workingMemory = closing.workingMemory?.validated(against: closing.events)
-                closing.updatedAt = .now
-                try await taskRepository.mutateTask(
-                    closing,
-                    appendEvents: [],
-                    deleteEventIDs: retractIDs,
-                    setActive: false
+                self.state.enterIdle()
+                self.state.lastAssistantText = nil
+                self.planProgress.clear()
+                self.state.discardParkedTurnInput(for: closing.id)
+                self.onTaskClosed?(closing.id)
+                return true
+            } catch {
+                self.state.enterFailed(
+                    message: "Could not close the previous task: \(error.localizedDescription)"
                 )
-                state.refreshSummary(for: closing)
-                topicCoordinator?.scheduleTopicGeneration(for: closing)
-                if !closing.skillPersistConsidered {
-                    skills.scheduleExtraction(for: closing)
-                }
+                return false
             }
-            state.enterIdle()
-            state.lastAssistantText = nil
-            planProgress.clear()
-            state.discardParkedTurnInput(for: closing.id)
-            onTaskClosed?(closing.id)
-            return true
-        } catch {
-            state.enterFailed(
-                message: "Could not close the previous task: \(error.localizedDescription)"
-            )
-            return false
         }
     }
 
@@ -222,22 +266,27 @@ final class AgentTaskStore {
             skillPersistConsidered: true,
             originScheduleID: originScheduleID
         )
-        do {
-            try await taskRepository.saveTaskState(task, setActive: false)
-            state.activeTask = task
-            state.activeTaskID = task.id
-            state.enterIdle()
-            state.lastAssistantText = nil
-            planProgress.clear()
-            state.clearTokenUsage()
-            state.activatedSkillNames = []
-            state.sessionAllowlist.reset()
-            skillRecall?.clearTurnCache()
-            onActiveTaskChanged?()
-            return task.id
-        } catch {
-            state.enterFailed(message: "Could not create scheduled task: \(error.localizedDescription)")
-            return nil
+        return await withCommitLock {
+            guard !self.state.isTornDown else { return nil }
+            do {
+                try await self.taskRepository.saveTaskState(task, setActive: false)
+                self.state.activeTask = task
+                self.state.activeTaskID = task.id
+                self.state.enterIdle()
+                self.state.lastAssistantText = nil
+                self.planProgress.clear()
+                self.state.clearTokenUsage()
+                self.state.activatedSkillNames = []
+                self.state.sessionAllowlist.reset()
+                self.skillRecall?.clearTurnCache()
+                self.onActiveTaskChanged?()
+                return task.id
+            } catch {
+                self.state.enterFailed(
+                    message: "Could not create scheduled task: \(error.localizedDescription)"
+                )
+                return nil
+            }
         }
     }
 }

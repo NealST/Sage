@@ -17,6 +17,11 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
     private weak var skillCatalog: SkillCatalog?
     private weak var mcpHub: CapabilityStore?
     var onSkillsCatalogChanged: (() async -> Void)?
+    /// Live Execute explore spawn (M4). Wired in AgentSessionGraph to
+    /// TurnCoordinator.runExploreSubagent; nil only in unit-test hosts.
+    var runExploreSubagentDelegate: (
+        (String, String?, String?, Set<String>) async throws -> String
+    )?
 
     init(
         state: AgentSessionState,
@@ -69,23 +74,10 @@ final class AgentHostSurface: SkillToolHost, SlashCommandHost {
         instructions: String?,
         activatedSkillNames: Set<String>
     ) async throws -> String {
-        try await ExploreSubagentRunner.runTask(
-            ExploreSubagentRequest(
-                task: task,
-                context: context,
-                instructions: instructions,
-                settings: settings.snapshot(for: .execute),
-                tools: tools,
-                pathGuardPolicy: state.pathGuardPolicy,
-                skillHost: self,
-                activatedSkillNames: activatedSkillNames,
-                enabledSkills: enabledSkills,
-                extraReadAllowlist: MessageAttachment.readAllowlist(
-                    from: state.events,
-                    visibleEventIDs: state.modelVisibleAttachmentEventIDs
-                )
-            )
-        )
+        guard let runExploreSubagentDelegate else {
+            throw ToolError.operationFailed("Explore subagent is not available in this session.")
+        }
+        return try await runExploreSubagentDelegate(task, context, instructions, activatedSkillNames)
     }
 
     func executeToolInvocation(name: String, argumentsJSON: String) async throws -> String {

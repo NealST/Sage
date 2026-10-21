@@ -48,6 +48,57 @@ final class Phase9AgentTests: XCTestCase {
         XCTAssertEqual(source.parentThreadId(), parent)
     }
 
+    func testRoleToolAllowlistScopesExplorerReadOnly() {
+        XCTAssertEqual(
+            roleToolAllowlist(roleName: "explorer"),
+            ["list_directory", "read_text_file", "search_files"]
+        )
+        XCTAssertNil(roleToolAllowlist(roleName: nil))
+        XCTAssertNil(roleToolAllowlist(roleName: "default"))
+        XCTAssertNil(roleToolAllowlist(roleName: "worker"))
+    }
+
+    func testFilterToolsByAllowlistDropsDisallowedAndKeepsNamespaceSubset() {
+        let read = functionSpecJSON(name: "read_text_file")
+        let write = functionSpecJSON(name: "write_text_file")
+        XCTAssertEqual(filterToolsByAllowlist([read, write], allowlist: ["read_text_file"]), [read])
+        XCTAssertTrue(filterToolsByAllowlist([write], allowlist: ["read_text_file"]).isEmpty)
+        let namespace = JSONValue.object([
+            "type": .string("namespace"),
+            "name": .string("mcp"),
+            "tools": .array([read, write]),
+        ])
+        XCTAssertEqual(
+            filterToolsByAllowlist([namespace], allowlist: ["read_text_file"]),
+            [
+                JSONValue.object([
+                    "type": .string("namespace"),
+                    "name": .string("mcp"),
+                    "tools": .array([read]),
+                ])
+            ]
+        )
+        XCTAssertTrue(filterToolsByAllowlist([namespace], allowlist: ["missing"]).isEmpty)
+    }
+
+    func testThreadManagerChildModelToolsFollowRole() throws {
+        let manager = ThreadManager()
+        let read = functionSpecJSON(name: "read_text_file")
+        let write = functionSpecJSON(name: "write_text_file")
+        manager.updateChildModelTools([read, write])
+        let explorer = SessionSource.subAgent(
+            .threadSpawn(
+                parentThreadId: ThreadId(),
+                depth: 1,
+                agentPath: try AgentPath.root().join("ada"),
+                agentNickname: "Ada",
+                agentRole: "explorer"
+            )
+        )
+        XCTAssertEqual(manager.childModelTools(for: explorer), [read])
+        XCTAssertEqual(manager.childModelTools(for: .cli), [read, write])
+    }
+
     func testAgentRegistryReserveAndResolve() throws {
         let registry = AgentRegistry()
         let threadId = ThreadId()
@@ -1560,7 +1611,7 @@ final class Phase9AgentTests: XCTestCase {
                         depth: 1,
                         agentPath: try AgentPath.root().join("ada"),
                         agentNickname: "Ada",
-                        agentRole: "explorer"
+                        agentRole: nil
                     )
                 ),
                 options: SpawnAgentOptions(parentThreadId: parent.threadId)
@@ -1634,6 +1685,88 @@ final class Phase9AgentTests: XCTestCase {
         })
     }
 
+    func testExplorerChildDispatchGateRejectsWriteTools() async throws {
+        let sampler = ExplorerGateSampler()
+        let runner = RecordingToolRunner()
+        let manager = ThreadManager()
+        manager.setTurnSampler(sampler)
+        manager.setTurnToolRunner(runner)
+        let parent = try await manager.startThread(
+            StartThreadOptions(model: "gpt-test", cwd: "/", source: .cli)
+        )
+        let (spawned, _) = try await manager.agentControl().spawn(
+            SpawnRequest(
+                caller: parent.threadId,
+                input: .userInput([.text(text: "hello", textElements: [])]),
+                source: .subAgent(
+                    .threadSpawn(
+                        parentThreadId: parent.threadId,
+                        depth: 1,
+                        agentPath: try AgentPath.root().join("ada"),
+                        agentNickname: "Ada",
+                        agentRole: "explorer"
+                    )
+                ),
+                options: SpawnAgentOptions(parentThreadId: parent.threadId)
+            )
+        )
+        let child = try await manager.getThread(spawned.threadId)
+        let session = try XCTUnwrap(child.liveSession())
+        let text = await session.waitForSamplingResult()
+        XCTAssertEqual(text, "done")
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertEqual(sampler.batches.count, 2)
+        let followUp = try XCTUnwrap(sampler.batches.last)
+        XCTAssertTrue(followUp.contains { input in
+            if case .responseItem(.functionCallOutput(_, let callId, _, _, let output, _)) = input {
+                return callId == "c1"
+                    && output.textContent?.contains("not available for role 'explorer'") == true
+            }
+            return false
+        })
+    }
+
+    func testExplorerChildToolRoundBudgetEndsWithSummary() async throws {
+        let sampler = ExplorerRoundBudgetSampler()
+        let runner = RecordingToolRunner()
+        let manager = ThreadManager()
+        manager.setTurnSampler(sampler)
+        manager.setTurnToolRunner(runner)
+        let parent = try await manager.startThread(
+            StartThreadOptions(model: "gpt-test", cwd: "/", source: .cli)
+        )
+        let (spawned, _) = try await manager.agentControl().spawn(
+            SpawnRequest(
+                caller: parent.threadId,
+                input: .userInput([.text(text: "hello", textElements: [])]),
+                source: .subAgent(
+                    .threadSpawn(
+                        parentThreadId: parent.threadId,
+                        depth: 1,
+                        agentPath: try AgentPath.root().join("ada"),
+                        agentNickname: "Ada",
+                        agentRole: "explorer"
+                    )
+                ),
+                options: SpawnAgentOptions(parentThreadId: parent.threadId)
+            )
+        )
+        let child = try await manager.getThread(spawned.threadId)
+        let session = try XCTUnwrap(child.liveSession())
+        let text = await session.waitForSamplingResult()
+        XCTAssertEqual(text, "budget summary")
+        XCTAssertEqual(runner.calls.count, explorerToolRoundBudget)
+        XCTAssertEqual(sampler.batches.count, explorerToolRoundBudget + 2)
+        let refusedBatch = try XCTUnwrap(sampler.batches[explorerToolRoundBudget + 1])
+        XCTAssertTrue(refusedBatch.contains { input in
+            if case .responseItem(.functionCallOutput(_, let callId, _, _, let output, _)) = input {
+                return callId == "c\(explorerToolRoundBudget + 1)"
+                    && output.textContent?.contains("Tool-round limit reached") == true
+            }
+            return false
+        })
+    }
+
     func testRegularTurnInterruptAbortsToolFollowUp() async throws {
         let sampler = ToolFollowUpSampler()
         let runner = HoldToolRunner()
@@ -1653,7 +1786,7 @@ final class Phase9AgentTests: XCTestCase {
                         depth: 1,
                         agentPath: try AgentPath.root().join("ada"),
                         agentNickname: "Ada",
-                        agentRole: "explorer"
+                        agentRole: nil
                     )
                 ),
                 options: SpawnAgentOptions(parentThreadId: parent.threadId)
@@ -2027,6 +2160,78 @@ private final class HoldTurnSampler: TurnSampler, @unchecked Sendable {
         for waiter in waiters {
             waiter.resume()
         }
+    }
+}
+
+private func functionSpecJSON(name: String) -> JSONValue {
+    .object([
+        "type": .string("function"),
+        "name": .string(name),
+        "description": .string(name),
+    ])
+}
+
+private final class ExplorerGateSampler: TurnSampler, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var batches: [[TurnInput]] = []
+
+    func sampleTurn(
+        turnId: String,
+        input: [TurnInput],
+        cancellation: CancellationToken
+    ) async throws -> TurnSample? {
+        _ = turnId
+        let count: Int = lock.withLock {
+            batches.append(input)
+            return batches.count
+        }
+        if cancellation.isCancelled { return nil }
+        if count == 1 {
+            return TurnSample(functionCalls: [
+                TurnFunctionCall(callId: "c1", name: "write_text_file", arguments: "{}")
+            ])
+        }
+        return TurnSample(assistantText: "done")
+    }
+}
+
+private final class ExplorerRoundBudgetSampler: TurnSampler, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var batches: [[TurnInput]] = []
+
+    func sampleTurn(
+        turnId: String,
+        input: [TurnInput],
+        cancellation: CancellationToken
+    ) async throws -> TurnSample? {
+        _ = turnId
+        let count: Int = lock.withLock {
+            batches.append(input)
+            return batches.count
+        }
+        if cancellation.isCancelled { return nil }
+        if count == explorerToolRoundBudget + 2 {
+            return TurnSample(assistantText: "budget summary")
+        }
+        return TurnSample(functionCalls: [
+            TurnFunctionCall(callId: "c\(count)", name: "read_text_file", arguments: "{}")
+        ])
+    }
+}
+
+private final class RecordingToolRunner: TurnToolRunner, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var calls: [TurnFunctionCall] = []
+
+    func runTool(
+        turnId: String,
+        call: TurnFunctionCall,
+        cancellation: CancellationToken
+    ) async throws -> String {
+        _ = turnId
+        _ = cancellation
+        lock.withLock { calls.append(call) }
+        return "ran:\(call.name)"
     }
 }
 

@@ -209,29 +209,26 @@ struct TaskHistoryBrowserView: View {
         guard let name = promptTaskName(current: summary.displayTitle ?? "") else { return }
         let trimmed = String(name.prefix(80))
         Task {
-            do {
+            if summary.id == activeID {
+                await session.agent.renameActiveTaskTopic(trimmed)
+            } else {
                 // `updateTopic` writes topic + abstract together — preserve the
                 // generated abstract so routing/recall behavior is unchanged.
-                let existing = try await repository.loadTaskMetadata(id: summary.id)
-                try await repository.updateTopic(
-                    taskID: summary.id,
-                    topic: trimmed,
-                    abstract: existing?.abstract ?? "",
-                    topicUpdatedAt: .now
-                )
-                if summary.id == activeID, var active = session.agent.state.activeTask {
-                    active.topic = trimmed
-                    active.topicUpdatedAt = .now
-                    active.updatedAt = .now
-                    session.agent.state.activeTask = active
-                    session.agent.state.refreshSummary(for: active)
+                do {
+                    let existing = try await repository.loadTaskMetadata(id: summary.id)
+                    try await repository.updateTopic(
+                        taskID: summary.id,
+                        topic: trimmed,
+                        abstract: existing?.abstract ?? "",
+                        topicUpdatedAt: .now
+                    )
+                } catch {
+                    session.agent.reportFailure(
+                        "Could not rename the task: \(error.localizedDescription)"
+                    )
                 }
-                await reload()
-            } catch {
-                session.agent.reportFailure(
-                    "Could not rename the task: \(error.localizedDescription)"
-                )
             }
+            await reload()
         }
     }
 

@@ -7,6 +7,9 @@
 //  Port status: adapted
 //
 //  Built-in role text and `spawn_tool_spec.build` are faithful.
+//  Sage addition: `roleToolAllowlist` / `filterToolsByAllowlist` scope
+//  spawned-child tools by role (no codex counterpart; upstream explorer.toml
+//  is empty, so upstream explorer children inherit the parent tool set).
 //  `apply_role_to_config` waits on Config / ConfigLayerStack.
 //  Explorer TOML is empty upstream, so locked-settings notes stay empty
 //  unless a caller-supplied config file parses a model or effort.
@@ -19,6 +22,15 @@ import Foundation
 public let DEFAULT_ROLE_NAME = "default"
 let AGENT_TYPE_UNAVAILABLE_ERROR = "agent type is currently not available"
 
+/// Sage addition (no codex counterpart). Role name for read-only Explore
+/// children; pairs with `roleToolAllowlist` below.
+public let explorerRoleName = "explorer"
+
+/// Sage addition (no codex counterpart). Tool batches an explorer child may
+/// dispatch before `ThreadSession.runRegularTurn` starts refusing its tool
+/// calls, mirroring Sage's legacy ExploreTask round budget.
+public let explorerToolRoundBudget = 6
+
 public func applyRoleToConfig(roleName: String?) async throws {
     throw SageErr.unsupportedOperation(
         "apply_role_to_config waits on Config / ConfigLayerStack"
@@ -30,6 +42,34 @@ public func resolveRoleConfig(
     userDefined: [String: AgentRoleConfig] = [:]
 ) -> AgentRoleConfig? {
     userDefined[roleName] ?? builtInRoleConfigs()[roleName]
+}
+
+/// Sage addition (no codex counterpart). Flat tool names a spawned child with
+/// this role may call; `nil` means no restriction. The `explorer` role keeps
+/// the read-only set Sage's explore path already enforced, expressed at the
+/// role layer so child sampler assembly and child dispatch share one source.
+public func roleToolAllowlist(roleName: String?) -> Set<String>? {
+    guard roleName == explorerRoleName else { return nil }
+    return ["list_directory", "read_text_file", "search_files"]
+}
+
+/// Sage addition (no codex counterpart). Narrows wire-format tool specs (the
+/// `ToolSpec.toJSON` shape) to a flat-name allowlist. A namespace spec
+/// survives with only its allowed tools.
+public func filterToolsByAllowlist(_ tools: [JSONValue], allowlist: Set<String>) -> [JSONValue] {
+    tools.compactMap { tool in
+        guard case .object(let fields) = tool,
+              case .string(let name) = fields["name"] ?? .null else { return nil }
+        if case .string("namespace") = fields["type"] ?? .null,
+           case .array(let nested) = fields["tools"] ?? .null {
+            let kept = filterToolsByAllowlist(nested, allowlist: allowlist)
+            guard !kept.isEmpty else { return nil }
+            var filtered = fields
+            filtered["tools"] = .array(kept)
+            return .object(filtered)
+        }
+        return allowlist.contains(name) ? tool : nil
+    }
 }
 
 public enum SpawnToolSpec {

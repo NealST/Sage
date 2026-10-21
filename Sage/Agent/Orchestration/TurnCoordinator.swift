@@ -7,6 +7,8 @@
 //
 
 import Foundation
+import SageCore
+import SageProtocol
 
 /// Owns submit / retry and the three-sub-agent loop for a single session.
 @MainActor
@@ -28,7 +30,6 @@ final class TurnCoordinator {
     let reviewer: ReviewAgent
 
     weak var slashHost: SlashCommandHost?
-    var executeToolBatch: ((Bool) async -> ToolBatchExecutor.WaveOutcome)?
     var handleStop: ((AgentPlan?) async -> Void)?
     /// User approved a side-effect work plan this turn. Scoped to `turnLoopTaskID`.
     var planApproved = false
@@ -38,6 +39,13 @@ final class TurnCoordinator {
     /// In-memory loop flags keyed by task, so switching threads does not leak them.
     var turnLoopByTask: [UUID: TurnLoopState] = [:]
     var turnLoopTaskID: UUID?
+    /// One persistent harness Session per task (M3). Created lazily by
+    /// `ensureTaskHarness()`; planner / execute / reviewer reach it through
+    /// `RegularTask.harnessProvider` / `PhaseTurnRunner.harnessProvider`.
+    private(set) var taskHarness: TaskHarness?
+    /// Remembers each task's thread id and rollout file so a harness rebuilt
+    /// after a task switch (Recents away and back) resumes the same rollout.
+    var harnessIdentity: [UUID: (ThreadId, String?)] = [:]
 
     struct TurnLoopState: Equatable {
         var planApproved = false
@@ -74,8 +82,8 @@ final class TurnCoordinator {
         self.streaming = streaming
         self.topicCoordinator = topicCoordinator
         self.skills = skills
-        self.planner = PlanAgent(state: state, modelGateway: modelGateway)
-        self.reviewer = ReviewAgent(state: state, modelGateway: modelGateway)
+        self.planner = PlanAgent(state: state, modelGateway: modelGateway, taskStore: taskStore)
+        self.reviewer = ReviewAgent(state: state, modelGateway: modelGateway, taskStore: taskStore)
         self.execute = RegularTask(
             state: state,
             planProgress: planProgress,
@@ -83,24 +91,99 @@ final class TurnCoordinator {
             modelGateway: modelGateway,
             streaming: streaming
         )
+        execute.harnessProvider = { [weak self] in
+            guard let self else { return nil }
+            return self.ensureTaskHarness()
+        }
+        planner.phaseRunner.harnessProvider = { [weak self] in
+            self?.ensureTaskHarness()
+        }
+        reviewer.phaseRunner.harnessProvider = { [weak self] in
+            self?.ensureTaskHarness()
+        }
+    }
+
+    /// Returns the harness for the active task, creating it (with the
+    /// one-time events→history reverse mapping) when the task changed.
+    func ensureTaskHarness() -> TaskHarness? {
+        let taskID = state.activeTaskID
+        if let harness = taskHarness, harness.taskID == taskID {
+            rememberHarnessIdentity(harness)
+            return harness
+        }
+        retireTaskHarness()
+        let harness = TaskHarness(
+            taskID: taskID,
+            task: execute,
+            state: state,
+            modelGateway: modelGateway,
+            remembered: taskID.flatMap { harnessIdentity[$0] }
+        )
+        taskHarness = harness
+        rememberHarnessIdentity(harness)
+        return harness
+    }
+
+    /// Drops the current harness, saving its identity, and shuts its session
+    /// down off the turn path. An in-flight turn is aborted by the shutdown.
+    func retireTaskHarness() {
+        guard let old = taskHarness else { return }
+        if let oldID = old.taskID {
+            harnessIdentity[oldID] = (old.threadId, old.rolloutPath)
+        }
+        taskHarness = nil
+        Task { await old.shutdown() }
+    }
+
+    func discardTaskHarness() {
+        guard let old = taskHarness else { return }
+        taskHarness = nil
+        Task { await old.shutdown() }
+    }
+
+    private func rememberHarnessIdentity(_ harness: TaskHarness) {
+        guard let id = harness.taskID else { return }
+        harnessIdentity[id] = (harness.threadId, harness.rolloutPath)
+    }
+
+    /// explore_subagent (M4): spawn an explorer child on the task's harness
+    /// session, wait for its findings, and return the summary text.
+    func runExploreSubagent(
+        task: String,
+        context: String?,
+        instructions: String?
+    ) async throws -> String {
+        guard let harness = ensureTaskHarness() else {
+            throw ToolError.operationFailed("Explore subagent is not available.")
+        }
+        return try await ExploreAgentSpawnRunner.run(
+            harness: harness,
+            task: task,
+            context: context,
+            instructions: instructions,
+            boundaryDescription: state.pathGuardPolicy.boundaryDescription
+        )
+    }
+
+    /// Window teardown: releases the submission-loop strong cycle.
+    func shutdownTaskHarness() async {
+        guard let old = taskHarness else { return }
+        taskHarness = nil
+        await old.shutdown()
     }
 
     func bind(
         slashHost: SlashCommandHost,
-        executeToolBatch: @escaping (Bool) async -> ToolBatchExecutor.WaveOutcome,
         handleStop: @escaping (AgentPlan?) async -> Void,
         ensureMCPConnected: (() async -> Void)? = nil,
         reconnectMCP: (() async -> Void)? = nil,
         disconnectMCP: (([String]) async -> Void)? = nil
     ) {
         self.slashHost = slashHost
-        self.executeToolBatch = executeToolBatch
         self.handleStop = handleStop
         reviewer.skillHost = slashHost as? SkillToolHost
+        planner.skillHost = slashHost as? SkillToolHost
         execute.bind(
-            runToolBatch: { [weak self] retryFailed in
-                await self?.executeToolBatch?(retryFailed) ?? .persistFailed
-            },
             onCandidateReply: { [weak self] text in
                 await self?.reviewAndFinish(text)
             },

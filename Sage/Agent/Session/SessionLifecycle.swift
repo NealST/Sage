@@ -88,6 +88,15 @@ final class SessionLifecycle {
         state.didBootstrap = true
     }
 
+    /// Boots a headless session for scheduled runs: pins project focus and
+    /// marks bootstrap done without loading the workspace snapshot or
+    /// restoring/creating the interactive thread — the schedule runner drives
+    /// its own ephemeral task.
+    func bootstrapHeadless(project: ProjectRecord?) {
+        state.focusedProject = project
+        state.didBootstrap = true
+    }
+
     /// Clears tips and abandons a paused skill choice before this window is destroyed.
     func prepareForWindowClose() async {
         // Lock immediately so composer / submit cannot start work while we drain tips/saves.
@@ -202,7 +211,6 @@ final class SessionLifecycle {
                 }
                 current.status = .awaitingApproval
             }
-            current.pendingPrompt = state.pendingPrompt
             current.updatedAt = .now
             do {
                 try await taskRepository.saveTaskState(current, setActive: false)

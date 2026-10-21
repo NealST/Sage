@@ -58,6 +58,79 @@ enum ToolSpec: Equatable, Sendable {
         case .freeform(let tool): return tool.name
         }
     }
+
+    /// rust `serde_json::to_value(&ToolSpec)` — a valid Responses API
+    /// tool. Sage's `builtTools` renders model-visible specs through this
+    /// instead of a parallel responses-tools array.
+    func toJSON() -> SageProtocol.JSONValue {
+        switch self {
+        case .function(let tool):
+            return .object([
+                "type": .string("function"),
+                "name": .string(tool.name),
+                "description": .string(tool.description),
+                "strict": .bool(tool.strict),
+                "parameters": tool.parameters.toJSON(),
+            ])
+        case .namespace(let namespace):
+            return .object([
+                "type": .string("namespace"),
+                "name": .string(namespace.name),
+                "description": .string(namespace.description),
+                "tools": .array(namespace.tools.map { namespaced in
+                    .object([
+                        "type": .string("function"),
+                        "name": .string(namespaced.function.name),
+                        "description": .string(namespaced.function.description),
+                        "strict": .bool(namespaced.function.strict),
+                        "parameters": namespaced.function.parameters.toJSON(),
+                    ])
+                }),
+            ])
+        case .toolSearch(let execution, let description, let parameters):
+            return .object([
+                "type": .string("tool_search"),
+                "execution": .string(execution),
+                "description": .string(description),
+                "parameters": parameters.toJSON(),
+            ])
+        case .webSearch(
+            let externalWebAccess,
+            let indexedWebAccess,
+            let filters,
+            let userLocation,
+            let searchContextSize,
+            let searchContentTypes
+        ):
+            var fields: [String: SageProtocol.JSONValue] = ["type": .string("web_search")]
+            if let externalWebAccess {
+                fields["external_web_access"] = .bool(externalWebAccess)
+            }
+            if let indexedWebAccess {
+                fields["indexed_web_access"] = .bool(indexedWebAccess)
+            }
+            if let filters {
+                fields["filters"] = filters
+            }
+            if let userLocation {
+                fields["user_location"] = userLocation
+            }
+            if let searchContextSize {
+                fields["search_context_size"] = .string(searchContextSize)
+            }
+            if let searchContentTypes {
+                fields["search_content_types"] = .array(searchContentTypes.map { .string($0) })
+            }
+            return .object(fields)
+        case .freeform(let tool):
+            return .object([
+                "type": .string("custom"),
+                "name": .string(tool.name),
+                "description": .string(tool.description),
+                "format": .string(tool.format),
+            ])
+        }
+    }
 }
 
 enum ToolExposure: Equatable, Sendable {

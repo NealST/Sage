@@ -108,12 +108,22 @@ public final class ContextManager: @unchecked Sendable {
     public private(set) var reconstructedTurnSettings: ReconstructedTurnSettings?
     public private(set) var reconstructedLastStartedTurnId: String?
     public private(set) var reconstructedContextWindow: ReconstructedContextWindow?
+    /// Tool-completion tasks append items while the turn loop snapshots
+    /// history for the next sample; the port has no borrow checker to
+    /// serialize them, so this lock does.
+    private let historyLock = NSLock()
 
     public init() {
         tokenInfoValue = TokenUsageInfo.newOrAppend(info: nil, last: nil, modelContextWindow: nil)
     }
 
     public func recordItems(_ items: [ResponseItem]) {
+        historyLock.lock()
+        defer { historyLock.unlock() }
+        recordItemsLocked(items)
+    }
+
+    func recordItemsLocked(_ items: [ResponseItem]) {
         self.items.append(contentsOf: items.map { ResponseItemEnvelope($0) })
         if items.contains(where: isUserTurnBoundary) {
             userMessageRevision += 1
@@ -121,6 +131,12 @@ public final class ContextManager: @unchecked Sendable {
     }
 
     public func replaceAnnotated(_ items: [ResponseItemEnvelope]) {
+        historyLock.lock()
+        defer { historyLock.unlock() }
+        replaceAnnotatedLocked(items)
+    }
+
+    func replaceAnnotatedLocked(_ items: [ResponseItemEnvelope]) {
         self.items = items
         historyVersion += 1
         resetVersion += 1
@@ -131,6 +147,8 @@ public final class ContextManager: @unchecked Sendable {
         _ items: [ResponseItemEnvelope],
         reviewerCompactionHash: String?
     ) -> Bool {
+        historyLock.lock()
+        defer { historyLock.unlock() }
         self.items = items
         historyVersion += 1
         worldStateBaseline = nil
@@ -150,6 +168,8 @@ public final class ContextManager: @unchecked Sendable {
     /// The returned value is the bounded record that was stored.
     @discardableResult
     public func recordVerifiedAnswer(_ answer: RetainedVerifiedAnswer) -> RetainedVerifiedAnswer? {
+        historyLock.lock()
+        defer { historyLock.unlock() }
         let bounded = boundVerifiedAnswer(answer)
         if let index = verifiedAnswers.firstIndex(where: {
             $0.turnId == bounded.turnId && $0.callId == bounded.callId
@@ -173,6 +193,8 @@ public final class ContextManager: @unchecked Sendable {
         _ answers: [RetainedVerifiedAnswer],
         incomplete: Bool
     ) {
+        historyLock.lock()
+        defer { historyLock.unlock() }
         verifiedAnswers = []
         verifiedAnswersIncomplete = false
         for answer in answers {
@@ -197,6 +219,8 @@ public final class ContextManager: @unchecked Sendable {
     /// Verified answers whose turn id was removed go with it.
     public func dropLastUserTurns(_ numTurns: UInt32) {
         if numTurns == 0 { return }
+        historyLock.lock()
+        defer { historyLock.unlock() }
         let positions = items.indices.filter { isUserTurnBoundary(items[$0].item) }
         guard let firstTurn = positions.first else { return }
         let count = Int(exactly: numTurns) ?? Int.max
@@ -206,7 +230,7 @@ public final class ContextManager: @unchecked Sendable {
         }
         let removedTurnIds = Set(items[cut...].compactMap { $0.item.turnId() })
         let keptAnswers = verifiedAnswers.filter { !removedTurnIds.contains($0.turnId) }
-        replaceAnnotated(Array(items.prefix(cut)))
+        replaceAnnotatedLocked(Array(items.prefix(cut)))
         if userMessageRevision < .max {
             userMessageRevision += 1
         }
@@ -256,10 +280,14 @@ public final class ContextManager: @unchecked Sendable {
 
     public func forPrompt(inputModalities: [InputModality] = []) -> [ResponseItem] {
         _ = inputModalities
+        historyLock.lock()
+        defer { historyLock.unlock() }
         return items.map(\.item)
     }
 
     public func cloneHistory() -> ContextManager {
+        historyLock.lock()
+        defer { historyLock.unlock() }
         let copy = ContextManager()
         copy.items = items
         copy.guardianReviewMode = guardianReviewMode

@@ -43,6 +43,8 @@ final class CapabilityStore {
     private var reconnectTasks: [String: Task<Void, Never>] = [:]
     /// Per-server serial queue so rapid enable/disable/delete cannot interleave connect/disconnect.
     private var serverOperations: [String: Task<Void, Never>] = [:]
+    /// Serializes config snapshots so a stale save cannot overwrite a newer one.
+    private var persistTask: Task<Void, Never>?
     let callCoordinator = MCPServerCallCoordinator()
 
     private static let maxReconnectAttempts = 3
@@ -180,8 +182,8 @@ final class CapabilityStore {
             writableRoots: writableRoots,
             allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
         )
-        await client.setOnProcessExit { [weak self] exitedServerID in
-            await self?.handleServerProcessExit(serverID: exitedServerID)
+        await client.setOnProcessExit { [weak self] exitedServerID, exitedIdentity in
+            await self?.handleServerProcessExit(serverID: exitedServerID, exitedIdentity: exitedIdentity)
         }
         clients[serverID] = client
 
@@ -197,13 +199,17 @@ final class CapabilityStore {
     /// servers stay up; Sage does this before sampling, not on a side path.
     func ensureEnabledServersConnected() async {
         for server in mcpServers where server.enabled && clients[server.id] == nil {
-            await connect(serverID: server.id)
+            await enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }.value
         }
     }
 
     func reconnectEnabledServers() async {
         for server in mcpServers where server.enabled {
-            await connect(serverID: server.id)
+            await enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }.value
         }
     }
 
@@ -216,38 +222,49 @@ final class CapabilityStore {
         }
     }
 
-    private func handleServerProcessExit(serverID: String) async {
-        guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
-        guard mcpServers[index].enabled else { return }
+    /// Internal (not private) so tests can drive the identity gate directly.
+    func handleServerProcessExit(serverID: String, exitedIdentity: ObjectIdentifier) async {
+        // Only react when the exited client is still the live one. Stale
+        // callbacks from clients that were replaced (connect) or deliberately
+        // torn down (disable/delete) must not clobber the new state.
+        guard let exitedClient = clients[serverID],
+              ObjectIdentifier(exitedClient) == exitedIdentity
+        else { return }
 
-        let exitedClient = clients[serverID]
-        if let exitedClient {
-            let logs = await exitedClient.stderrLog
-            if let idx = mcpServers.firstIndex(where: { $0.id == serverID }) {
-                mcpServers[idx].recentLogs = logs
-            }
-        }
-
-        if let current = clients[serverID], current === exitedClient {
+        guard let index = mcpServers.firstIndex(where: { $0.id == serverID }) else {
             clients[serverID] = nil
-        } else if exitedClient == nil {
-            clients[serverID] = nil
+            mcpTools.removeAll { $0.serverID == serverID }
+            return
         }
-        mcpTools.removeAll { $0.serverID == serverID }
-
-        guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
-        guard mcpServers[idx].enabled else { return }
-
-        let attempts = mcpServers[idx].reconnectAttempts
-        if attempts >= Self.maxReconnectAttempts {
-            mcpServers[idx].status = .error
-            mcpServers[idx].statusMessage = "Process exited. Reconnect failed after \(attempts) attempts."
+        guard mcpServers[index].enabled else {
+            clients[serverID] = nil
+            mcpTools.removeAll { $0.serverID == serverID }
             return
         }
 
-        mcpServers[idx].status = .reconnecting
-        mcpServers[idx].reconnectAttempts = attempts + 1
-        mcpServers[idx].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
+        let logs = await exitedClient.stderrLog
+        guard let idx = mcpServers.firstIndex(where: { $0.id == serverID }) else {
+            clients[serverID] = nil
+            mcpTools.removeAll { $0.serverID == serverID }
+            return
+        }
+        mcpServers[idx].recentLogs = logs
+        clients[serverID] = nil
+        mcpTools.removeAll { $0.serverID == serverID }
+
+        guard let current = mcpServers.firstIndex(where: { $0.id == serverID }) else { return }
+        guard mcpServers[current].enabled else { return }
+
+        let attempts = mcpServers[current].reconnectAttempts
+        if attempts >= Self.maxReconnectAttempts {
+            mcpServers[current].status = .error
+            mcpServers[current].statusMessage = "Process exited. Reconnect failed after \(attempts) attempts."
+            return
+        }
+
+        mcpServers[current].status = .reconnecting
+        mcpServers[current].reconnectAttempts = attempts + 1
+        mcpServers[current].statusMessage = "Reconnecting (attempt \(attempts + 1)/\(Self.maxReconnectAttempts))…"
 
         let baseDelay = Self.reconnectBaseDelay * pow(2.0, Double(attempts))
         let jitter = Double.random(in: 0...(baseDelay * 0.3))
@@ -321,8 +338,9 @@ extension CapabilityStore {
     }
 
     /// Chains work behind any in-flight op for the same server id.
+    /// Internal so other files in the module route connect/disconnect through it.
     @discardableResult
-    private func enqueueServerOperation(
+    func enqueueServerOperation(
         serverID: String,
         _ body: @escaping @MainActor () async -> Void
     ) -> Task<Void, Never> {
@@ -344,18 +362,23 @@ extension CapabilityStore {
                 mcpServers[$0].id == key || mcpServers[$0].name == key
             }
             if matches.isEmpty {
-                await disconnect(serverID: key)
+                await enqueueServerOperation(serverID: key) { [weak self] in
+                    await self?.disconnect(serverID: key)
+                }.value
                 disconnectedIDs.append(key)
                 continue
             }
             for index in matches {
                 let id = mcpServers[index].id
-                await disconnect(serverID: id)
-                guard mcpServers.indices.contains(index) else { continue }
-                mcpServers[index].status = mcpServers[index].enabled ? .disconnected : .disabled
-                mcpServers[index].statusMessage = nil
-                mcpServers[index].toolCount = 0
-                mcpServers[index].reconnectAttempts = 0
+                await enqueueServerOperation(serverID: id) { [weak self] in
+                    guard let self else { return }
+                    await self.disconnect(serverID: id)
+                    guard let idx = self.mcpServers.firstIndex(where: { $0.id == id }) else { return }
+                    self.mcpServers[idx].status = self.mcpServers[idx].enabled ? .disconnected : .disabled
+                    self.mcpServers[idx].statusMessage = nil
+                    self.mcpServers[idx].toolCount = 0
+                    self.mcpServers[idx].reconnectAttempts = 0
+                }.value
                 disconnectedIDs.append(id)
             }
         }
@@ -374,7 +397,9 @@ extension CapabilityStore {
 
     private func persistMCP() {
         let snapshot = mcpServers
-        Task {
+        let previous = persistTask
+        persistTask = Task {
+            await previous?.value
             await store.saveServers(snapshot)
         }
     }

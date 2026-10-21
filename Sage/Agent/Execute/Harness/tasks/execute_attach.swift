@@ -54,9 +54,11 @@ enum ExecuteHarnessAttach {
         history: [ResponseItem],
         threadId: ThreadId = ThreadId(),
         startSource: SessionStartSource? = nil,
-        forkedFromThreadId: ThreadId? = nil
+        forkedFromThreadId: ThreadId? = nil,
+        discardEvents: Bool = false
     ) -> Session {
         let session = Session(threadId: threadId)
+        session.discardEvents = discardEvents
         session.state.sessionConfiguration.forkedFromThreadId = forkedFromThreadId
         if !history.isEmpty {
             session.state.recordItems(history)
@@ -117,15 +119,16 @@ enum ExecuteHarnessAttach {
     static func leaseResponsesClient(
         existing: ResponsesClientLease?,
         baseURL: String,
-        apiKey: String
+        apiKey: String,
+        threadId: ThreadId? = nil
     ) -> ResponsesClientLease? {
         guard !baseURL.isEmpty, !apiKey.isEmpty else { return nil }
         if let existing, existing.baseURL == baseURL, existing.apiKey == apiKey {
             return existing
         }
-        let threadId = existing?.client.threadId ?? ThreadId()
+        let resolvedThreadId = threadId ?? existing?.client.threadId ?? ThreadId()
         return ResponsesClientLease(
-            client: responsesClient(baseURL: baseURL, apiKey: apiKey, threadId: threadId),
+            client: responsesClient(baseURL: baseURL, apiKey: apiKey, threadId: resolvedThreadId),
             baseURL: baseURL,
             apiKey: apiKey
         )
@@ -145,9 +148,14 @@ enum ExecuteHarnessAttach {
     }
 
     static func makeTurnContext(cwd: String, model: String, allowsMutation: Bool) -> TurnContext {
-        TurnContext(
+        var config = Config()
+        // No HUD answer path is wired for request_user_input; without this
+        // the tool would be model-visible but its call could hang the turn.
+        config.experimentalRequestUserInputEnabled = false
+        return TurnContext(
             cwd: cwd,
             model: model,
+            config: config,
             sandboxPolicy: allowsMutation
                 ? .workspaceWrite(
                     writableRoots: [],
@@ -353,9 +361,25 @@ enum ExecuteHarnessAttach {
         return events
     }
 
-    /// Responses function schemas for the prompt `buildPrompt` already assembled.
-    static func responsesTools(_ tools: [ToolDefinition]) -> [SageProtocol.JSONValue] {
-        tools.map(responsesTool)
+    /// Real-schema tool specs for `assembleToolRouter` registration.
+    static func sageToolSpecs(_ tools: [ToolDefinition]) -> [SageToolSpec] {
+        tools.map(sageToolSpec)
+    }
+
+    static func sageToolSpec(_ tool: ToolDefinition) -> SageToolSpec {
+        SageToolSpec(
+            name: tool.name,
+            description: tool.description,
+            parameters: jsonSchema(from: tool.parameters)
+        )
+    }
+
+    /// App `ToolDefinition.parameters` → harness `JsonSchema`. Schemas the
+    /// subset cannot model fall back to a permissive object, mirroring the
+    /// MCP catalog fallback.
+    private static func jsonSchema(from parameters: Sage.JSONValue) -> JsonSchema {
+        (try? parseCatalogParameters(protocolJSON(parameters).encodedString()))
+            ?? .object([:], additionalProperties: true)
     }
 
     /// One `/responses` stream, kept so a collected sample can be replayed.
@@ -651,15 +675,6 @@ enum ExecuteHarnessAttach {
 
     static func modelTurn(from stream: SageCore.ResponseStream) async throws -> ModelTurn {
         try await collectResponses(from: stream).turn
-    }
-
-    private static func responsesTool(_ tool: ToolDefinition) -> SageProtocol.JSONValue {
-        .object([
-            "type": .string("function"),
-            "name": .string(tool.name),
-            "description": .string(tool.description),
-            "parameters": protocolJSON(tool.parameters),
-        ])
     }
 
     private static func protocolJSON(_ value: Sage.JSONValue) -> SageProtocol.JSONValue {

@@ -98,7 +98,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
 
         XCTAssertEqual(reply, "九轮之后仍能收尾")
         XCTAssertEqual(runtime.turns.execute.toolBatchCount, 9)
-        XCTAssertTrue(runtime.turns.execute.canOfferMoreTools)
     }
 
     func testStopCancelsTheModelRequest() async throws {
@@ -221,12 +220,14 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         await runtime.turns.execute.start()
 
         XCTAssertEqual(reply, "from-harness")
-        XCTAssertEqual(runtime.turns.execute.harnessInput.count, 1)
+        // Creation's reverse mapping already recorded the last userInput,
+        // so the first execute turn submits no extra input.
+        XCTAssertTrue(runtime.turns.execute.harnessInput.isEmpty)
         XCTAssertGreaterThanOrEqual(
-            runtime.turns.execute.harnessSession?.cloneHistory().forPrompt().count ?? 0,
+            runtime.turns.execute.turnHarness?.session.cloneHistory().forPrompt().count ?? 0,
             2
         )
-        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager)
+        XCTAssertNotNil(runtime.turns.execute.turnHarness?.threadManager)
     }
 
     func testHarnessRunTurnDispatchesToolsThenFinishes() async throws {
@@ -284,16 +285,16 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         await runtime.turns.execute.start()
 
         XCTAssertEqual(reply, "from-harness")
-        XCTAssertTrue(runtime.turns.execute.harnessSession?.mcpReprojectionRequested == true)
+        XCTAssertTrue(runtime.turns.execute.turnHarness?.session.mcpReprojectionRequested == true)
         XCTAssertTrue(
-            runtime.turns.execute.harnessSession?.emittedEvents.contains(where: isTurnComplete)
-                == true
+            runtime.turns.execute.turnHarness?.session.discardEvents == true,
+            "task harness sessions must not accumulate events no one drains"
         )
-        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager)
-        XCTAssertNotNil(runtime.turns.execute.harnessSession?.services.localAgentControl)
-        let parentId = try XCTUnwrap(runtime.turns.execute.harnessSession?.threadId)
-        XCTAssertNotNil(runtime.turns.execute.harnessThreadManager?.peekThread(parentId))
-        XCTAssertNil(runtime.turns.execute.harnessThreadManager?.peekThread(parentId)?.liveSession())
+        XCTAssertNotNil(runtime.turns.execute.turnHarness?.threadManager)
+        XCTAssertNotNil(runtime.turns.execute.turnHarness?.session.services.localAgentControl)
+        let parentId = try XCTUnwrap(runtime.turns.execute.turnHarness?.session.threadId)
+        XCTAssertNotNil(runtime.turns.execute.turnHarness?.threadManager.peekThread(parentId))
+        XCTAssertNil(runtime.turns.execute.turnHarness?.threadManager.peekThread(parentId)?.liveSession())
     }
 
     func testHarnessRunTurnPausesWhenTheBatchNeedsApproval() async throws {
@@ -683,11 +684,16 @@ final class ExecuteHarnessTurnTests: XCTestCase {
         let session = Session()
         session.prepareSamplingPrompt = {
             session.state.sessionConfiguration.baseInstructions = "系统"
-            session.services.sageResponsesTools = [
-                .object([
-                    "type": .string("function"),
-                    "name": .string("read_text_file"),
-                ]),
+            session.services.sageToolSpecs = [
+                SageToolSpec(
+                    name: "read_text_file",
+                    description: "Reads a text file.",
+                    parameters: .object(
+                        ["path": .string("File path.")],
+                        required: ["path"],
+                        additionalProperties: false
+                    )
+                ),
             ]
         }
         var seenSystem = ""
@@ -699,21 +705,30 @@ final class ExecuteHarnessTurnTests: XCTestCase {
             return ExecuteHarnessAttach.responseStream(from: ModelTurn(content: "ok", toolCalls: []))
         }
         var clientSession: ModelClientSession?
+        var turnConfig = Config()
+        turnConfig.experimentalRequestUserInputEnabled = false
         let result = try await runSamplingRequest(
             sess: session,
-            stepContext: StepContext(),
+            stepContext: StepContext(turn: TurnContext(config: turnConfig)),
             clientSession: &clientSession,
             input: [],
             cancellationToken: CancellationToken()
         )
         XCTAssertEqual(seenSystem, "系统")
         XCTAssertEqual(seenTools.count, 1)
+        guard case .object(let fields)? = seenTools.first,
+              case .string("function")? = fields["type"],
+              case .string("read_text_file")? = fields["name"],
+              case .object(let parameters)? = fields["parameters"] else {
+            return XCTFail("expected a full function schema for read_text_file")
+        }
+        XCTAssertEqual(parameters["required"], .array([.string("path")]))
         XCTAssertEqual(result.lastAgentMessage, "ok")
 
-        session.services.sageResponsesTools = []
+        session.services.sageToolSpecs = []
         let empty = buildPrompt(
             input: [],
-            stepContext: StepContext(),
+            stepContext: StepContext(turn: TurnContext(config: turnConfig)),
             baseInstructions: BaseInstructions(text: "系统"),
             sess: session
         )
@@ -792,15 +807,6 @@ final class ExecuteHarnessTurnTests: XCTestCase {
                 endTurn: true
             )),
         ])
-    }
-
-    private func isTurnComplete(_ event: EventMsg) -> Bool {
-        switch event {
-        case .turnComplete(let _):
-            return true
-        default:
-            return false
-        }
     }
 }
 

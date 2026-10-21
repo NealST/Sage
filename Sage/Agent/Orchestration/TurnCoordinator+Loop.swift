@@ -101,30 +101,17 @@ extension TurnCoordinator {
         await execute.start()
     }
 
-    func handleTurn(_ turn: ModelTurn) async {
-        await execute.handleTurn(turn)
-    }
-
-    var canOfferMoreTools: Bool {
-        execute.canOfferMoreTools
-    }
-
     func notePlanApproved() {
         planApproved = true
     }
 
     func extendAndContinueToolRounds() async {
-        execute.extendToolBatchLimit()
         guard await taskStore.clearPendingPrompt() else { return }
         await execute.continueWithTools()
     }
 
     func finishWithoutMoreToolRounds() async {
         await execute.finishWithoutMoreTools()
-    }
-
-    func pauseForToolRoundLimit() async {
-        await execute.pauseForToolRoundLimit()
     }
 
     func persistWorkPlanApproval() async -> Bool {
@@ -185,9 +172,8 @@ extension TurnCoordinator {
                 await presentReviewMustFix(draft: draft, message: message, waitForUser: false)
                 reviewRounds += 1
                 state.reviewFeedback = message
-                execute.resetLoop()
                 state.enterThinking()
-                await execute.start()
+                await execute.startRework(Self.reworkUserText(message))
                 return
             }
             await presentReviewMustFix(draft: draft, message: message, waitForUser: true)
@@ -223,9 +209,8 @@ extension TurnCoordinator {
         guard case .reviewMustFix(let draft, let message) = state.pendingPrompt else { return }
         guard await taskStore.clearPendingPrompt() else { return }
         state.reviewFeedback = message
-        execute.resetLoop()
         state.enterThinking()
-        await execute.start()
+        await execute.startRework(Self.reworkUserText(message))
         _ = draft
     }
 
@@ -240,9 +225,19 @@ extension TurnCoordinator {
         guard case .reviewOptional(_, let message) = state.pendingPrompt else { return }
         guard await taskStore.clearPendingPrompt() else { return }
         state.reviewFeedback = message
-        execute.resetLoop()
         state.enterThinking()
-        await execute.start()
+        await execute.startRework(Self.reworkUserText(message))
+    }
+
+    /// The rework request submitted as an explicit user turn on the task
+    /// session (M3). The same feedback also rides the system-prompt
+    /// follow-up appendix, which stays the carrier after a restart, when
+    /// the session is rebuilt without the review history.
+    static func reworkUserText(_ feedback: String) -> String {
+        """
+        Review feedback on the last result — address this, then finish:
+        \(feedback)
+        """
     }
 
     func acceptOptionalReview() async {
@@ -310,7 +305,8 @@ extension TurnCoordinator {
     }
 
     func persistReviewPrompt(_ prompt: AgentPendingPrompt, waitForUser: Bool) async {
-        state.pendingPrompt = prompt
+        // Memory updates only through commit's adopt — a failed save leaves
+        // no phantom prompt behind.
         _ = await taskStore.commit(appendEvents: [], deleteEventIDs: []) { task in
             task.pendingPrompt = prompt
         }
@@ -448,6 +444,9 @@ extension TurnCoordinator {
             execute.resetLoop()
             latestUserEventID = state.events.last { $0.kind == .userInput }?.id
         }
+        if let harness = taskHarness, harness.taskID != newID {
+            retireTaskHarness()
+        }
         if state.activeTask?.workPlanApproved == true {
             planApproved = true
         }
@@ -455,6 +454,10 @@ extension TurnCoordinator {
 
     func dropTurnLoop(for id: UUID) {
         turnLoopByTask.removeValue(forKey: id)
+        if taskHarness?.taskID == id {
+            discardTaskHarness()
+        }
+        harnessIdentity.removeValue(forKey: id)
         if turnLoopTaskID == id {
             turnLoopTaskID = nil
             planApproved = false

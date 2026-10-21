@@ -9,10 +9,13 @@
 //  Sage admits tools through an RWLock: parallel-capable calls take a
 //  read lock, serial calls take a write lock. `ToolCallRuntime` (runTurn)
 //  wires `request_user_input`, `request_permissions`, and dynamic tools
-//  onto the session waiters and, with `ToolBatchExecutor.runAdmittedBatch`,
-//  shares `SessionServices.parallelAdmission`.
-//  HUD approval still happens first. This file also owns the partition
-//  policy used by `ToolBatchWave` and a generic runner for isolated batches.
+//  onto the session waiters and shares `SessionServices.parallelAdmission`
+//  with Execute tool dispatch.
+//  This file also owns the partition policy used by `ToolBatchWave` and a
+//  generic runner for isolated batches.
+//  Sage addition (no codex counterpart): `dispatchUnlocked` copies
+//  `TurnContext.toolAllowlist` onto the invocation and lets a turn-level
+//  `serviceOverrides.onSageToolCall` take priority over the session slot.
 //
 
 import SageAsyncUtils
@@ -233,6 +236,7 @@ struct ToolCallRuntime: Sendable {
             )
             invocation.cancellationToken = cancellationToken
             invocation.sessionSource = stepContext.turn.sessionSource
+            invocation.toolAllowlist = stepContext.turn.toolAllowlist
             invocation.isRootThread = !stepContext.turn.sessionSource.isNonRootAgent()
             invocation.turnEnvironments = stepContext.environments.isEmpty
                 ? [stepContext.turn.environment]
@@ -273,7 +277,8 @@ struct ToolCallRuntime: Sendable {
             invocation.onMcpCall = session.services.onMcpCall
             invocation.mcpToolTransport = session.services.mcpToolTransport
             invocation.mcpInputModalities = stepContext.turn.modelInfoValue().inputModalities
-            invocation.onSageToolCall = session.services.onSageToolCall
+            invocation.onSageToolCall = stepContext.turn.serviceOverrides?.onSageToolCall
+                ?? session.services.onSageToolCall
             invocation.localAgentControl = session.services.localAgentControl
             invocation.parentThreadId = session.state.sessionConfiguration.parentThreadId
             invocation.inputQueue = session.inputQueue

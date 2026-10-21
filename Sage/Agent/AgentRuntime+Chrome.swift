@@ -121,9 +121,6 @@ extension AgentRuntime {
         }
         turns.bind(
             slashHost: host,
-            executeToolBatch: { [weak self] retryFailed in
-                await self?.executeCurrentPlanUnlocked(retryFailedSteps: retryFailed) ?? .persistFailed
-            },
             handleStop: { [weak self] plan in
                 guard let self else { return }
                 await ToolBatchExecutor.handleStop(plan: plan, services: self.makeExecuteServices())
@@ -177,19 +174,11 @@ extension AgentRuntime {
             state: state,
             planProgress: planProgress,
             taskStore: taskStore,
-            modelGateway: modelGateway,
             modelSettings: { [settings] in settings.snapshot(for: .execute) },
             tools: tools,
             mcp: mcpHub,
             skillHost: host,
-            topicCoordinator: topicCoordinator,
             clearStream: { [weak self] in self?.streaming.clear() },
-            allowToolsAfterExecute: { [weak self] in
-                self?.turns.canOfferMoreTools ?? false
-            },
-            continueTurn: { [weak self] turn in
-                await self?.turns.handleTurn(turn)
-            },
             preToolUseDecision: { [weak self] name, args in
                 await self?.preToolUseDecision(name: name, argumentsJSON: args)
                     ?? .deny("The agent session is no longer available.")
@@ -216,9 +205,6 @@ extension AgentRuntime {
             },
             pauseForToolApproval: { [weak self] _ in
                 self?.state.enterAwaitingConfirmation()
-            },
-            pauseForToolRoundLimit: { [weak self] in
-                await self?.turns.pauseForToolRoundLimit()
             }
         )
     }
@@ -232,6 +218,7 @@ extension AgentRuntime {
 
     func prepareForWindowClose() async {
         contextCompactor.cancel()
+        await turns.shutdownTaskHarness()
         await lifecycle.prepareForWindowClose()
     }
 

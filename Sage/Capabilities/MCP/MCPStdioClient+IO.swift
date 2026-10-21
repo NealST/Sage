@@ -52,6 +52,7 @@ extension MCPStdioClient {
         let stdoutStream = Self.asyncDataStream(from: handle)
         readTask = Task { [weak self] in
             guard let self else { return }
+            let identity = ObjectIdentifier(self)
             for await chunk in stdoutStream {
                 guard !Task.isCancelled else { break }
                 await self.consume(chunk)
@@ -60,7 +61,7 @@ extension MCPStdioClient {
             if shouldNotify {
                 let didClean = await self.forceCleanup()
                 if didClean, let callback = await self.onProcessExit {
-                    await callback(serverID)
+                    await callback(serverID, identity)
                 }
             }
         }
@@ -183,9 +184,10 @@ extension MCPStdioClient {
                 } catch {
                     // Ping failed or timed out — treat as unresponsive.
                     guard !Task.isCancelled else { break }
+                    let identity = ObjectIdentifier(self)
                     let didClean = await self.forceCleanup()
                     if didClean, let callback = await self.onProcessExit {
-                        await callback(serverID)
+                        await callback(serverID, identity)
                     }
                     break
                 }

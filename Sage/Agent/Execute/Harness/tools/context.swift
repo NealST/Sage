@@ -8,6 +8,9 @@
 //
 //  Invocation carries the call identity, optional session callbacks, and
 //  the HookRuntime project/skills `registry.dispatch` needs for Pre/Post.
+//  Sage addition (no codex counterpart): `toolAllowlist` mirrors
+//  `TurnContext.toolAllowlist` so the registry can reject out-of-scope
+//  calls even when they bypass model-visible filtering.
 //
 
 import SageAsyncUtils
@@ -66,6 +69,10 @@ struct ToolInvocation: Sendable {
     var turnId: String
     var threadId: ThreadId?
     var modeKind: ModeKind
+    /// Sage addition (no codex counterpart). Flat tool names allowed for
+    /// this invocation; `nil` means no restriction. Copied from
+    /// `TurnContext.toolAllowlist` at dispatch.
+    var toolAllowlist: Set<String>?
     var tokensRemaining: Int64?
     var clock: @Sendable () -> Date
     var isRootThread: Bool
@@ -116,6 +123,7 @@ struct ToolInvocation: Sendable {
         turnId: String = "",
         threadId: ThreadId? = nil,
         modeKind: ModeKind = .default,
+        toolAllowlist: Set<String>? = nil,
         tokensRemaining: Int64? = nil,
         clock: @escaping @Sendable () -> Date = Date.init,
         isRootThread: Bool = true,
@@ -160,6 +168,7 @@ struct ToolInvocation: Sendable {
         self.turnId = turnId
         self.threadId = threadId
         self.modeKind = modeKind
+        self.toolAllowlist = toolAllowlist
         self.tokensRemaining = tokensRemaining
         self.clock = clock
         self.isRootThread = isRootThread

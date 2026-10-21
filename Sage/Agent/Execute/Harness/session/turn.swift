@@ -40,59 +40,6 @@ import SageThreadStore
 import SageUtils
 import Foundation
 
-/// Shared sample → tools → sample loop. `RegularTask` and `ExploreTask` both use it.
-@MainActor
-protocol ExecuteTurnLoop: AnyObject {
-    var canOfferMoreTools: Bool { get }
-    /// Compact, then connect MCP servers, before this sample. Tool hooks run in `consume`.
-    func willSample(includeTools: Bool) async
-    func sample(includeTools: Bool) async throws -> ModelTurn
-    func consume(_ turn: ModelTurn) async -> Turn.StepResult
-    func didCancel() async
-    func didFail(_ error: Error) async
-    func pauseForToolRoundLimit() async
-}
-
-enum Turn {
-    enum StepResult {
-        /// Final answer, approval pause, safety valve, or a failed persist.
-        case finished
-        /// Tool output is in the transcript. Sample again.
-        case needsFollowUp
-    }
-
-    @MainActor
-    static func run(_ task: some ExecuteTurnLoop, includeTools: Bool) async {
-        var includeTools = includeTools
-        while !Task.isCancelled {
-            await task.willSample(includeTools: includeTools)
-            let turn: ModelTurn
-            do {
-                try Task.checkCancellation()
-                turn = try await task.sample(includeTools: includeTools)
-                try Task.checkCancellation()
-            } catch is CancellationError {
-                await task.didCancel()
-                return
-            } catch {
-                await task.didFail(error)
-                return
-            }
-
-            switch await task.consume(turn) {
-            case .finished:
-                return
-            case .needsFollowUp:
-                includeTools = true
-                guard task.canOfferMoreTools else {
-                    await task.pauseForToolRoundLimit()
-                    return
-                }
-            }
-        }
-    }
-}
-
 /// Explicit MCP startup requirements retained across restarts within one user turn.
 struct McpStartupRequirements: Equatable, Sendable {
     var requiredServers: [String]
@@ -511,7 +458,7 @@ func buildPrompt(
 ) -> Prompt {
     let turnContext = stepContext.turn
     let tools = builtTools(sess: sess, stepContext: stepContext)
-    let parallelToolCalls = sess?.services.sageResponsesTools == nil || !tools.isEmpty
+    let parallelToolCalls = !tools.isEmpty
     return Prompt(
         input: input,
         tools: tools,
@@ -587,10 +534,33 @@ func assembleToolRouter(sess: Session?, stepContext: StepContext) -> ToolRouter 
     registerMcpTools(registrations, on: &router)
     appendDynamicToolRuntimes(stepContext.turn.dynamicTools, on: &router)
     if let sess {
-        registerSageTools(sess.services.sageToolNames, on: &router)
+        let sageSpecs = stepContext.turn.serviceOverrides?.sageToolSpecs
+            ?? sess.services.sageToolSpecs
+        registerSageTools(sageSpecs, on: &router)
+    }
+    if let allowlist = stepContext.turn.toolAllowlist {
+        router.modelVisibleSpecs = router.modelVisibleSpecs.compactMap {
+            allowlistFilteredSpec($0, allowlist: allowlist)
+        }
     }
     stepContext.toolRouter = router
     return router
+}
+
+/// Sage addition (no codex counterpart). Narrows model-visible specs to
+/// the turn allowlist. A namespace survives with only its allowed tools.
+func allowlistFilteredSpec(_ spec: ToolSpec, allowlist: Set<String>) -> ToolSpec? {
+    switch spec {
+    case .function(let tool):
+        return allowlist.contains(tool.name) ? spec : nil
+    case .namespace(var namespace):
+        let tools = namespace.tools.filter { allowlist.contains($0.function.name) }
+        guard !tools.isEmpty else { return nil }
+        namespace.tools = tools
+        return .namespace(namespace)
+    case .toolSearch, .webSearch, .freeform:
+        return allowlist.contains(spec.name()) ? spec : nil
+    }
 }
 
 func builtTools(stepContext: StepContext) -> [SageProtocol.JSONValue] {
@@ -656,50 +626,7 @@ func mcpVisibleTools(from sess: Session?) -> [McpVisibleTool] {
 
 func builtTools(sess: Session?, stepContext: StepContext) -> [SageProtocol.JSONValue] {
     let router = assembleToolRouter(sess: sess, stepContext: stepContext)
-    if var tools = sess?.services.sageResponsesTools {
-        if router.canManageChildren {
-            let existing = Set(tools.compactMap(responsesToolName))
-            for name in collaborationFunctionNames(router.modelVisibleSpecs) where !existing.contains(name) {
-                tools.append(
-                    .object([
-                        "type": .string("function"),
-                        "name": .string(name),
-                    ])
-                )
-            }
-        }
-        return tools
-    }
-    return router.modelVisibleSpecs.map { spec in
-        .object(["name": .string(spec.name())])
-    }
-}
-
-private func responsesToolName(_ value: SageProtocol.JSONValue) -> String? {
-    guard case .object(let fields) = value, case .string(let name) = fields["name"] else {
-        return nil
-    }
-    return name
-}
-
-func collaborationFunctionNames(_ specs: [ToolSpec]) -> [String] {
-    var names: [String] = []
-    var seen = Set<String>()
-    for spec in specs {
-        let extracted: [String]
-        switch spec {
-        case .function(let tool):
-            extracted = [tool.name]
-        case .namespace(let namespace):
-            extracted = namespace.tools.map(\.function.name)
-        default:
-            extracted = []
-        }
-        for name in extracted where seen.insert(name).inserted {
-            names.append(name)
-        }
-    }
-    return names
+    return router.modelVisibleSpecs.map { $0.toJSON() }
 }
 
 func turnDiffDisplayRoots(_ stepContext: StepContext) -> [(String, String)] {
@@ -1059,10 +986,17 @@ func runSamplingRequest(
         return try await override(input, stepContext)
     }
 
-    if let prepare = sess.prepareSamplingPrompt {
-        await prepare()
+    // Sage addition: a turn-level baseInstructions override (phase turn on a
+    // shared session) replaces the session's prepare + base instructions.
+    let baseInstructions: BaseInstructions
+    if let turnBase = stepContext.turn.serviceOverrides?.baseInstructions {
+        baseInstructions = BaseInstructions(text: turnBase)
+    } else {
+        if let prepare = sess.prepareSamplingPrompt {
+            await prepare()
+        }
+        baseInstructions = sess.getPromptBaseInstructions()
     }
-    let baseInstructions = sess.getPromptBaseInstructions()
     var retryState = ResponsesStreamRetryState()
     let maxRetries = clientSession?.client.providerInfo.streamMaxRetries() ?? 0
     var initialInput: [ResponseItem]? = input
@@ -1245,7 +1179,12 @@ func tryRunSamplingRequest(
         throw SageErr(details: .turnAborted)
     }
     let stream: SageCore.ResponseStream
-    if let override = sess.runSamplingStreamOverride {
+    // Sage addition: turn-level override (phase turn on a shared session)
+    // wins over the session slot and leaves the Execute-only
+    // samplingClientSession bookkeeping untouched.
+    if let override = stepContext.turn.serviceOverrides?.runSamplingStreamOverride {
+        stream = try await override(prompt)
+    } else if let override = sess.runSamplingStreamOverride {
         sess.samplingClientSession = clientSession
         sess.samplingStepContext = stepContext
         stream = try await override(prompt)

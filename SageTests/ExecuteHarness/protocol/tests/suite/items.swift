@@ -19,7 +19,7 @@ final class ItemsTests: XCTestCase {
 
         let cwd = try PathUri.parse("file:///tmp")
         let item = CommandExecutionItem(
-            sandboxType: .macSeatbelt,
+            sandboxType: .macosSeatbelt,
             modelContext: context,
             id: "cmd-1",
             command: ["echo", "hi"],

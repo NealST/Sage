@@ -502,6 +502,10 @@ final class Session: @unchecked Sendable {
     var pendingReviewContext: PendingReviewContext?
     var exhaustedReviewBudget: ExhaustedReviewBudget?
     var emittedEvents: [EventMsg] = []
+    /// Nothing in the app drains `emittedEvents` or the event mailbox, so
+    /// production harness sessions set this to drop events on the floor
+    /// instead of accumulating them for the task's lifetime.
+    var discardEvents = false
     var pendingHookContexts: [String] = []
     var sessionStartHooksConsumed = false
     var stopHookActive = false
@@ -527,7 +531,6 @@ final class Session: @unchecked Sendable {
     /// Stand-ins for `skills_service.clear_cache` and `plugins_manager.clear_cache`.
     var skillsCacheGeneration: UInt64 = 0
     var pluginsCacheGeneration: UInt64 = 0
-    var lastTaskAgentMessage: String?
     var lastStartedTurnContext: TurnContext?
     /// Rust `last_started_turn_id`. Cleared by a standalone settings update so
     /// it no longer continues that turn. The context itself stays for tests
@@ -551,8 +554,44 @@ final class Session: @unchecked Sendable {
     var lastSuspendTurnError: String?
     /// Next `reserve_input_order` value. Legacy guardian mode does not consume it.
     var nextUserInputOrder: UInt64 = 0
-    var lastTurnAbortReason: TurnAbortReason?
-    var lastTaskError: Error?
+    /// Task outcome slots. The turn task, the submission loop, and Execute
+    /// glue all touch these from different tasks, so each access takes the
+    /// slot lock. Awaiting `spawnTask` still orders a finished turn's three
+    /// writes before the reader's three reads.
+    private let taskResultLock = NSLock()
+    private var _lastTaskAgentMessage: String?
+    var lastTaskAgentMessage: String? {
+        get {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            return _lastTaskAgentMessage
+        }
+        set {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            _lastTaskAgentMessage = newValue
+        }
+    }
+    private var _lastTurnAbortReason: TurnAbortReason?
+    var lastTurnAbortReason: TurnAbortReason? {
+        get {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            return _lastTurnAbortReason
+        }
+        set {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            _lastTurnAbortReason = newValue
+        }
+    }
+    private var _lastTaskError: Error?
+    var lastTaskError: Error? {
+        get {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            return _lastTaskError
+        }
+        set {
+            taskResultLock.lock(); defer { taskResultLock.unlock() }
+            _lastTaskError = newValue
+        }
+    }
 
     func emitTurnStarted(_ turnContext: TurnContext) {
         sendEvent(
@@ -659,13 +698,17 @@ final class Session: @unchecked Sendable {
     }
 
     func sendEventRaw(_ event: Event) {
+        if discardEvents { return }
         emittedEvents.append(event.msg)
         eventMailbox.send(event)
     }
 
     func notifyIdleIfNeeded() {
-        guard !hasRunningTask else { return }
         idleLock.lock()
+        guard !hasRunningTask else {
+            idleLock.unlock()
+            return
+        }
         let waiters = idleWaiters
         idleWaiters = []
         idleLock.unlock()

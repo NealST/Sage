@@ -80,9 +80,9 @@ final class AbsolutePathBufTests: XCTestCase {
         try FileManager.default.createDirectory(atPath: baseDir + "/two", withIntermediateDirectories: false)
         try "".write(toFile: baseDir + "/two/file.txt", atomically: false, encoding: .utf8)
         let absPathBuf = try AbsolutePathBuf.fromAbsolutePath(baseDir + "/one/../two/./file.txt")
-        try XCTAssertEqual(
-            absPathBuf.canonicalize().asPath,
-            realpathString(baseDir + "/two/file.txt")
+        XCTAssertEqual(
+            try absPathBuf.canonicalize().asPath,
+            try realpathString(baseDir + "/two/file.txt")
         )
     }
 

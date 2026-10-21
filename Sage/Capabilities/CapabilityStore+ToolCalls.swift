@@ -53,11 +53,13 @@ extension CapabilityStore {
             )
         }
 
-        await connect(
-            serverID: server.id,
-            writableRoots: temporaryWriteRoots,
-            allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
-        )
+        await enqueueServerOperation(serverID: server.id) { [weak self] in
+            await self?.connect(
+                serverID: server.id,
+                writableRoots: temporaryWriteRoots,
+                allowsProtectedMetadataWrites: allowsProtectedMetadataWrites
+            )
+        }.value
         guard let writableClient = clients[server.id] else {
             throw MCPStdioClient.ClientError.notRunning
         }
@@ -66,10 +68,14 @@ extension CapabilityStore {
                 name: target.toolName,
                 argumentsJSON: argumentsJSON
             )
-            await connect(serverID: server.id)
+            await enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }.value
             return result
         } catch {
-            await connect(serverID: server.id)
+            await enqueueServerOperation(serverID: server.id) { [weak self] in
+                await self?.connect(serverID: server.id)
+            }.value
             throw error
         }
     }

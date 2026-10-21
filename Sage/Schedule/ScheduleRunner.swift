@@ -108,8 +108,7 @@ final class ScheduleRunner {
             mcpHub: mcpHub,
             skillStateStore: skillStateStore
         )
-        session.agent.state.focusedProject = project
-        session.agent.state.didBootstrap = true
+        session.agent.lifecycle.bootstrapHeadless(project: project)
         inFlightSessions[record.id] = session
         defer { inFlightSessions[record.id] = nil }
         let agent = session.agent

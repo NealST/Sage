@@ -24,7 +24,6 @@ extension AgentTaskStore {
 
     func restoreBaseState(from task: TaskRecord) {
         state.activatedSkillNames = task.activatedSkillNames
-        state.pendingPrompt = task.pendingPrompt
         state.lastAssistantText = task.events.last { event in
             event.kind == .assistantResponse && (event.toolCalls?.isEmpty ?? true)
         }?.content
@@ -190,7 +189,6 @@ extension AgentTaskStore {
             merged.workingMemory = current.workingMemory
         }
         state.activeTask = merged
-        state.pendingPrompt = merged.pendingPrompt
         state.refreshSummary(for: merged)
         if let plan = merged.pendingPlan {
             planProgress.replace(plan)
@@ -289,12 +287,10 @@ extension AgentTaskStore {
         do {
             try await taskRepository.saveTaskState(task, setActive: setsScopeActive)
             state.activeTask = task
-            state.pendingPrompt = task.pendingPrompt
             state.refreshSummary(for: task)
             state.enterFailed(message: message)
         } catch {
             state.activeTask = task
-            state.pendingPrompt = task.pendingPrompt
             state.enterFailed(
                 message: "Could not save progress. \(error.localizedDescription)"
             )

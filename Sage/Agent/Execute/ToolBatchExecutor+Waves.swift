@@ -2,9 +2,9 @@
 //  ToolBatchExecutor+Waves.swift
 //  Sage
 //
-//  Approval-first dispatch: pause the whole batch if any step still needs a
-//  gate, then admit the rest through the session ParallelAdmission
-//  (read vs write lock) that ToolCallRuntime also uses.
+//  Approval-first admission: pause the whole batch if any step still needs a
+//  gate. Tool execution itself happens in `runTurn` through
+//  `RegularTask.dispatchSageTool`, not here.
 //
 
 import Foundation
@@ -36,48 +36,6 @@ extension ToolBatchExecutor {
             }
         }
         return .ready
-    }
-
-    /// Sage starts every call, then admits them through an RWLock.
-    /// Approval still happens first so a HUD card is a single pause.
-    ///
-    /// `SessionOperationGate` is a busy lock: the turn cannot sit inside
-    /// `operations.run` while `confirmToolApproval` tries to `begin()`.
-    static func runAdmittedBatch(
-        plan: inout AgentPlan,
-        services: ExecuteServices
-    ) async -> WaveOutcome {
-        var approved: [Int] = []
-        for index in plan.steps.indices {
-            if shouldSkip(plan.steps[index], services: services) { continue }
-            if let blocked = await gateSerialStep(plan.steps[index], at: index, plan: &plan, services: services) {
-                return blocked
-            }
-            approved.append(index)
-        }
-        guard !approved.isEmpty else { return .succeeded }
-        guard await markParallelRunning(approved, plan: &plan, services: services) else {
-            return .persistFailed
-        }
-        let steps = plan.steps
-        let gate = services.state.parallelAdmission
-        let tasks = approved.map { index in
-            Task { @MainActor in
-                let exclusive = !ParallelToolRuntime.supportsParallel(steps[index].toolName)
-                let outcome: StepCallResult
-                if exclusive {
-                    outcome = await gate.write { await invoke(steps[index], services: services) }
-                } else {
-                    outcome = await gate.read { await invoke(steps[index], services: services) }
-                }
-                return IndexedResult(index: index, result: outcome)
-            }
-        }
-        var collected: [IndexedResult] = []
-        for task in tasks {
-            collected.append(await task.value)
-        }
-        return await foldParallelResults(collected, plan: &plan, services: services)
     }
 
     private static func gateSerialStep(
@@ -142,79 +100,6 @@ extension ToolBatchExecutor {
         return nil
     }
 
-    static func markParallelRunning(
-        _ runnable: [Int],
-        plan: inout AgentPlan,
-        services: ExecuteServices
-    ) async -> Bool {
-        for index in runnable {
-            plan.steps[index].status = .running
-        }
-        services.planProgress.update(plan)
-        guard await services.commit(
-            appendEvents: [],
-            deleteEventIDs: [],
-            mutate: { task in
-                task.pendingPlan = plan
-                task.status = .active
-            }
-        ) else {
-            await services.failDuringExecution(
-                plan: plan,
-                message: "Could not save progress. Retry to continue remaining steps."
-            )
-            return false
-        }
-        return true
-    }
-
-    struct IndexedResult: Sendable {
-        var index: Int
-        var result: StepCallResult
-    }
-
-    static func foldParallelResults(
-        _ results: [IndexedResult],
-        plan: inout AgentPlan,
-        services: ExecuteServices
-    ) async -> WaveOutcome {
-        var cancelled = false
-        for item in results {
-            if case .needsEscalationApproval(let reason) = item.result {
-                plan.steps[item.index].status = .pending
-                let step = plan.steps[item.index]
-                let card = AgentStep(
-                    id: step.id,
-                    toolCallID: step.toolCallID,
-                    toolName: step.toolName,
-                    argumentsJSON: step.argumentsJSON,
-                    title: SandboxEscalation.title(reason: reason, original: step.title),
-                    status: .pending
-                )
-                return await pauseForApproval(card, plan: plan, services: services)
-            }
-            if case .cancelled = item.result {
-                plan.steps[item.index].status = .pending
-                cancelled = true
-                continue
-            }
-            switch await applyOutcome(item.result, at: item.index, plan: &plan, services: services) {
-            case .succeeded:
-                continue
-
-            case .paused:
-                return .paused
-
-            case .persistFailed:
-                return .persistFailed
-
-            case .cancelled:
-                cancelled = true
-            }
-        }
-        return cancelled ? .cancelled : .succeeded
-    }
-
     static func shouldSkip(_ step: AgentStep, services: ExecuteServices) -> Bool {
         if step.status == .succeeded { return true }
         if AgentEventHelpers.hasSuccessfulToolResult(for: step.toolCallID, in: services.events) {
@@ -226,30 +111,6 @@ extension ToolBatchExecutor {
             }
         }
         return false
-    }
-
-    static func invoke(
-        _ step: AgentStep,
-        services: ExecuteServices
-    ) async -> StepCallResult {
-        do {
-            try Task.checkCancellation()
-            let raw = try await services.executeToolInvocation(
-                name: step.toolName,
-                argumentsJSON: step.argumentsJSON,
-                toolCallID: step.toolCallID
-            )
-            return .success(raw)
-        } catch is CancellationError {
-            return .cancelled
-        } catch let error as HarnessToolError {
-            if case .needsEscalationApproval(let reason) = error {
-                return .needsEscalationApproval(reason)
-            }
-            return .failure(error.localizedDescription)
-        } catch {
-            return .failure(error.localizedDescription)
-        }
     }
 
     static func applyOutcome(

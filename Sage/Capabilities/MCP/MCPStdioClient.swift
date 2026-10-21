@@ -33,8 +33,10 @@ actor MCPStdioClient {
     static let stderrLineLimit = 50
 
     /// Called when the server process exits unexpectedly (not via `disconnect`).
-    /// The callback receives the server config ID.
-    var onProcessExit: (@Sendable (String) async -> Void)?
+    /// Receives the server config ID plus the identity of the client instance that
+    /// observed the exit, so the coordinator can ignore stale callbacks from
+    /// clients that were already replaced or torn down.
+    var onProcessExit: (@Sendable (String, ObjectIdentifier) async -> Void)?
 
     /// True while a graceful disconnect is in progress — suppresses exit callback.
     var isDisconnecting = false
@@ -65,7 +67,7 @@ actor MCPStdioClient {
         }
     }
 
-    func setOnProcessExit(_ callback: @escaping @Sendable (String) async -> Void) {
+    func setOnProcessExit(_ callback: @escaping @Sendable (String, ObjectIdentifier) async -> Void) {
         onProcessExit = callback
     }
 
@@ -140,7 +142,10 @@ actor MCPStdioClient {
 
         forceCleanup()
         isDisconnecting = false
-        didCleanup = false
+        // `didCleanup` intentionally stays true: after a planned disconnect the
+        // reader task may still observe a late EOF (process killed by
+        // forceCleanup), and only the first cleanup is allowed to fire the
+        // exit notification. `startProcess()` resets the flag on reuse.
     }
 
     /// True once forceCleanup has fired — prevents double exit notification.
