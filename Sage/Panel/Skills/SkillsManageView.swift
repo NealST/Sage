@@ -93,6 +93,9 @@ struct SkillsManageView: View {
         .frame(minWidth: 640, minHeight: 440)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .interactiveDismissDisabled(editSession.isDirty)
+        // Escape routes through the same dirty-check as Done — never a
+        // silent bypass of the discard confirmation.
+        .onExitCommand { performDone() }
         .onAppear {
             refreshSkillSections()
             selectDefaultIfNeeded()

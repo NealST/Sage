@@ -88,9 +88,9 @@ struct ToolResultView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.down")
+                Image(systemName: "chevron.right")
                     .sageFont(type.icon, weight: .semibold)
-                    .rotationEffect(.degrees(expanded ? 180 : 0))
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
             .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
             .padding(.vertical, SageDesign.Spacing.chipVertical)

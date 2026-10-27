@@ -295,7 +295,7 @@ private struct SageGlassTintedCapsuleModifier: ViewModifier {
             if accessibility.reduceTransparency {
                 content
                     .background {
-                        shape.fill(tint.opacity(0.14))
+                        shape.fill(tint.opacity(SageDesign.Chrome.diffFillOpacity))
                     }
             } else {
                 content

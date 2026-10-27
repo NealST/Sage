@@ -161,7 +161,12 @@ struct WaitAgentHandler: CoreToolRuntime {
         }
 
         let timedOut = statuses.isEmpty
-        let statusesById = Dictionary(uniqueKeysWithValues: statuses)
+        // Upstream collects into a HashMap (last write wins); duplicate
+        // targets must not trap like Dictionary(uniqueKeysWithValues:).
+        var statusesById: [ThreadId: AgentStatus] = [:]
+        for (threadId, status) in statuses {
+            statusesById[threadId] = status
+        }
         var resultStatus: [String: AgentStatus] = [:]
         for (threadId, status) in statuses {
             if let key = targetByThreadId[threadId] {

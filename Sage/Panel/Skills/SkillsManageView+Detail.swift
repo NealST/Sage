@@ -33,11 +33,13 @@ extension SkillsManageView {
         .listStyle(.sidebar)
         .sageScrollEdgeGlass()
         .environment(\.defaultMinListRowHeight, 28)
-        .searchable(
-            text: $searchText,
-            placement: .toolbar,
-            prompt: "Search skills"
-        )
+        // Sheets have no toolbar for .searchable — float the shared inline
+        // field above the source list like the panel tabs do.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            SageInlineSearchField(prompt: "Search skills", text: $searchText)
+                .padding(.horizontal, SageDesign.Spacing.small)
+                .padding(.vertical, SageDesign.Spacing.small)
+        }
     }
 
     var isFiltering: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -81,6 +83,7 @@ extension SkillsManageView {
             .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.small)
+            .accessibilityLabel("Enabled for \(skill.name)")
         }
         .tag(skill.path)
         .help(skill.description)
@@ -144,7 +147,7 @@ extension SkillsManageView {
         HStack {
             Text(footerSummary)
                 .sageMicro(type.micro)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             Spacer()
             Button("Done", action: performDone)
                 .keyboardShortcut(.defaultAction)

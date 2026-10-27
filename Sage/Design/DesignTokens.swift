@@ -78,11 +78,13 @@ enum SageDesign {
         static var strokeOpacity: Double { AccessibilitySettings.shared.strokeOpacity }
         @MainActor
         static var dividerOpacity: Double { AccessibilitySettings.shared.dividerOpacity }
-        /// Non-matching content while in-task find is active — stronger
-        /// de-emphasis under Increase Contrast so matches stand out further.
+        /// Non-matching content while in-task find is active. Increase
+        /// Contrast must never push body text below its default legibility,
+        /// so the emphasis on matches comes from the accent highlight, not
+        /// from dimming everything else harder.
         @MainActor
         static var dimmedContentOpacity: Double {
-            AccessibilitySettings.shared.increaseContrast ? 0.15 : 0.3
+            AccessibilitySettings.shared.increaseContrast ? 0.35 : 0.3
         }
         /// Disabled custom-styled controls — styles that draw their own
         /// chrome must dim themselves; the system treatment only covers
@@ -114,8 +116,6 @@ enum SageDesign {
         /// macOS comfortable hit floor — small visual frames grow their
         /// tappable area to reach this (`sageHitSlop`).
         static let minimumHitTarget: CGFloat = 28
-        /// Status dot diameter (schedule rows, connection state).
-        static let statusDotDiameter: CGFloat = 8
     }
 
     /// Semantic colors — one meaning each so error treatments never drift.
@@ -252,8 +252,12 @@ enum SageDesign {
             return .interpolatingSpring(duration: 0.3, bounce: 0, initialVelocity: clamped)
         }
 
-        /// Brief settle after copy confirmation.
-        static let copiedFeedback: Animation = .interpolatingSpring(duration: 0.28, bounce: 0)
+        /// Brief settle after copy confirmation — `nil` under Reduce Motion.
+        static var copiedFeedback: Animation? {
+            AccessibilityPreferences.reduceMotion
+                ? nil
+                : .interpolatingSpring(duration: 0.28, bounce: 0)
+        }
 
         /// Confirmation flashes (copied / saved chips) — one duration so
         /// sibling feedback reads as the same idiom.
@@ -280,8 +284,13 @@ enum SageDesign {
                 : .interpolatingSpring(duration: 0.2, bounce: 0)
         }
 
-        /// Countdown ticks (retry ring + numeric text) — critically damped, no bounce.
-        static let countdownTick: Animation = .interpolatingSpring(duration: 0.3, bounce: 0)
+        /// Countdown ticks (retry ring + numeric text) — critically damped, no
+        /// bounce; `nil` under Reduce Motion.
+        static var countdownTick: Animation? {
+            AccessibilityPreferences.reduceMotion
+                ? nil
+                : .interpolatingSpring(duration: 0.3, bounce: 0)
+        }
 
         static var scrollAnimation: Animation? {
             AccessibilityPreferences.reduceMotion ? nil : contentCrossFade
@@ -337,6 +346,9 @@ enum SageDesign {
         static let approvalContentClipLimit = 300
         static let approvalTextClipLimit = 600
         static let approvalPreviewLineLimit = 4
+        /// Cap on the expanded-arguments scroll area so the decision row
+        /// stays on screen no matter how large the arguments are.
+        static let approvalExpandedMaxHeight: CGFloat = 240
         /// Monospaced code font size (~85% of reading body, matching github-markdown `pre`).
         static let codeFontSize: CGFloat = 12
         /// Content padding — github-markdown uses 16; top is taller to clear floating chrome.
@@ -387,6 +399,9 @@ enum SageDesign {
         static let skills = "book.closed"
         static let skillSave = "tray.and.arrow.down"
         static let mcp = "server.rack"
+        static let modelCloud = "cloud"
+        static let modelLocal = "cpu"
+        static let modelManage = "slider.horizontal.3"
     }
 }
 

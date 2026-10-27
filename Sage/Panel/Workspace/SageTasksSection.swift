@@ -34,7 +34,7 @@ struct SageTasksSection: View {
                         .foregroundStyle(.secondary)
                     Text("\(recentUserTasks.count)")
                         .sageMicro(type.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
                         .sageFont(type.icon, weight: .semibold)
@@ -100,7 +100,7 @@ struct SageTasksSection: View {
             Spacer(minLength: 4)
             Text(summary.updatedAt.formatted(.relative(presentation: .named)))
                 .sageMicro(type.micro)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

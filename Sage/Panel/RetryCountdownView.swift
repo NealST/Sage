@@ -19,7 +19,6 @@ struct RetryCountdownView: View {
     var onRetryNow: (() -> Void)? = nil
 
     @Environment(\.sageTypography) private var type
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: SageDesign.Spacing.small) {
@@ -30,13 +29,10 @@ struct RetryCountdownView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                    .animation(
-                        reduceMotion ? .none : SageDesign.Motion.countdownTick,
-                        value: state.secondsRemaining
-                    )
+                    .animation(SageDesign.Motion.countdownTick, value: state.secondsRemaining)
                 Text("Attempt \(state.attempt) of \(state.maxAttempts)")
                     .sageFont(type.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
             Spacer(minLength: 0)
@@ -89,10 +85,7 @@ struct RetryCountdownView: View {
                     style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(
-                    reduceMotion ? .none : SageDesign.Motion.countdownTick,
-                    value: state.secondsRemaining
-                )
+                .animation(SageDesign.Motion.countdownTick, value: state.secondsRemaining)
 
             // Seconds number in center
             Text("\(state.secondsRemaining)")
@@ -100,10 +93,7 @@ struct RetryCountdownView: View {
                 .foregroundStyle(SageDesign.Palette.warningText)
                 .monospacedDigit()
                 .contentTransition(.numericText())
-                .animation(
-                    reduceMotion ? .none : SageDesign.Motion.countdownTick,
-                    value: state.secondsRemaining
-                )
+                .animation(SageDesign.Motion.countdownTick, value: state.secondsRemaining)
         }
         .frame(
             width: SageDesign.Control.iconButtonLarge,

@@ -88,7 +88,7 @@ struct DashboardView: View {
                     // a quiet inline note, not an empty-state page.
                     Text("Context fill appears after the first turn.")
                         .sageMicro(type.micro)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(SageDesign.Spacing.medium)

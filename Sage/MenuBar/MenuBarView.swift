@@ -124,14 +124,12 @@ struct MenuBarView: View {
         } label: {
             Label("Open Project…", systemImage: "folder")
         }
-        .keyboardShortcut("o", modifiers: [.command, .shift])
 
         Button {
             onCreateProject()
         } label: {
             Label("New Project…", systemImage: "folder.badge.plus")
         }
-        .keyboardShortcut("n", modifiers: [.command, .shift])
 
         // Status line — reads as informational, distinct from the commands.
         Label(appState.statusHint, systemImage: "info.circle")
@@ -201,14 +199,12 @@ struct MenuBarView: View {
         } label: {
             Label("Dashboard", systemImage: "rectangle.grid.2x2")
         }
-        .keyboardShortcut("d", modifiers: [.command, .shift])
 
         Button {
             onOpenSettings()
         } label: {
             Label("Settings…", systemImage: SageDesign.Symbol.settings)
         }
-        .keyboardShortcut(",", modifiers: [.command])
 
         Button {
             appState.revealKeySession()

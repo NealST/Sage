@@ -32,8 +32,10 @@ struct ReviewFailedCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: SageDesign.Spacing.small) {
+                // Escape / ⌘. is the system-wide "cancel" escape hatch — it
+                // must never accept an unreviewed reply. Accepting is a
+                // deliberate choice, not a cancel.
                 Button("Use this reply", action: onAccept)
-                    .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
                     .sageGlassButton(.regular)
 
                 Spacer(minLength: 0)

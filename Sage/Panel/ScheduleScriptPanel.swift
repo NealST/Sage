@@ -21,9 +21,8 @@ struct ScheduleScriptPanel: View {
     @State private var runOnceNow = false
     @State private var workingDirectoryIsAllowed = true
     @State private var filePickError: String?
-    /// Preset-insert of the hovered cadence chip — feeds the quiet hover fill.
-    @State private var hoveringCadence: String?
-    @FocusState private var commandFocused: Bool
+    private enum Field { case command, workingDirectory }
+    @FocusState private var focusedField: Field?
     /// Label column width — scales with Dynamic Type alongside the micro labels.
     @ScaledMetric(relativeTo: .caption) private var labelColumnWidth: CGFloat = 80
 
@@ -57,7 +56,8 @@ struct ScheduleScriptPanel: View {
                         .textFieldStyle(.plain)
                         .sageFont(type.body, design: .monospaced)
                         .lineLimit(1...3)
-                        .focused($commandFocused)
+                        .focused($focusedField, equals: .command)
+                        .sageFieldChrome(focused: focusedField == .command)
                         .accessibilityLabel("Command")
 
                     Button("Choose File…") {
@@ -76,6 +76,8 @@ struct ScheduleScriptPanel: View {
                     TextField(".", text: $workingDirectory)
                         .textFieldStyle(.plain)
                         .sageFont(type.body, design: .monospaced)
+                        .focused($focusedField, equals: .workingDirectory)
+                        .sageFieldChrome(focused: focusedField == .workingDirectory)
                         .accessibilityLabel("Working directory")
                         .help("Relative to this window’s sandbox. Must stay inside PathGuard.")
 
@@ -106,17 +108,20 @@ struct ScheduleScriptPanel: View {
                     }
                 }
 
-                HStack(alignment: .firstTextBaseline, spacing: SageDesign.Spacing.small) {
+                HStack(spacing: SageDesign.Spacing.small) {
                     Text("When")
                         .sageMicro(type.micro, weight: .medium)
                         .foregroundStyle(.secondary)
                         .frame(width: labelColumnWidth, alignment: .leading)
 
-                    HStack(spacing: 6) {
+                    Picker("When", selection: $presetInsert) {
                         ForEach(ScheduleCadenceParser.presets) { preset in
-                            cadenceChip(preset)
+                            Text(preset.insert).tag(preset.insert)
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityLabel("When")
                 }
 
                 HStack(spacing: SageDesign.Spacing.small) {
@@ -150,7 +155,7 @@ struct ScheduleScriptPanel: View {
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.vertical, SageDesign.Spacing.small)
         .onAppear {
-            commandFocused = true
+            focusedField = .command
             refreshWorkingDirectoryAllowed()
         }
         .onChange(of: workingDirectory) { _, _ in
@@ -188,39 +193,6 @@ struct ScheduleScriptPanel: View {
     private func refreshWorkingDirectoryAllowed() {
         workingDirectoryIsAllowed =
             (try? ScheduleService.resolveWorkingDirectory(workingDirectory, policy: pathGuardPolicy)) != nil
-    }
-
-    private func cadenceChip(_ preset: ScheduleCadenceParser.Preset) -> some View {
-        let selected = preset.insert == presetInsert
-        return Button(preset.insert) {
-            presetInsert = preset.insert
-        }
-        .buttonStyle(.plain)
-        .sageMicro(type.micro, weight: selected ? .semibold : .medium)
-        .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-        .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-        .background(
-            RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
-                .fill(
-                    Color.accentColor.opacity(
-                        selected
-                            ? 0.14
-                            : (hoveringCadence == preset.insert ? 0.08 : 0.05)
-                    )
-                )
-        )
-        .foregroundStyle(
-            selected
-                ? Color.accentColor
-                : (hoveringCadence == preset.insert ? Color.primary : Color.secondary)
-        )
-        .onHover { hovering in
-            withAnimation(SageDesign.Motion.contentCrossFade) {
-                hoveringCadence = hovering ? preset.insert : nil
-            }
-        }
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityLabel(preset.description)
     }
 
     private func chooseFile() {
@@ -286,5 +258,32 @@ struct ScheduleScriptPanel: View {
 
     private func cancel() {
         session.skills.scriptScheduleDraft = nil
+    }
+}
+
+/// Plain-style form fields need visible focus state for Full Keyboard Access —
+/// same chrome idiom as SageInlineSearchField: quiet fill + system focus color.
+private struct SageFormFieldChrome: ViewModifier {
+    let focused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, SageDesign.Spacing.medium)
+            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
+            .background(
+                RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
+                    .fill(Color.primary.opacity(SageDesign.Chrome.pillFillOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SageDesign.Glass.chip, style: .continuous)
+                    .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 1.5)
+                    .opacity(focused ? 1 : 0)
+            )
+    }
+}
+
+private extension View {
+    func sageFieldChrome(focused: Bool) -> some View {
+        modifier(SageFormFieldChrome(focused: focused))
     }
 }

@@ -69,26 +69,7 @@ struct ToolApprovalCard: View {
             }
 
             if !parameterFields.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(parameterFields.enumerated()), id: \.offset) { _, field in
-                        HStack(alignment: .top, spacing: SageDesign.Spacing.extraSmall) {
-                            Text(field.key)
-                                .foregroundStyle(.secondary)
-                            Text(displayValue(field))
-                                .foregroundStyle(.primary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                // Paths keep their filename when clipped.
-                                .lineLimit(
-                                    showsFullArguments
-                                        ? nil
-                                        : SageDesign.Markdown.approvalPreviewLineLimit
-                                )
-                                .truncationMode(.middle)
-                        }
-                    }
-                }
-                .sageFont(type.caption, design: .monospaced)
-                .textSelection(.enabled)
+                fieldRows
 
                 if previewIsClipped {
                     Button {
@@ -98,9 +79,9 @@ struct ToolApprovalCard: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(showsFullArguments ? "Show less" : "Show full arguments")
-                            Image(systemName: "chevron.down")
+                            Image(systemName: "chevron.right")
                                 .sageFont(type.icon, weight: .semibold)
-                                .rotationEffect(.degrees(showsFullArguments ? 180 : 0))
+                                .rotationEffect(.degrees(showsFullArguments ? 90 : 0))
                         }
                         .sageFont(type.caption, weight: .medium)
                         .contentShape(Rectangle())
@@ -125,20 +106,6 @@ struct ToolApprovalCard: View {
 
                 Spacer(minLength: 0)
 
-                Menu {
-                    Button("Always allow this permission…") {
-                        alwaysAllowPresented = true
-                    }
-                } label: {
-                    Label("More approval options", systemImage: "ellipsis.circle")
-                }
-                // Same glass system as the sibling decision buttons — one
-                // row, one control vocabulary.
-                .sageGlassButton(.regular)
-                .labelStyle(.iconOnly)
-                .help("Always allow this permission (asks for confirmation)")
-                .accessibilityLabel("More approval options")
-
                 Button("Allow for this task", action: onAllowSession)
                     .sageGlassButton(.regular)
                     // Return and Escape already cover Allow once / Don't Run;
@@ -151,6 +118,21 @@ struct ToolApprovalCard: View {
                     .focusable(true)
             }
             .padding(.top, SageDesign.Spacing.extraSmall)
+
+            // The long-horizon grant stays out of the decision row (it is
+            // the least-frequent choice) but reads as visible text, not an
+            // icon-only menu behind a tooltip.
+            HStack {
+                Spacer()
+                Button("Always allow this permission…") {
+                    alwaysAllowPresented = true
+                }
+                .sageFont(type.caption)
+                .buttonStyle(SagePlainActionButtonStyle())
+                .foregroundStyle(.secondary)
+                .help("Stop asking for this permission until you revoke it in Settings")
+                .accessibilityLabel("Always allow this permission")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sageGlassCard()
@@ -174,6 +156,43 @@ struct ToolApprovalCard: View {
             return prompt
         }
         return "This tool call needs your approval before it runs."
+    }
+
+    /// Expanded arguments scroll inside the card (capped) so the decision
+    /// row stays on screen no matter how large the arguments are.
+    @ViewBuilder
+    private var fieldRows: some View {
+        if showsFullArguments {
+            ScrollView(.vertical) {
+                fieldRowsContent
+            }
+            .frame(maxHeight: SageDesign.Markdown.approvalExpandedMaxHeight)
+        } else {
+            fieldRowsContent
+        }
+    }
+
+    private var fieldRowsContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(parameterFields.enumerated()), id: \.offset) { _, field in
+                HStack(alignment: .top, spacing: SageDesign.Spacing.extraSmall) {
+                    Text(field.key)
+                        .foregroundStyle(.secondary)
+                    Text(displayValue(field))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // Paths keep their filename when clipped.
+                        .lineLimit(
+                            showsFullArguments
+                                ? nil
+                                : SageDesign.Markdown.approvalPreviewLineLimit
+                        )
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .sageFont(type.caption, design: .monospaced)
+        .textSelection(.enabled)
     }
 
     private var alwaysAllowMessage: String {

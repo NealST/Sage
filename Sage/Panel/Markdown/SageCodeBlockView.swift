@@ -13,7 +13,6 @@ struct SageCodeBlockView: View {
     let configuration: CodeBlockConfiguration
 
     @Environment(AccessibilitySettings.self) private var accessibility
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.sageTypography) private var type
     @State private var copied = false
     @State private var expanded = false
@@ -69,7 +68,7 @@ struct SageCodeBlockView: View {
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
-                    Color(nsColor: .separatorColor).opacity(accessibility.increaseContrast ? 0.9 : 0.28),
+                    Color(nsColor: .separatorColor).opacity(SageDesign.Chrome.dividerOpacity),
                     lineWidth: 1
                 )
         }
@@ -104,8 +103,6 @@ struct SageCodeBlockView: View {
                 )
                 .clipped()
         }
-        // Trackpad / Magic Mouse still scroll; hide the fat always-visible bar.
-        .scrollIndicators(.never)
         // Collapsed cut fades into the code surface so the fold reads as
         // "more below" instead of an abrupt clip.
         .overlay(alignment: .bottom) {
@@ -146,7 +143,7 @@ struct SageCodeBlockView: View {
                     cornerRadius: SageDesign.Markdown.codeBlockCornerRadius,
                     style: .continuous
                 )
-                .strokeBorder(Color.accentColor.opacity(SageDesign.Chrome.accentRingOpacity), lineWidth: 1)
+                .strokeBorder(Color(nsColor: .keyboardFocusIndicatorColor), lineWidth: 1.5)
             }
         }
         .focused($copyFocused)
@@ -166,9 +163,9 @@ struct SageCodeBlockView: View {
             HStack(spacing: 4) {
                 Text(expanded ? "Show less" : "Show more")
                     .sageMicro(type.micro, weight: .medium)
-                Image(systemName: "chevron.down")
+                Image(systemName: "chevron.right")
                     .sageFont(type.icon, weight: .semibold)
-                    .rotationEffect(.degrees(expanded ? 180 : 0))
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
@@ -188,7 +185,7 @@ struct SageCodeBlockView: View {
         pasteboard.clearContents()
         pasteboard.setString(configuration.content, forType: .string)
 
-        withAnimation(reduceMotion ? nil : SageDesign.Motion.copiedFeedback) {
+        withAnimation(SageDesign.Motion.copiedFeedback) {
             copied = true
         }
         Task { @MainActor in

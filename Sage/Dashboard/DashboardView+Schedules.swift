@@ -107,6 +107,13 @@ extension DashboardView {
                                 .sageFont(type.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            Button("Open a Chat Window") {
+                                appState.showGeneralWindow()
+                            }
+                            .controlSize(.small)
+                            .buttonStyle(SagePlainActionButtonStyle())
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.top, SageDesign.Spacing.extraSmall)
                         }
                         .padding(SageDesign.Spacing.medium)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -207,9 +214,12 @@ private struct ScheduleDashboardRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             HStack(spacing: SageDesign.Spacing.small) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: SageDesign.Control.statusDotDiameter, height: SageDesign.Control.statusDotDiameter)
+                // Shape-differentiated glyph, not a color-only dot: the
+                // light-mode system green/orange sit near 2.2:1.
+                Image(systemName: statusSymbol)
+                    .sageFont(type.icon, weight: .semibold)
+                    .foregroundStyle(statusColor)
+                    .frame(width: SageDesign.Control.iconColumnWidth)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
@@ -359,7 +369,7 @@ private struct ScheduleDashboardRow: View {
 
     var statusColor: Color {
         if isRunning { return SageDesign.Palette.warning }
-        if isQueued { return SageDesign.Palette.warning.opacity(SageDesign.Chrome.deemphasizedContentOpacity) }
+        if isQueued { return SageDesign.Palette.warning }
         if isPaused { return Color.secondary }
         switch record.status {
         case .failed: return SageDesign.Palette.danger
@@ -367,6 +377,20 @@ private struct ScheduleDashboardRow: View {
         case .awaitingConfirmation: return SageDesign.Palette.warning
         case .armed: return SageDesign.Palette.success
         case .paused: return Color.secondary
+        }
+    }
+
+    /// Distinct glyph per state — status never rides on color alone.
+    var statusSymbol: String {
+        if isRunning { return SageDesign.Symbol.stepRunning }
+        if isQueued { return "clock.fill" }
+        if isPaused { return "pause.circle.fill" }
+        switch record.status {
+        case .failed: return SageDesign.Symbol.stepFailed
+        case .needsFirstRun, .draft: return SageDesign.Symbol.stepPending
+        case .awaitingConfirmation: return SageDesign.Symbol.pending
+        case .armed: return SageDesign.Symbol.stepSuccess
+        case .paused: return "pause.circle.fill"
         }
     }
 
@@ -455,9 +479,12 @@ struct MCPServerRow: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header row
             HStack(spacing: SageDesign.Spacing.small) {
-                Circle()
-                    .fill(serverStatusColor)
-                    .frame(width: SageDesign.Control.statusDotDiameter, height: SageDesign.Control.statusDotDiameter)
+                // Shape-differentiated glyph, not a color-only dot: the
+                // light-mode system green/orange sit near 2.2:1.
+                Image(systemName: MCPServerStatusChrome.symbol(server.status))
+                    .sageFont(type.icon, weight: .semibold)
+                    .foregroundStyle(MCPServerStatusChrome.color(server.status))
+                    .frame(width: SageDesign.Control.iconColumnWidth)
                     .accessibilityHidden(true)
 
                 Text(server.name)
@@ -508,7 +535,7 @@ struct MCPServerRow: View {
                 Text(message)
                     .sageMicro(type.micro)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, SageDesign.Control.statusDotDiameter + SageDesign.Spacing.small) // align with name
+                    .padding(.leading, SageDesign.Control.iconColumnWidth + SageDesign.Spacing.small) // align with name
                     .padding(.top, 2)
                     .contentTransition(.opacity)
             }
@@ -530,15 +557,6 @@ struct MCPServerRow: View {
         .padding(SageDesign.Spacing.medium)
         .sagePanelBackground(cornerRadius: SageDesign.Glass.card)
         .animation(SageDesign.Motion.contentCrossFade, value: server.status)
-    }
-
-    var serverStatusColor: Color {
-        switch server.status {
-        case .connected: SageDesign.Palette.success
-        case .connecting, .reconnecting: SageDesign.Palette.warning
-        case .error: SageDesign.Palette.danger
-        case .disabled, .disconnected: Color.secondary
-        }
     }
 
     var serverStatusAccessibilityName: String {

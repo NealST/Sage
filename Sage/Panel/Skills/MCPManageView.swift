@@ -48,11 +48,16 @@ struct MCPManageView: View {
                 }
                 .listStyle(.inset)
                 .sageScrollEdgeGlass()
-                .searchable(
-                    text: $searchText,
-                    placement: .toolbar,
-                    prompt: "Search servers or tools"
-                )
+                // Sheets have no toolbar for .searchable — float the shared
+                // inline field like the panel tabs do.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    SageInlineSearchField(
+                        prompt: "Search servers or tools",
+                        text: $searchText
+                    )
+                    .padding(.horizontal, SageDesign.Spacing.large)
+                    .padding(.vertical, SageDesign.Spacing.small)
+                }
             }
 
             footer
@@ -60,6 +65,10 @@ struct MCPManageView: View {
         // Ideal = previous fixed size; bounds let users grow the sheet when a
         // server exposes many tools.
         .frame(minWidth: 480, idealWidth: 560, minHeight: 360, idealHeight: 500)
+        // "Done" completes the session, so Return carries it; Escape stays a
+        // real cancel path for the sheet (the nested add-sheet owns Esc while
+        // presented, via its own Cancel button).
+        .onExitCommand { dismiss() }
         .onAppear { refreshToolsIndex() }
         .onChange(of: appState.mcpHub.mcpTools) { _, _ in
             refreshToolsIndex()
@@ -104,7 +113,7 @@ struct MCPManageView: View {
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(.horizontal, SageDesign.Spacing.large)
@@ -316,7 +325,9 @@ struct MCPManageView: View {
     }
 }
 
-private enum MCPServerStatusChrome {
+/// Shared MCP status chrome — the manage sheet and the Dashboard's MCP rows
+/// draw the same glyphs and colors so one status vocabulary reads anywhere.
+enum MCPServerStatusChrome {
     static func accessibilityName(_ status: MCPServerStatus) -> String {
         switch status {
         case .connected: return "Connected"

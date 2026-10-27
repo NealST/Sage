@@ -23,6 +23,9 @@ private struct SageHelpModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // `.help` also feeds VoiceOver's help channel — keep that when
+            // replacing the visual tooltip.
+            .accessibilityHint(text)
             .background {
                 HelpAnchorView(anchor: anchor)
             }

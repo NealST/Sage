@@ -363,11 +363,9 @@ struct AgentTranscriptPane: View {
         .padding(.horizontal, SageDesign.Spacing.large)
         .padding(.top, SageDesign.Spacing.small)
         .onKeyPress(.escape) {
-            if findText.isEmpty {
-                endFinding()
-            } else {
-                findText = ""
-            }
+            // Find bars close on Esc (Xcode/Safari convention) — the query
+            // is transient, not worth a two-step clear-then-close.
+            endFinding()
             return .handled
         }
         .accessibilityElement(children: .contain)

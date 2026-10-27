@@ -542,6 +542,12 @@
 				A10ROLEPROD000000000001 /* SageAgentRoles */,
 				A10HOOKPROD000000000001 /* SageHooks */,
 				A10TERMDETPROD0000000001 /* SageTerminalDetection */,
+				A10MLXSWIFTPROD0000000001 /* MLX */,
+				A10MLXLLMPROD0000000000001 /* MLXLLM */,
+				A10MLXLMCPROD0000000000001 /* MLXLMCommon */,
+				A10MLXHFPROD00000000000001 /* MLXHuggingFace */,
+				A10HUGGINGFACEPROD0000001 /* HuggingFace */,
+				A10HUMMINGBIRDPROD00000001 /* Hummingbird */,
 			);
 			productName = Sage;
 			productReference = 30ACE9D53001EBF5006F8C54 /* Sage.app */;
@@ -639,6 +645,10 @@
 				A10TSJAVAPKG000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-java" */,
 				A10TSKTPKG00000000000000 /* XCRemoteSwiftPackageReference "tree-sitter-kotlin" */,
 				A10HARNESSPKG0000000000001 /* XCLocalSwiftPackageReference "Sage/Harness" */,
+				A10MLXSWIFTPKG000000000001 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				A10MLXSWIFTLMPKG0000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				A10SWIFTHFPKG0000000000001 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				A10HUMMINGBIRDPKG000000001 /* XCRemoteSwiftPackageReference "hummingbird" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 30ACE9D63001EBF5006F8C54 /* Products */;
@@ -1103,6 +1113,38 @@
 				minimumVersion = 0.23.0;
 			};
 		};
+		A10MLXSWIFTPKG000000000001 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 0.31.4;
+			};
+		};
+		A10MLXSWIFTLMPKG0000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = exactVersion;
+				version = 3.31.4;
+			};
+		};
+		A10SWIFTHFPKG0000000000001 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.0;
+			};
+		};
+		A10HUMMINGBIRDPKG000000001 /* XCRemoteSwiftPackageReference "hummingbird" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hummingbird-project/hummingbird";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.9.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1150,6 +1192,36 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A10GRDB000000000000000003 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
+		};
+		A10MLXSWIFTPROD0000000001 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10MLXSWIFTPKG000000000001 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		A10MLXLLMPROD0000000000001 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10MLXSWIFTLMPKG0000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		A10MLXLMCPROD0000000000001 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10MLXSWIFTLMPKG0000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		A10MLXHFPROD00000000000001 /* MLXHuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10MLXSWIFTLMPKG0000000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXHuggingFace;
+		};
+		A10HUGGINGFACEPROD0000001 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10SWIFTHFPKG0000000000001 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
+		A10HUMMINGBIRDPROD00000001 /* Hummingbird */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A10HUMMINGBIRDPKG000000001 /* XCRemoteSwiftPackageReference "hummingbird" */;
+			productName = Hummingbird;
 		};
 		A10HISTPROD000000000001 /* SageHistory */ = {
 			isa = XCSwiftPackageProductDependency;

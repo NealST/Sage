@@ -2,7 +2,7 @@
 //  SageTypography.swift
 //  Sage
 //
-//  Dynamic Type–scaled metrics for agent chrome (baseline matches SageDesign.Typography).
+//  App text-size–scaled metrics for agent chrome (baseline matches SageDesign.Typography).
 //
 
 import SwiftUI
@@ -25,6 +25,23 @@ struct SageTypographyMetrics: Equatable {
         micro: SageDesign.Typography.microSize,
         icon: SageDesign.Typography.iconSize
     )
+
+    /// App text-size scaling (macOS has no Dynamic Type channel). Fractional
+    /// results round to the half point so rasterized text stays crisp.
+    func scaled(by factor: CGFloat) -> Self {
+        func size(_ value: CGFloat) -> CGFloat {
+            (value * factor * 2).rounded() / 2
+        }
+        return Self(
+            input: size(input),
+            body: size(body),
+            reading: size(reading),
+            caption: size(caption),
+            title: size(title),
+            micro: size(micro),
+            icon: size(icon)
+        )
+    }
 }
 
 private struct SageTypographyKey: EnvironmentKey {
@@ -38,28 +55,14 @@ extension EnvironmentValues {
     }
 }
 
-/// Installs scaled type metrics for the subtree.
+/// Installs app text-size–scaled metrics for the subtree. Reading
+/// `SageTextSizeSettings.shared` during body evaluation registers the
+/// Observation dependency, so Settings changes propagate live.
 struct SageScaledTypographyModifier: ViewModifier {
-    @ScaledMetric(relativeTo: .body) private var input = SageDesign.Typography.inputSize
-    @ScaledMetric(relativeTo: .body) private var body = SageDesign.Typography.bodySize
-    @ScaledMetric(relativeTo: .body) private var reading = SageDesign.Typography.readingSize
-    @ScaledMetric(relativeTo: .caption) private var caption = SageDesign.Typography.captionSize
-    @ScaledMetric(relativeTo: .title3) private var title = SageDesign.Typography.titleSize
-    @ScaledMetric(relativeTo: .caption) private var micro = SageDesign.Typography.microSize
-    @ScaledMetric(relativeTo: .caption) private var icon = SageDesign.Typography.iconSize
-
     func body(content: Content) -> some View {
         content.environment(
             \.sageTypography,
-            SageTypographyMetrics(
-                input: input,
-                body: body,
-                reading: reading,
-                caption: caption,
-                title: title,
-                micro: micro,
-                icon: icon
-            )
+            SageTypographyMetrics.baseline.scaled(by: SageTextSizeSettings.shared.scale)
         )
     }
 }
@@ -86,16 +89,15 @@ extension View {
         modifier(SageAccessibilityObservationModifier())
     }
 
-    /// 11pt chrome text carries a slight positive tracking bump — dense
-    /// captions read looser and legible at that size, mirroring how SF's
-    /// tracking tables tighten large text and relax small text.
+    /// 11pt chrome text. SF's own tracking tables already relax small sizes,
+    /// so no manual adjustment is layered on top (HIG: only mockups hand-tune
+    /// tracking — the running system font adjusts it dynamically).
     func sageMicro(
         _ size: CGFloat,
         weight: Font.Weight = .regular,
         design: Font.Design = .default
     ) -> some View {
         font(.system(size: size, weight: weight, design: design))
-            .tracking(0.2)
     }
 }
 

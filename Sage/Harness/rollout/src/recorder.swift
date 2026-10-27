@@ -149,7 +149,8 @@ public final class RolloutRecorder: @unchecked Sendable {
             let handle = try FileHandle(forUpdating: URL(fileURLWithPath: rolloutPath))
             defer { try? handle.close() }
             try handle.seekToEnd()
-            for item in current.pending {
+            while !current.pending.isEmpty {
+                let item = current.pending[0]
                 let ordinal = try current.ordinal.current()
                 let line = RolloutLine(
                     timestamp: rfc3339(Date()),
@@ -160,10 +161,12 @@ public final class RolloutRecorder: @unchecked Sendable {
                 data.append(UInt8(ascii: "\n"))
                 try handle.write(contentsOf: data)
                 current.ordinal.advance()
+                current.pending.removeFirst()
+                // Commit progress per written line so a mid-flush failure
+                // cannot rewrite already-durable lines on the next flush.
+                state = current
             }
-            current.pending.removeAll()
             try handle.synchronize()
-            state = current
         }
     }
 

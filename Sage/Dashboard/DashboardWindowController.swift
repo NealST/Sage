@@ -61,8 +61,8 @@ final class DashboardWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = false
         window.isReleasedWhenClosed = false
         window.hidesOnDeactivate = false
-        window.minSize = NSSize(width: 360, height: 360)
-        window.setContentSize(NSSize(width: 420, height: 520))
+        window.minSize = NSSize(width: 480, height: 360)
+        window.setContentSize(NSSize(width: 480, height: 520))
         window.setFrameAutosaveName("SageDashboardWindow")
         return window
     }

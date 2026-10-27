@@ -288,8 +288,8 @@ extension AgentTranscriptPane {
                 if !event.content.isEmpty {
                     Text(event.content)
                         .sageFont(type.input)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
+                        .padding(.vertical, SageDesign.Spacing.chipVertical)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         // Reading-canvas content stays passive — same surface
                         // language as tool chips, no glass.
@@ -369,7 +369,7 @@ extension AgentTranscriptPane {
             }
         }
         .sageMicro(type.micro)
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.secondary)
     }
 
     func looksLikeConfigurationError(_ message: String) -> Bool {

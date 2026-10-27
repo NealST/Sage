@@ -80,6 +80,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             settings: appState.settings,
             onPresentationRequest: { [weak self] handler in
                 self?.settingsPresentationHandler = handler
+            },
+            onTitleChange: { [weak self] title in
+                self?.window?.title = title
             }
         )
             .sageScaledTypography()
@@ -88,9 +91,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             .environment(AccessibilitySettings.shared)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Settings"
+        // The visible pane owns the title (synced via onTitleChange); seed it
+        // with the restored pane so the first frame already matches.
+        let storedPane = UserDefaults.standard
+            .string(forKey: SettingsView.paneStorageKey)
+            .flatMap(SettingsPane.init(rawValue:)) ?? .connection
+        window.title = storedPane.title
         window.identifier = NSUserInterfaceItemIdentifier(AppState.WindowIdentifier.settings)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        // HIG: dim the settings window's minimize and zoom buttons — panes
+        // don't benefit from either, and resizing stays available.
+        window.standardWindowButton(.miniaturizeButton)?.isEnabled = false
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
         window.sageApplyLiquidGlass(customTitlebar: false)
         window.hasShadow = true
         // Keep false so field/text drag selects content instead of moving the window.

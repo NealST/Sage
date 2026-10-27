@@ -31,8 +31,10 @@ struct ToolRoundLimitCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: SageDesign.Spacing.small) {
-                Button("Finish", role: .cancel, action: onFinish)
-                    .sageShortcut(.cancelAction, enabled: bindsReturnShortcut)
+                // Escape / ⌘. is the system-wide "cancel" escape hatch — it
+                // must never trigger the consequential action. "Finish" is a
+                // deliberate choice, not a cancel.
+                Button("Finish", action: onFinish)
                     .sageGlassButton(.regular)
 
                 Spacer(minLength: 0)

@@ -1168,6 +1168,15 @@ func lastAssistantMessageFromItem(_ item: ResponseItem) -> String? {
     getLastAssistantMessage(from: [item])
 }
 
+/// Upstream `drain_in_flight`: await every in-flight tool future on any
+/// exit path so results recorded inside the future land in history before
+/// the turn ends; failures are logged upstream, never propagated.
+func drainInFlightTools(_ inFlight: [Task<ResponseItem, Error>]) async {
+    for task in inFlight {
+        _ = try? await task.value
+    }
+}
+
 func tryRunSamplingRequest(
     sess: Session,
     stepContext: StepContext,
@@ -1214,6 +1223,7 @@ func tryRunSamplingRequest(
 
     for await event in stream.events {
         if cancellationToken.isCancelled || stream.consumerDropped.isCancelled {
+            await drainInFlightTools(inFlight)
             throw SageErr(details: .turnAborted)
         }
         let value: ResponseEvent
@@ -1221,6 +1231,7 @@ func tryRunSamplingRequest(
         case .success(let event):
             value = event
         case .failure(let error):
+            await drainInFlightTools(inFlight)
             throw error
         }
         switch value {
@@ -1320,13 +1331,19 @@ func tryRunSamplingRequest(
                 planModeState = state
             }
             let alreadyStarted = parseTurnItem(item).map { startedItemIds.contains($0.id) } ?? false
-            let output = try await handleOutputItemDone(
-                sess: sess,
-                stepContext: stepContext,
-                item: item,
-                cancellationToken: cancellationToken,
-                itemAlreadyStarted: alreadyStarted
-            )
+            let output: OutputItemResult
+            do {
+                output = try await handleOutputItemDone(
+                    sess: sess,
+                    stepContext: stepContext,
+                    item: item,
+                    cancellationToken: cancellationToken,
+                    itemAlreadyStarted: alreadyStarted
+                )
+            } catch {
+                await drainInFlightTools(inFlight)
+                throw
+            }
             activeToolCallId = nil
             if let future = output.toolFuture {
                 inFlight.append(future)
@@ -1336,9 +1353,7 @@ func tryRunSamplingRequest(
             }
             needsFollowUp = needsFollowUp || output.needsFollowUp
             if shouldPreemptForMailbox(sess: sess, turnContext: stepContext.turn, item: item) {
-                for task in inFlight {
-                    _ = try await task.value
-                }
+                await drainInFlightTools(inFlight)
                 return SamplingRequestResult(needsFollowUp: true, lastAgentMessage: lastAgentMessage)
             }
         case .completed(responseId: let responseId, tokenUsage: let tokenUsage, usageMetadata: _, endTurn: let endTurn):
@@ -1355,9 +1370,7 @@ func tryRunSamplingRequest(
             if endTurn == false {
                 needsFollowUp = true
             }
-            for task in inFlight {
-                _ = try await task.value
-            }
+            await drainInFlightTools(inFlight)
             if let unifiedDiff = sess.services.turnDiffTracker.getUnifiedDiff() {
                 sess.sendEvent(stepContext.turn, .turnDiff(TurnDiffEvent(unifiedDiff: unifiedDiff)))
             }
@@ -1414,6 +1427,7 @@ func tryRunSamplingRequest(
         }
     }
 
+    await drainInFlightTools(inFlight)
     if cancellationToken.isCancelled {
         throw SageErr(details: .turnAborted)
     }

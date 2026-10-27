@@ -56,7 +56,7 @@ struct TodoListCard: View {
                 if canReorder, onReorder != nil {
                     Spacer(minLength: 0)
                     Image(systemName: "line.3.horizontal")
-                        .sageFont(type.icon)
+                        .sageFont(type.icon, weight: .semibold)
                         .foregroundStyle(.tertiary)
                         .opacity(0.6)
                         .accessibilityHidden(true)
@@ -120,7 +120,24 @@ struct TodoListCard: View {
         .animation(SageDesign.Motion.dragSettle, value: draggedIndex)
         .gesture(reorderGesture(index: index))
         .accessibilityLabel("\(item.title), \(label(for: item.status))")
-        .accessibilityHint(canReorder && onReorder != nil ? "Drag vertically to reorder" : "")
+        .accessibilityHint(canReorder && onReorder != nil ? "Reorder from the actions rotor or context menu, or drag vertically." : "")
+        .modifier(TodoReorderActions(
+            enabled: canReorder && onReorder != nil,
+            index: index,
+            count: items.count,
+            move: move
+        ))
+    }
+
+    /// Keyboard / VoiceOver reorder path — drag is not the only way in.
+    private func move(_ index: Int, by offset: Int) {
+        guard canReorder, let handler = onReorder else { return }
+        let target = index + offset
+        guard items.indices.contains(index), items.indices.contains(target) else { return }
+        var reordered = items
+        let moved = reordered.remove(at: index)
+        reordered.insert(moved, at: target)
+        handler(reordered)
     }
 
     /// Drag a row to reorder — tracks 1:1, commits on release. Vertical intent
@@ -215,6 +232,35 @@ struct TodoListCard: View {
         case .notStarted: return "not started"
         case .inProgress: return "in progress"
         case .completed: return "completed"
+        }
+    }
+}
+
+/// Move Up / Move Down surfaces for one row, only while reordering is on —
+/// VoiceOver users get rotor actions, keyboard users get the context menu.
+private struct TodoReorderActions: ViewModifier {
+    let enabled: Bool
+    let index: Int
+    let count: Int
+    let move: (_ index: Int, _ offset: Int) -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .accessibilityAction(named: Text("Move Up")) {
+                    move(index, -1)
+                }
+                .accessibilityAction(named: Text("Move Down")) {
+                    move(index, 1)
+                }
+                .contextMenu {
+                    Button("Move Up") { move(index, -1) }
+                        .disabled(index == 0)
+                    Button("Move Down") { move(index, 1) }
+                        .disabled(index == count - 1)
+                }
+        } else {
+            content
         }
     }
 }

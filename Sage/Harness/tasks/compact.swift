@@ -214,8 +214,17 @@ final class CompactSessionTask: SessionTask, @unchecked Sendable {
         if cancellationToken.isCancelled {
             throw SageErr(details: .turnAborted)
         }
-        _ = session.startNewContextWindow()
-        session.sendEvent(context, .contextCompacted(ContextCompactedEvent()))
+        let stepContext = try await session.captureStepContext(
+            context,
+            cancellationToken: cancellationToken
+        )
+        var clientSession = session.services.modelClient?.newSession()
+        try await CompactTask.run(
+            sess: session,
+            stepContext: stepContext,
+            clientSession: &clientSession,
+            injection: .doNotInject
+        )
         return nil
     }
 }

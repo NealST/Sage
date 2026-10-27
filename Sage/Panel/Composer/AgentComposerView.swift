@@ -58,6 +58,11 @@ struct AgentComposerView: View {
                         .transition(.opacity)
                 }
 
+                if case .awaitingConfirmation = session.agent.state.phase {
+                    awaitingConfirmationRow
+                        .transition(.opacity)
+                }
+
                 HStack(alignment: .center, spacing: SageDesign.Spacing.small) {
                     attachButton
                     inputField
@@ -134,6 +139,7 @@ struct AgentComposerView: View {
         .animation(SageDesign.Motion.expandAnimation, value: removedAttachment)
         .animation(SageDesign.Motion.expandAnimation, value: session.attachmentHint)
         .animation(SageDesign.Motion.expandAnimation, value: isInputFocused)
+        .animation(SageDesign.Motion.expandAnimation, value: session.agent.state.phase)
         .confirmationDialog(
             "Sage is still working",
             isPresented: turnInterruptPresented,
@@ -169,9 +175,14 @@ struct AgentComposerView: View {
     /// Model chip · save jobs · queued count · working/attention status.
     private var statusRow: some View {
         HStack(spacing: SageDesign.Spacing.small) {
-            Text(appState.settings.resolvedModel(for: .execute))
-                .sageMicro(type.micro, weight: .medium)
-                .foregroundStyle(.secondary)
+            ComposerModelPicker()
+
+            if let localEngineNote {
+                Label(localEngineNote, systemImage: "hourglass")
+                    .sageMicro(type.micro)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            }
 
             if !session.skills.saveJobs.isEmpty {
                 SkillSaveStatusIndicator()
@@ -194,14 +205,6 @@ struct AgentComposerView: View {
                 Label("Adding attachments…", systemImage: "arrow.down.circle")
                     .sageMicro(type.micro)
                     .foregroundStyle(.secondary)
-            } else if case .awaitingConfirmation = session.agent.state.phase {
-                // Safety-critical pending decision — the only status that
-                // outranks the chrome, so it gets caption weight + full
-                // warning saturation instead of micro.
-                Label(pendingConfirmationHint, systemImage: SageDesign.Symbol.pending)
-                    .sageFont(type.caption, weight: .semibold)
-                    .foregroundStyle(SageDesign.Palette.warningText)
-                    .labelStyle(.titleAndIcon)
             } else if session.agent.canStop || blocksTyping {
                 Text(
                     session.agent.state.hasPendingPlan && !session.agent.canStop
@@ -217,6 +220,33 @@ struct AgentComposerView: View {
             SageDesign.Motion.expandAnimation,
             value: session.agent.state.turnInput.items.count
         )
+        .animation(SageDesign.Motion.expandAnimation, value: localEngineNote)
+    }
+
+    /// Loading a multi-GB local model takes tens of seconds — surface the
+    /// engine's warm-up inside the row so the wait reads as progress, not a
+    /// hang (the first request triggers the same load).
+    private var localEngineNote: String? {
+        switch LocalEngineObserver.shared.status {
+        case .loading:
+            return "Loading local model…"
+        case .downloading(_, let progress):
+            return "Fetching weights \(Int(progress * 100))%…"
+        case .idle, .ready, .failed:
+            return nil
+        }
+    }
+
+    /// Safety-critical pending decision — lives inside the composer surface so
+    /// it reads as part of the blocked input, not a footnote at the window's
+    /// bottom edge. Caption weight + full warning saturation, above micro.
+    private var awaitingConfirmationRow: some View {
+        Label(pendingConfirmationHint, systemImage: SageDesign.Symbol.pending)
+            .sageFont(type.caption, weight: .semibold)
+            .foregroundStyle(SageDesign.Palette.warningText)
+            .labelStyle(.titleAndIcon)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var inputField: some View {
@@ -224,7 +254,7 @@ struct AgentComposerView: View {
         TextField(composerPlaceholder, text: $session.draft, axis: .vertical)
             .textFieldStyle(.plain)
             .sageFont(type.input)
-            .lineLimit(1...5)
+            .lineLimit(1...12)
             .scrollIndicators(.never)
             .focused($isInputFocused)
             .disabled(blocksTyping)
@@ -297,10 +327,9 @@ struct AgentComposerView: View {
         }
         .sageGlassButton()
         .sageHitSlop(visualSize: SageDesign.Control.iconButton)
-        .opacity(isArmed ? 1 : 0)
-        .allowsHitTesting(isArmed)
+        // Stays visible when unarmed — the composer's fixed action anchor
+        // reads as a disabled control (system glass dimming), not a hole.
         .disabled(!isArmed)
-        .accessibilityHidden(!isArmed)
         .sageShortcut(.cancelAction, enabled: isStop)
         .animation(SageDesign.Motion.expandAnimation, value: isArmed)
         .animation(SageDesign.Motion.expandAnimation, value: isStop)
@@ -341,11 +370,11 @@ struct AgentComposerView: View {
                 undoAttachmentRemoval()
             }
             .sageMicro(type.micro, weight: .semibold)
+            .buttonStyle(SagePlainActionButtonStyle())
             .foregroundStyle(Color.accentColor)
-            .buttonStyle(.plain)
-            .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal)
-            .padding(.vertical, SageDesign.Spacing.compactChipVertical)
-            .contentShape(Rectangle())
+            // The row only exists while the undo window is open, so ⌘Z rides
+            // with it — system undo muscle memory restores the slip.
+            .keyboardShortcut("z", modifiers: .command)
             .accessibilityHint("Puts the removed attachment back")
         }
         .accessibilityElement(children: .combine)
@@ -363,7 +392,7 @@ struct AgentComposerView: View {
                 } label: {
                     HStack(spacing: SageDesign.Spacing.labelGap) {
                         Image(systemName: suggestion.systemImage)
-                            .sageFont(type.icon)
+                            .sageFont(type.icon, weight: .semibold)
                             .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                         Text(suggestion.title)
                             .sageFont(type.body, weight: .medium)

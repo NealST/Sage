@@ -3,6 +3,7 @@
 //  Sage
 //
 
+import AppKit
 import SwiftUI
 
 /// Expandable tool-call chip used in the transcript and plan card.
@@ -97,6 +98,8 @@ struct ToolCallView: View {
             header
             if expanded, canExpand {
                 previewBody
+                    .contextMenu { previewContextMenu }
+                    .transition(.opacity)
             }
         }
         .sageToolChipSurface(warning: isMutatingStep)
@@ -120,9 +123,11 @@ struct ToolCallView: View {
     var header: some View {
         Button {
             guard canExpand else { return }
-            // Chevron animates; the source body is not sprung in — TreeSitter
-            // + MarkdownUI on a 0.32s spring is what made expand hitch.
-            expanded.toggle()
+            // Chevron springs; the body only cross-fades — springing the
+            // TreeSitter + MarkdownUI layout is what made expand hitch.
+            withAnimation(SageDesign.Motion.reducedCrossFade) {
+                expanded.toggle()
+            }
         } label: {
             HStack(spacing: SageDesign.Spacing.labelGap) {
                 if let status {
@@ -150,9 +155,9 @@ struct ToolCallView: View {
                 }
 
                 if canExpand {
-                    Image(systemName: "chevron.down")
+                    Image(systemName: "chevron.right")
                         .sageFont(type.icon, weight: .semibold)
-                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
                         .animation(SageDesign.Motion.expandAnimation, value: expanded)
                 }
             }
@@ -221,6 +226,76 @@ struct ToolCallView: View {
                 }
             }
         }
-        .padding(.bottom, 10)
+        .padding(.bottom, SageDesign.Spacing.chipVertical)
+    }
+
+    /// Copy / Reveal parity with ToolResultView — the expanded call body has
+    /// the same reachability as the result chip.
+    @ViewBuilder private var previewContextMenu: some View {
+        if writePayload != nil || previewAgainstDisk,
+           case let .fileEdit(path, content, _) = model.body {
+            fileEditContextMenu(path: path, newContents: writePayload?.after ?? content)
+        } else if let resultContent, !resultContent.isEmpty {
+            resultContextMenu(resultContent)
+        } else {
+            switch model.body {
+            case let .fileEdit(path, content, _):
+                fileEditContextMenu(path: path, newContents: content)
+            case let .text(label, value):
+                Button("Copy \(label)") {
+                    copyToPasteboard(value)
+                }
+            case let .fields(pairs):
+                Button("Copy Arguments") {
+                    copyToPasteboard(
+                        pairs.map { "\($0.key): \($0.value)" }
+                            .joined(separator: "\n")
+                    )
+                }
+            case .empty:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder private func fileEditContextMenu(path: String, newContents: String) -> some View {
+        if let url = try? PathGuard.resolveAllowed(path, policy: pathGuardPolicy, access: .read) {
+            Button("Reveal “\(url.lastPathComponent)” in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+            Divider()
+        }
+        Button("Copy New File Contents") {
+            copyToPasteboard(newContents)
+        }
+    }
+
+    @ViewBuilder private func resultContextMenu(_ content: String) -> some View {
+        let urls = PathTextSupport.allFileURLs(in: content, policy: pathGuardPolicy)
+        if urls.isEmpty {
+            Button("Copy Result") {
+                copyToPasteboard(content)
+            }
+        } else {
+            ForEach(urls, id: \.path) { url in
+                if PathTextSupport.isImagePath(url.path) {
+                    Button("Quick Look “\(url.lastPathComponent)”") {
+                        QuickLookPresenter.shared.preview(url: url)
+                    }
+                }
+                Button("Reveal “\(url.lastPathComponent)” in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
+            Divider()
+            Button("Copy Result") {
+                copyToPasteboard(content)
+            }
+        }
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 }

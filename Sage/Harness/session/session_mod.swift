@@ -570,6 +570,9 @@ public final class ThreadSession: @unchecked Sendable {
             return nil
         }
         if let blocked {
+            if blocked == .pendingTriggerTurn {
+                startTurnForPendingMailboxIfNeeded()
+            }
             return .notSubmitted(reason: blocked)
         }
         if rejectedForDraining(request, kind: kind, route: .startIfIdle) {
@@ -638,6 +641,11 @@ public final class ThreadSession: @unchecked Sendable {
             )
             loop.lastStartedTurnId = submissionId
             loop.pending.append(contentsOf: queued)
+            // Upstream drains queued mailbox mail into every new turn's
+            // input (input_queue.rs drain_mailbox_input_items).
+            let mails = loop.mailbox
+            loop.mailbox.removeAll()
+            loop.pending.append(contentsOf: mails.map { .interAgentCommunication($0.0) })
         }
         beginSampling(turnId: submissionId)
         return .started(turnId: submissionId)
@@ -653,9 +661,32 @@ public final class ThreadSession: @unchecked Sendable {
             guard communication.triggerTurn, loop.active == nil, loop.mode != .plan else {
                 return false
             }
+            let mails = loop.mailbox
+            loop.mailbox.removeAll()
             loop.active = ActiveLiveTurn(id: submissionId, kind: .regular, finalOutputJsonSchema: nil)
             loop.lastStartedTurnId = submissionId
-            loop.pending.append(.interAgentCommunication(communication))
+            loop.pending.append(contentsOf: mails.map { .interAgentCommunication($0.0) })
+            return true
+        }
+        if shouldStart {
+            beginSampling(turnId: submissionId)
+        }
+    }
+
+    /// Upstream `maybe_start_turn_for_pending_work`: a queued trigger-turn
+    /// mail starts its own turn once the thread is idle. Without this the
+    /// `pendingTriggerTurn` admission block would never clear.
+    private func startTurnForPendingMailboxIfNeeded() {
+        let submissionId = newSubmissionId()
+        let shouldStart = state.withLock { loop -> Bool in
+            guard !loop.closed, loop.active == nil, loop.mode != .plan,
+                  loop.mailbox.contains(where: { $0.0.triggerTurn })
+            else { return false }
+            let mails = loop.mailbox
+            loop.mailbox.removeAll()
+            loop.active = ActiveLiveTurn(id: submissionId, kind: .regular, finalOutputJsonSchema: nil)
+            loop.lastStartedTurnId = submissionId
+            loop.pending.append(contentsOf: mails.map { .interAgentCommunication($0.0) })
             return true
         }
         if shouldStart {
@@ -865,6 +896,9 @@ public final class ThreadSession: @unchecked Sendable {
                 )
             }
             result.succeed(nil)
+            if !isClosed {
+                startTurnForPendingMailboxIfNeeded()
+            }
             return
         }
         guard clearActiveTurn(turnId) else {
@@ -876,6 +910,7 @@ public final class ThreadSession: @unchecked Sendable {
         }
         onEvent(Event(id: turnId, msg: .turnComplete(TurnCompleteEvent(turnId: turnId))))
         result.succeed(lastText)
+        startTurnForPendingMailboxIfNeeded()
     }
 
     /// Tool errors stay model-visible. A missing runner is terminal: the turn cannot continue.

@@ -145,12 +145,12 @@ struct TranscriptNoticeBar: View {
                 .lineLimit(1)
                 .accessibilityLabel(hint)
             Spacer(minLength: SageDesign.Spacing.extraSmall)
-            Button("Don’t reuse") {
+            Button("Start Fresh") {
                 session.agent.dismissContextHint()
             }
             .sageGlassButton()
-            .help("Next request starts without this prior context")
-            .accessibilityHint("Next request starts without this prior context")
+            .help("Next request starts a fresh task without this prior context")
+            .accessibilityHint("Next request starts a fresh task without this prior context")
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, SageDesign.Spacing.large)

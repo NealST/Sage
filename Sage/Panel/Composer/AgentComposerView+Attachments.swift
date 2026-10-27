@@ -70,7 +70,9 @@ extension AgentComposerView {
         session.draftAttachments = outcome.attachments
         attachmentHintGeneration &+= 1
         session.attachmentHint = outcome.hint
-        if outcome.hint != nil {
+        // Only the no-action duplicate notice fades on its own; failures
+        // stay until dismissed so the reason is actually readable.
+        if outcome.hint == AttachmentImport.duplicateHint {
             let generation = attachmentHintGeneration
             Task {
                 try? await Task.sleep(for: .seconds(4))

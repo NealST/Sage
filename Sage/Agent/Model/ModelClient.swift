@@ -172,7 +172,9 @@ actor ModelClient {
 
     /// Lightweight connectivity check against an OpenAI-compatible provider.
     func probe(settings: ModelSettingsSnapshot) async throws {
-        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+        guard settings.origin == .local || !settings.apiKey.isEmpty else {
+            throw ModelClientError.notConfigured
+        }
 
         let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let modelsURL = URL(string: "\(trimmedBase)/models") else {
@@ -181,7 +183,9 @@ actor ModelClient {
 
         var request = URLRequest(url: modelsURL)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+        if !settings.apiKey.isEmpty {
+            request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.timeoutInterval = 15
 
         let (data, response) = try await URLSession.shared.data(for: request)

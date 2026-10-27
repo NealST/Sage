@@ -119,7 +119,7 @@ extension Theme {
                     .markdownTextStyle {
                         ForegroundColor(.secondary)
                     }
-                    .padding(.leading, 14)
+                    .padding(.leading, SageDesign.Spacing.large)
                     .padding(.vertical, 2)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -176,7 +176,7 @@ extension Theme {
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, SageDesign.Spacing.small)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, SageDesign.Spacing.large)
                 .relativeLineSpacing(.em(0.3))
         }
         .thematicBreak {

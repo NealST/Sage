@@ -96,6 +96,26 @@ struct SageApp: App {
                 .disabled(!appState.keySessionHasTranscript)
             }
 
+            // Terminal-style View menu home for text size — SwiftUI has no
+            // Format-menu placement to hang ⌘+/⌘-/⌘0 on.
+            CommandMenu("View") {
+                Button("Bigger Text") {
+                    SageTextSizeSettings.shared.stepUp()
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Smaller Text") {
+                    SageTextSizeSettings.shared.stepDown()
+                }
+                .keyboardShortcut("-", modifiers: .command)
+
+                Button("Default Text Size") {
+                    SageTextSizeSettings.shared.reset()
+                }
+                .keyboardShortcut("0", modifiers: .command)
+                .disabled(SageTextSizeSettings.shared.isDefault)
+            }
+
             CommandGroup(after: .toolbar) {
                 Button("Show Task") {
                     appState.selectWorkspaceTab(.task)

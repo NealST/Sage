@@ -30,18 +30,7 @@ struct SettingsConnectionSection: View {
                 validation: Self.baseURLError
             )
 
-            connectionField(
-                "Model",
-                text: $settings.model,
-                prompt: "gpt-4.1-mini",
-                validation: Self.modelError
-            )
-
-            connectionField("Planning model", text: $settings.planModel, prompt: "same as Model")
-            connectionField("Execute model", text: $settings.executeModel, prompt: "same as Model")
-            connectionField("Review model", text: $settings.reviewModel, prompt: "same as Model")
-
-            LabeledContent("API key") {
+            LabeledContent("API Key") {
                 VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
                     SecureField("sk-…", text: $settings.apiKey)
                         .onChange(of: settings.apiKey) { _, _ in
@@ -82,7 +71,7 @@ struct SettingsConnectionSection: View {
             }
             .help("Sampling randomness for agent replies. Drag to override the provider default.")
 
-            LabeledContent("Request timeout") {
+            LabeledContent("Request Timeout") {
                 Stepper(
                     value: Binding(
                         get: { settings.requestTimeout },
@@ -110,7 +99,6 @@ struct SettingsConnectionSection: View {
 
     static func canTest(_ settings: ModelSettings) -> Bool {
         baseURLError(settings.baseURL) == nil
-            && modelError(settings.model) == nil
             && apiKeyError(settings.apiKey, persistenceError: settings.apiKeyPersistenceError) == nil
     }
 
@@ -153,12 +141,6 @@ struct SettingsConnectionSection: View {
             return "Enter a valid http(s) URL"
         }
         return nil
-    }
-
-    nonisolated static func modelError(_ raw: String) -> String? {
-        raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Model is required"
-            : nil
     }
 
     nonisolated static func apiKeyError(_ raw: String, persistenceError: String?) -> String? {

@@ -5,6 +5,8 @@ extension Notification.Name {
     static let sageOpenSettings = Notification.Name("sage.openSettings")
     /// Opens Settings on the Capabilities pane with the MCP manage sheet up.
     static let sageOpenSettingsMCP = Notification.Name("sage.openSettingsMCP")
+    /// Opens Settings on the Models pane (supply sources, downloads).
+    static let sageOpenSettingsModels = Notification.Name("sage.openSettingsModels")
 }
 
 @MainActor
@@ -21,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // "Ask Sage About Selected Text" in every app's Services menu while
         // Sage is running (Info.plist NSServices + this provider).
         NSApp.servicesProvider = self
+
+        // Loopback-only OpenAI-compatible endpoint for local model selections;
+        // binds a dynamic port so it never collides with anything.
+        LocalModelServer.shared.start()
 
         UNUserNotificationCenter.current().delegate = self
         TaskCompletionNotifier.registerCategories()
@@ -45,6 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self,
             selector: #selector(handleOpenSettingsMCP),
             name: .sageOpenSettingsMCP,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenSettingsModels),
+            name: .sageOpenSettingsModels,
             object: nil
         )
         Task {
@@ -210,6 +222,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @objc private func handleOpenSettingsMCP() {
         settingsController?.show(pane: .capabilities, openMCPManage: true)
+    }
+
+    @objc private func handleOpenSettingsModels() {
+        settingsController?.show(pane: .models)
     }
 
     // MARK: - Services

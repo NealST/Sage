@@ -2,7 +2,11 @@
 //  ProjectFilesBrowserView.swift
 //  Sage
 //
-//  Browse-only project file tree (shallow expansion) with git change badges.
+//  Browse-only project file tree with git change badges. Directories load
+//  lazily: the first two levels arrive with the initial snapshot, and each
+//  frontier directory carries a placeholder child whose appearance triggers
+//  the next level, so deep folders stay expandable instead of masquerading
+//  as empty leaves.
 //
 
 import AppKit
@@ -17,6 +21,8 @@ struct ProjectFilesBrowserView: View {
     @State private var searchText = ""
     /// Selected file path — enables arrow-key navigation and row highlight.
     @State private var selectedPath: String?
+    /// Frontier directories whose placeholder already kicked off a load.
+    @State private var pendingFrontiers: Set<String> = []
 
     private var isFiltering: Bool { !searchText.isEmpty }
 
@@ -28,7 +34,7 @@ struct ProjectFilesBrowserView: View {
 
     private static func flatten(_ node: FileNode, matching query: String) -> [FileNode] {
         var result: [FileNode] = []
-        if node.name.localizedCaseInsensitiveContains(query) {
+        if !node.isPlaceholder, node.name.localizedCaseInsensitiveContains(query) {
             result.append(node)
         }
         for child in node.children ?? [] {
@@ -111,6 +117,43 @@ struct ProjectFilesBrowserView: View {
         return nil
     }
 
+    /// Swaps a frontier directory's placeholder child for its real children.
+    /// The placeholder's appearance inside the expanded outline is the only
+    /// expansion signal OutlineGroup offers, so loading rides on `task`.
+    private func expandFrontier(_ placeholder: FileNode) {
+        let frontierID = placeholder.parentID
+        guard !pendingFrontiers.contains(frontierID) else { return }
+        pendingFrontiers.insert(frontierID)
+        let url = placeholder.url
+        Task {
+            let loaded = await Task.detached(priority: .utility) {
+                FileNode.loadChildren(of: url, depth: 2)
+            }.value
+            nodes = Self.replacingChildren(
+                of: frontierID, in: nodes,
+                with: loaded.isEmpty ? nil : loaded
+            )
+        }
+    }
+
+    private static func replacingChildren(
+        of id: String,
+        in nodes: [FileNode],
+        with children: [FileNode]?
+    ) -> [FileNode] {
+        nodes.map { node in
+            if node.id == id {
+                var updated = node
+                updated.children = children
+                return updated
+            }
+            guard let kids = node.children else { return node }
+            var updated = node
+            updated.children = replacingChildren(of: id, in: kids, with: children)
+            return updated
+        }
+    }
+
     private static func find(_ id: String, in node: FileNode) -> FileNode? {
         if node.id == id { return node }
         for child in node.children ?? [] {
@@ -119,7 +162,27 @@ struct ProjectFilesBrowserView: View {
         return nil
     }
 
+    @ViewBuilder
     private func fileRow(_ node: FileNode, showPath: Bool) -> some View {
+        if node.isPlaceholder {
+            placeholderRow(node)
+        } else {
+            fileContentRow(node, showPath: showPath)
+        }
+    }
+
+    private func placeholderRow(_ node: FileNode) -> some View {
+        HStack(spacing: SageDesign.Spacing.labelGap) {
+            ProgressView()
+                .controlSize(.mini)
+            Text("Loading…")
+                .sageMicro(type.micro)
+                .foregroundStyle(.secondary)
+        }
+        .task { expandFrontier(node) }
+    }
+
+    private func fileContentRow(_ node: FileNode, showPath: Bool) -> some View {
         HStack(spacing: SageDesign.Spacing.labelGap) {
             Label {
                 VStack(alignment: .leading, spacing: 1) {
@@ -136,7 +199,7 @@ struct ProjectFilesBrowserView: View {
                 }
             } icon: {
                 Image(systemName: node.isDirectory ? "folder" : "doc")
-                    .sageFont(type.icon)
+                    .sageFont(type.icon, weight: .semibold)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: SageDesign.Spacing.extraSmall)
@@ -231,6 +294,22 @@ nonisolated private struct FileNode: Identifiable, Sendable {
     let url: URL
     let isDirectory: Bool
     var children: [Self]?
+    /// Placeholder rows mark frontier directories whose real children have
+    /// not loaded yet; `parentID` is the frontier directory's node id.
+    var isPlaceholder = false
+    var parentID = ""
+
+    static func placeholder(for directory: URL) -> Self {
+        Self(
+            id: directory.path + "/.sage-loading",
+            name: "Loading…",
+            url: directory,
+            isDirectory: false,
+            children: nil,
+            isPlaceholder: true,
+            parentID: directory.path
+        )
+    }
 
     static func loadChildren(of directory: URL, depth: Int) -> [Self] {
         guard depth > 0 else { return [] }
@@ -255,8 +334,14 @@ nonisolated private struct FileNode: Identifiable, Sendable {
                 let isDir = values?.isDirectory == true
                 let kids: [Self]?
                 if isDir {
-                    let loaded = loadChildren(of: url, depth: depth - 1)
-                    kids = loaded.isEmpty ? nil : loaded
+                    if depth > 1 {
+                        let loaded = loadChildren(of: url, depth: depth - 1)
+                        kids = loaded.isEmpty ? nil : loaded
+                    } else {
+                        // Frontier: keep the disclosure triangle alive so the
+                        // folder never reads as an empty leaf.
+                        kids = [placeholder(for: url)]
+                    }
                 } else {
                     kids = nil
                 }

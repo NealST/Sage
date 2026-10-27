@@ -103,7 +103,12 @@ extension ModelClient {
     }
 
     func chatCompletionsURL(settings: ModelSettingsSnapshot) throws -> URL {
-        guard !settings.apiKey.isEmpty else { throw ModelClientError.notConfigured }
+        // Local snapshots carry no credentials — the in-process server never
+        // checks auth. Cloud snapshots stay key-gated so a missing key fails
+        // fast with the actionable message.
+        guard settings.origin == .local || !settings.apiKey.isEmpty else {
+            throw ModelClientError.notConfigured
+        }
         let trimmedBase = settings.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: "\(trimmedBase)/chat/completions") else {
             throw ModelClientError.invalidURL
@@ -120,7 +125,9 @@ extension ModelClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.timeoutInterval = timeout
         request.httpBody = body
         return request
@@ -290,6 +297,9 @@ nonisolated struct ModelSettingsSnapshot: Sendable {
     let baseURL: String
     let model: String
     let apiKey: String
+    /// Which supply source the request targets. Local snapshots point at
+    /// the in-process server and never carry credentials.
+    var origin: ModelOrigin = .cloud
     /// User-set sampling temperature; nil = provider default.
     var temperature: Double? = nil
     /// Per-request timeout in seconds.

@@ -229,7 +229,7 @@ extension SkillEditorPane {
                 if draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("No preview available.")
                         .sageFont(type.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     MarkdownContentView(
@@ -237,7 +237,10 @@ extension SkillEditorPane {
                         collapsible: false,
                         syntaxHighlighting: false
                     )
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(
+                        maxWidth: SageDesign.Panel.readingColumnWidth,
+                        alignment: .leading
+                    )
                     .textSelection(.enabled)
                 }
             }

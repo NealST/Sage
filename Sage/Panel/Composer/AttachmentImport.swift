@@ -14,9 +14,9 @@ nonisolated struct AttachmentImportOutcome: Sendable, Equatable {
 }
 
 enum AttachmentImport {
-    nonisolated static let tooManyHint = "8 files at a time."
+    nonisolated static let tooManyHint = "Attach up to 8 files at a time."
     nonisolated static let outsideHomeHint = "Sage can only use files in your home folder."
-    nonisolated static let unreadableHint = "That file couldn’t be added."
+    nonisolated static let unreadableHint = "Sage couldn’t read that file — check its permissions and try again."
     nonisolated static let duplicateHint = "That item is already attached."
 
     /// Files and folders already on disk. Copies nothing.

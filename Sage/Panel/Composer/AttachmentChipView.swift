@@ -86,7 +86,7 @@ struct AttachmentChipView: View {
         // Tighter than the chip tokens on purpose: the 22pt hit area inside a
         // small capsule leaves little room, and these chips sit in a dense
         // wrapping row where full chip padding would balloon the composer.
-        .padding(.leading, 5)
+        .padding(.leading, SageDesign.Spacing.labelGap)
         .padding(.trailing, showsRemove ? 2 : SageDesign.Spacing.compactChipHorizontal)
         .padding(.vertical, SageDesign.Spacing.compactChipVertical)
         .background(
@@ -137,7 +137,7 @@ struct AttachmentChipView: View {
         .buttonStyle(.plain)
         .sageFont(type.icon, weight: .bold)
         .foregroundStyle(
-            hoveringRemove ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary)
+            hoveringRemove ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary)
         )
         .frame(width: SageDesign.Control.iconButton, height: SageDesign.Control.iconButton)
         // Hit slop beyond the visual glyph — small targets should not

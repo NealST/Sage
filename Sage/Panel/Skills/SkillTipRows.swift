@@ -45,7 +45,7 @@ struct SkillSaveTipRow: View {
                                 : suggestion)
                         }
                         .sageMicro(type.micro, weight: .semibold)
-                        .buttonStyle(.plain)
+                        .buttonStyle(SagePlainActionButtonStyle())
                         .foregroundStyle(Color.accentColor)
                         .help(saveHelp)
                         .accessibilityLabel(saveButtonTitle)

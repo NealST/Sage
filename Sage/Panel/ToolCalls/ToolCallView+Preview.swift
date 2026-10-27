@@ -26,7 +26,7 @@ extension ToolCallView {
                             .controlSize(.mini)
                         Text("Comparing with current file…")
                             .sageMicro(type.micro)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, SageDesign.Spacing.medium)
                     proposedContent(content, language: language)
@@ -101,7 +101,7 @@ extension ToolCallView {
         VStack(alignment: .leading, spacing: SageDesign.Spacing.extraSmall) {
             Text(label)
                 .sageMicro(type.micro, weight: .semibold)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             Text(value)
                 .sageFont(type.caption, design: .monospaced)
                 .textSelection(.enabled)
@@ -116,7 +116,7 @@ extension ToolCallView {
                 VStack(alignment: .leading, spacing: SageDesign.Spacing.titleDetailGap) {
                     Text(pair.key)
                         .sageMicro(type.micro, weight: .semibold)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                     Text(PathTextSupport.attributedString(from: pair.value, policy: pathGuardPolicy))
                         .sageFont(type.caption, design: .monospaced)
                         .textSelection(.enabled)
@@ -150,7 +150,7 @@ extension ToolCallView {
         switch status {
         case .pending:
             Image(systemName: SageDesign.Symbol.stepPending)
-                .sageFont(type.icon)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(.tertiary)
 
         case .running:
@@ -171,7 +171,7 @@ extension ToolCallView {
 
         case .skipped:
             Image(systemName: "minus.circle")
-                .sageFont(type.icon)
+                .sageFont(type.icon, weight: .semibold)
                 .foregroundStyle(.tertiary)
         }
     }

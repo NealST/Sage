@@ -22,6 +22,8 @@ struct TaskHistoryBrowserView: View {
     /// False until the first reload lands — spares the list an empty-state
     /// flash while rows are still being read.
     @State private var isLoaded = false
+    /// Arrow-key selection, mirroring the Files tab.
+    @State private var selectedSummaryID: TaskSummary.ID?
 
     private let repository: any TaskRepository
     private let projectID: UUID?
@@ -52,11 +54,20 @@ struct TaskHistoryBrowserView: View {
             } else if filtered.isEmpty, isLoaded {
                 emptyState
             } else {
-                List {
+                List(selection: $selectedSummaryID) {
                     ForEach(filtered) { row(for: $0) }
                 }
                 .listStyle(.plain)
                 .sageScrollEdgeGlass()
+                // Return activates the arrow-key selection — same reachability
+                // the Files tab gives its rows.
+                .onKeyPress(.return) {
+                    guard let selectedSummaryID,
+                          let summary = filtered.first(where: { $0.id == selectedSummaryID })
+                    else { return .ignored }
+                    activate(summary)
+                    return .handled
+                }
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -156,8 +167,12 @@ struct TaskHistoryBrowserView: View {
             }
         }
         .padding(.vertical, 3)
-        .contentShape(Rectangle())
-        .onTapGesture { activate(summary) }
+        .tag(summary.id)
+        // Single click still selects (List); double click opens the task,
+        // mirroring the Files tab and the context-menu actions.
+        .onTapGesture(count: 2) {
+            activate(summary)
+        }
         .contextMenu {
             Button("Open") { activate(summary) }
             Button("Rename…") { renameTask(summary) }

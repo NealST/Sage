@@ -132,7 +132,7 @@ struct ProjectHistoryBrowserView: View {
         HStack(spacing: 6) {
             if let branch {
                 Image(systemName: "arrow.triangle.branch")
-                    .sageFont(type.icon)
+                    .sageFont(type.icon, weight: .semibold)
                 Text(branch)
                     .lineLimit(1)
                     .truncationMode(.middle)

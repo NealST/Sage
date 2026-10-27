@@ -77,7 +77,7 @@ struct UnifiedDiffView: View {
             } else {
                 Text("Preparing diff…")
                     .sageMicro(type.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
                     .accessibilityLabel("Preparing diff")
             }
@@ -135,7 +135,7 @@ struct UnifiedDiffView: View {
             } else if before == nil, !created {
                 Text("Previous contents unavailable (binary or unreadable). Showing proposed file.")
                     .sageMicro(type.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
                 MarkdownContentView(
                     markdown: ToolCallPresentation.fencedMarkdown(
@@ -157,7 +157,7 @@ struct UnifiedDiffView: View {
             if truncated {
                 Text("Diff preview truncated for size.")
                     .sageMicro(type.micro)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, SageDesign.Spacing.chipHorizontal)
             }
 

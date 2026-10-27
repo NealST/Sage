@@ -202,7 +202,7 @@ extension AgentComposerView {
             startingRevision: startingRevision
         )
         showPersistentAttachmentHint(
-            "Couldn’t prepare for vision: "
+            "Sage couldn’t prepare these images for the model: "
             + failedImages.map(\.displayName).joined(separator: ", ")
             + "."
         )

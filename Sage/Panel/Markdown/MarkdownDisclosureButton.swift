@@ -18,9 +18,9 @@ struct MarkdownDisclosureButton: View {
             HStack(spacing: SageDesign.Spacing.extraSmall) {
                 Text(title)
                     .sageMicro(type.micro, weight: .semibold)
-                Image(systemName: "chevron.down")
+                Image(systemName: "chevron.right")
                     .sageFont(type.icon, weight: .semibold)
-                    .rotationEffect(.degrees(expanded ? 180 : 0))
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
             .foregroundStyle(.primary.opacity(SageDesign.Chrome.deemphasizedContentOpacity))
             .padding(.horizontal, SageDesign.Spacing.compactChipHorizontal + SageDesign.Spacing.extraSmall)
